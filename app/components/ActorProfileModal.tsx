@@ -72,7 +72,7 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
              </div>
              <div className="bg-black/40 p-2 rounded-lg text-center border border-white/5">
                 <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Age</p>
-                <p className="text-xs font-bold text-white">{actor.age}</p>
+                <p className="text-xs font-bold text-white">{actor.Age}</p>
              </div>
              <div className="bg-black/40 p-2 rounded-lg text-center border border-white/5">
                 <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Range</p>

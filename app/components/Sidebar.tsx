@@ -18,12 +18,10 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   const navItems = [
-    { name: "Launch", href: "/", icon: <Rocket size={20} /> },
     { name: "Auditions", href: "/auditions", icon: <Mic2 size={20} /> },
     { name: "Callbacks", href: "/callbacks", icon: <Users size={20} /> },
     { name: "Casting", href: "/casting", icon: <ClipboardList size={20} /> },
-    { name: "Diagnostics", href: "/diagnostics", icon: <Wrench size={20} /> },
-  ];
+];
 
   return (
     <aside 

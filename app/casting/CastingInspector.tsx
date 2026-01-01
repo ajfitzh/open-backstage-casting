@@ -1,198 +1,144 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { User, AlertTriangle, CheckCircle2, AlertOctagon, Layers, Zap, X } from "lucide-react";
+import { useState } from "react";
+import { X, CheckCircle2, Mic2, Move, FileText, ExternalLink, Clock } from "lucide-react";
+import ActorProfileModal from "../components/ActorProfileModal";
 
-interface Props {
-  actor: any;
-  allScenes: any[]; 
-  stats: {
-    sceneCount: number;
-    hasAct1: boolean;
-    hasAct2: boolean;
-    assignments: Record<number, string>; 
-    assignedRoleNames: string[];
-  };
-  onClose: () => void; // NEW PROP
-}
+// Helper to generate consistent colors for roles so "Ariel" is always one color, "Ursula" another
+const getRoleColor = (roleName: string) => {
+  if (!roleName) return "bg-zinc-800 border-zinc-700";
+  const name = roleName.toLowerCase();
+  if (name.includes("ariel") || name.includes("lead")) return "bg-blue-500 border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.4)]";
+  if (name.includes("ursula") || name.includes("villain")) return "bg-purple-600 border-purple-400 shadow-[0_0_10px_rgba(147,51,234,0.4)]";
+  if (name.includes("ensemble")) return "bg-emerald-600 border-emerald-400";
+  if (name.includes("new role")) return "bg-amber-600 border-amber-400";
+  // Default hash-like fallback
+  const colors = [
+    "bg-cyan-600 border-cyan-400", 
+    "bg-indigo-600 border-indigo-400", 
+    "bg-pink-600 border-pink-400",
+    "bg-lime-600 border-lime-400"
+  ];
+  return colors[roleName.length % colors.length];
+};
 
-export default function CastingInspector({ actor, allScenes, stats, onClose }: Props) {
-  
-  const safeString = (val: any): string => {
-    if (val === null || val === undefined) return "";
-    if (typeof val === 'string') return val;
-    if (typeof val === 'number') return String(val);
-    if (Array.isArray(val)) return val.length > 0 ? safeString(val[0].value || val[0]) : "";
-    if (typeof val === 'object') return val.value ? safeString(val.value) : "";
-    return String(val);
-  };
+export default function CastingInspector({ actor, allScenes, stats, onClose }: any) {
+  const [showFullProfile, setShowFullProfile] = useState(false);
 
-  if (!actor) {
-    return (
-      <aside className="bg-zinc-950 p-8 border-l border-white/5 flex flex-col items-center justify-center text-center h-full relative">
-        <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900 rounded-lg transition-colors"
-        >
-            <X size={16} />
-        </button>
-        <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4">
-            <User size={24} className="text-zinc-600" />
-        </div>
-        <h2 className="text-xs font-black uppercase tracking-wider text-zinc-500">Inspector Idle</h2>
-        <p className="text-[10px] text-zinc-600 mt-2 max-w-[150px]">Select an actor to view timeline and quick changes.</p>
-      </aside>
-    );
-  }
-
-  // ... (Keep existing Violation logic and renderTimeline helper exactly the same) ...
-  // VIOLATIONS
-  const violations = [];
-  if (stats.sceneCount < 3) violations.push({ level: 'error', msg: `Underutilized: Only in ${stats.sceneCount} scenes (Min 3).` });
-  if (!stats.hasAct1) violations.push({ level: 'warn', msg: "Missing from Act 1." });
-  if (!stats.hasAct2) violations.push({ level: 'warn', msg: "Missing from Act 2." });
-
-  const act1Scenes = allScenes.filter(s => safeString(s.Act).includes('1'));
-  const act2Scenes = allScenes.filter(s => safeString(s.Act).includes('2'));
-
-  const headshotUrl = actor.Headshot && actor.Headshot[0]?.url 
-    ? actor.Headshot[0].url 
-    : "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
-
-  // --- TIMELINE RENDERER ---
-  const renderTimeline = (scenes: any[]) => {
-    return (
-        <div className="grid grid-cols-4 gap-2">
-            {scenes.map((scene, index) => {
-                const roleInScene = stats.assignments[scene.id];
-                const isAssigned = !!roleInScene;
-                
-                // Quick Change Logic
-                const prevScene = scenes[index - 1];
-                const roleInPrevScene = prevScene ? stats.assignments[prevScene.id] : null;
-                const isQuickChange = isAssigned && roleInPrevScene && (roleInScene !== roleInPrevScene);
-
-                return (
-                    <div key={scene.id} className="relative group">
-                        {isQuickChange && (
-                            <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-4 h-1 bg-red-500 z-20"></div>
-                        )}
-                        <div 
-                            className={`
-                                h-14 rounded-lg border flex flex-col items-center justify-center p-1 text-center relative transition-all overflow-hidden
-                                ${isAssigned 
-                                    ? 'bg-zinc-800 border-white/20 shadow-lg' 
-                                    : 'bg-zinc-900 border-white/10' 
-                                }
-                                ${isQuickChange ? 'ring-1 ring-red-500' : ''}
-                            `}
-                        >
-                            <span className={`text-[8px] font-bold mb-1 leading-none absolute top-1 left-1 ${isAssigned ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                                {index + 1}
-                            </span>
-                            {isAssigned ? (
-                                <>
-                                    <div className={`w-1.5 h-1.5 rounded-full mb-1 ${isQuickChange ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`}></div>
-                                    <span className="text-[7px] font-bold text-white uppercase tracking-tighter leading-none w-full break-words px-0.5">
-                                        {roleInScene}
-                                    </span>
-                                </>
-                            ) : (
-                                <div className="w-1.5 h-1.5 rounded-full bg-zinc-700"></div> 
-                            )}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 hidden group-hover:block bg-black border border-white/10 p-2 rounded z-50 pointer-events-none shadow-xl">
-                                <p className="text-[9px] font-bold text-white">{safeString(scene["Scene Name"])}</p>
-                                {isAssigned ? <p className="text-[9px] text-blue-400 mt-1">Role: {roleInScene}</p> : <p className="text-[9px] text-zinc-500 italic mt-1">Not in scene</p>}
-                                {isQuickChange && (
-                                    <div className="mt-2 pt-2 border-t border-white/10">
-                                        <p className="text-[9px] text-red-500 font-bold flex items-center gap-1"><Zap size={10} /> Quick Change!</p>
-                                        <p className="text-[8px] text-zinc-400">Switching from <span className="text-white">{roleInPrevScene}</span></p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-  };
+  if (!actor) return null;
 
   return (
-    <aside className="bg-zinc-950 flex flex-col h-full border-l border-white/5 overflow-hidden relative">
-        {/* CLOSE BUTTON */}
-        <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 z-50 p-2 bg-zinc-950/80 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg border border-white/5 transition-all shadow-sm"
-        >
-            <X size={14} />
-        </button>
-
-        <header className="p-6 border-b border-white/5 bg-zinc-900/20 pr-12"> {/* Added padding-right to avoid overlap with close button */}
-            <div className="flex items-center gap-4 mb-4">
-                <img src={headshotUrl} className="w-16 h-16 rounded-2xl object-cover border-2 border-white/10 shadow-lg" />
-                <div>
-                    <h2 className="text-lg font-black italic text-white leading-none mb-2">{safeString(actor.Performer)}</h2>
-                    <div className="flex flex-wrap gap-1">
-                        {stats.assignedRoleNames && stats.assignedRoleNames.length > 0 ? (
-                            stats.assignedRoleNames.map(r => (
-                                <span key={r} className="text-[9px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">{r}</span>
-                            ))
-                        ) : (
-                            <span className="text-[9px] text-zinc-600 italic">Uncast</span>
-                        )}
-                    </div>
+    <>
+      <div className="bg-zinc-900 border-l border-white/5 flex flex-col w-[350px] shrink-0 h-full relative shadow-2xl z-20 transition-all">
+        
+        {/* HEADER */}
+        <div className="p-6 pb-4 border-b border-white/5 relative bg-zinc-900 z-10">
+          <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"><X size={20} /></button>
+          
+          <div className="flex items-start gap-4">
+             <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0">
+               <img src={actor.Headshot} className="w-full h-full object-cover" />
+             </div>
+             <div>
+                <h2 className="text-lg font-black text-white leading-tight">{actor.Performer}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                    {actor.Gender && actor.Gender !== "N/A" && (
+                        <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.Gender}</span>
+                    )}
+                    <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.Age || "Age ?"}</span>
                 </div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-2">
-                {/* Stats boxes (same as before) */}
-                <div className={`p-2 rounded-lg text-center border ${stats.sceneCount >= 3 ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-                    <p className="text-[9px] font-black uppercase opacity-60">Scenes</p>
-                    <p className={`text-xl font-black ${stats.sceneCount >= 3 ? 'text-emerald-400' : 'text-red-400'}`}>{stats.sceneCount}</p>
+                <div className="flex gap-2 mt-3">
+                   {actor.grades?.actingNotes && <FileText size={14} className="text-blue-500" title="Has Acting Notes" />}
+                   {actor.grades?.vocalNotes && <Mic2 size={14} className="text-purple-500" title="Has Vocal Notes" />}
+                   {actor.grades?.danceNotes && <Move size={14} className="text-emerald-500" title="Has Dance Notes" />}
                 </div>
-                <div className={`p-2 rounded-lg text-center border ${stats.hasAct1 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-zinc-800 border-white/5'}`}>
-                    <p className="text-[9px] font-black uppercase opacity-60">Act 1</p>
-                    <Layers size={16} className={`mx-auto mt-1 ${stats.hasAct1 ? 'text-blue-400' : 'text-zinc-600'}`} />
-                </div>
-                <div className={`p-2 rounded-lg text-center border ${stats.hasAct2 ? 'bg-purple-500/10 border-purple-500/30' : 'bg-zinc-800 border-white/5'}`}>
-                    <p className="text-[9px] font-black uppercase opacity-60">Act 2</p>
-                    <Layers size={16} className={`mx-auto mt-1 ${stats.hasAct2 ? 'text-purple-400' : 'text-zinc-600'}`} />
-                </div>
-            </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-            {violations.length > 0 && (
-                <section className="space-y-2">
-                     <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
-                        <AlertTriangle size={12} className="text-amber-500" /> Alerts
-                    </h3>
-                    {violations.map((v, i) => (
-                        <div key={i} className={`p-3 border rounded-xl flex gap-3 ${v.level === 'error' ? 'bg-red-900/10 border-red-500/30' : 'bg-amber-900/10 border-amber-500/30'}`}>
-                            <AlertOctagon size={16} className={v.level === 'error' ? 'text-red-500' : 'text-amber-500'} />
-                            <p className={`text-xs font-bold ${v.level === 'error' ? 'text-red-300' : 'text-amber-300'}`}>{v.msg}</p>
-                        </div>
-                    ))}
-                </section>
-            )}
-
-            <section>
-                <div className="flex items-center gap-4 mb-4">
-                     <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-400">Act 1</h3>
-                     <div className="h-px flex-1 bg-blue-500/20"></div>
-                </div>
-                {renderTimeline(act1Scenes)}
-            </section>
-
-             <section>
-                <div className="flex items-center gap-4 mb-4">
-                     <h3 className="text-[10px] font-black uppercase tracking-widest text-purple-400">Act 2</h3>
-                     <div className="h-px flex-1 bg-purple-500/20"></div>
-                </div>
-                {renderTimeline(act2Scenes)}
-            </section>
+             </div>
+          </div>
         </div>
-    </aside>
+
+        {/* SCROLLABLE TIMELINE BODY */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+            <div className="absolute left-[27px] top-0 bottom-0 w-px bg-white/5 z-0" />
+
+            <div className="p-4 space-y-1 relative z-10">
+                 {allScenes.map((scene: any) => {
+                     const roleInScene = stats.assignments[scene.id];
+                     const isCast = !!roleInScene;
+                     const isConflict = roleInScene && roleInScene.includes('+'); 
+                     const dotColor = isConflict ? "bg-red-500 border-red-400 animate-pulse" : getRoleColor(roleInScene);
+
+                     return (
+                         <div 
+                            key={scene.id} 
+                            className={`group flex items-center gap-3 py-2 px-2 rounded-lg transition-all
+                                ${isCast ? 'bg-zinc-800/80 border border-white/10 my-1 shadow-sm' : 'opacity-40 hover:opacity-80 hover:bg-white/5'}`
+                            }
+                         >
+                             <div className="w-8 flex flex-col items-end shrink-0">
+                                 <span className={`text-[9px] font-black uppercase ${isCast ? 'text-white' : 'text-zinc-600'}`}>{scene.Act}</span>
+                             </div>
+
+                             <div className={`w-3 h-3 rounded-full border-2 shrink-0 transition-transform ${isCast ? dotColor : 'bg-zinc-900 border-zinc-700'}`} />
+
+                             <div className="min-w-0 flex-1">
+                                 <div className="flex justify-between items-baseline">
+                                     <p className={`text-xs font-bold truncate ${isCast ? 'text-zinc-200' : 'text-zinc-500'}`}>{scene["Scene Name"]}</p>
+                                     {!isCast && <span className="text-[9px] text-zinc-700 uppercase hidden group-hover:block">{scene["Scene Type"]}</span>}
+                                 </div>
+                                 
+                                 {isCast && (
+                                     <div className="flex items-center gap-1.5 mt-0.5 animate-in slide-in-from-left-2 duration-300">
+                                         <span className={`text-[9px] font-black uppercase px-1.5 rounded-sm bg-zinc-950 text-white border border-white/5 truncate max-w-full ${isConflict ? 'text-red-400 border-red-500/30' : ''}`}>
+                                            {roleInScene}
+                                         </span>
+                                         {isConflict && <Clock size={10} className="text-red-500" />}
+                                     </div>
+                                 )}
+                             </div>
+                         </div>
+                     );
+                 })}
+            </div>
+            <div className="h-20" />
+        </div>
+
+        {/* FOOTER ACTIONS */}
+        <div className="p-4 border-t border-white/5 bg-zinc-900 z-20 shrink-0 space-y-3">
+             {stats.assignedRoleNames.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-2">
+                    {stats.assignedRoleNames.map((role: string) => (
+                        <span key={role} className="text-[9px] font-bold text-zinc-300 bg-zinc-800 px-2 py-1 rounded border border-white/5 flex items-center gap-1">
+                            <div className={`w-1.5 h-1.5 rounded-full ${getRoleColor(role).split(' ')[0]}`} />
+                            {role}
+                        </span>
+                    ))}
+                </div>
+             )}
+
+            <button 
+                onClick={() => setShowFullProfile(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-white text-black text-xs font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+            >
+                <ExternalLink size={14} />
+                View Full Profile
+            </button>
+        </div>
+
+      </div>
+
+      {/* MODAL (Now matches Callback Logic EXACTLY) */}
+      {showFullProfile && (
+        <ActorProfileModal 
+          actor={{
+            ...actor,
+            name: actor.Performer,  // Modal expects 'name', we have 'Performer'
+            avatar: actor.Headshot, // Modal expects 'avatar', we have 'Headshot'
+          }}
+          grades={actor.grades} 
+          onClose={() => setShowFullProfile(false)}
+        />
+      )}
+    </>
   );
 }

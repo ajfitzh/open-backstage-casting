@@ -1,157 +1,191 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const getConfig = () => ({
-  // Using your specific domain
-  baseUrl: process.env.NEXT_PUBLIC_BASEROW_URL || "https://open-backstage.org",
-  token: process.env.NEXT_PUBLIC_BASEROW_TOKEN,
-});
-
-// Internal helper to keep headers consistent
-const getHeaders = (token: string | undefined) => ({
-  "Authorization": `Token ${token}`,
+// 1. DYNAMIC BASE URL (This fixes the 401 Error)
+const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
+const HEADERS = {
+  "Authorization": `Token ${process.env.NEXT_PUBLIC_BASEROW_TOKEN}`,
   "Content-Type": "application/json",
-});
+};
 
-// --- HELPER FUNCTIONS ---
+// --- READ FUNCTIONS ---
 
-export async function getSeasonsAndShows() {
-  const { baseUrl, token } = getConfig();
-  const url = `${baseUrl}/api/database/rows/table/600/?user_field_names=true`;
-  const res = await fetch(url, { headers: getHeaders(token) });
-  const data = await res.json();
-  const productions = data.results;
-  const seasons = Array.from(new Set(productions.map((p: any) => p.Season?.value).filter(Boolean)));
-  return { seasons, productions };
-}
-
-// --- AUDITION SLOTS (For the Casting Deck) ---
-
-/**
- * FETCH: Get all audition records (Table 630)
- * Used by: AuditionsPage
- */
 export async function getAuditionSlots() {
-  const { baseUrl, token } = getConfig();
-  const url = `${baseUrl}/api/database/rows/table/630/?user_field_names=true`;
-  
-  const res = await fetch(url, { 
-    headers: getHeaders(token),
-    cache: 'no-store' 
+  const tableId = process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630";
+  // We use user_field_names=true so we get "Acting Score" instead of "field_123"
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true&size=200`, {
+    headers: HEADERS,
+    cache: "no-store", 
   });
-  
-  if (!res.ok) throw new Error(`Baserow GET Failed: ${res.status}`);
+  if (!res.ok) throw new Error("Failed to fetch audition slots");
   const data = await res.json();
   return data.results;
 }
 
-/**
- * UPDATE: Patch an existing audition record (Table 630)
- * Used by: AuditionsPage (when grading a specific slot)
- */
-export async function updateAuditionSlot(rowId: number, grades: any) {
-  const { baseUrl, token } = getConfig();
-  const url = `${baseUrl}/api/database/rows/table/630/${rowId}/?user_field_names=true`;
-  
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: getHeaders(token),
-    body: JSON.stringify({
-      "Vocal Score": grades.vocal,
-      "Acting Score": grades.acting,
-      "Dance Score": grades.dance,
-      "Stage Presence Score": grades.presence,
-      "Notes": grades.notes,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Update Failed: ${errorText}`);
-  }
-  return res.json();
-}
-
-// --- PEOPLE & CREATION (For CastingContext / Admin usage) ---
-
-/**
- * FETCH: Get all Performers directly (Table 599)
- * Used by: CastingContext
- */
 export async function getAuditionees() {
-  const { baseUrl, token } = getConfig();
-  const url = `${baseUrl}/api/database/rows/table/599/?user_field_names=true`;
-  
-  const res = await fetch(url, { headers: getHeaders(token) });
-  
-  if (!res.ok) throw new Error(`Baserow GET Failed: ${res.status}`);
+  const tableId = process.env.NEXT_PUBLIC_BASEROW_TABLE_PEOPLE || "599";
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true&size=200`, {
+    headers: HEADERS,
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch people");
   const data = await res.json();
   return data.results;
 }
 
-/**
- * CREATE: Create a NEW audition record (Table 630)
- * Used by: CastingContext (if adding a walk-in audition)
- */
-export async function submitAudition(performerId: number, productionId: number, grades: any) {
-  const { baseUrl, token } = getConfig();
-  const url = `${baseUrl}/api/database/rows/table/630/?user_field_names=true`;
-  
-  const res = await fetch(url, {
-    method: "POST",
-    headers: getHeaders(token),
-    body: JSON.stringify({
-      "Performer": [performerId], // Link to Person
-      "Production": [productionId], // Link to Show
-      "Vocal Score": grades.vocal,
-      "Acting Score": grades.acting,
-      "Dance Score": grades.dance,
-      "Stage Presence Score": grades.presence,
-      "Notes": grades.notes,
-      "Date": new Date().toISOString() // Sets current timestamp
-    }),
-  });
-
-  if (!res.ok) throw new Error("Failed to create new audition record.");
-  return res.json();
-}
-// --- SCENES (For the Casting Mission Control) ---
-
-/**
- * FETCH: Get all scenes for the show
- */
 export async function getScenes() {
-  const { baseUrl, token } = getConfig();
-  // REPLACE 'YOUR_SCENES_TABLE_ID' WITH THE REAL ID (e.g., 631)
-  const tableId = "627"; 
-  const url = `${baseUrl}/api/database/rows/table/${tableId}/?user_field_names=true`;
-  
-  const res = await fetch(url, { 
-    headers: getHeaders(token),
-    cache: 'no-store' 
+  // Add a new env variable for Scenes if you want, or hardcode the ID if it's stable
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/627/?user_field_names=true&size=200`, {
+    headers: HEADERS,
   });
-  
-  if (!res.ok) throw new Error(`Baserow GET Scenes Failed: ${res.status}`);
+  if (!res.ok) return [];
   const data = await res.json();
   return data.results;
 }
-// --- ROLES (Table 605) ---
-// Inside app/lib/baserow.tsx
 
 export async function getRoles() {
-  const { baseUrl, token } = getConfig();
-  const tableId = "605"; 
-  
-  // FIX: Add '&size=200' to fetch up to 200 roles (default is 100)
-  const url = `${baseUrl}/api/database/rows/table/${tableId}/?user_field_names=true&size=200`;
-  
-  const res = await fetch(url, { 
-    headers: getHeaders(token),
-    cache: 'no-store' 
+  // Table 605 is Blueprint Roles
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/605/?user_field_names=true&size=200`, {
+    headers: HEADERS,
   });
-  
-  if (!res.ok) throw new Error(`Baserow GET Roles Failed: ${res.status}`);
+  if (!res.ok) return [];
   const data = await res.json();
   return data.results;
 }
 
-// ... existing functions (getAuditionSlots, getScenes, etc.)
+// --- WRITE FUNCTIONS ---
+
+export async function updateAuditionSlot(rowId: number, data: any) {
+  const tableId = process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630";
+
+  // Sanitize Data (Baserow hates empty strings for Numbers)
+  const cleanData = { ...data };
+  ["Vocal Score", "Acting Score", "Dance Score", "Stage Presence Score"].forEach(key => {
+      if (key in cleanData) {
+          cleanData[key] = Number(cleanData[key]) || 0; 
+      }
+  });
+
+  console.log(`📤 Sending Update to ${BASE_URL}...`);
+
+  const response = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/${rowId}/?user_field_names=true`, {
+    method: "PATCH",
+    headers: HEADERS,
+    body: JSON.stringify(cleanData),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("❌ Baserow Update Failed:", errorData);
+    throw new Error(errorData.error || "Baserow update failed");
+  }
+
+  return await response.json();
+}
+
+export async function submitAudition(personId: number, productionId: number, data: any) {
+  const tableId = process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630";
+  
+  // Prepare payload for creating a NEW row
+  const payload = {
+    ...data,
+    "Performer": [personId],   // Link to Person Table
+    "Production": [productionId], // Link to Production Table
+    "Date": new Date().toISOString() // Timestamp the walk-in
+  };
+
+  const response = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to submit walk-in");
+  }
+  return await response.json();
+}
+
+export async function createCastAssignment(actorId: number, roleId: number, productionName: string) {
+  const tableId = process.env.NEXT_PUBLIC_BASEROW_TABLE_ASSIGNMENTS || "603";
+  
+  const response = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({
+      "Person": [actorId], 
+      "Performance Identity": [roleId], 
+      "Production": [productionName] // Baserow smart-matches text for links
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || "Failed to assign role");
+  }
+  return await response.json();
+}
+
+export async function updateRoleAssignment(roleId: string, actorName: string) {
+    // Legacy function support if needed, but createCastAssignment is preferred
+    // ...
+}
+
+// app/lib/baserow.ts
+
+// ... existing imports and constants
+
+// --- READ FUNCTIONS ---
+
+// ... existing read functions (getAuditionSlots, etc)
+
+export async function getSeasonsAndShows() {
+  const tableId = "600"; // Productions Table ID
+  
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true&size=200`, {
+    headers: HEADERS,
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch productions");
+  
+  const data = await res.json();
+  const rows = data.results;
+
+  // Extract unique seasons from the Single Select field
+  // Baserow returns Single Select as: { id: 123, value: "2025-2026", color: "blue" }
+  const uniqueSeasons = Array.from(
+    new Set(rows.map((r: any) => r.Season?.value).filter(Boolean))
+  ).sort() as string[];
+
+  // Sort seasons in descending order (newest first) usually looks best
+  uniqueSeasons.reverse();
+
+  return {
+    seasons: uniqueSeasons,
+    productions: rows
+  };
+}
+
+// app/lib/baserow.ts
+
+export async function getActiveProduction() {
+  const tableId = "600"; 
+  // We filter specifically for the boolean true
+  // Note: Baserow API filters might vary, usually "filter__field_ID__boolean=true"
+  // But searching client-side for the one active show is safer if you have few shows.
+  
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/?user_field_names=true&size=50`, {
+    headers: HEADERS,
+    cache: "no-store",
+  });
+  
+  if (!res.ok) return null;
+  const data = await res.json();
+  
+  // Find the one where "Is Active" is true
+  const activeShow = data.results.find((r: any) => r["Is Active"] === true);
+  
+  if (!activeShow) return data.results[0]; // Fallback to first show if none marked active
+  return activeShow;
+}
