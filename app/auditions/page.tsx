@@ -206,14 +206,17 @@ export default function AuditionsPage() {
   }, [isReady]);
 
   /* ---------- CHOREOGRAPHER AUTO-SAVE ---------- */
+// Inside app/auditions/page.tsx
+
 const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
-    // A. Update Local
+    // A. Update Local State Instantly
     setGrades(prev => ({
         ...prev,
         [actorId]: {
             ...prev[actorId],
             dance: score,
-            choreoNotes: notes
+            choreoNotes: notes,
+            video: videoUrl || prev[actorId]?.video // <--- ADD THIS LINE (Preserve or Update Video)
         }
     }));
 
@@ -223,8 +226,6 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
         "Choreography Notes": notes
     };
     
-    // If we have a video, we need to handle it. 
-    // IF your Baserow field "Audition Video" is a Text Field, this works:
     if (videoUrl) {
         payload["Audition Video"] = videoUrl; 
     }
