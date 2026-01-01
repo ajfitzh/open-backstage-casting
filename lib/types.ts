@@ -3,9 +3,16 @@
 export interface Performer {
   id: number; // Table 599
   name: string;
-  photo?: string;
+  age: number;
+  headshot?: string; // URL to Baserow file
   vocalRange: string;
-  danceLevel: string;
+  tenure: string; // "New Student", "3+ Shows", etc.
+  batch: number; // IMPORTANT: Needed for the Batch 1/2/3 filtering
+  auditionDetails?: {
+    song: string;
+    monologue: string;
+  };
+  danceLevel?: string;
   stats?: {
     sceneCount: number;
     act1: boolean;
