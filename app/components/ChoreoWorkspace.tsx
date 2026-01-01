@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 
 // --- CONFIG ---
-// Standard "On/Off" Tags
 const STANDARD_TAGS = [
   { id: "#Featured", label: "Featured", icon: Star, color: "bg-purple-600 border-purple-400" },
   { id: "#Tap", label: "Tap", icon: Zap, color: "bg-blue-600 border-blue-400" },
@@ -55,7 +54,7 @@ export default function ChoreoWorkspace({
     onSave(activeStudent.id, activeGrade.dance || 0, newNotes);
   };
 
-  // --- NEW: ATTITUDE CYCLER ---
+  // --- ATTITUDE CYCLER ---
   const handleAttitudeCycle = () => {
     const currentNotes = activeGrade.choreoNotes || "";
     let newNotes = currentNotes;
@@ -74,7 +73,6 @@ export default function ChoreoWorkspace({
     onSave(activeStudent.id, activeGrade.dance || 0, newNotes);
   };
 
-  // Determine current Attitude State for UI
   const getAttitudeState = () => {
       const n = activeGrade.choreoNotes || "";
       if (n.includes("#GreatAttitude")) return "good";
@@ -102,8 +100,9 @@ export default function ChoreoWorkspace({
   return (
     <div className="flex flex-col h-full bg-black overflow-hidden">
       
-      {/* 1. TOP: THE "STAGE" (Flex-1 to take available space) */}
-      <div className="flex-1 relative flex flex-col p-4 min-h-0">
+      {/* 1. TOP: THE "STAGE" */}
+      {/* Added min-h-0 to allow this section to shrink aggressively on small screens */}
+      <div className="flex-1 relative flex flex-col p-4 min-h-0 overflow-y-auto">
          
          {/* Navigation Overlay */}
          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-2 z-10 pointer-events-none">
@@ -125,11 +124,12 @@ export default function ChoreoWorkspace({
 
          {/* BIG IDENTITY CARD */}
          <div className="flex-1 flex flex-col items-center justify-center space-y-2 md:space-y-4">
-             <div className="relative w-32 h-32 md:w-56 md:h-56 rounded-full overflow-hidden border-4 border-white/10 shadow-2xl shrink-0">
+             {/* Shrunk the mobile image size to w-28 (7rem) to save vertical space */}
+             <div className="relative w-28 h-28 md:w-56 md:h-56 rounded-full overflow-hidden border-4 border-white/10 shadow-2xl shrink-0 transition-all">
                  <img src={activeStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-full h-full object-cover" />
                  {activeGrade.dance > 0 && (
                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[2px]">
-                         <span className="text-5xl md:text-6xl font-black text-white drop-shadow-lg">{activeGrade.dance}</span>
+                         <span className="text-4xl md:text-6xl font-black text-white drop-shadow-lg">{activeGrade.dance}</span>
                      </div>
                  )}
              </div>
@@ -141,8 +141,9 @@ export default function ChoreoWorkspace({
          </div>
       </div>
 
-      {/* 2. MIDDLE: CONTROL PAD (Auto-height, sits above lineup) */}
-      <div className="bg-zinc-900 border-t border-white/10 p-4 pb-6 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20 shrink-0">
+      {/* 2. MIDDLE: CONTROL PAD */}
+      {/* Added z-30 and extra pb-8 bottom padding to clear the bottom bar */}
+      <div className="bg-zinc-900 border-t border-white/10 p-4 pb-8 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-30 shrink-0 relative">
           
           {/* LEVEL SELECTOR */}
           <div className="grid grid-cols-4 gap-2 mb-4">
@@ -200,8 +201,8 @@ export default function ChoreoWorkspace({
                    <Smile size={16} />}
                   
                   <span className="text-xs font-bold uppercase tracking-wide">
-                      {attState === 'good' ? "Good Attitude" : 
-                       attState === 'bad' ? "Bad Attitude" : 
+                      {attState === 'good' ? "Good" : 
+                       attState === 'bad' ? "Bad" : 
                        "Attitude"}
                   </span>
               </button>
@@ -209,7 +210,7 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* 3. BOTTOM: LINEUP SCROLL */}
-      <div className="bg-black border-t border-white/10 h-20 md:h-24 overflow-x-auto custom-scrollbar shrink-0">
+      <div className="bg-black border-t border-white/10 h-20 md:h-24 overflow-x-auto custom-scrollbar shrink-0 z-40 relative">
           <div className="flex items-center h-full px-4 gap-2">
               {lineup.map((person, i) => (
                   <div 
