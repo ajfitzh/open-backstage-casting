@@ -42,13 +42,22 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
   const pastRolesList = getRolesList(actor.pastRoles);
 
   return (
-    <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-white/10 w-full max-w-4xl h-[700px] rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
+    <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-0 md:p-4">
+      <div className="bg-zinc-950 w-full h-full md:max-w-4xl md:h-[700px] md:rounded-3xl md:border md:border-white/10 overflow-hidden shadow-2xl flex flex-col md:flex-row relative">
         
-        {/* --- LEFT: IDENTITY & RADAR --- */}
-        <div className="p-8 border-r border-white/5 bg-zinc-900/50 w-full md:w-[35%] flex flex-col items-center shrink-0">
+        {/* CLOSE BUTTON (Mobile: Top Right floating, Desktop: Inside content area) */}
+        <button 
+            onClick={onClose} 
+            className="absolute top-4 right-4 z-50 p-2 bg-black/50 backdrop-blur rounded-full text-zinc-400 hover:text-white md:hidden"
+        >
+            <X size={24} />
+        </button>
+
+        {/* --- LEFT (MOBILE: TOP): IDENTITY & RADAR --- */}
+        <div className="p-6 md:p-8 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900/50 w-full md:w-[35%] flex flex-row md:flex-col items-center md:justify-start gap-6 shrink-0">
+          
           {/* Avatar */}
-          <div className="relative w-32 h-32 mb-4 shrink-0">
+          <div className="relative w-20 h-20 md:w-32 md:h-32 shrink-0">
             {actor.avatar ? (
               <img 
                 src={actor.avatar} 
@@ -57,31 +66,33 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
               />
             ) : (
               <div className="w-full h-full bg-zinc-800 rounded-2xl flex items-center justify-center border-2 border-dashed border-white/10">
-                <User size={48} className="text-zinc-600" />
+                <User size={32} className="text-zinc-600 md:w-12 md:h-12" />
               </div>
             )}
           </div>
           
-          <h2 className="text-2xl font-black italic uppercase tracking-tight text-center leading-tight">{actor.name}</h2>
-          
-          {/* Vitals Grid */}
-          <div className="grid grid-cols-3 w-full gap-2 mt-6 mb-6">
-             <div className="bg-black/40 p-2 rounded-lg text-center border border-white/5">
-                <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Height</p>
-                <p className="text-xs font-bold text-white">{actor.height || "-"}</p>
-             </div>
-             <div className="bg-black/40 p-2 rounded-lg text-center border border-white/5">
-                <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Age</p>
-                <p className="text-xs font-bold text-white">{actor.Age}</p>
-             </div>
-             <div className="bg-black/40 p-2 rounded-lg text-center border border-white/5">
-                <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Range</p>
-                <p className="text-xs font-bold text-white">{actor.vocalRange || "-"}</p>
-             </div>
+          <div className="flex-1 md:w-full md:text-center">
+              <h2 className="text-xl md:text-2xl font-black italic uppercase tracking-tight leading-tight">{actor.name}</h2>
+              
+              {/* Vitals Grid */}
+              <div className="flex md:grid md:grid-cols-3 gap-2 mt-2 md:mt-6">
+                 <div className="bg-black/40 px-3 py-1 md:p-2 rounded-lg text-center border border-white/5">
+                    <p className="text-[8px] md:text-[9px] text-zinc-500 font-black uppercase tracking-widest">Height</p>
+                    <p className="text-xs font-bold text-white">{actor.height || "-"}</p>
+                 </div>
+                 <div className="bg-black/40 px-3 py-1 md:p-2 rounded-lg text-center border border-white/5">
+                    <p className="text-[8px] md:text-[9px] text-zinc-500 font-black uppercase tracking-widest">Age</p>
+                    <p className="text-xs font-bold text-white">{actor.age}</p>
+                 </div>
+                 <div className="bg-black/40 px-3 py-1 md:p-2 rounded-lg text-center border border-white/5 hidden md:block">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Range</p>
+                    <p className="text-xs font-bold text-white">{actor.vocalRange || "-"}</p>
+                 </div>
+              </div>
           </div>
 
-          {/* Radar Chart */}
-          <div className="w-full h-40 mt-auto relative">
+          {/* Radar Chart (Hidden on small phones in landscape, visible on portrait/desktop) */}
+          <div className="hidden md:block w-full h-40 mt-auto relative">
              <p className="absolute -top-2 w-full text-[9px] text-center text-zinc-500 font-black uppercase tracking-[0.2em]">Live Analysis</p>
              <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="55%" outerRadius="70%" data={chartData}>
@@ -93,14 +104,16 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
           </div>
         </div>
 
-        {/* --- RIGHT: CONTENT AREA --- */}
-        <div className="flex-1 flex flex-col bg-zinc-950 relative min-w-0">
-          <button onClick={onClose} className="absolute top-6 right-6 text-zinc-500 hover:text-white z-10 transition-colors">
+        {/* --- RIGHT (MOBILE: BOTTOM): CONTENT AREA --- */}
+        <div className="flex-1 flex flex-col bg-zinc-950 relative min-w-0 overflow-hidden">
+          
+          {/* Desktop Close Button */}
+          <button onClick={onClose} className="absolute top-6 right-6 text-zinc-500 hover:text-white z-10 transition-colors hidden md:block">
             <X size={20} />
           </button>
 
           {/* Tabs */}
-          <div className="flex border-b border-white/5 p-4 gap-4 shrink-0">
+          <div className="flex border-b border-white/5 p-4 gap-4 shrink-0 bg-zinc-950 sticky top-0 z-10">
             <button 
               onClick={() => setActiveTab("insights")}
               className={`pb-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'insights' ? 'text-white border-b-2 border-blue-500' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -115,12 +128,12 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar pb-24 md:pb-8">
             {activeTab === "insights" ? (
-              <div className="space-y-8">
+              <div className="space-y-6 md:space-y-8">
                 
                 {/* 1. Song & Monologue Info */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-3 bg-zinc-900 rounded-xl border border-white/5">
                     <p className="text-[9px] font-black text-purple-400 uppercase mb-1 tracking-tighter">Planned Song</p>
                     <p className="text-xs font-bold text-zinc-300 line-clamp-1">{actor.song}</p>
@@ -131,7 +144,7 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
                   </div>
                 </div>
 
-                {/* 2. FEEDBACK GRID (The New Feature) */}
+                {/* 2. FEEDBACK GRID */}
                 <section>
                    <div className="flex items-center gap-2 text-zinc-400 mb-4">
                     <Star size={14} className="text-blue-500" />
@@ -168,7 +181,7 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
                             <p className="text-[10px] font-bold text-emerald-400 uppercase">Choreographer</p>
                         </div>
                         <p className="text-xs text-zinc-300 italic leading-relaxed">
-                            "{grades?.danceNotes || "No notes logged."}"
+                            "{grades?.choreoNotes || "No notes logged."}"
                         </p>
                     </div>
 
@@ -229,7 +242,7 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
             )}
           </div>
 
-          <div className="p-6 border-t border-white/5 bg-zinc-900/20 shrink-0">
+          <div className="p-4 md:p-6 border-t border-white/5 bg-zinc-900/20 shrink-0 absolute bottom-0 w-full md:relative">
             <button 
               onClick={onClose}
               className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] hover:invert transition-all active:scale-[0.98]"

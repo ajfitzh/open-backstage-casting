@@ -3,9 +3,9 @@
 
 import { useState } from "react";
 import { X, CheckCircle2, Mic2, Move, FileText, ExternalLink, Clock } from "lucide-react";
-import ActorProfileModal from "../components/ActorProfileModal";
+import ActorProfileModal from "@/app/components/ActorProfileModal";
 
-// Helper to generate consistent colors for roles so "Ariel" is always one color, "Ursula" another
+// Helper to generate consistent colors for roles
 const getRoleColor = (roleName: string) => {
   if (!roleName) return "bg-zinc-800 border-zinc-700";
   const name = roleName.toLowerCase();
@@ -30,11 +30,14 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
 
   return (
     <>
-      <div className="bg-zinc-900 border-l border-white/5 flex flex-col w-[350px] shrink-0 h-full relative shadow-2xl z-20 transition-all">
+      {/* MOBILE: Fixed full screen overlay (z-50)
+          DESKTOP: Relative sidebar (z-20) 
+      */}
+      <div className="fixed inset-0 md:static md:inset-auto z-50 md:z-20 w-full md:w-[350px] h-full flex flex-col bg-zinc-900 md:border-l border-white/5 shadow-2xl transition-all">
         
         {/* HEADER */}
-        <div className="p-6 pb-4 border-b border-white/5 relative bg-zinc-900 z-10">
-          <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"><X size={20} /></button>
+        <div className="p-6 pb-4 border-b border-white/5 relative bg-zinc-900 z-10 shrink-0">
+          <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors p-2 bg-black/20 rounded-full md:bg-transparent"><X size={20} /></button>
           
           <div className="flex items-start gap-4">
              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0">
@@ -58,7 +61,8 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
         </div>
 
         {/* SCROLLABLE TIMELINE BODY */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-zinc-950/50">
+            {/* Timeline Line */}
             <div className="absolute left-[27px] top-0 bottom-0 w-px bg-white/5 z-0" />
 
             <div className="p-4 space-y-1 relative z-10">
@@ -104,7 +108,7 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
         </div>
 
         {/* FOOTER ACTIONS */}
-        <div className="p-4 border-t border-white/5 bg-zinc-900 z-20 shrink-0 space-y-3">
+        <div className="p-4 border-t border-white/5 bg-zinc-900 z-20 shrink-0 space-y-3 pb-safe">
              {stats.assignedRoleNames.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pb-2">
                     {stats.assignedRoleNames.map((role: string) => (

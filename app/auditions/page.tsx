@@ -65,7 +65,7 @@ export default function AuditionsPage() {
     }
   }, []);
 
-/* ---------- Data Fetching (FIXED) ---------- */
+  /* ---------- Data Fetching (FIXED) ---------- */
   useEffect(() => {
     const loadData = async () => {
       if (!isReady) return;
@@ -215,7 +215,8 @@ export default function AuditionsPage() {
 
     loadData();
   }, [isReady]);
-/* ---------- Save Action (FIXED: MAPS NOTES LOCALLY) ---------- */
+
+  /* ---------- Save Action (FIXED: MAPS NOTES LOCALLY) ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;
     const activeShowId = localStorage.getItem('activeShowId');
@@ -359,8 +360,6 @@ export default function AuditionsPage() {
       {isReady && (
         <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
           <div className="flex-1 flex flex-col">
-            
-            {/* --- HEADER (FIXED: No Duplication, Reset Included) --- */}
             <header className={`p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color}`}>
               <div className="flex justify-between items-center">
                 
@@ -483,7 +482,7 @@ export default function AuditionsPage() {
 
           {/* --- SCORING SIDEBAR --- */}
           {selectedPerson && (
-            <aside className="w-[420px] bg-zinc-950 border-l border-white/10 flex flex-col shadow-2xl relative z-50">
+            <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
                
                {/* 1. HEADER */}
                <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">

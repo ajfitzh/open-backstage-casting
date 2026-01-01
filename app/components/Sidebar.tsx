@@ -1,96 +1,69 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Users, Mic2, Layers, LogOut } from 'lucide-react';
 
-import { useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { 
-  Rocket,           // Launch
-  Mic2,             // Auditions
-  Users,            // Callbacks
-  ClipboardList,    // Casting
-  Wrench,           // Diagnostics
-  ChevronLeft, 
-  ChevronRight
-} from "lucide-react";
-
-export default function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(true); 
-  const pathname = usePathname();
-
-  const navItems = [
-    { name: "Auditions", href: "/auditions", icon: <Mic2 size={20} /> },
-    { name: "Callbacks", href: "/callbacks", icon: <Users size={20} /> },
-    { name: "Casting", href: "/casting", icon: <ClipboardList size={20} /> },
+const NAV_ITEMS = [
+  { name: 'Auditions', href: '/auditions', icon: Mic2 },
+  { name: 'Callbacks', href: '/callbacks', icon: Layers },
+  { name: 'Casting', href: '/casting', icon: Users },
 ];
 
+export default function ResponsiveNav() {
+  const pathname = usePathname();
+
   return (
-    <aside 
-        className={`bg-zinc-950 border-r border-white/5 flex flex-col transition-all duration-300 z-50
-            ${isCollapsed ? "w-[60px]" : "w-64"}
-        `}
-    >
-      {/* HEADER / LOGO */}
-      <div className="h-14 flex items-center justify-center border-b border-white/5 relative">
-        <div className={`font-black italic text-white transition-all overflow-hidden whitespace-nowrap duration-300
-            ${isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto text-lg"}
-        `}>
-           OPEN BACKSTAGE
+    <>
+      {/* --- DESKTOP SIDEBAR (Hidden on Mobile) --- */}
+      <aside className="hidden md:flex flex-col w-20 lg:w-64 bg-zinc-900 border-r border-white/5 h-screen shrink-0">
+        <div className="p-6">
+          <h1 className="text-xl font-black italic uppercase text-blue-500 hidden lg:block">Casting Deck</h1>
+          <h1 className="text-xl font-black italic uppercase text-blue-500 lg:hidden">CD</h1>
         </div>
-        {isCollapsed && <span className="font-bold text-xs text-zinc-500">OB</span>}
-      </div>
-
-      {/* NAVIGATION */}
-      <nav className="flex-1 flex flex-col gap-2 p-2 mt-4">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link 
-              key={item.href} 
-              href={item.href}
-              className={`flex items-center gap-3 p-2.5 rounded-xl transition-all group relative
-                ${isActive 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20" 
-                  : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
-                }
-                ${isCollapsed ? "justify-center" : ""}
-              `}
-            >
-              <span className={`shrink-0 ${isActive ? "text-white" : "group-hover:text-white"}`}>
-                {item.icon}
-              </span>
-              
-              {/* LABEL (Visible when Expanded) */}
-              <span 
-                className={`text-sm font-bold tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300
-                    ${isCollapsed ? "w-0 opacity-0 absolute" : "w-auto opacity-100 relative"}
-                `}
+        
+        <nav className="flex-1 px-4 space-y-2">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                className={`flex items-center gap-4 p-3 rounded-xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
               >
-                {item.name}
-              </span>
+                <item.icon size={20} />
+                <span className="font-bold hidden lg:block">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-              {/* TOOLTIP (Only Visible when Collapsed + Hovered) */}
-              {isCollapsed && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 border border-white/10 text-white text-xs font-bold rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                    {item.name}
+        <div className="p-4 border-t border-white/5">
+           <Link href="/login" className="flex items-center gap-4 p-3 text-zinc-500 hover:text-red-400 transition-colors">
+              <LogOut size={20} />
+              <span className="font-bold hidden lg:block text-xs uppercase tracking-widest">Logout</span>
+           </Link>
+        </div>
+      </aside>
+
+      {/* --- MOBILE BOTTOM NAV (Visible only on small screens) --- */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-zinc-950 border-t border-white/10 z-[100] flex justify-around items-center px-2 pb-safe">
+        {NAV_ITEMS.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all ${isActive ? 'text-blue-500' : 'text-zinc-500'}`}
+              >
+                <div className={`p-1.5 rounded-full ${isActive ? 'bg-blue-500/20' : 'bg-transparent'}`}>
+                    <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                 </div>
-              )}
-            </Link>
-          );
+                <span className="text-[9px] font-bold uppercase tracking-wide">{item.name}</span>
+              </Link>
+            );
         })}
       </nav>
-
-      {/* TOGGLE BUTTON */}
-      <button 
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className="h-12 border-t border-white/5 flex items-center justify-center text-zinc-600 hover:text-white hover:bg-zinc-900 transition-colors"
-      >
-        {isCollapsed ? <ChevronRight size={16} /> : (
-            <div className="flex items-center gap-2 text-xs font-bold uppercase">
-                <ChevronLeft size={16} /> Collapse
-            </div>
-        )}
-      </button>
-
-    </aside>
+    </>
   );
 }

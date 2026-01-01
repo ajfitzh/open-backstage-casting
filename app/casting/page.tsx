@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { getAuditionSlots, getScenes, getRoles, createCastAssignment } from "@/app/lib/baserow"; 
-import { Users, Filter, Loader2, LayoutGrid, Ban, PanelLeftClose, PanelLeftOpen, RefreshCcw, PlusCircle, AlertTriangle, ShieldAlert, Save, Check } from "lucide-react";
+import { Users, Filter, Loader2, LayoutGrid, Ban, PanelLeftClose, PanelLeftOpen, RefreshCcw, PlusCircle, AlertTriangle, ShieldAlert, Save, Check, Archive, Menu, ChevronUp } from "lucide-react";
 import CastingInspector from "./CastingInspector";
 import ChemistryWorkspace from "./ChemistryWorkspace";
 import CastWorkspace from "./CastWorkspace"; 
@@ -19,6 +19,7 @@ export default function CastingPage() {
   const [viewMode, setViewMode] = useState<'cast' | 'lineup'>('cast');
   const [isInspectorOpen, setIsInspectorOpen] = useState(false); 
   const [isBenchCollapsed, setIsBenchCollapsed] = useState(false);
+  const [isMobileBenchOpen, setIsMobileBenchOpen] = useState(false); // New for Mobile
   const [benchFilter, setBenchFilter] = useState<'all' | 'drafting' | 'uncast' | 'cut'>('all');
   const [activeProduction, setActiveProduction] = useState("Little Mermaid"); 
   const [sortBy, setSortBy] = useState("name");
@@ -340,7 +341,8 @@ export default function CastingPage() {
          }, 50);
      }
      setDraggedActor(null);
-     setPendingDrop(null); 
+     setPendingDrop(null);
+     setIsMobileBenchOpen(false); // Close mobile drawer on drop
   };
 
   const handleConfirmRole = (roleId: string, actorId: number) => {
@@ -376,17 +378,12 @@ export default function CastingPage() {
 
   if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
-  const getGridCols = () => {
-      const left = isBenchCollapsed ? '70px' : '280px';
-      if (isInspectorOpen) return `${left} 1fr 350px`;
-      return `${left} 1fr`;
-  };
-
-return (
-    <div className="h-screen bg-zinc-950 text-white grid divide-x divide-white/5 font-sans transition-all duration-300 ease-in-out relative" style={{ gridTemplateColumns: getGridCols() }}>
+  return (
+    <div className="h-screen bg-zinc-950 text-white flex flex-col md:grid md:divide-x divide-white/5 font-sans transition-all duration-300 ease-in-out relative overflow-hidden" 
+         style={{ gridTemplateColumns: isBenchCollapsed ? '70px 1fr' : '280px 1fr' }}>
       
-      {/* LEFT SIDEBAR (No Changes) */}
-      <aside className="bg-zinc-900/50 flex flex-col overflow-hidden relative transition-all">
+      {/* --- LEFT SIDEBAR (The Bench) - Hidden on Mobile, Visible on Desktop --- */}
+      <aside className={`bg-zinc-900/50 flex flex-col overflow-hidden relative transition-all hidden md:flex`}>
         <header className={`p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur-md z-10 space-y-3 ${isBenchCollapsed ? 'px-2 items-center' : ''}`}>
             <div className={`flex items-center ${isBenchCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
                  {!isBenchCollapsed && <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Progress {progressStats.percent}%</div>}
@@ -438,35 +435,64 @@ return (
                 </div>
             )})}
         </div>
-        {benchFilter !== 'cut' && (
-            <div onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={handleCutActor} className={`absolute bottom-0 left-0 right-0 bg-zinc-950/90 border-t border-white/10 backdrop-blur-md flex items-center justify-center transition-all hover:bg-red-900/40 hover:border-red-500/30 group z-20 ${isBenchCollapsed ? 'h-12' : 'h-14'}`}>
-                <div className="flex flex-col items-center text-zinc-600 group-hover:text-red-400 pointer-events-none transition-colors">{isBenchCollapsed ? <Ban size={20} /> : <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-2"><Ban size={14} /> Drag here to Cut</span>}</div>
-            </div>
-        )}
       </aside>
 
-      {/* CENTER */}
-      <div className="flex flex-col h-full overflow-hidden bg-zinc-950">
+      {/* --- MOBILE BENCH DRAWER (Slides up from bottom) --- */}
+      <div className={`md:hidden fixed inset-x-0 bottom-0 z-[100] bg-zinc-900 border-t border-white/10 rounded-t-3xl transition-transform duration-300 ease-out shadow-[0_-10px_40px_rgba(0,0,0,0.5)] ${isMobileBenchOpen ? 'translate-y-0' : 'translate-y-[92%]'}`} style={{ height: '80vh' }}>
+          <div onClick={() => setIsMobileBenchOpen(!isMobileBenchOpen)} className="h-10 flex items-center justify-center cursor-pointer">
+              <div className="w-12 h-1.5 bg-zinc-700 rounded-full" />
+          </div>
+          <div className="p-4 h-full overflow-y-auto pb-24">
+              <h3 className="text-sm font-black uppercase text-zinc-500 mb-4 tracking-widest flex items-center gap-2"><Users size={16} /> The Bench ({performers.length})</h3>
+              <div className="grid grid-cols-2 gap-2">
+                  {performers.map(p => (
+                      <div 
+                          key={p.id}
+                          onClick={() => {
+                              // On mobile, tap to assign instead of drag
+                              const roleName = prompt(`Assign ${p.Performer} to which role?`);
+                              if (roleName) {
+                                  const role = castState.find(r => r.name.toLowerCase().includes(roleName.toLowerCase()));
+                                  if (role) {
+                                      setDraggedActor(p); // Set context for validation
+                                      executeAddActor(role.id, p);
+                                  } else {
+                                      alert("Role not found.");
+                                  }
+                              }
+                          }}
+                          className="bg-zinc-950 p-3 rounded-xl border border-white/5 flex items-center gap-3 active:scale-95 transition-transform"
+                      >
+                          <img src={p.Headshot || DEFAULT_AVATAR} className="w-8 h-8 rounded-full object-cover" />
+                          <span className="text-xs font-bold truncate">{p.Performer}</span>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      </div>
+
+      {/* --- CENTER --- */}
+      <div className="flex flex-col h-full overflow-hidden bg-zinc-950 relative z-0">
           <div className="p-2 border-b border-white/5 flex items-center justify-between bg-zinc-900/50 shrink-0 px-4">
               
-              {/* Left Spacer */}
-              <div className="w-32 hidden md:block"></div> 
+              {/* Mobile Menu Toggle */}
+              <button onClick={() => setIsMobileBenchOpen(true)} className="md:hidden p-2 text-zinc-400">
+                  <Users size={20} />
+              </button>
 
               {/* Center Controls */}
               <div className="bg-zinc-950 p-1 rounded-lg border border-white/10 flex gap-1 mx-auto">
-                  <button onClick={() => setViewMode('cast')} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'cast' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={12} /> Grid</button>
-                  <button onClick={() => setViewMode('lineup')} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'lineup' ? 'bg-purple-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><Users size={12} /> Lineup</button>
+                  <button onClick={() => setViewMode('cast')} className={`flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'cast' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={12} /> <span className="hidden md:inline">Grid</span></button>
+                  <button onClick={() => setViewMode('lineup')} className={`flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'lineup' ? 'bg-purple-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><Users size={12} /> <span className="hidden md:inline">Lineup</span></button>
               </div>
 
-              {/* Right: ACTION BUTTONS (Publish + Show Inspector) */}
+              {/* Right: ACTION BUTTONS */}
               <div className="w-auto md:w-auto flex justify-end gap-3 items-center">
-                  
-                  {/* PUBLISH BUTTON */}
                   <button 
                       onClick={handlePublishCast}
                       disabled={isSaving || progressStats.filled === 0}
                       className={`
-                          flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border
+                          flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border
                           ${saveStatus === 'success' 
                               ? 'bg-emerald-500 border-emerald-400 text-white hover:bg-emerald-400' 
                               : saveStatus === 'error'
@@ -476,28 +502,17 @@ return (
                       `}
                   >
                       {isSaving ? (
-                          <><Loader2 size={14} className="animate-spin" /> Saving...</>
+                          <><Loader2 size={14} className="animate-spin" /> <span className="hidden md:inline">Saving...</span></>
                       ) : saveStatus === 'success' ? (
-                          <><Check size={14} /> Published!</>
+                          <><Check size={14} /> <span className="hidden md:inline">Published!</span></>
                       ) : (
-                          <><Save size={14} /> Publish Cast</>
+                          <><Save size={14} /> <span className="hidden md:inline">Publish</span></>
                       )}
                   </button>
-
-                  {/* INSPECTOR TOGGLE (Only if Hidden) */}
-                  {!isInspectorOpen && selectedActor && (
-                      <button 
-                          onClick={() => setIsInspectorOpen(true)} 
-                          className="flex items-center gap-2 text-[10px] font-bold uppercase text-zinc-500 hover:text-white transition-colors bg-zinc-800/50 px-3 py-2 rounded-lg border border-white/5 hover:bg-zinc-800"
-                      >
-                          <Users size={14} /> 
-                          <span className="hidden xl:inline">Inspector</span>
-                      </button>
-                  )}
               </div>
           </div>
 
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 overflow-hidden relative pb-20 md:pb-0">
               {viewMode === 'cast' ? (
                   <CastWorkspace 
                       roles={filteredRoles}
@@ -523,22 +538,24 @@ return (
           </div>
       </div>
 
-      {/* RIGHT: INSPECTOR */}
+      {/* RIGHT: INSPECTOR (Desktop: Sidebar, Mobile: Modal) */}
       {isInspectorOpen && (
-          <CastingInspector 
-            actor={selectedActor} 
-            allScenes={safeScenes} 
-            stats={selectedActor 
-                ? getActorStats(selectedActor.Performer, selectedActor.id) 
-                : { sceneCount: 0, hasAct1: false, hasAct2: false, assignments: {}, assignedRoleNames: [] }
-            }
-            onClose={() => setIsInspectorOpen(false)}
-          />
+          <div className={`fixed inset-0 z-[200] md:static md:z-0 md:block`}>
+             <CastingInspector 
+                actor={selectedActor} 
+                allScenes={safeScenes} 
+                stats={selectedActor 
+                    ? getActorStats(selectedActor.Performer, selectedActor.id) 
+                    : { sceneCount: 0, hasAct1: false, hasAct2: false, assignments: {}, assignedRoleNames: [] }
+                }
+                onClose={() => setIsInspectorOpen(false)}
+              />
+          </div>
       )}
 
       {/* --- SMART DECISION MODAL --- */}
       {pendingDrop && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="absolute inset-0 z-[250] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-in fade-in zoom-in-95 duration-200">
                   <div className="flex flex-col items-center text-center mb-6">
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${pendingDrop.warnings.includes("GENDER_MISMATCH") ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>
