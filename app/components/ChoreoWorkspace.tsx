@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  ArrowLeft, ArrowRight, Save, Move, 
-  AlertTriangle, Star, CheckCircle2, Zap, Hand 
+  ArrowLeft, ArrowRight, Move, 
+  AlertTriangle, Star, Zap
 } from "lucide-react";
 
 // --- CONFIG ---
@@ -44,11 +44,13 @@ export default function ChoreoWorkspace({
 
   // --- ACTIONS ---
   const handleScore = (score: number) => {
-    onSave(activeStudent.id, score, activeGrade.notes || "");
+    // Pass existing notes so we don't overwrite tags
+    onSave(activeStudent.id, score, activeGrade.choreoNotes || "");
   };
 
   const handleToggleTag = (tag: string) => {
-    const currentNotes = activeGrade.notes || "";
+    // FIXED: Read from 'choreoNotes', not generic 'notes'
+    const currentNotes = activeGrade.choreoNotes || "";
     let newNotes = "";
     
     if (currentNotes.includes(tag)) {
@@ -56,6 +58,7 @@ export default function ChoreoWorkspace({
     } else {
       newNotes = `${currentNotes} ${tag}`.trim();
     }
+    // Pass existing score so we don't overwrite it
     onSave(activeStudent.id, activeGrade.dance || 0, newNotes);
   };
 
@@ -143,7 +146,8 @@ export default function ChoreoWorkspace({
           {/* TAG TOGGLES */}
           <div className="flex flex-wrap justify-center gap-3">
               {TAGS.map((tag) => {
-                  const isActive = (activeGrade.notes || "").includes(tag.id);
+                  // FIXED: Check choreoNotes for the tag
+                  const isActive = (activeGrade.choreoNotes || "").includes(tag.id);
                   return (
                       <button
                           key={tag.id}
