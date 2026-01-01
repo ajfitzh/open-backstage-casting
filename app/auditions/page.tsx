@@ -8,15 +8,14 @@ import {
   MessageSquare, ShieldCheck, Search, UserPlus, PlayCircle, Film
 } from "lucide-react";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
-import ChoreoWorkspace from "@/app/components/ChoreoWorkspace"; // New Import
+import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 
 const TARGET_PRODUCTION_STRING = "The Little Mermaid, Jr. - Spring - 2025-2026";
 
 /* =====================
-   Types
+   Types & Config
 ===================== */
 type AuditionSession = "Thursday" | "Friday" | "Video/Remote" | "Walk-In";
-
 type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 
 const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
@@ -28,33 +27,32 @@ const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string
 };
 
 export default function AuditionsPage() {
-  /* ---------- Hydration Fix State ---------- */
   const [isMounted, setIsMounted] = useState(false); 
   
-  /* ---------- Judge Onboarding ---------- */
+  // Judge State
   const [judgeName, setJudgeName] = useState("");
   const [judgeRole, setJudgeRole] = useState<JudgeRole | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-  /* ---------- App State ---------- */
+  // App State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSession, setActiveSession] = useState<AuditionSession>("Thursday");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [inspectingActor, setInspectingActor] = useState<any | null>(null);
 
-  // Data States
+  // Data
   const [scheduledPerformers, setScheduledPerformers] = useState<any[]>([]);
   const [allStudents, setAllStudents] = useState<any[]>([]); 
   const [grades, setGrades] = useState<Record<number, any>>({});
   
-  // Scoring State
+  // Current Editing Score
   const [currentScores, setCurrentScores] = useState({
     vocal: 0, acting: 0, dance: 0, presence: 0, notes: "",
   });
 
   const reopenJudgeSetup = () => setIsReady(false);
 
-  /* ---------- Load Judge & Mount ---------- */
+  // Initial Load
   useEffect(() => {
     setIsMounted(true); 
     const savedName = localStorage.getItem("judgeName");
@@ -66,7 +64,7 @@ export default function AuditionsPage() {
     }
   }, []);
 
-  /* ---------- Data Fetching (FIXED) ---------- */
+  /* ---------- Data Fetching ---------- */
   useEffect(() => {
     const loadData = async () => {
       if (!isReady) return;
@@ -74,22 +72,14 @@ export default function AuditionsPage() {
         const slots = await getAuditionSlots();
         const activeShowId = localStorage.getItem('activeShowId'); 
 
-        // Filter for this show (ID Match OR String Match Fallback)
         const showAuditions = slots.filter((row: any) => {
           const prodArray = row.Production || [];
           if (!prodArray.length) return false;
-
-          // 1. Try ID Match (Best)
-          if (activeShowId && prodArray.some((p: any) => String(p.id) === activeShowId)) {
-            return true;
-          }
-          
-          // 2. Fallback: String Match (If IDs don't align)
-          const showName = prodArray[0].value || "";
-          return showName.toLowerCase().includes("mermaid"); // Loose match
+          if (activeShowId && prodArray.some((p: any) => String(p.id) === activeShowId)) return true;
+          return (prodArray[0]?.value || "").toLowerCase().includes("mermaid");
         });
 
-        // --- Helpers ---
+        // Helper to extract baserow values
         const getLookupValue = (field: any) => {
           if (!field) return null;
           if (Array.isArray(field)) return field[0]?.value || field[0];
@@ -120,30 +110,36 @@ export default function AuditionsPage() {
           return { label: count > 0 ? `Shows: ${count}` : "First Show", list: roleList };
         };
 
-        // Map Scheduled Data
+        // Map Data
         const formattedSchedule = showAuditions.map((row: any) => {
            const rawDate = row.Date;
            let displayTime = "TBD";
-           let session: AuditionSession = "Video/Remote"; // Default
+           let session: AuditionSession = "Video/Remote";
 
            if (rawDate) {
              const dateObj = new Date(rawDate);
              const dayOfWeek = dateObj.getDay(); 
-             
-             // 4 = Thursday, 5 = Friday (Standard JS Days)
              if (dayOfWeek === 4) session = "Thursday";
              else if (dayOfWeek === 5) session = "Friday";
-             
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
            }
            
-           // Video URL Extraction
+           // --- VIDEO EXTRACTION (New Priority Logic) ---
            let videoUrl = null;
-           const rawVideo = row["Audition Video"]; 
-           if (Array.isArray(rawVideo) && rawVideo.length > 0) videoUrl = rawVideo[0].url;
-           else if (typeof rawVideo === 'string' && rawVideo.startsWith('http')) videoUrl = rawVideo;
+           
+           // 1. Try "Dance Video" (Your new field)
+           if (row["Dance Video"]) {
+               videoUrl = row["Dance Video"];
+           } 
+           
+           // 2. Fallback to "Audition Video" if Dance Video is empty
+           if (!videoUrl) {
+               const rawVideo = row["Audition Video"]; 
+               if (Array.isArray(rawVideo) && rawVideo.length > 0) videoUrl = rawVideo[0].url;
+               else if (typeof rawVideo === 'string' && rawVideo.startsWith('http')) videoUrl = rawVideo;
+           }
 
-           // Headshot Extraction
+           // Headshot
            let headshotUrl = null;
            const rawHeadshot = row.Headshot;
            if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) headshotUrl = rawHeadshot[0].url;
@@ -190,7 +186,7 @@ export default function AuditionsPage() {
 
         const initialGrades: Record<number, any> = {};
         formattedSchedule.forEach(p => {
-          if (p.vocal > 0 || p.dance > 0 || p.acting > 0) initialGrades[p.id] = p;
+          if (p.vocal > 0 || p.dance > 0 || p.acting > 0 || p.video) initialGrades[p.id] = p;
         });
         setGrades(initialGrades);
 
@@ -205,10 +201,8 @@ export default function AuditionsPage() {
     loadData();
   }, [isReady]);
 
-  /* ---------- CHOREOGRAPHER AUTO-SAVE ---------- */
-// Inside app/auditions/page.tsx
-
-const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
+  /* ---------- CHOREOGRAPHER AUTO-SAVE (FIXED) ---------- */
+  const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     // A. Update Local State Instantly
     setGrades(prev => ({
         ...prev,
@@ -216,22 +210,26 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
             ...prev[actorId],
             dance: score,
             choreoNotes: notes,
-            video: videoUrl || prev[actorId]?.video // <--- ADD THIS LINE (Preserve or Update Video)
+            // Only update video locally if a new one was provided
+            video: videoUrl || prev[actorId]?.video 
         }
     }));
 
-    // B. Save to Baserow
+    // B. Prepare Payload for Baserow
     const payload: any = {
-        "Dance Score": score,
+        // FIX: Send 'null' instead of 0 for Ratings (prevents 400 error)
+        "Dance Score": score > 0 ? score : null, 
         "Choreography Notes": notes
     };
     
+    // FIX: Save to new "Dance Video" field
     if (videoUrl) {
-        payload["Audition Video"] = videoUrl; 
+        payload["Dance Video"] = videoUrl; 
     }
     
+    // C. Fire & Forget DB Update
     updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
-};
+  };
 
   /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
@@ -261,10 +259,10 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
 
     try {
       const payload: any = {
-          "Vocal Score": currentScores.vocal,
-          "Acting Score": currentScores.acting,
-          "Dance Score": currentScores.dance,
-          "Stage Presence Score": currentScores.presence,
+          "Vocal Score": currentScores.vocal > 0 ? currentScores.vocal : null,
+          "Acting Score": currentScores.acting > 0 ? currentScores.acting : null,
+          "Dance Score": currentScores.dance > 0 ? currentScores.dance : null,
+          "Stage Presence Score": currentScores.presence > 0 ? currentScores.presence : null,
       };
 
       switch (judgeRole) {
@@ -289,8 +287,7 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
     }
   };
 
-
-/* ---------- Logic: Weighted Scores ---------- */
+  /* ---------- Logic: Grouping & Scoring ---------- */
   const calculateWeightedScore = (scores: any) => {
     if (!judgeRole) return 0;
     const s = {
@@ -307,7 +304,6 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
     }
   };
 
-  /* ---------- Logic: Grouping ---------- */
   const visibleList = useMemo(() => {
     if (activeSession === "Walk-In") {
       if (!searchQuery) return [];
@@ -404,7 +400,6 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
         <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
           <div className="flex-1 flex flex-col">
             
-            {/* HEADER */}
             <header className={`p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color}`}>
               <div className="flex justify-between items-center">
                 <button onClick={reopenJudgeSetup} className="text-left group">

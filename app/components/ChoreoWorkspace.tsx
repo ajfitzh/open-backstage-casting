@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   ArrowLeft, ArrowRight, Move, 
   AlertTriangle, Star, Zap, Smile, ThumbsUp, MessageSquare,
-  Video, Users, Loader2, Play, RefreshCw, Trash2
+  Video, Users, Loader2, Play, RefreshCw, Trash2, ChevronLeft // <--- ADD THIS
 } from "lucide-react";
 
 // --- CONFIG ---
