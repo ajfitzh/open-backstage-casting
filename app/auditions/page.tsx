@@ -206,8 +206,8 @@ export default function AuditionsPage() {
   }, [isReady]);
 
   /* ---------- CHOREOGRAPHER AUTO-SAVE ---------- */
-  const handleChoreoSave = (actorId: number, score: number, notes: string) => {
-    // A. Update Local State Instantly
+const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
+    // A. Update Local
     setGrades(prev => ({
         ...prev,
         [actorId]: {
@@ -217,12 +217,20 @@ export default function AuditionsPage() {
         }
     }));
 
-    // B. Fire & Forget DB Update
-    updateAuditionSlot(actorId, {
+    // B. Save to Baserow
+    const payload: any = {
         "Dance Score": score,
         "Choreography Notes": notes
-    }).catch(err => console.error("Auto-save failed", err));
-  };
+    };
+    
+    // If we have a video, we need to handle it. 
+    // IF your Baserow field "Audition Video" is a Text Field, this works:
+    if (videoUrl) {
+        payload["Audition Video"] = videoUrl; 
+    }
+    
+    updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
+};
 
   /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
