@@ -8,6 +8,7 @@ import {
   MessageSquare, ShieldCheck, Search, UserPlus, PlayCircle, Film
 } from "lucide-react";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
+import ChoreoWorkspace from "@/app/components/ChoreoWorkspace"; // New Import
 
 const TARGET_PRODUCTION_STRING = "The Little Mermaid, Jr. - Spring - 2025-2026";
 
@@ -73,10 +74,6 @@ export default function AuditionsPage() {
         const slots = await getAuditionSlots();
         const activeShowId = localStorage.getItem('activeShowId'); 
 
-        // DEBUG: Check what we are working with
-        console.log("🔍 Total Slots Fetched:", slots.length);
-        console.log("🎯 Filtering for Show ID:", activeShowId);
-
         // Filter for this show (ID Match OR String Match Fallback)
         const showAuditions = slots.filter((row: any) => {
           const prodArray = row.Production || [];
@@ -91,8 +88,6 @@ export default function AuditionsPage() {
           const showName = prodArray[0].value || "";
           return showName.toLowerCase().includes("mermaid"); // Loose match
         });
-
-        console.log("✅ Slots after Filter:", showAuditions.length);
 
         // --- Helpers ---
         const getLookupValue = (field: any) => {
@@ -133,9 +128,6 @@ export default function AuditionsPage() {
 
            if (rawDate) {
              const dateObj = new Date(rawDate);
-             // Fix for Timezone offsets showing wrong day
-             // We use getUTCDay if your dates in Baserow are UTC, 
-             // but usually local getDay() is safer for local theatre.
              const dayOfWeek = dateObj.getDay(); 
              
              // 4 = Thursday, 5 = Friday (Standard JS Days)
@@ -145,9 +137,6 @@ export default function AuditionsPage() {
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
            }
            
-           // If manually flagged as remote/video in a note or empty date
-           if (!rawDate) session = "Video/Remote";
-
            // Video URL Extraction
            let videoUrl = null;
            const rawVideo = row["Audition Video"]; 
@@ -201,7 +190,7 @@ export default function AuditionsPage() {
 
         const initialGrades: Record<number, any> = {};
         formattedSchedule.forEach(p => {
-          if (p.vocal > 0) initialGrades[p.id] = p;
+          if (p.vocal > 0 || p.dance > 0 || p.acting > 0) initialGrades[p.id] = p;
         });
         setGrades(initialGrades);
 
@@ -216,38 +205,52 @@ export default function AuditionsPage() {
     loadData();
   }, [isReady]);
 
-  /* ---------- Save Action (FIXED: MAPS NOTES LOCALLY) ---------- */
+  /* ---------- CHOREOGRAPHER AUTO-SAVE ---------- */
+  const handleChoreoSave = (actorId: number, score: number, notes: string) => {
+    // A. Update Local State Instantly
+    setGrades(prev => ({
+        ...prev,
+        [actorId]: {
+            ...prev[actorId],
+            dance: score,
+            choreoNotes: notes
+        }
+    }));
+
+    // B. Fire & Forget DB Update
+    updateAuditionSlot(actorId, {
+        "Dance Score": score,
+        "Choreography Notes": notes
+    }).catch(err => console.error("Auto-save failed", err));
+  };
+
+  /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;
     const activeShowId = localStorage.getItem('activeShowId');
 
-    // 1. Prepare the Notes Mapping Logic
-    // We need to know WHICH specific field to update based on the current judge
     let noteField = "";
     switch (judgeRole) {
-        case "Director": noteField = "actingNotes"; break; // Matches Modal prop
+        case "Director": noteField = "actingNotes"; break; 
         case "Music": noteField = "musicNotes"; break;
         case "Choreographer": noteField = "choreoNotes"; break;
         case "Drop-In": noteField = "dropInNotes"; break;
         default: noteField = "adminNotes"; break;
     }
 
-    // 2. Optimistic UI Update (The Fix)
-    // We merge the new scores AND the specific note field into the existing data
     setGrades((prev) => {
         const existingData = prev[selectedPerson.id] || {};
         return {
             ...prev,
             [selectedPerson.id]: {
-                ...existingData,        // Keep existing data (e.g. video url, name)
-                ...currentScores,       // Update scores (vocal, acting, etc)
-                [noteField]: currentScores.notes // <--- MAP GENERIC TO SPECIFIC LOCALLY
+                ...existingData,        
+                ...currentScores,       
+                [noteField]: currentScores.notes 
             }
         };
     });
 
     try {
-      // 3. Prepare Database Payload (Same mapping, but for Baserow column names)
       const payload: any = {
           "Vocal Score": currentScores.vocal,
           "Acting Score": currentScores.acting,
@@ -255,7 +258,6 @@ export default function AuditionsPage() {
           "Stage Presence Score": currentScores.presence,
       };
 
-      // Map generic "notes" to specific Baserow Column
       switch (judgeRole) {
           case "Director": payload["Acting Notes"] = currentScores.notes; break;
           case "Music": payload["Music Notes"] = currentScores.notes; break;
@@ -356,20 +358,50 @@ export default function AuditionsPage() {
         </div>
       )}
 
-      {/* --- MAIN AUDITION DECK --- */}
-      {isReady && (
+      {/* --- CONDITIONAL VIEW --- */}
+      {isReady && judgeRole === 'Choreographer' ? (
+        // === CHOREOGRAPHER WORKSPACE ===
+        <div className="h-screen bg-black flex flex-col">
+            <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
+                 <button onClick={reopenJudgeSetup} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">
+                     Exit Dance Mode
+                 </button>
+                 <div className="flex gap-2">
+                      {(["Thursday", "Friday", "Walk-In"] as const).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setActiveSession(s)}
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
+                            activeSession === s ? "bg-white text-black" : "bg-zinc-800 text-zinc-500"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                 </div>
+            </div>
+            
+            <div className="flex-1 overflow-hidden">
+                <ChoreoWorkspace 
+                    people={visibleList} 
+                    initialGrades={grades} 
+                    onSave={handleChoreoSave} 
+                />
+            </div>
+        </div>
+      ) : (
+        // === STANDARD AUDITION DECK ===
+        isReady && (
         <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
           <div className="flex-1 flex flex-col">
+            
+            {/* HEADER */}
             <header className={`p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color}`}>
               <div className="flex justify-between items-center">
-                
-                {/* LEFT: Judge Info & Escape Hatch */}
                 <button onClick={reopenJudgeSetup} className="text-left group">
                   <h1 className="text-2xl font-black italic uppercase">Audition Deck</h1>
                   <div className="flex items-center gap-2">
                       <p className="text-[9px] uppercase text-zinc-500">{judgeName} • {judgeRole}</p>
-                      
-                      {/* RESET BUTTON */}
                       <span 
                           onClick={(e) => {
                               e.stopPropagation();
@@ -385,7 +417,6 @@ export default function AuditionsPage() {
                   </div>
                 </button>
 
-                {/* RIGHT: Session Tabs */}
                 <div className="flex gap-2">
                   {(["Thursday", "Friday", "Video/Remote", "Walk-In"] as const).map((s) => (
                     <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors ${activeSession === s ? "bg-white text-black" : "text-zinc-500 hover:text-zinc-300"}`}>
@@ -395,7 +426,6 @@ export default function AuditionsPage() {
                 </div>
               </div>
 
-              {/* SEARCH BAR */}
               <div className="mt-4 relative w-64">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
                 <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
@@ -415,17 +445,11 @@ export default function AuditionsPage() {
                         <button
                           onClick={() => {
                             setSelectedPerson(person);
-                            // --- FIXED LOADING LOGIC START ---
-                            // 1. Check if we have unsaved local changes (grades state)
                             const saved = grades[person.id] || {};
-                            
-                            // 2. Determine which note to display based on the CURRENT JUDGE
                             let loadedNote = "";
                             if (saved.notes) {
-                                // Prefer locally saved note if user just typed it
                                 loadedNote = saved.notes;
                             } else {
-                                // Otherwise load from DB column based on role
                                 switch(judgeRole) {
                                     case "Director": loadedNote = person.actingNotes; break;
                                     case "Music": loadedNote = person.musicNotes; break;
@@ -442,7 +466,6 @@ export default function AuditionsPage() {
                                 presence: saved.presence || person.presence || 0,
                                 notes: loadedNote || "", 
                             });
-                            // --- FIXED LOADING LOGIC END ---
                           }}
                           className={`flex-1 flex items-center gap-4 p-3 rounded-xl transition-all border ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"}`}
                         >
@@ -480,11 +503,9 @@ export default function AuditionsPage() {
             </div>
           </div>
 
-          {/* --- SCORING SIDEBAR --- */}
+          {/* SCORING SIDEBAR */}
           {selectedPerson && (
             <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
-               
-               {/* 1. HEADER */}
                <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
                  <div className="flex justify-between items-start mb-4">
                     <div className="flex gap-4">
@@ -504,8 +525,6 @@ export default function AuditionsPage() {
                </div>
 
                <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-                  
-                  {/* VIDEO PLAYER */}
                   {selectedPerson.video && (
                      <div className="rounded-xl overflow-hidden border border-white/10 bg-black aspect-video relative group shadow-2xl">
                         <video 
@@ -520,7 +539,6 @@ export default function AuditionsPage() {
                      </div>
                   )}
 
-                  {/* 2. SCORE DISPLAY */}
                   <div className={`p-4 rounded-xl border ${ROLE_THEMES[judgeRole!].color} bg-zinc-900/50`}>
                       <div className="flex justify-between items-center">
                         <div>
@@ -533,7 +551,6 @@ export default function AuditionsPage() {
                       </div>
                   </div>
 
-                  {/* 3. SLIDERS */}
                   <div className="space-y-6">
                       <RubricSlider label="Vocal Ability" val={currentScores.vocal} setVal={(v) => setCurrentScores((s) => ({ ...s, vocal: v }))} disabled={judgeRole !== "Music" && judgeRole !== "Admin"} />
                       <RubricSlider label="Acting / Reads" val={currentScores.acting} setVal={(v) => setCurrentScores((s) => ({ ...s, acting: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
@@ -543,14 +560,12 @@ export default function AuditionsPage() {
                       <RubricSlider label="Stage Presence" val={currentScores.presence} setVal={(v) => setCurrentScores((s) => ({ ...s, presence: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
                   </div>
 
-                  {/* NOTES */}
                   <div className="pt-2 border-t border-white/5">
                     <label className="text-xs uppercase text-zinc-500 font-bold mb-3 block tracking-widest flex items-center gap-2"><MessageSquare size={12}/> Notes</label>
                     <textarea className="w-full bg-zinc-900 border border-white/10 p-4 rounded-xl text-sm min-h-[100px] focus:border-blue-500 outline-none resize-none transition-all placeholder:text-zinc-700" placeholder={`Internal notes for ${selectedPerson.name}...`} value={currentScores.notes} onChange={(e) => setCurrentScores((s) => ({ ...s, notes: e.target.value }))} />
                   </div>
                </div>
 
-               {/* FOOTER */}
                <div className="p-6 border-t border-white/10 bg-zinc-900/50">
                  <button onClick={handleCommit} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-transform active:scale-95">
                    <Save size={18} />
@@ -560,9 +575,9 @@ export default function AuditionsPage() {
             </aside>
           )}
         </div>
+        )
       )}
 
-      {/* Modal */}
       {inspectingActor && <ActorProfileModal actor={inspectingActor} grades={grades[inspectingActor.id]} onClose={() => setInspectingActor(null)} />}
     </>
   );
