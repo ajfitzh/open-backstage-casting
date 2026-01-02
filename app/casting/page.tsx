@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { getAuditionSlots, getScenes, getRoles, createCastAssignment } from "@/app/lib/baserow"; 
-import { Users, Filter, Loader2, LayoutGrid, Ban, PanelLeftClose, PanelLeftOpen, RefreshCcw, PlusCircle, AlertTriangle, ShieldAlert, Save, Check, Archive, Menu, ChevronUp } from "lucide-react";
+import { Users, Filter, Loader2, LayoutGrid, Ban, PanelLeftClose, PanelLeftOpen, RefreshCcw, PlusCircle, AlertTriangle, ShieldAlert, Save, Check, Archive } from "lucide-react";
 import CastingInspector from "./CastingInspector";
 import ChemistryWorkspace from "./ChemistryWorkspace";
 import CastWorkspace from "./CastWorkspace"; 
@@ -19,7 +19,7 @@ export default function CastingPage() {
   const [viewMode, setViewMode] = useState<'cast' | 'lineup'>('cast');
   const [isInspectorOpen, setIsInspectorOpen] = useState(false); 
   const [isBenchCollapsed, setIsBenchCollapsed] = useState(false);
-  const [isMobileBenchOpen, setIsMobileBenchOpen] = useState(false); // New for Mobile
+  const [isMobileBenchOpen, setIsMobileBenchOpen] = useState(false);
   const [benchFilter, setBenchFilter] = useState<'all' | 'drafting' | 'uncast' | 'cut'>('all');
   const [activeProduction, setActiveProduction] = useState("Little Mermaid"); 
   const [sortBy, setSortBy] = useState("name");
@@ -31,13 +31,15 @@ export default function CastingPage() {
   // --- DATA STATE ---
   const [draggedActor, setDraggedActor] = useState<any | null>(null);
   const [selectedActor, setSelectedActor] = useState<any | null>(null);
+  
+  // NOTE: Changed selectedActorId -> selectedActorIds (Array)
   const [castState, setCastState] = useState<any[]>([]);
   const [cutActorIds, setCutActorIds] = useState<Set<number>>(new Set());
   const [pendingDrop, setPendingDrop] = useState<{ 
       actor: any; roleId: string; roleName: string; currentActors: any[]; warnings: string[]; 
   } | null>(null);
 
-  // --- HELPERS (Robust Data Cleaners) ---
+  // --- HELPERS ---
   const safeString = (val: any): string => {
     if (val === null || val === undefined) return "";
     if (typeof val === 'string') return val;
@@ -55,25 +57,6 @@ export default function CastingPage() {
     }
     if (typeof raw === 'string' && raw.startsWith('http')) return raw;
     return DEFAULT_AVATAR;
-  };
-
-  const formatDate = (raw: any) => {
-    const val = safeString(raw);
-    if (!val || val === "N/A") return "N/A";
-    try {
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return val;
-      return date.toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch (e) { return val; }
-  };
-
-  const formatHeight = (raw: any) => {
-      let height = safeString(raw);
-      if (height && !height.includes("'") && !isNaN(Number(height))) {
-          const inches = Number(height);
-          return `${Math.floor(inches / 12)}' ${inches % 12}"`;
-      }
-      return height || "-";
   };
 
   const calculateTenure = (rawPast: any) => {
@@ -110,7 +93,7 @@ export default function CastingPage() {
                     ageReq: safeString(r["Age Range"]) || "Any",
                     production: safeString(r["Master Show Database"]), 
                     actors: [], 
-                    selectedActorId: null,
+                    selectedActorIds: [], // CHANGED TO ARRAY
                     sceneIds: preSetScenes 
                 };
             });
@@ -119,8 +102,6 @@ export default function CastingPage() {
 
         // 2. MAP PERFORMERS
         const mappedPerformers = (pData || []).map((p: any) => {
-            
-            // Extract Helper for Baserow Arrays/Objects
             const extractValue = (keys: string[]) => {
                 for (const k of keys) {
                     const val = p[k];
@@ -132,53 +113,27 @@ export default function CastingPage() {
                 return "";
             };
 
-            const parseList = (raw: any) => {
-                if (!raw) return [];
-                if (Array.isArray(raw)) return raw.map((item: any) => item.value || item);
-                return [raw];
-            };
-
             const rawPast = extractValue(["Past Productions"]);
             const adminNote = safeString(extractValue(["Admin Notes", "General Notes"]));
             const dropInNote = safeString(extractValue(["Drop-In Notes", "Flags"]));
 
             return {
                 id: p.id,
-                // IDENTITY
                 Performer: safeString(extractValue(["Performer", "Name"])) || "Unknown Actor",
                 Gender: safeString(extractValue(["Gender", "Sex", "Pronouns"])), 
                 Age: safeString(extractValue(["Age", "Student Age"])),
                 Headshot: getHeadshot(p.Headshot), 
-                
-                // VITALS (Formatted)
-                height: formatHeight(extractValue(["Height"])),
-                dob: formatDate(extractValue(["Birthdate", "DOB"])),
-                vocalRange: safeString(extractValue(["Vocal Range", "Range"])) || "-",
+                height: safeString(extractValue(["Height"])) || "-",
                 tenure: calculateTenure(rawPast),
-                
-                // PRODUCTION HISTORY & CONFLICTS
-                pastRoles: parseList(p["Past Productions"]), 
-                conflicts: parseList(p["Conflicts"]),
-                
-                // RAW DATA FOR SORTING/FILTERING
-                Production: safeString(extractValue(["Production"])),
-
-                // GRADES & NOTES
                 grades: {
                     acting: Number(extractValue(["Acting Score"]) || 0),
                     vocal: Number(extractValue(["Vocal Score"]) || 0),
                     dance: Number(extractValue(["Dance Score"]) || 0),
-                    presence: Number(extractValue(["Stage Presence Score"]) || 0),
-                    
                     actingNotes: safeString(extractValue(["Acting Notes", "Director Notes"])),
                     vocalNotes: safeString(extractValue(["Music Notes", "Vocal Notes"])),
-                    danceNotes: safeString(extractValue(["Choreography Notes", "Dance Notes"])),
+                    choreoNotes: safeString(extractValue(["Choreography Notes", "Dance Notes"])),
                     adminNotes: [adminNote, dropInNote].filter(Boolean).join(" | "),
                 },
-                
-                // CONTENT
-                monologue: safeString(extractValue(["Monologue", "Monologue Selection"])),
-                song: safeString(extractValue(["Song", "Song Selection"])),
             };
         });
         setAllPerformers(mappedPerformers);
@@ -201,7 +156,8 @@ export default function CastingPage() {
     const uniqueRoles = new Set<string>();
 
     castState.forEach(role => {
-        if (role.selectedActorId === actorId) {
+        // CHECK IF ID IS IN THE ARRAY
+        if (role.selectedActorIds.includes(actorId)) {
             uniqueRoles.add(role.name); 
             role.sceneIds.forEach((sceneId: number) => {
                 if (assignmentMap[sceneId]) assignmentMap[sceneId] = `${assignmentMap[sceneId]} + ${role.name}`;
@@ -239,64 +195,51 @@ export default function CastingPage() {
 
     const r = castState.filter(role => role.production.includes(activeProduction));
     const totalRoles = r.length;
-    const filledRoles = r.filter(role => role.selectedActorId !== null).length;
+    const filledRoles = r.filter(role => role.selectedActorIds.length > 0).length;
     const percent = totalRoles > 0 ? Math.round((filledRoles / totalRoles) * 100) : 0;
 
     return { performers: p, filteredRoles: r, progressStats: { filled: filledRoles, total: totalRoles, percent } };
   }, [allPerformers, castState, activeProduction, sortBy, benchFilter, cutActorIds, safeScenes]); 
 
 
-  // --- ACTIONS: ROLE MANAGEMENT ---
-  const handleAddRole = () => setCastState(prev => [...prev, { id: Date.now().toString(), name: "New Role", type: "Featured", genderReq: "Any", production: activeProduction, actors: [], selectedActorId: null, sceneIds: [] }]);
+  // --- ACTIONS ---
+  const handleAddRole = () => setCastState(prev => [...prev, { id: Date.now().toString(), name: "New Role", type: "Featured", genderReq: "Any", production: activeProduction, actors: [], selectedActorIds: [], sceneIds: [] }]);
   const handleRemoveRole = (id: string) => setCastState(prev => prev.filter(r => r.id !== id));
-  const handleDuplicateRole = (roleId: string) => {
-    const original = castState.find(r => r.id === roleId);
-    if (!original) return;
-    const clone = { ...original, id: Date.now().toString(), name: `${original.name} (Copy)`, actors: [], selectedActorId: null };
-    setCastState(prev => {
-        const index = prev.findIndex(r => r.id === roleId);
-        const newArr = [...prev];
-        newArr.splice(index + 1, 0, clone);
-        return newArr;
-    });
-  };
-
-  // --- ACTIONS: PUBLISH TO BASEROW ---
+  
   const handlePublishCast = async () => {
-    const assignedRoles = castState.filter(r => r.selectedActorId !== null);
+    const assignedRoles = castState.filter(r => r.selectedActorIds.length > 0);
     if (assignedRoles.length === 0) return;
     
-    if (!confirm(`Ready to publish ${assignedRoles.length} role assignments to the database?`)) return;
+    if (!confirm(`Ready to publish ${assignedRoles.length} roles to the database?`)) return;
     
     setIsSaving(true);
     setSaveStatus('idle');
 
     try {
-      const promises = assignedRoles.map(role => {
-          // Baserow needs Numbers for IDs
-          const rId = parseInt(role.id); 
-          const aId = Number(role.selectedActorId);
-          // Baserow needs a String for Production (it will match the text)
-          const prodName = role.production; 
-
-          return createCastAssignment(aId, rId, prodName);
-      });
+      const promises = [];
+      
+      // Loop through roles, then loop through the IDs in that role
+      for (const role of assignedRoles) {
+          for (const actorId of role.selectedActorIds) {
+              const rId = parseInt(role.id);
+              const prodName = role.production;
+              promises.push(createCastAssignment(actorId, rId, prodName));
+          }
+      }
 
       await Promise.all(promises);
-
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 4000); 
-
     } catch (err) {
       console.error(err);
       setSaveStatus('error');
-      alert("There was an issue publishing one or more roles. Check the console for details.");
+      alert("Publish failed. Check console.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // --- LOGIC: DROP HANDLER (SMART INTERCEPTOR) ---
+  // --- DROP HANDLER (MULTI-CAST LOGIC) ---
   const handleDropActorToRole = (e: React.DragEvent, roleId: string) => {
     if (!draggedActor) return;
     const targetRole = castState.find(r => r.id === roleId);
@@ -304,15 +247,13 @@ export default function CastingPage() {
     if (targetRole.actors.some((a: any) => a.id === draggedActor.id)) return; 
 
     const warnings: string[] = [];
-    const isEnsemble = safeString(targetRole.type).toLowerCase().includes('ensemble');
-    if (viewMode === 'cast' && targetRole.actors.length > 0 && !isEnsemble) warnings.push("OCCUPIED");
-
+    const isEnsemble = safeString(targetRole.type).toLowerCase().includes('ensemble') || safeString(targetRole.type).toLowerCase().includes('group');
+    
+    // GENDER CHECK
     const roleString = safeString(targetRole.genderReq).toLowerCase(); 
     const actorString = safeString(draggedActor.Gender).toLowerCase();
-    
     const roleReqsFemale = roleString.includes('female');
     const roleReqsMale = roleString.includes('male') && !roleString.includes('female'); 
-
     if (roleReqsFemale && actorString === 'male') warnings.push("GENDER_MISMATCH");
     if (roleReqsMale && actorString === 'female') warnings.push("GENDER_MISMATCH");
 
@@ -320,48 +261,62 @@ export default function CastingPage() {
         setPendingDrop({ actor: draggedActor, roleId, roleName: targetRole.name, currentActors: targetRole.actors, warnings });
         return; 
     }
-    executeAddActor(roleId, draggedActor);
+    
+    // If Ensemble, we AUTO-CONFIRM. If Principal, we just ADD AS CANDIDATE.
+    const autoConfirm = isEnsemble;
+    executeAddActor(roleId, draggedActor, false, autoConfirm);
   };
 
-  const executeAddActor = (roleId: string, actor: any, clearOthers: boolean = false) => {
+  const executeAddActor = (roleId: string, actor: any, clearOthers: boolean = false, autoConfirm: boolean = false) => {
      setCastState(prev => prev.map(r => {
          if (r.id !== roleId) return r;
+         
          const newActors = clearOthers ? [actor] : [...r.actors, actor];
-         const newSelectedId = clearOthers ? actor.id : r.selectedActorId; 
-         return { ...r, actors: newActors, selectedActorId: newSelectedId };
+         let newSelectedIds = r.selectedActorIds;
+
+         if (clearOthers) {
+             newSelectedIds = [actor.id]; // Swap
+         } else if (autoConfirm) {
+             newSelectedIds = [...r.selectedActorIds, actor.id]; // Add to pool
+         }
+
+         return { ...r, actors: newActors, selectedActorIds: newSelectedIds };
      }));
 
-     if (!clearOthers && viewMode === 'cast') {
-         setTimeout(() => {
-             setCastState(curr => {
-                 const role = curr.find(r => r.id === roleId);
-                 if (role && role.selectedActorId === null) handleConfirmRole(roleId, actor.id); 
-                 return curr;
-             });
-         }, 50);
-     }
      setDraggedActor(null);
      setPendingDrop(null);
-     setIsMobileBenchOpen(false); // Close mobile drawer on drop
+     setIsMobileBenchOpen(false);
   };
 
+  // --- TOGGLE CONFIRMATION (Supports Double Casting) ---
   const handleConfirmRole = (roleId: string, actorId: number) => {
-      const targetRole = castState.find(r => r.id === roleId);
-      if (!targetRole) return;
-      const conflictingRoles = castState.filter(r => r.selectedActorId === actorId && r.id !== roleId);
-      for (const existingRole of conflictingRoles) {
-          const overlap = targetRole.sceneIds.filter((id: number) => existingRole.sceneIds.includes(id));
-          if (overlap.length > 0) {
-              const conflictNames = safeScenes.filter(s => overlap.includes(s.id)).map(s => safeString(s["Scene Name"]));
-              alert(`🚫 CONFLICT DETECTED\n\nThis actor is already "${existingRole.name}" in:\n• ${conflictNames.join("\n• ")}`);
-              return; 
+      setCastState(prev => prev.map(r => {
+          if (r.id !== roleId) return r;
+          
+          const isSelected = r.selectedActorIds.includes(actorId);
+          let newIds;
+
+          if (isSelected) {
+              // REMOVE (Toggle Off)
+              newIds = r.selectedActorIds.filter((id: number) => id !== actorId);
+          } else {
+              // ADD (Toggle On - Double Cast)
+              newIds = [...r.selectedActorIds, actorId];
           }
-      }
-      setCastState(prev => prev.map(r => r.id === roleId ? { ...r, selectedActorId: actorId } : r));
+          
+          return { ...r, selectedActorIds: newIds };
+      }));
   };
 
   const handleRemoveActorFromRole = (roleId: string, actorId: number) => {
-    setCastState(prev => prev.map(r => r.id === roleId ? { ...r, actors: r.actors.filter((a: any) => a.id !== actorId), selectedActorId: r.selectedActorId === actorId ? null : r.selectedActorId } : r));
+    setCastState(prev => prev.map(r => {
+        if (r.id !== roleId) return r;
+        return { 
+            ...r, 
+            actors: r.actors.filter((a: any) => a.id !== actorId), 
+            selectedActorIds: r.selectedActorIds.filter((id: number) => id !== actorId) 
+        };
+    }));
   };
 
   const handleToggleScene = (roleId: string, sceneId: number) => {
@@ -382,7 +337,7 @@ export default function CastingPage() {
     <div className="h-screen bg-zinc-950 text-white flex flex-col md:grid md:divide-x divide-white/5 font-sans transition-all duration-300 ease-in-out relative overflow-hidden" 
          style={{ gridTemplateColumns: isBenchCollapsed ? '70px 1fr' : '280px 1fr' }}>
       
-      {/* --- LEFT SIDEBAR (The Bench) - Hidden on Mobile, Visible on Desktop --- */}
+      {/* LEFT SIDEBAR (Desktop) */}
       <aside className={`bg-zinc-900/50 flex flex-col overflow-hidden relative transition-all hidden md:flex`}>
         <header className={`p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur-md z-10 space-y-3 ${isBenchCollapsed ? 'px-2 items-center' : ''}`}>
             <div className={`flex items-center ${isBenchCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
@@ -437,7 +392,7 @@ export default function CastingPage() {
         </div>
       </aside>
 
-      {/* --- MOBILE BENCH DRAWER (Slides up from bottom) --- */}
+      {/* MOBILE DRAWER */}
       <div className={`md:hidden fixed inset-x-0 bottom-0 z-[100] bg-zinc-900 border-t border-white/10 rounded-t-3xl transition-transform duration-300 ease-out shadow-[0_-10px_40px_rgba(0,0,0,0.5)] ${isMobileBenchOpen ? 'translate-y-0' : 'translate-y-[92%]'}`} style={{ height: '80vh' }}>
           <div onClick={() => setIsMobileBenchOpen(!isMobileBenchOpen)} className="h-10 flex items-center justify-center cursor-pointer">
               <div className="w-12 h-1.5 bg-zinc-700 rounded-full" />
@@ -449,13 +404,13 @@ export default function CastingPage() {
                       <div 
                           key={p.id}
                           onClick={() => {
-                              // On mobile, tap to assign instead of drag
                               const roleName = prompt(`Assign ${p.Performer} to which role?`);
                               if (roleName) {
                                   const role = castState.find(r => r.name.toLowerCase().includes(roleName.toLowerCase()));
                                   if (role) {
-                                      setDraggedActor(p); // Set context for validation
-                                      executeAddActor(role.id, p);
+                                      setDraggedActor(p); 
+                                      const isEnsemble = safeString(role.type).toLowerCase().includes('ensemble');
+                                      executeAddActor(role.id, p, false, isEnsemble);
                                   } else {
                                       alert("Role not found.");
                                   }
@@ -471,22 +426,18 @@ export default function CastingPage() {
           </div>
       </div>
 
-      {/* --- CENTER --- */}
+      {/* CENTER */}
       <div className="flex flex-col h-full overflow-hidden bg-zinc-950 relative z-0">
           <div className="p-2 border-b border-white/5 flex items-center justify-between bg-zinc-900/50 shrink-0 px-4">
-              
-              {/* Mobile Menu Toggle */}
               <button onClick={() => setIsMobileBenchOpen(true)} className="md:hidden p-2 text-zinc-400">
                   <Users size={20} />
               </button>
 
-              {/* Center Controls */}
               <div className="bg-zinc-950 p-1 rounded-lg border border-white/10 flex gap-1 mx-auto">
                   <button onClick={() => setViewMode('cast')} className={`flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'cast' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={12} /> <span className="hidden md:inline">Grid</span></button>
                   <button onClick={() => setViewMode('lineup')} className={`flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'lineup' ? 'bg-purple-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}><Users size={12} /> <span className="hidden md:inline">Lineup</span></button>
               </div>
 
-              {/* Right: ACTION BUTTONS */}
               <div className="w-auto md:w-auto flex justify-end gap-3 items-center">
                   <button 
                       onClick={handlePublishCast}
@@ -518,27 +469,27 @@ export default function CastingPage() {
                       roles={filteredRoles}
                       scenes={safeScenes}
                       onAddRole={handleAddRole}
-                      onRemoveRole={handleRemoveRole}
-                      onDuplicateRole={handleDuplicateRole}
+                      onRemoveRole={(id) => setCastState(prev => prev.filter(r => r.id !== id))}
+                      onDuplicateRole={() => {}}
                       onDropActor={handleDropActorToRole}
                       onRemoveActor={handleRemoveActorFromRole}
                       onToggleScene={handleToggleScene}
-                      onConfirmRole={handleConfirmRole}
                       onSelectRole={(role) => { if (role.actors.length > 0) { setSelectedActor(role.actors[0]); setIsInspectorOpen(true); }}}
+                      onConfirmRole={handleConfirmRole} // NEW: Handles toggling
                   />
               ) : (
                   <ChemistryWorkspace 
                       roles={filteredRoles}
                       onDropActor={handleDropActorToRole}
                       onRemoveActor={handleRemoveActorFromRole}
-                      onConfirmRole={handleConfirmRole}
                       onSelectRole={(role) => { if (role.actors.length > 0) { setSelectedActor(role.actors[0]); setIsInspectorOpen(true); }}}
+                      onConfirmRole={handleConfirmRole}
                   />
               )}
           </div>
       </div>
 
-      {/* RIGHT: INSPECTOR (Desktop: Sidebar, Mobile: Modal) */}
+      {/* RIGHT: INSPECTOR */}
       {isInspectorOpen && (
           <div className={`fixed inset-0 z-[200] md:static md:z-0 md:block`}>
              <CastingInspector 
@@ -553,7 +504,7 @@ export default function CastingPage() {
           </div>
       )}
 
-      {/* --- SMART DECISION MODAL --- */}
+      {/* --- TRAFFIC CONTROL MODAL --- */}
       {pendingDrop && (
           <div className="absolute inset-0 z-[250] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
               <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-in fade-in zoom-in-95 duration-200">
@@ -561,25 +512,16 @@ export default function CastingPage() {
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${pendingDrop.warnings.includes("GENDER_MISMATCH") ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>
                           {pendingDrop.warnings.includes("GENDER_MISMATCH") ? <AlertTriangle size={24} /> : <ShieldAlert size={24} />}
                       </div>
-                      <h3 className="text-lg font-black text-white uppercase italic tracking-wider mb-2">
-                          {pendingDrop.warnings.includes("OCCUPIED") ? "Traffic Control" : "Review Candidate"}
-                      </h3>
+                      <h3 className="text-lg font-black text-white uppercase italic tracking-wider mb-2">Review Candidate</h3>
                       <div className="space-y-2 text-sm">
                           {pendingDrop.warnings.includes("GENDER_MISMATCH") && (<p className="text-amber-400 font-bold bg-amber-900/10 px-2 py-1 rounded border border-amber-500/20">⚠️ Gender Mismatch Detected</p>)}
-                          {pendingDrop.warnings.includes("OCCUPIED") && (<p className="text-zinc-400"><span className="text-white font-bold">{pendingDrop.roleName}</span> is already filled by <span className="text-white font-bold">{safeString(pendingDrop.currentActors[0]?.Performer)}</span>.</p>)}
                       </div>
                   </div>
 
                   <div className="space-y-3">
-                      {pendingDrop.warnings.includes("OCCUPIED") && (
-                          <button onClick={() => executeAddActor(pendingDrop.roleId, pendingDrop.actor, true)} className="w-full flex items-center gap-4 p-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-colors text-left group">
-                              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0"><RefreshCcw size={16} className="text-white" /></div>
-                              <div><div className="text-xs font-black uppercase text-white tracking-wide">Swap</div><div className="text-[10px] text-blue-100 opacity-80">Replace current actor</div></div>
-                          </button>
-                      )}
-                      <button onClick={() => executeAddActor(pendingDrop.roleId, pendingDrop.actor, false)} className={`w-full flex items-center gap-4 p-3 rounded-xl transition-colors text-left group border ${!pendingDrop.warnings.includes("OCCUPIED") ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-500' : 'bg-zinc-800 border-white/5 hover:border-white/10 hover:bg-zinc-700'}`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${!pendingDrop.warnings.includes("OCCUPIED") ? 'bg-white/20' : 'bg-purple-500/20'}`}><PlusCircle size={16} className={!pendingDrop.warnings.includes("OCCUPIED") ? 'text-white' : 'text-purple-400'} /></div>
-                          <div><div className={`text-xs font-black uppercase tracking-wide ${!pendingDrop.warnings.includes("OCCUPIED") ? 'text-white' : 'text-zinc-200'}`}>{pendingDrop.warnings.includes("OCCUPIED") ? "Double Cast" : "Cast Anyway"}</div><div className={`text-[10px] ${!pendingDrop.warnings.includes("OCCUPIED") ? 'text-blue-100' : 'text-zinc-400'}`}>{pendingDrop.warnings.includes("OCCUPIED") ? "Add as alternate" : "Ignore warning & proceed"}</div></div>
+                      <button onClick={() => executeAddActor(pendingDrop.roleId, pendingDrop.actor, false)} className="w-full flex items-center gap-4 p-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition-colors text-left group">
+                          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0"><PlusCircle size={16} className="text-white" /></div>
+                          <div><div className="text-xs font-black uppercase text-white tracking-wide">Add Candidate</div><div className="text-[10px] text-blue-100 opacity-80">Add to role (Gray)</div></div>
                       </button>
                       <button onClick={() => setPendingDrop(null)} className="w-full py-3 text-xs font-bold text-zinc-500 hover:text-white transition-colors">Cancel</button>
                   </div>

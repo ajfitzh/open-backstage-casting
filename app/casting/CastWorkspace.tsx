@@ -13,7 +13,7 @@ interface Props {
   onRemoveActor: (roleId: string, actorId: number) => void;
   onToggleScene: (roleId: string, sceneId: number) => void;
   onSelectRole: (role: any) => void;
-  onConfirmRole: (roleId: string, actorId: number) => void; // NEW: Triggers "Official" selection
+  onConfirmRole: (roleId: string, actorId: number) => void;
 }
 
 export default function CastWorkspace({ 
@@ -46,8 +46,6 @@ export default function CastWorkspace({
       <header className="p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur-md z-10 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4">
             <h1 className="text-xl font-black italic uppercase hidden md:block">Cast Grid</h1>
-            
-            {/* LEGEND */}
             <div className="flex items-center gap-3 px-3 py-1 bg-zinc-900 rounded-full border border-white/5 overflow-x-auto">
                 <div className="flex items-center gap-1.5 shrink-0"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-[9px] font-bold text-zinc-400 uppercase">Scene</span></div>
                 <div className="flex items-center gap-1.5 shrink-0"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-[9px] font-bold text-zinc-400 uppercase">Song</span></div>
@@ -55,18 +53,13 @@ export default function CastWorkspace({
             </div>
         </div>
 
-        <button 
-           onClick={onAddRole}
-           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all shadow-lg shadow-blue-900/20"
-        >
+        <button onClick={onAddRole} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all shadow-lg shadow-blue-900/20">
            <Plus size={14} /> <span className="hidden md:inline">Add Role</span>
         </button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
         <div className="space-y-4 pb-20">
-            
-            {/* GRID HEADER */}
             <div className="grid grid-cols-[140px_1fr_30px] md:grid-cols-[280px_1fr_30px] gap-4 mb-2 sticky top-0 z-20 pr-2">
                 <div className="bg-zinc-950/80 backdrop-blur-sm rounded-lg"></div> 
                 <div className="flex gap-0.5 h-8">
@@ -88,7 +81,6 @@ export default function CastWorkspace({
                 <div></div> 
             </div>
 
-            {/* ROLES ROWS */}
             {roles.map((role) => (
                 <div key={role.id} className="group grid grid-cols-[140px_1fr_30px] md:grid-cols-[280px_1fr_30px] gap-4 p-2 bg-zinc-900/30 border border-white/5 rounded-xl hover:bg-zinc-900 transition-all items-start">
                     
@@ -99,7 +91,7 @@ export default function CastWorkspace({
                         onClick={() => onSelectRole(role)}
                         className={`min-h-[4rem] rounded-lg border-2 border-dashed transition-all cursor-pointer flex flex-col p-2 gap-2 relative
                              ${role.actors.length > 0 ? 'bg-zinc-800 border-white/10' : 'bg-black/20 border-white/5 hover:border-blue-500/50 hover:bg-blue-500/5'}
-                             ${role.selectedActorId ? 'ring-1 ring-purple-500/50' : ''}
+                             ${role.selectedActorIds.length > 0 ? 'ring-1 ring-purple-500/50' : ''}
                         `}
                     >
                          <div className="flex justify-between items-center mb-1">
@@ -107,16 +99,15 @@ export default function CastWorkspace({
                             <span className="text-[9px] font-bold px-1.5 rounded bg-black/40 text-zinc-500 shrink-0 hidden md:block">{role.sceneIds.length} Scn</span>
                          </div>
 
-                        {/* ACTOR CHIPS */}
                         <div className="flex flex-wrap gap-1.5">
                             {role.actors.length === 0 && <p className="text-[10px] text-zinc-600 italic py-1 w-full text-center hidden md:block">Drag actors here...</p>}
                             
                             {role.actors.map((actor: any) => {
-                                const isSelected = role.selectedActorId === actor.id;
+                                const isSelected = role.selectedActorIds.includes(actor.id);
                                 return (
                                     <div 
                                         key={actor.id} 
-                                        onClick={(e) => { e.stopPropagation(); onConfirmRole(role.id, actor.id); }} // CLICK TO CONFIRM
+                                        onClick={(e) => { e.stopPropagation(); onConfirmRole(role.id, actor.id); }} 
                                         className={`flex items-center gap-1.5 rounded-full pr-2 pl-1 py-0.5 shadow-sm max-w-full cursor-pointer transition-all border
                                             ${isSelected 
                                                 ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-900/50' 
@@ -147,7 +138,6 @@ export default function CastWorkspace({
                                 <button
                                     key={scene.id}
                                     onClick={() => onToggleScene(role.id, scene.id)}
-                                    title={`${safeString(scene["Scene Name"])} (${safeString(scene["Scene Type"])})`}
                                     className={`flex-1 min-w-0 transition-all rounded-sm relative overflow-hidden border
                                         ${isActive ? `opacity-100 ${getSceneColor(safeString(scene["Scene Type"]))}` : 'bg-zinc-800/30 border-white/5 hover:bg-zinc-700/50 hover:border-white/20'}
                                     `}
@@ -158,10 +148,9 @@ export default function CastWorkspace({
                         })}
                     </div>
                     
-                    {/* RIGHT: ACTIONS */}
                     <div className="flex flex-col gap-1 items-center opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity pt-1">
-                         <button onClick={() => onDuplicateRole(role.id)} title="Duplicate Row" className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded"><Copy size={14} /></button>
-                        <button onClick={() => onRemoveRole(role.id)} title="Delete Row" className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded"><Trash2 size={14} /></button>
+                         <button onClick={() => onDuplicateRole(role.id)} className="p-1.5 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded"><Copy size={14} /></button>
+                        <button onClick={() => onRemoveRole(role.id)} className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded"><Trash2 size={14} /></button>
                     </div>
                 </div>
             ))}
