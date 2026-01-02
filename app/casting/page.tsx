@@ -75,6 +75,8 @@ export default function CastingPage() {
             getRoles() 
         ]);
         
+        console.log("📥 Raw Performers Loaded:", pData?.length || 0); // Debug Log
+
         setAllScenes(sData || []);
 
         // 1. MAP ROLES
@@ -93,7 +95,7 @@ export default function CastingPage() {
                     ageReq: safeString(r["Age Range"]) || "Any",
                     production: safeString(r["Master Show Database"]), 
                     actors: [], 
-                    selectedActorIds: [], // CHANGED TO ARRAY
+                    selectedActorIds: [], 
                     sceneIds: preSetScenes 
                 };
             });
@@ -113,18 +115,22 @@ export default function CastingPage() {
                 return "";
             };
 
-            const rawPast = extractValue(["Past Productions"]);
+            const rawPast = extractValue(["Past Productions", "Experience"]);
             const adminNote = safeString(extractValue(["Admin Notes", "General Notes"]));
             const dropInNote = safeString(extractValue(["Drop-In Notes", "Flags"]));
 
             return {
                 id: p.id,
-                Performer: safeString(extractValue(["Performer", "Name"])) || "Unknown Actor",
+                Performer: safeString(extractValue(["Performer", "Name", "Full Name"])) || "Unknown Actor", // Expanded fallbacks
                 Gender: safeString(extractValue(["Gender", "Sex", "Pronouns"])), 
                 Age: safeString(extractValue(["Age", "Student Age"])),
                 Headshot: getHeadshot(p.Headshot), 
                 height: safeString(extractValue(["Height"])) || "-",
                 tenure: calculateTenure(rawPast),
+                
+                // CRITICAL: Ensure Production is captured correctly
+                Production: safeString(extractValue(["Production", "Show"])), 
+
                 grades: {
                     acting: Number(extractValue(["Acting Score"]) || 0),
                     vocal: Number(extractValue(["Vocal Score"]) || 0),
@@ -138,7 +144,7 @@ export default function CastingPage() {
         });
         setAllPerformers(mappedPerformers);
 
-      } catch (err) { console.error(err); } 
+      } catch (err) { console.error("Load Error:", err); } 
       finally { setLoading(false); }
     }
     loadData();
@@ -147,16 +153,15 @@ export default function CastingPage() {
   // --- STATS & FILTERING ---
   const safeScenes = useMemo(() => {
     return allScenes
-        .filter(i => safeString(i.Production).includes(activeProduction))
+        .filter(i => safeString(i.Production).toLowerCase().includes("mermaid")) // Loose match for scenes
         .map(s => ({ ...s, "Scene Name": safeString(s["Scene Name"]), "Scene Type": safeString(s["Scene Type"]), "Act": safeString(s.Act) }));
-  }, [allScenes, activeProduction]);
+  }, [allScenes]);
 
   const getActorStats = (actorName: string, actorId: number) => {
     const assignmentMap: Record<number, string> = {};
     const uniqueRoles = new Set<string>();
 
     castState.forEach(role => {
-        // CHECK IF ID IS IN THE ARRAY
         if (role.selectedActorIds.includes(actorId)) {
             uniqueRoles.add(role.name); 
             role.sceneIds.forEach((sceneId: number) => {
@@ -179,7 +184,16 @@ export default function CastingPage() {
   };
 
   const { performers, filteredRoles, progressStats } = useMemo(() => {
-    let p = allPerformers.filter(i => safeString(i.Production).includes(activeProduction));
+    // 1. ROBUST FILTERING
+    let p = allPerformers.filter(i => {
+        const prod = i.Production.toLowerCase();
+        const target = activeProduction.toLowerCase();
+        // Allow if matches "mermaid", OR if production is empty/unassigned (safety net)
+        return prod.includes("mermaid") || !prod; 
+    });
+
+    console.log("Filtered Performers:", p.length); // Debug
+
     if (sortBy === 'name') p.sort((a, b) => safeString(a.Performer).localeCompare(safeString(b.Performer)));
 
     if (benchFilter === 'cut') {
@@ -193,7 +207,7 @@ export default function CastingPage() {
         }
     }
 
-    const r = castState.filter(role => role.production.includes(activeProduction));
+    const r = castState.filter(role => role.production.toLowerCase().includes("mermaid") || !role.production);
     const totalRoles = r.length;
     const filledRoles = r.filter(role => role.selectedActorIds.length > 0).length;
     const percent = totalRoles > 0 ? Math.round((filledRoles / totalRoles) * 100) : 0;
@@ -217,8 +231,6 @@ export default function CastingPage() {
 
     try {
       const promises = [];
-      
-      // Loop through roles, then loop through the IDs in that role
       for (const role of assignedRoles) {
           for (const actorId of role.selectedActorIds) {
               const rId = parseInt(role.id);
@@ -226,7 +238,6 @@ export default function CastingPage() {
               promises.push(createCastAssignment(actorId, rId, prodName));
           }
       }
-
       await Promise.all(promises);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 4000); 
@@ -249,7 +260,6 @@ export default function CastingPage() {
     const warnings: string[] = [];
     const isEnsemble = safeString(targetRole.type).toLowerCase().includes('ensemble') || safeString(targetRole.type).toLowerCase().includes('group');
     
-    // GENDER CHECK
     const roleString = safeString(targetRole.genderReq).toLowerCase(); 
     const actorString = safeString(draggedActor.Gender).toLowerCase();
     const roleReqsFemale = roleString.includes('female');
@@ -262,7 +272,6 @@ export default function CastingPage() {
         return; 
     }
     
-    // If Ensemble, we AUTO-CONFIRM. If Principal, we just ADD AS CANDIDATE.
     const autoConfirm = isEnsemble;
     executeAddActor(roleId, draggedActor, false, autoConfirm);
   };
@@ -275,9 +284,9 @@ export default function CastingPage() {
          let newSelectedIds = r.selectedActorIds;
 
          if (clearOthers) {
-             newSelectedIds = [actor.id]; // Swap
+             newSelectedIds = [actor.id]; 
          } else if (autoConfirm) {
-             newSelectedIds = [...r.selectedActorIds, actor.id]; // Add to pool
+             newSelectedIds = [...r.selectedActorIds, actor.id]; 
          }
 
          return { ...r, actors: newActors, selectedActorIds: newSelectedIds };
@@ -288,22 +297,13 @@ export default function CastingPage() {
      setIsMobileBenchOpen(false);
   };
 
-  // --- TOGGLE CONFIRMATION (Supports Double Casting) ---
   const handleConfirmRole = (roleId: string, actorId: number) => {
       setCastState(prev => prev.map(r => {
           if (r.id !== roleId) return r;
-          
           const isSelected = r.selectedActorIds.includes(actorId);
           let newIds;
-
-          if (isSelected) {
-              // REMOVE (Toggle Off)
-              newIds = r.selectedActorIds.filter((id: number) => id !== actorId);
-          } else {
-              // ADD (Toggle On - Double Cast)
-              newIds = [...r.selectedActorIds, actorId];
-          }
-          
+          if (isSelected) newIds = r.selectedActorIds.filter((id: number) => id !== actorId);
+          else newIds = [...r.selectedActorIds, actorId];
           return { ...r, selectedActorIds: newIds };
       }));
   };
