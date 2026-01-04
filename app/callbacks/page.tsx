@@ -7,7 +7,7 @@ import {
   Link as LinkIcon, Music, FileText,
   Loader2, Copy, UploadCloud, Eye, AlertTriangle, 
   Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, Film,
-  Star, TrendingDown, GripVertical
+  Star, TrendingDown
 } from 'lucide-react';
 import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
@@ -38,8 +38,11 @@ interface CallbackSlot {
   materialLink?: string; 
   materialName?: string; 
   assignedIds: number[];
-  // Sub-groups for chemistry reads
-  pairs?: { name: string, studentIds: number[] }[]; 
+  // UPDATED: Now tracks role assignment per student
+  pairs?: { 
+      name: string, 
+      assignments: { studentId: number, role: string }[] 
+  }[]; 
 }
 
 interface Asset {
@@ -90,29 +93,58 @@ const PartnerMatcher = ({
     onSave: (updatedSlot: CallbackSlot) => void, 
     onClose: () => void 
 }) => {
-    const [localPairs, setLocalPairs] = useState<{ name: string, studentIds: number[] }[]>(slot.pairs || []);
+    // 1. Detect Roles from Title (Simple Split)
+    const availableRoles = useMemo(() => {
+        // Split by common separators: " vs ", " & ", " / ", " and "
+        const raw = slot.title.split(/ vs | & | \/ | and /i);
+        // If no split found (e.g. "General Reading"), just use "Reader"
+        return raw.length > 1 ? raw.map(r => r.trim()) : ["Reader 1", "Reader 2"];
+    }, [slot.title]);
+
+    const [localPairs, setLocalPairs] = useState<{ name: string, assignments: { studentId: number, role: string }[] }[]>(slot.pairs || []);
     const [unpairedIds, setUnpairedIds] = useState<number[]>([]);
 
     useEffect(() => {
-        const pairedSet = new Set(localPairs.flatMap(p => p.studentIds));
+        const pairedSet = new Set(localPairs.flatMap(p => p.assignments.map(a => a.studentId)));
         setUnpairedIds(slot.assignedIds.filter(id => !pairedSet.has(id)));
     }, [slot.assignedIds, localPairs]);
 
     const addPair = () => {
-        setLocalPairs([...localPairs, { name: `Read ${localPairs.length + 1}`, studentIds: [] }]);
+        setLocalPairs([...localPairs, { name: `Read ${localPairs.length + 1}`, assignments: [] }]);
     };
 
     const toggleStudentInPair = (studentId: number, pairIndex: number) => {
         const newPairs = [...localPairs];
         const currentPair = newPairs[pairIndex];
         
-        if (currentPair.studentIds.includes(studentId)) {
-            currentPair.studentIds = currentPair.studentIds.filter(id => id !== studentId);
+        // Check if student is already in this pair
+        const existingIdx = currentPair.assignments.findIndex(a => a.studentId === studentId);
+
+        if (existingIdx >= 0) {
+            // REMOVE: Send back to tank
+            currentPair.assignments.splice(existingIdx, 1);
             setUnpairedIds([...unpairedIds, studentId]);
         } else {
-            currentPair.studentIds.push(studentId);
+            // ADD: Assign first available role
+            // Find which roles are already taken in this pair
+            const takenRoles = new Set(currentPair.assignments.map(a => a.role));
+            // Find first role NOT taken, or default to first role
+            const nextRole = availableRoles.find(r => !takenRoles.has(r)) || availableRoles[0];
+            
+            currentPair.assignments.push({ studentId, role: nextRole });
             setUnpairedIds(unpairedIds.filter(id => id !== studentId));
         }
+        setLocalPairs(newPairs);
+    };
+
+    const cycleRole = (pairIndex: number, assignmentIndex: number) => {
+        const newPairs = [...localPairs];
+        const assignment = newPairs[pairIndex].assignments[assignmentIndex];
+        
+        const currentRoleIdx = availableRoles.indexOf(assignment.role);
+        const nextRoleIdx = (currentRoleIdx + 1) % availableRoles.length;
+        
+        assignment.role = availableRoles[nextRoleIdx];
         setLocalPairs(newPairs);
     };
 
@@ -125,7 +157,14 @@ const PartnerMatcher = ({
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-2xl h-[80vh] flex flex-col shadow-2xl">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 rounded-t-2xl">
-                    <h2 className="text-lg font-black uppercase italic text-white">Partner Matcher: {slot.title}</h2>
+                    <div>
+                        <h2 className="text-lg font-black uppercase italic text-white">Partner Matcher</h2>
+                        <div className="flex gap-2 mt-1">
+                            {availableRoles.map(r => (
+                                <span key={r} className="text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded text-zinc-400">{r}</span>
+                            ))}
+                        </div>
+                    </div>
                     <button onClick={handleSave} className="bg-blue-600 px-4 py-2 rounded font-bold text-xs uppercase hover:bg-blue-500 text-white shadow-lg">Save Pairs</button>
                 </div>
 
@@ -172,17 +211,32 @@ const PartnerMatcher = ({
                                     
                                     {/* ASSIGNED TO THIS PAIR */}
                                     <div className="space-y-1 mb-3 min-h-[40px]">
-                                        {pair.studentIds.map(id => {
-                                            const s = students.find(st => st.id === id);
+                                        {pair.assignments.map((assign, aIdx) => {
+                                            const s = students.find(st => st.id === assign.studentId);
                                             if(!s) return null;
                                             return (
-                                                <div key={id} onClick={() => toggleStudentInPair(id, idx)} className="flex items-center gap-2 bg-blue-600/20 border border-blue-500/30 text-blue-100 p-1.5 rounded cursor-pointer hover:bg-red-900/30 hover:border-red-500/30 transition-colors group/item">
-                                                    <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover" />
-                                                    <span className="text-[10px] font-bold">{s.name}</span>
+                                                <div key={assign.studentId} className="flex items-center justify-between bg-blue-600/20 border border-blue-500/30 text-blue-100 p-1.5 rounded group/item">
+                                                    <div 
+                                                        className="flex items-center gap-2 cursor-pointer"
+                                                        onClick={() => toggleStudentInPair(assign.studentId, idx)} // Click name to remove
+                                                        title="Click to Remove"
+                                                    >
+                                                        <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover" />
+                                                        <span className="text-[10px] font-bold">{s.name}</span>
+                                                    </div>
+                                                    
+                                                    {/* ROLE BADGE (Click to Cycle) */}
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); cycleRole(idx, aIdx); }}
+                                                        className="ml-2 bg-blue-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded hover:bg-blue-400 transition-colors"
+                                                        title="Tap to switch role"
+                                                    >
+                                                        {assign.role}
+                                                    </button>
                                                 </div>
                                             )
                                         })}
-                                        {pair.studentIds.length === 0 && <p className="text-[10px] text-zinc-600 italic py-2 text-center border-2 border-dashed border-zinc-800 rounded">Empty Read</p>}
+                                        {pair.assignments.length === 0 && <p className="text-[10px] text-zinc-600 italic py-2 text-center border-2 border-dashed border-zinc-800 rounded">Empty Read</p>}
                                     </div>
 
                                     {/* AVAILABLE TO ADD */}
@@ -393,10 +447,14 @@ export default function CallbackMatrixPage() {
           slot.assignedIds.forEach(id => {
               let entry = `${slot.time}: ${slot.title}`;
               if (slot.materialLink) entry += ` (Link: ${slot.materialLink})`;
-              // Add pairs info if exists
+              // UPDATED: Include Role Info
               if (slot.pairs && slot.pairs.length > 0) {
-                  const pairName = slot.pairs.find(p => p.studentIds.includes(id))?.name;
-                  if (pairName) entry += ` [${pairName}]`;
+                  // Find assignment
+                  const pair = slot.pairs.find(p => p.assignments.some(a => a.studentId === id));
+                  if (pair) {
+                      const assignment = pair.assignments.find(a => a.studentId === id);
+                      entry += ` [${pair.name}: ${assignment?.role}]`;
+                  }
               }
               if (updates[id]) updates[id] += `\n${entry}`;
               else updates[id] = entry;
@@ -463,7 +521,6 @@ export default function CallbackMatrixPage() {
         
         {/* LEFT: BENCH */}
         <aside className={`${leftPanelOpen ? 'w-[320px]' : 'w-0'} bg-zinc-900 border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
-            
             {/* Header */}
             <div className="p-4 border-b border-white/5 bg-zinc-900 shrink-0 flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -472,10 +529,7 @@ export default function CallbackMatrixPage() {
                     <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{benchList.length}</span>
                 </div>
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => setShowHidden(!showHidden)}
-                        className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}
-                    >
+                    <button onClick={() => setShowHidden(!showHidden)} className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}>
                         {showHidden ? <Eye size={16} /> : <EyeOff size={16} />}
                         <span className="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50">
                             {showHidden ? "Hide Archived" : "Show Archived"}
@@ -494,31 +548,17 @@ export default function CallbackMatrixPage() {
                     { id: 'dance', icon: Move, label: "Top Dance" },
                     { id: 'bottom', icon: TrendingDown, label: "Lowest Scores" },
                 ].map((btn) => (
-                    <button 
-                        key={btn.id}
-                        onClick={() => setSortMode(btn.id as any)} 
-                        className={`group relative flex-1 py-2 rounded flex justify-center transition-colors 
-                            ${sortMode === btn.id 
-                                ? 'bg-blue-600 text-white' 
-                                : btn.id === 'bottom' ? 'bg-zinc-900 text-red-400 hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800'
-                            }`}
-                    >
+                    <button key={btn.id} onClick={() => setSortMode(btn.id as any)} className={`group relative flex-1 py-2 rounded flex justify-center transition-colors ${sortMode === btn.id ? 'bg-blue-600 text-white' : btn.id === 'bottom' ? 'bg-zinc-900 text-red-400 hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800'}`}>
                         <btn.icon size={14} />
-                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                            {btn.label}
-                        </span>
+                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">{btn.label}</span>
                     </button>
                 ))}
             </div>
 
-            {/* SORT LABEL */}
             <div className="px-3 pb-2 pt-1 text-center border-b border-white/5 bg-zinc-900/50">
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
-                    Sorting By: <span className="text-blue-400">{getSortLabel()}</span>
-                </p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Sorting By: <span className="text-blue-400">{getSortLabel()}</span></p>
             </div>
 
-            {/* Search */}
             <div className="p-2 border-b border-white/5 shrink-0">
                 <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -532,38 +572,23 @@ export default function CallbackMatrixPage() {
                     <div 
                         key={student.id} draggable onDragStart={(e) => handleDragStart(e, student.id)}
                         onClick={() => { if (window.innerWidth < 768) { setActiveMobileStudent(student); setLeftPanelOpen(false); }}}
-                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative transition-colors
-                             ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent'}
-                             ${hiddenIds.has(student.id) ? 'opacity-50 grayscale' : ''}
-                        `}
+                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative transition-colors ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent'} ${hiddenIds.has(student.id) ? 'opacity-50 grayscale' : ''}`}
                     >
                         <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-8 h-8 rounded-full object-cover bg-zinc-800" />
                         <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold truncate">{student.name}</p>
                             <div className="flex gap-2 text-[10px] text-zinc-500">
-                                <span className={`font-bold ${student.score >= 4 ? 'text-green-400' : 'text-zinc-400'}`}>
-                                    {getDisplayScore(student)}
-                                </span>
+                                <span className={`font-bold ${student.score >= 4 ? 'text-green-400' : 'text-zinc-400'}`}>{getDisplayScore(student)}</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-1">
-                            <button 
-                                onClick={(e) => toggleHideStudent(e, student.id)}
-                                className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
-                            >
+                            <button onClick={(e) => toggleHideStudent(e, student.id)} className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}>
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                                    {hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (Hide)"}
-                                </span>
+                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">{hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (Hide)"}</span>
                             </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }}
-                                className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors"
-                            >
+                            <button onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }} className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors">
                                 <Eye size={14} />
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                                    View Profile
-                                </span>
+                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">View Profile</span>
                             </button>
                         </div>
                     </div>
@@ -619,9 +644,14 @@ export default function CallbackMatrixPage() {
                                             <div key={pIdx} className="bg-zinc-800/80 border border-blue-500/30 rounded-lg px-3 py-1.5 flex items-center gap-2">
                                                 <span className="text-[10px] font-black text-blue-400 uppercase mr-1">{pair.name}:</span>
                                                 <div className="flex -space-x-1.5">
-                                                    {pair.studentIds.map(sid => {
-                                                        const s = students.find(st => st.id === sid);
-                                                        return s ? <img key={sid} src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full border border-black object-cover" title={s.name} /> : null;
+                                                    {pair.assignments.map(a => {
+                                                        const s = students.find(st => st.id === a.studentId);
+                                                        return s ? (
+                                                            <div key={a.studentId} className="relative group/face">
+                                                                <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full border border-black object-cover" title={`${s.name} (${a.role})`} />
+                                                                <span className="absolute bottom-full mb-1 hidden group-hover/face:block bg-black text-white text-[8px] px-1 py-0.5 rounded whitespace-nowrap">{a.role}</span>
+                                                            </div>
+                                                        ) : null;
                                                     })}
                                                 </div>
                                             </div>
@@ -647,16 +677,8 @@ export default function CallbackMatrixPage() {
 
                             {/* SLOT ACTIONS */}
                             <div className="flex flex-col gap-2 items-end">
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); setPairingSlotId(slot.id); }} 
-                                    className="text-zinc-500 hover:text-blue-400 p-1.5 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors"
-                                    title="Manage Pairs / Reads"
-                                >
-                                    <Users size={16} />
-                                </button>
-                                <button onClick={(e) => { e.stopPropagation(); handleRemoveSlot(slot.id); }} className="text-zinc-600 hover:text-red-500 p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
-                                    <Trash2 size={16} />
-                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); setPairingSlotId(slot.id); }} className="text-zinc-500 hover:text-blue-400 p-1.5 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors" title="Manage Pairs / Reads"><Users size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleRemoveSlot(slot.id); }} className="text-zinc-600 hover:text-red-500 p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16} /></button>
                             </div>
                         </div>
                     </div>
@@ -698,23 +720,16 @@ export default function CallbackMatrixPage() {
         {/* MODAL: ADD SLOT */}
         {isAddingSlot && (
             <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsAddingSlot(false)}>
-                <form 
-                    onSubmit={handleCreateSlot} 
-                    onClick={e => e.stopPropagation()}
-                    className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4"
-                >
+                <form onSubmit={handleCreateSlot} onClick={e => e.stopPropagation()} className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
                     <h3 className="text-lg font-black uppercase italic">Create Callback Slot</h3>
-                    
                     <div>
                         <label className="text-[10px] font-bold uppercase text-zinc-500">Time</label>
                         <input autoFocus value={newSlotData.time} onChange={e => setNewSlotData({...newSlotData, time: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none text-white" />
                     </div>
-                    
                     <div>
                         <label className="text-[10px] font-bold uppercase text-zinc-500">Title</label>
                         <input placeholder="e.g. Ariel Reading" value={newSlotData.title} onChange={e => setNewSlotData({...newSlotData, title: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none text-white" />
                     </div>
-
                     <div>
                         <label className="text-[10px] font-bold uppercase text-zinc-500">Asset Link (Optional)</label>
                         <input placeholder="https://..." value={newSlotData.link} onChange={e => setNewSlotData({...newSlotData, link: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none text-white" />
@@ -722,7 +737,6 @@ export default function CallbackMatrixPage() {
                             <input placeholder="Label (e.g. Sheet Music)" value={newSlotData.label} onChange={e => setNewSlotData({...newSlotData, label: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm mt-2 focus:border-blue-500 outline-none text-white" />
                         )}
                     </div>
-
                     <div className="flex gap-2 pt-2">
                         <button type="button" onClick={() => setIsAddingSlot(false)} className="flex-1 py-3 bg-zinc-800 rounded-lg text-xs font-bold uppercase hover:bg-zinc-700">Cancel</button>
                         <button type="submit" className="flex-1 py-3 bg-blue-600 rounded-lg text-xs font-bold uppercase hover:bg-blue-500 text-white">Create Slot</button>
@@ -731,7 +745,7 @@ export default function CallbackMatrixPage() {
             </div>
         )}
 
-        {/* MODAL: PARTNER MATCHER */}
+        {/* MODAL: PARTNER MATCHER (With Role Logic) */}
         {pairingSlotId && (
             <PartnerMatcher 
                 slot={slots.find(s => s.id === pairingSlotId)!}
