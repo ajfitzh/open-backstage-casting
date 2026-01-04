@@ -62,12 +62,10 @@ export default function ChoreoWorkspace({
       if (slots.length > 0 && !activeSlot) setActiveSlot(slots[0]);
   }, [slots, activeSlot]);
 
-  // Current Context
   const currentGroup = groupedPeople[activeSlot] || [];
   const activeStudent = currentGroup[selectedIndex];
   const activeGrade = initialGrades[activeStudent?.id] || {};
 
-  // VIDEO CHECK
   const groupVideoUrl = currentGroup.length > 0 
       ? (initialGrades[currentGroup[0].id]?.video || currentGroup[0].video) 
       : null;
@@ -77,7 +75,7 @@ export default function ChoreoWorkspace({
   }, [activeStudent?.id, activeGrade.choreoNotes]);
 
 
-  // --- ACTIONS (GRADING) ---
+  // --- ACTIONS ---
   const handleScore = (score: number) => onSave(activeStudent.id, score, localNotes);
   const handleManualNoteChange = (text: string) => setLocalNotes(text);
   const saveNotes = () => onSave(activeStudent.id, activeGrade.dance || 0, localNotes);
@@ -106,14 +104,11 @@ export default function ChoreoWorkspace({
   };
   const attState = getAttitudeState();
 
-  // --- ACTIONS (VIDEO) ---
   const handleBatchVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-
       setIsUploading(true);
       setUploadProgress("Start");
-
       try {
           const res = await fetch('/api/upload', {
               method: 'POST',
@@ -131,7 +126,6 @@ export default function ChoreoWorkspace({
           if (!uploadRes.ok) throw new Error("Upload failed");
 
           alert("Video Uploaded! Linking to all dancers in this group...");
-          
           currentGroup.forEach(student => {
               const oldNotes = initialGrades[student.id]?.choreoNotes || "";
               const oldScore = initialGrades[student.id]?.dance || 0;
@@ -140,7 +134,6 @@ export default function ChoreoWorkspace({
                   onSave(student.id, oldScore, newNotes, publicUrl);
               }
           });
-
       } catch (err) {
           console.error(err);
           alert("Upload failed. Use Camera Roll.");
@@ -152,18 +145,14 @@ export default function ChoreoWorkspace({
 
   const handleDeleteVideo = () => {
       if(!confirm("Delete this group video? This cannot be undone.")) return;
-      
       currentGroup.forEach(student => {
           const oldScore = initialGrades[student.id]?.dance || 0;
           const oldNotes = initialGrades[student.id]?.choreoNotes || "";
           const cleanNotes = oldNotes.replace("[GROUP VIDEO]", "").trim();
-          
-          // Send "DELETE" signal which AuditionsPage now handles
           onSave(student.id, oldScore, cleanNotes, "DELETE");
       });
   };
 
-  // --- ACTIONS (NAV) ---
   const changeStudent = (delta: number) => {
       const newIndex = selectedIndex + delta;
       if (newIndex >= 0 && newIndex < currentGroup.length) setSelectedIndex(newIndex);
@@ -185,7 +174,7 @@ export default function ChoreoWorkspace({
   return (
     <div className="flex flex-col h-full bg-black overflow-hidden relative">
       
-      {/* 0. TIME SLOTS (Only visible in Group Mode) */}
+      {/* 0. TIME SLOTS */}
       <div className={`h-14 bg-zinc-900 border-b border-white/5 flex items-center px-2 gap-2 overflow-x-auto shrink-0 custom-scrollbar transition-all duration-300 ${viewMode === 'grade' ? 'h-0 opacity-0 overflow-hidden border-none' : ''}`}>
           {slots.map((slot) => {
               const isActive = slot === activeSlot;
@@ -206,8 +195,9 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* === PERSISTENT VIDEO PLAYER === */}
+      {/* UPDATE: Adjusted height to h-36 (9rem) on mobile grade mode to save space */}
       <div className={`w-full bg-black border-b border-white/10 shrink-0 relative transition-all duration-500 ease-in-out
-          ${viewMode === 'group' ? 'flex-1 max-h-[40vh]' : 'h-48 md:h-64'}
+          ${viewMode === 'group' ? 'flex-1 max-h-[40vh]' : 'h-36 md:h-64'}
       `}>
           {groupVideoUrl ? (
               <div className="relative w-full h-full group">
@@ -217,14 +207,11 @@ export default function ChoreoWorkspace({
                       playsInline
                       className="w-full h-full object-contain bg-zinc-950"
                   />
-                  
-                  {/* CONTROLS OVERLAY */}
                   <div className="absolute top-2 right-2 flex gap-2 z-10">
                      <label className="flex items-center gap-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors">
                          <RefreshCw size={12} /> Retake
                          <input type="file" accept="video/*" capture="environment" className="hidden" onChange={handleBatchVideoUpload} disabled={isUploading} />
                      </label>
-
                      <button 
                         onClick={handleDeleteVideo}
                         className="flex items-center gap-2 bg-red-600/80 hover:bg-red-600 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors"
@@ -234,7 +221,6 @@ export default function ChoreoWorkspace({
                   </div>
               </div>
           ) : (
-              // PLACEHOLDER / RECORD BUTTON
               <label className={`w-full h-full flex flex-col items-center justify-center gap-3 transition-all cursor-pointer bg-zinc-900 ${isUploading ? 'opacity-50 cursor-wait' : ''}`}>
                   {isUploading ? (
                       <>
@@ -255,7 +241,6 @@ export default function ChoreoWorkspace({
               </label>
           )}
 
-          {/* BACK TO GROUP BUTTON (Overlay in Grade Mode) */}
           {viewMode === 'grade' && (
               <button 
                   onClick={() => setViewMode('group')}
@@ -267,9 +252,9 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* === CONTENT AREA === */}
+      {/* This allows the control pad to scroll naturally */}
       <div className="flex-1 overflow-y-auto relative bg-zinc-950">
           
-          {/* VIEW 1: ROSTER GRID */}
           {viewMode === 'group' && (
               <div className="p-4">
                   <div className="flex justify-between items-end mb-3">
@@ -285,7 +270,6 @@ export default function ChoreoWorkspace({
                           </button>
                       )}
                   </div>
-                  
                   <div className="grid grid-cols-4 gap-2 pb-24">
                       {currentGroup.map((p, i) => {
                           const grade = initialGrades[p.id]?.dance || 0;
@@ -313,9 +297,8 @@ export default function ChoreoWorkspace({
               </div>
           )}
 
-          {/* VIEW 2: GRADING CONTROLS */}
           {viewMode === 'grade' && activeStudent && (
-              <div className="flex flex-col min-h-full">
+              <div className="flex flex-col">
                   
                   {/* COMPACT STUDENT HEADER */}
                   <div className="flex items-center justify-between p-3 border-b border-white/5 bg-zinc-900/50">
@@ -339,15 +322,16 @@ export default function ChoreoWorkspace({
                       <button onClick={() => changeStudent(1)} disabled={selectedIndex === currentGroup.length - 1} className="p-2 text-zinc-400 hover:text-white disabled:opacity-20"><ArrowRight size={20} /></button>
                   </div>
 
-                  {/* SWIPE AREA (Shrunk to allow more space for controls) */}
+                  {/* SWIPE AREA */}
                   <div 
-                    className="flex-1 min-h-[10px]"
+                    className="w-full h-8 shrink-0" 
                     onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
                   ></div>
 
-                  {/* CONTROL PAD (Added pb-24 for footer clearance) */}
-                  <div className="bg-zinc-900 border-t border-white/10 p-4 pb-24 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-                      <div className="grid grid-cols-4 gap-2 mb-2">
+                  {/* CONTROL PAD */}
+                  {/* UPDATE: Increased pb to 48 (12rem) to clear fixed bottom nav bars */}
+                  <div className="bg-zinc-900 border-t border-white/10 p-4 pb-48 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                      <div className="grid grid-cols-4 gap-2 mb-3">
                           {LEVELS.map((lvl) => (
                               <button key={lvl.val} onClick={() => handleScore(lvl.val)} className={`h-14 rounded-xl flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${activeGrade.dance === lvl.val ? `${lvl.color.replace('/30', '')} text-white shadow-lg scale-105` : `bg-transparent border-white/5 text-zinc-500 hover:bg-white/5`}`}>
                                   <span className="text-lg font-black">{lvl.val}</span>
@@ -356,8 +340,8 @@ export default function ChoreoWorkspace({
                           ))}
                       </div>
 
-                      <div className="mb-2 relative">
-                          <input value={localNotes} onChange={(e) => handleManualNoteChange(e.target.value)} onBlur={saveNotes} placeholder="Type note..." className="w-full bg-black/40 border border-white/5 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none" />
+                      <div className="mb-3 relative">
+                          <input value={localNotes} onChange={(e) => handleManualNoteChange(e.target.value)} onBlur={saveNotes} placeholder="Type note..." className="w-full bg-black/40 border border-white/5 rounded-lg pl-9 pr-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none" />
                           <MessageSquare size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
                       </div>
 
@@ -365,15 +349,15 @@ export default function ChoreoWorkspace({
                           {STANDARD_TAGS.map((tag) => {
                               const isActive = (localNotes || "").includes(tag.id);
                               return (
-                                  <button key={tag.id} onClick={() => handleToggleTag(tag.id)} className={`flex items-center gap-1.5 px-3 py-2 md:px-4 md:py-3 rounded-full border transition-all active:scale-95 flex-grow justify-center md:flex-grow-0 ${isActive ? `${tag.color} text-white shadow-lg` : "bg-zinc-950 border-white/10 text-zinc-400"}`}>
+                                  <button key={tag.id} onClick={() => handleToggleTag(tag.id)} className={`flex items-center gap-1.5 px-3 py-3 rounded-full border transition-all active:scale-95 flex-grow justify-center ${isActive ? `${tag.color} text-white shadow-lg` : "bg-zinc-950 border-white/10 text-zinc-400"}`}>
                                       <tag.icon size={14} fill={isActive ? "currentColor" : "none"} />
-                                      <span className="text-[10px] md:text-xs font-bold uppercase tracking-wide">{tag.label}</span>
+                                      <span className="text-[10px] font-bold uppercase tracking-wide">{tag.label}</span>
                                   </button>
                               );
                           })}
-                          <button onClick={handleAttitudeCycle} className={`flex items-center gap-1.5 px-3 py-2 md:px-4 md:py-3 rounded-full border transition-all active:scale-95 flex-grow justify-center md:flex-grow-0 ${attState === 'good' ? "bg-emerald-600 border-emerald-400 text-white shadow-lg" : attState === 'bad' ? "bg-red-600 border-red-400 text-white shadow-lg" : "bg-zinc-950 border-white/10 text-zinc-400"}`}>
+                          <button onClick={handleAttitudeCycle} className={`flex items-center gap-1.5 px-3 py-3 rounded-full border transition-all active:scale-95 flex-grow justify-center ${attState === 'good' ? "bg-emerald-600 border-emerald-400 text-white shadow-lg" : attState === 'bad' ? "bg-red-600 border-red-400 text-white shadow-lg" : "bg-zinc-950 border-white/10 text-zinc-400"}`}>
                               {attState === 'good' ? <ThumbsUp size={14} fill="currentColor" /> : attState === 'bad' ? <AlertTriangle size={14} fill="currentColor" /> : <Smile size={14} />}
-                              <span className="text-[10px] md:text-xs font-bold uppercase tracking-wide">{attState === 'good' ? "Good Att." : attState === 'bad' ? "Bad Att." : "Attitude"}</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wide">{attState === 'good' ? "Good Att." : attState === 'bad' ? "Bad Att." : "Attitude"}</span>
                           </button>
                       </div>
                   </div>
