@@ -77,6 +77,13 @@ export default function ChoreoWorkspace({
 
   // --- ACTIONS ---
   const handleScore = (score: number) => onSave(activeStudent.id, score, localNotes);
+  
+  // NEW: Full Reset Handler
+  const handleClear = () => {
+      setLocalNotes(""); // Wipe text UI
+      onSave(activeStudent.id, 0, ""); // Wipe DB
+  };
+
   const handleManualNoteChange = (text: string) => setLocalNotes(text);
   const saveNotes = () => onSave(activeStudent.id, activeGrade.dance || 0, localNotes);
 
@@ -334,14 +341,14 @@ export default function ChoreoWorkspace({
                           ))}
                       </div>
 
-                      {/* NEW: CLEAR BUTTON */}
+                      {/* FULL RESET BUTTON */}
                       <div className="flex justify-end mb-3 h-5">
                           {activeGrade.dance > 0 && (
                               <button 
-                                  onClick={() => handleScore(0)} 
+                                  onClick={handleClear} 
                                   className="flex items-center gap-1 text-[10px] font-bold uppercase text-zinc-500 hover:text-red-400 transition-colors"
                               >
-                                  <Eraser size={12} /> Clear Score
+                                  <Eraser size={12} /> Clear All (Score & Notes)
                               </button>
                           )}
                       </div>
