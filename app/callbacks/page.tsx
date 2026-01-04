@@ -130,7 +130,7 @@ export default function CallbackMatrixPage() {
 
   // --- ARCHIVE ACTIONS ---
   const toggleHideStudent = (e: React.MouseEvent, id: number) => {
-      e.stopPropagation(); // Prevents dragging/clicking the row
+      e.stopPropagation();
       setHiddenIds(prev => {
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
@@ -289,7 +289,7 @@ export default function CallbackMatrixPage() {
                 {benchList.map(student => (
                     <div 
                         key={student.id} draggable onDragStart={(e) => handleDragStart(e, student.id)}
-                        onClick={() => { if (window.innerWidth <768) { setActiveMobileStudent(student); setLeftPanelOpen(false); }}}
+                        onClick={() => { if (window.innerWidth < 768) { setActiveMobileStudent(student); setLeftPanelOpen(false); }}}
                         className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative
                              ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent'}
                              ${hiddenIds.has(student.id) ? 'opacity-50 grayscale' : ''}
@@ -303,9 +303,8 @@ export default function CallbackMatrixPage() {
                             </div>
                         </div>
 
-                        {/* ALWAYS VISIBLE ACTIONS (Replaced 'hidden group-hover:flex' with 'flex') */}
+                        {/* ALWAYS VISIBLE ACTIONS */}
                         <div className="flex items-center gap-1">
-                            {/* ARCHIVE BUTTON */}
                             <button 
                                 onClick={(e) => toggleHideStudent(e, student.id)}
                                 className={`p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
@@ -314,7 +313,6 @@ export default function CallbackMatrixPage() {
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
                             </button>
                             
-                            {/* INSPECTOR BUTTON */}
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }}
                                 className="p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors"
