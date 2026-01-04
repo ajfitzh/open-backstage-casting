@@ -6,7 +6,8 @@ import {
   Users, Clock, Plus, Trash2, Share, Search, X, 
   GripVertical, Link as LinkIcon, Music, FileText,
   Loader2, Copy, UploadCloud, Eye, AlertTriangle, 
-  Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, CheckCircle2, Film
+  Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, CheckCircle2, Film,
+  Star, TrendingDown, TrendingUp
 } from 'lucide-react';
 import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
@@ -68,7 +69,10 @@ export default function CallbackMatrixPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
 
-  // --- HELPER: SAFE STRING (The Crash Fix) ---
+  // --- NEW: SORT STATE ---
+  const [sortMode, setSortMode] = useState<'overall' | 'vocal' | 'acting' | 'dance' | 'bottom'>('overall');
+
+  // --- HELPER: SAFE STRING ---
   const safeString = (val: any): string => {
     if (val === null || val === undefined) return "";
     if (typeof val === 'string') return val;
@@ -108,13 +112,13 @@ export default function CallbackMatrixPage() {
         })
         .map((r: any) => ({
             id: r.id,
-            name: safeString(r.Performer), // Safe
+            name: safeString(r.Performer),
             avatar: r.Headshot?.[0]?.url || "",
-            age: safeString(r.Age), // Safe
-            gender: safeString(r.Gender), // Safe
-            score: safeNumber(r["Vocal Score"]), // Safe
+            age: safeString(r.Age),
+            gender: safeString(r.Gender),
+            score: safeNumber(r["Average Score"] || r["Vocal Score"]), // Fallback if avg not calc'd
             callbackString: safeString(r["Callbacks"]),
-            conflicts: safeString(r["Conflicts"]) || "None listed", // Safe
+            conflicts: safeString(r["Conflicts"]) || "None listed",
             breakdown: {
                 vocal: safeNumber(r["Vocal Score"]),
                 acting: safeNumber(r["Acting Score"]),
@@ -142,22 +146,18 @@ export default function CallbackMatrixPage() {
     load();
   }, []);
 
-  // --- ARCHIVE ACTIONS ---
+  // --- ACTIONS ---
   const toggleHideStudent = (e: React.MouseEvent, id: number) => {
       e.stopPropagation();
       setHiddenIds(prev => {
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
           else next.add(id);
-          
-          if (activeProductionId) {
-              localStorage.setItem(`hiddenCallbacks_${activeProductionId}`, JSON.stringify(Array.from(next)));
-          }
+          if (activeProductionId) localStorage.setItem(`hiddenCallbacks_${activeProductionId}`, JSON.stringify(Array.from(next)));
           return next;
       });
   };
 
-  // --- ASSET ACTIONS ---
   const handleUploadAsset = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!e.target.files || !e.target.files[0]) return;
       if (!activeProductionId) { alert("Please select a Production first!"); return; }
@@ -170,13 +170,7 @@ export default function CallbackMatrixPage() {
           });
           if (!res.ok) throw new Error("Sign failed");
           const { uploadUrl, publicUrl } = await res.json();
-
-          await fetch(uploadUrl, {
-              method: 'PUT',
-              body: file,
-              headers: { "Content-Type": file.type, "x-amz-acl": "public-read" },
-          });
-
+          await fetch(uploadUrl, { method: 'PUT', body: file, headers: { "Content-Type": file.type, "x-amz-acl": "public-read" } });
           const type = file.type.includes('pdf') ? 'PDF' : file.type.includes('audio') ? 'Audio' : 'Video';
           await createProductionAsset(file.name, publicUrl, type, activeProductionId);
           setAssets(prev => [...prev, { id: Date.now(), name: file.name, url: publicUrl, type }]);
@@ -188,7 +182,6 @@ export default function CallbackMatrixPage() {
       alert("Link copied!");
   };
 
-  // --- SLOT ACTIONS ---
   const handleAddSlot = () => {
       const time = prompt("Time (e.g. 2:00 PM):", "2:00 PM");
       if(!time) return;
@@ -247,6 +240,7 @@ export default function CallbackMatrixPage() {
       alert(`Published ${count} schedules!`);
   };
 
+  // --- FILTERED & SORTED BENCH ---
   const benchList = useMemo(() => {
       return students
         .filter(s => {
@@ -254,8 +248,23 @@ export default function CallbackMatrixPage() {
             const isVisible = showHidden || !hiddenIds.has(s.id);
             return matchesSearch && isVisible;
         })
-        .sort((a, b) => b.score - a.score); 
-  }, [students, search, hiddenIds, showHidden]);
+        .sort((a, b) => {
+            if (sortMode === 'overall') return b.score - a.score;
+            if (sortMode === 'vocal') return b.breakdown.vocal - a.breakdown.vocal;
+            if (sortMode === 'acting') return b.breakdown.acting - a.breakdown.acting;
+            if (sortMode === 'dance') return b.breakdown.dance - a.breakdown.dance;
+            if (sortMode === 'bottom') return a.score - b.score; // Ascending
+            return 0;
+        });
+  }, [students, search, hiddenIds, showHidden, sortMode]);
+
+  // --- DISPLAY HELPERS ---
+  const getDisplayScore = (student: Student) => {
+      if (sortMode === 'vocal') return `Vocal: ${student.breakdown.vocal}`;
+      if (sortMode === 'acting') return `Act: ${student.breakdown.acting}`;
+      if (sortMode === 'dance') return `Dance: ${student.breakdown.dance}`;
+      return `Avg: ${student.score.toFixed(1)}`;
+  };
 
   const handleDragStart = (e: React.DragEvent, id: number) => {
       setDraggedStudentId(id);
@@ -274,14 +283,15 @@ export default function CallbackMatrixPage() {
     <div className="h-screen bg-zinc-950 text-white flex overflow-hidden relative font-sans">
         
         {/* LEFT: BENCH */}
-        <aside className={`${leftPanelOpen ? 'w-[300px]' : 'w-0'} bg-zinc-900 border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
+        <aside className={`${leftPanelOpen ? 'w-[320px]' : 'w-0'} bg-zinc-900 border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
+            
+            {/* Header */}
             <div className="p-4 border-b border-white/5 bg-zinc-900 shrink-0 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <Users size={18} className="text-zinc-400" />
                     <h2 className="text-sm font-black uppercase tracking-widest">Bench</h2>
                     <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{benchList.length}</span>
                 </div>
-                {/* TOGGLE HIDDEN BUTTON */}
                 <div className="flex gap-2">
                     <button 
                         onClick={() => setShowHidden(!showHidden)}
@@ -294,16 +304,40 @@ export default function CallbackMatrixPage() {
                 </div>
             </div>
             
-            <div className="p-2 border-b border-white/5 shrink-0">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} className="bg-zinc-950 rounded p-2 text-xs w-full border border-white/5 focus:border-blue-500 outline-none" placeholder="Search..." />
+            {/* SORT BAR */}
+            <div className="px-2 pt-2 flex gap-1 justify-between shrink-0">
+                <button onClick={() => setSortMode('overall')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'overall' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Overall">
+                    <Star size={14} />
+                </button>
+                <button onClick={() => setSortMode('vocal')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'vocal' ? 'bg-purple-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Vocal">
+                    <Mic size={14} />
+                </button>
+                <button onClick={() => setSortMode('acting')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'acting' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Acting">
+                    <Theater size={14} />
+                </button>
+                <button onClick={() => setSortMode('dance')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'dance' ? 'bg-pink-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Dance">
+                    <Move size={14} />
+                </button>
+                <button onClick={() => setSortMode('bottom')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'bottom' ? 'bg-red-900/50 text-red-300' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Lowest Scores">
+                    <TrendingDown size={14} />
+                </button>
             </div>
 
+            {/* Search */}
+            <div className="p-2 border-b border-white/5 shrink-0">
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} className="bg-zinc-950 rounded p-2 pl-9 text-xs w-full border border-white/5 focus:border-blue-500 outline-none" placeholder="Search..." />
+                </div>
+            </div>
+
+            {/* List */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar pb-20">
                 {benchList.map(student => (
                     <div 
                         key={student.id} draggable onDragStart={(e) => handleDragStart(e, student.id)}
                         onClick={() => { if (window.innerWidth < 768) { setActiveMobileStudent(student); setLeftPanelOpen(false); }}}
-                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative
+                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative transition-colors
                              ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent'}
                              ${hiddenIds.has(student.id) ? 'opacity-50 grayscale' : ''}
                         `}
@@ -312,7 +346,9 @@ export default function CallbackMatrixPage() {
                         <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold truncate">{student.name}</p>
                             <div className="flex gap-2 text-[10px] text-zinc-500">
-                                {student.score > 0 && <span>Score: {student.score}</span>}
+                                <span className={`font-bold ${student.score >= 4 ? 'text-green-400' : 'text-zinc-400'}`}>
+                                    {getDisplayScore(student)}
+                                </span>
                             </div>
                         </div>
 
