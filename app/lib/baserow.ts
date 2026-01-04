@@ -189,3 +189,36 @@ export async function getActiveProduction() {
   if (!activeShow) return data.results[0]; // Fallback to first show if none marked active
   return activeShow;
 }
+
+// Add this to app/lib/baserow.ts
+
+// 1. FETCH ASSETS FOR CURRENT SHOW
+export async function getProductionAssets(productionId: number) {
+  // Replace '1234' with your actual table ID for "Production Resources"
+  const response = await fetch(`https://api.baserow.io/api/database/rows/table/YOUR_ASSETS_TABLE_ID/?user_field_names=true&size=200`, {
+    headers: { Authorization: `Token ${BASEROW_TOKEN}` }
+  });
+  const data = await response.json();
+  
+  // Filter by the specific production ID
+  return data.results.filter((row: any) => 
+    row.Production && row.Production.some((p: any) => p.id === productionId)
+  );
+}
+
+// 2. SAVE NEW UPLOAD
+export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
+  await fetch(`https://api.baserow.io/api/database/rows/table/YOUR_ASSETS_TABLE_ID/?user_field_names=true`, {
+    method: "POST",
+    headers: { 
+      Authorization: `Token ${BASEROW_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      "Name": name,
+      "Link": url,
+      "Type": type,
+      "Production": [productionId] // Link it to the show!
+    })
+  });
+}
