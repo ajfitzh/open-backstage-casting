@@ -7,7 +7,7 @@ import {
   GripVertical, Link as LinkIcon, Music, FileText,
   Loader2, Copy, UploadCloud, Eye, AlertTriangle, 
   Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, CheckCircle2, Film,
-  Star, TrendingDown
+  Star, TrendingDown, Save
 } from 'lucide-react';
 import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
@@ -15,6 +15,43 @@ import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProduc
 const DISCLAIMER_TEXT = `*** NOTICE ***
 The creative team reserves the right to release actors early if requirements are not met. 
 Please be prepared for all listed slots, but be aware the schedule may evolve.`;
+
+// --- PRE-POPULATED DEMO DATA ---
+const DEFAULT_SLOTS: CallbackSlot[] = [
+  { 
+    id: 'dance-1', 
+    time: '10:00 AM', 
+    title: 'General Dance Call (Jazz)', 
+    type: 'dance', 
+    materialName: "Combo Video",
+    materialLink: "https://youtu.be/example",
+    assignedIds: [] 
+  },
+  { 
+    id: 'vocal-1', 
+    time: '11:15 AM', 
+    title: 'Ariel / Ursula Vocal Cut', 
+    type: 'vocal', 
+    materialName: "Sheet Music (m.32-50)",
+    assignedIds: [] 
+  },
+  { 
+    id: 'read-1', 
+    time: '01:00 PM', 
+    title: 'Sc 4: Ariel & Flounder', 
+    type: 'read', 
+    materialName: "Side #4",
+    assignedIds: [] 
+  },
+  { 
+    id: 'read-2', 
+    time: '01:45 PM', 
+    title: 'Sc 7: Triton & Sebastian', 
+    type: 'read', 
+    materialName: "Side #2",
+    assignedIds: [] 
+  },
+];
 
 // --- TYPES ---
 interface Student {
@@ -47,10 +84,6 @@ interface Asset {
     type: 'PDF' | 'Audio' | 'Video';
 }
 
-const DEFAULT_SLOTS: CallbackSlot[] = [
-  { id: 'dance-1', time: '10:00 AM', title: 'General Dance Call', type: 'dance', assignedIds: [] },
-];
-
 export default function CallbackMatrixPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [slots, setSlots] = useState<CallbackSlot[]>(DEFAULT_SLOTS);
@@ -68,9 +101,11 @@ export default function CallbackMatrixPage() {
 
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
-
-  // --- SORT STATE ---
   const [sortMode, setSortMode] = useState<'overall' | 'vocal' | 'acting' | 'dance' | 'bottom'>('overall');
+
+  // NEW: MODAL STATE
+  const [isAddingSlot, setIsAddingSlot] = useState(false);
+  const [newSlotData, setNewSlotData] = useState({ time: "02:00 PM", title: "", link: "", label: "" });
 
   // --- HELPER: SAFE STRING ---
   const safeString = (val: any): string => {
@@ -179,24 +214,26 @@ export default function CallbackMatrixPage() {
 
   const handleCopyAsset = (asset: Asset) => {
       navigator.clipboard.writeText(asset.url);
-      alert("Link copied!");
+      setNewSlotData(prev => ({ ...prev, link: asset.url, label: asset.name }));
+      alert("Link copied! It will auto-fill if you create a slot now.");
   };
 
-  const handleAddSlot = () => {
-      const time = prompt("Time (e.g. 2:00 PM):", "2:00 PM");
-      if(!time) return;
-      const title = prompt("Title (e.g. Ursula Sides):", "New Slot");
-      if(!title) return;
-      const link = prompt("Material Link (Paste from Library):");
+  const handleCreateSlot = (e: React.FormEvent) => {
+      e.preventDefault();
+      const title = newSlotData.title || "New Slot";
+      const type = title.toLowerCase().includes('dance') ? 'dance' : title.toLowerCase().includes('vocal') ? 'vocal' : 'read';
       
       setSlots(prev => [...prev, {
           id: Date.now().toString(),
-          time, title,
-          type: title.toLowerCase().includes('dance') ? 'dance' : title.toLowerCase().includes('vocal') ? 'vocal' : 'read',
-          materialLink: link || undefined,
-          materialName: link ? "View Sides" : undefined,
+          time: newSlotData.time,
+          title,
+          type,
+          materialLink: newSlotData.link || undefined,
+          materialName: newSlotData.link ? (newSlotData.label || "Material") : undefined,
           assignedIds: []
       }]);
+      setIsAddingSlot(false);
+      setNewSlotData({ time: "", title: "", link: "", label: "" });
   };
 
   const handleRemoveSlot = (id: string) => setSlots(prev => prev.filter(s => s.id !== id));
@@ -240,7 +277,6 @@ export default function CallbackMatrixPage() {
       alert(`Published ${count} schedules!`);
   };
 
-  // --- FILTERED & SORTED BENCH ---
   const benchList = useMemo(() => {
       return students
         .filter(s => {
@@ -293,8 +329,6 @@ export default function CallbackMatrixPage() {
         
         {/* LEFT: BENCH */}
         <aside className={`${leftPanelOpen ? 'w-[320px]' : 'w-0'} bg-zinc-900 border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
-            
-            {/* Header */}
             <div className="p-4 border-b border-white/5 bg-zinc-900 shrink-0 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <Users size={18} className="text-zinc-400" />
@@ -307,15 +341,11 @@ export default function CallbackMatrixPage() {
                         className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}
                     >
                         {showHidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                        <span className="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50">
-                            {showHidden ? "Hide Archived" : "Show Archived"}
-                        </span>
                     </button>
                     <button onClick={() => setLeftPanelOpen(false)} className="md:hidden text-zinc-500"><X size={16}/></button>
                 </div>
             </div>
             
-            {/* SORT BAR WITH TOOLTIPS */}
             <div className="px-2 pt-2 flex gap-1 justify-between shrink-0">
                 {[
                     { id: 'overall', icon: Star, label: "Top Overall" },
@@ -334,21 +364,16 @@ export default function CallbackMatrixPage() {
                             }`}
                     >
                         <btn.icon size={14} />
-                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                            {btn.label}
-                        </span>
                     </button>
                 ))}
             </div>
 
-            {/* CURRENT SORT LABEL (For Mobile Context) */}
             <div className="px-3 pb-2 pt-1 text-center border-b border-white/5 bg-zinc-900/50">
                 <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
                     Sorting By: <span className="text-blue-400">{getSortLabel()}</span>
                 </p>
             </div>
 
-            {/* Search */}
             <div className="p-2 border-b border-white/5 shrink-0">
                 <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -356,7 +381,6 @@ export default function CallbackMatrixPage() {
                 </div>
             </div>
 
-            {/* List */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar pb-20">
                 {benchList.map(student => (
                     <div 
@@ -376,28 +400,18 @@ export default function CallbackMatrixPage() {
                                 </span>
                             </div>
                         </div>
-
-                        {/* ACTIONS */}
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={(e) => toggleHideStudent(e, student.id)}
                                 className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
                             >
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
-                                {/* TOOLTIP */}
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                                    {hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (Hide)"}
-                                </span>
                             </button>
-                            
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }}
                                 className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors"
                             >
                                 <Eye size={14} />
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
-                                    View Profile
-                                </span>
                             </button>
                         </div>
                     </div>
@@ -414,7 +428,7 @@ export default function CallbackMatrixPage() {
                 </div>
                 <div className="flex gap-2">
                     <button onClick={() => setRightPanelOpen(!rightPanelOpen)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase ${rightPanelOpen ? 'bg-zinc-700' : 'bg-zinc-800 text-zinc-300'}`}><UploadCloud size={14} /> <span className="hidden md:inline">Library</span></button>
-                    <button onClick={handleAddSlot} className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs font-bold uppercase"><Plus size={14} /> <span className="hidden md:inline">Slot</span></button>
+                    <button onClick={() => setIsAddingSlot(true)} className="flex items-center gap-2 bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs font-bold uppercase"><Plus size={14} /> <span className="hidden md:inline">Slot</span></button>
                     <button onClick={handlePublish} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase shadow-lg shadow-blue-900/20"><Share size={14} /> <span className="hidden md:inline">Publish</span></button>
                 </div>
             </header>
@@ -494,11 +508,42 @@ export default function CallbackMatrixPage() {
             </div>
         </aside>
 
-        {/* === STUDENT INSPECTOR MODAL === */}
+        {/* MODAL: ADD SLOT */}
+        {isAddingSlot && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <form onSubmit={handleCreateSlot} className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+                    <h3 className="text-lg font-black uppercase italic">Create Callback Slot</h3>
+                    
+                    <div>
+                        <label className="text-[10px] font-bold uppercase text-zinc-500">Time</label>
+                        <input autoFocus value={newSlotData.time} onChange={e => setNewSlotData({...newSlotData, time: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                    </div>
+                    
+                    <div>
+                        <label className="text-[10px] font-bold uppercase text-zinc-500">Title</label>
+                        <input placeholder="e.g. Ariel Reading" value={newSlotData.title} onChange={e => setNewSlotData({...newSlotData, title: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-bold uppercase text-zinc-500">Asset Link (Optional)</label>
+                        <input placeholder="https://..." value={newSlotData.link} onChange={e => setNewSlotData({...newSlotData, link: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                        {newSlotData.link && (
+                            <input placeholder="Label (e.g. Sheet Music)" value={newSlotData.label} onChange={e => setNewSlotData({...newSlotData, label: e.target.value})} className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm mt-2 focus:border-blue-500 outline-none" />
+                        )}
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                        <button type="button" onClick={() => setIsAddingSlot(false)} className="flex-1 py-3 bg-zinc-800 rounded-lg text-xs font-bold uppercase hover:bg-zinc-700">Cancel</button>
+                        <button type="submit" className="flex-1 py-3 bg-blue-600 rounded-lg text-xs font-bold uppercase hover:bg-blue-500 text-white">Create Slot</button>
+                    </div>
+                </form>
+            </div>
+        )}
+
+        {/* MODAL: INSPECTOR */}
         {inspectingStudent && (
              <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInspectingStudent(null)}>
                  <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-                     
                      <div className="p-6 pb-4 border-b border-white/5 flex gap-4 items-start">
                          <img src={inspectingStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-20 h-20 rounded-xl object-cover bg-zinc-800" />
                          <div className="flex-1">
@@ -512,7 +557,6 @@ export default function CallbackMatrixPage() {
                          </div>
                          <button onClick={() => setInspectingStudent(null)} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={20}/></button>
                      </div>
-
                      <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
                         <div className="bg-red-900/10 border border-red-500/20 p-4 rounded-xl">
                             <h3 className="text-red-400 font-black uppercase text-xs tracking-widest flex items-center gap-2 mb-2"><Calendar size={14} /> Conflicts</h3>
