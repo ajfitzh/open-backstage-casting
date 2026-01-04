@@ -195,7 +195,6 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* === PERSISTENT VIDEO PLAYER === */}
-      {/* UPDATE: Adjusted height to h-36 (9rem) on mobile grade mode to save space */}
       <div className={`w-full bg-black border-b border-white/10 shrink-0 relative transition-all duration-500 ease-in-out
           ${viewMode === 'group' ? 'flex-1 max-h-[40vh]' : 'h-36 md:h-64'}
       `}>
@@ -252,8 +251,7 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* === CONTENT AREA === */}
-      {/* This allows the control pad to scroll naturally */}
-      <div className="flex-1 overflow-y-auto relative bg-zinc-950">
+      <div className="flex-1 overflow-y-auto relative bg-zinc-950 flex flex-col">
           
           {viewMode === 'group' && (
               <div className="p-4">
@@ -297,11 +295,12 @@ export default function ChoreoWorkspace({
               </div>
           )}
 
+          {/* GRADE MODE: Flex-1 fills available space to remove "blank spot" */}
           {viewMode === 'grade' && activeStudent && (
-              <div className="flex flex-col">
+              <div className="flex flex-col flex-1 h-full min-h-0">
                   
                   {/* COMPACT STUDENT HEADER */}
-                  <div className="flex items-center justify-between p-3 border-b border-white/5 bg-zinc-900/50">
+                  <div className="flex items-center justify-between p-3 border-b border-white/5 bg-zinc-900/50 shrink-0">
                       <button onClick={() => changeStudent(-1)} disabled={selectedIndex === 0} className="p-2 text-zinc-400 hover:text-white disabled:opacity-20"><ArrowLeft size={20} /></button>
                       
                       <div className="flex items-center gap-3">
@@ -322,16 +321,12 @@ export default function ChoreoWorkspace({
                       <button onClick={() => changeStudent(1)} disabled={selectedIndex === currentGroup.length - 1} className="p-2 text-zinc-400 hover:text-white disabled:opacity-20"><ArrowRight size={20} /></button>
                   </div>
 
-                  {/* SWIPE AREA */}
+                  {/* CONTROL PAD (Flex-1 makes it fill the rest of the screen) */}
                   <div 
-                    className="w-full h-8 shrink-0" 
+                    className="flex-1 bg-zinc-900 border-t border-white/10 p-4 pb-48 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col justify-start"
                     onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-                  ></div>
-
-                  {/* CONTROL PAD */}
-                  {/* UPDATE: Increased pb to 48 (12rem) to clear fixed bottom nav bars */}
-                  <div className="bg-zinc-900 border-t border-white/10 p-4 pb-48 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-                      <div className="grid grid-cols-4 gap-2 mb-3">
+                  >
+                      <div className="grid grid-cols-4 gap-2 mb-3 mt-2">
                           {LEVELS.map((lvl) => (
                               <button key={lvl.val} onClick={() => handleScore(lvl.val)} className={`h-14 rounded-xl flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${activeGrade.dance === lvl.val ? `${lvl.color.replace('/30', '')} text-white shadow-lg scale-105` : `bg-transparent border-white/5 text-zinc-500 hover:bg-white/5`}`}>
                                   <span className="text-lg font-black">{lvl.val}</span>
