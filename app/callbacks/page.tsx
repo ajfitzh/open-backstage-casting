@@ -1,393 +1,354 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Users, Music, Star, Search, Loader2, Plus, 
-  Trash2, ArrowDownAZ, ArrowUpNarrowWide, PieChart, AlertCircle, MoveRight
+  Users, Calendar, Clock, Plus, Trash2, 
+  FileText, Share, Search, MoreVertical, X, 
+  ChevronRight, GripVertical, CheckCircle2
 } from 'lucide-react';
-import { getAuditionSlots } from '@/app/lib/baserow'; 
-import ActorProfileModal from '@/app/components/ActorProfileModal'; 
+import { getAuditionSlots, updateAuditionSlot } from '@/app/lib/baserow'; 
 
 // --- TYPES ---
-interface CallbackCandidate {
+interface Student {
   id: number;
   name: string;
-  headshot: string;
-  score: number;
-  dance: number;
-  acting: number;
-  groupId: string; 
-  gender: string;
-  notes: string;
+  avatar: string;
   age: string;
-  height: string;
-  birthdate: string; 
-  tenure: string; 
-  conflicts: string;
-  song: string;
-  monologue: string;
-  bio: string;
-  email: string;
-  phone: string;
-  pastRoles: string[]; 
-  actingNotes: string;
-  vocalNotes: string;
-  danceNotes: string;
-  adminNotes: string;
+  gender: string;
+  score: number; // Avg audition score
+  tags: string[]; // "Mover", "Strong Vocal", etc.
+  callbackString: string; // The text saved to DB (e.g. "Dance, Ariel")
 }
 
-interface CallbackColumn {
+interface CallbackSlot {
   id: string;
+  time: string;
   title: string;
-  type: 'pool' | 'role' | 'dance';
-  color: string;
+  type: 'dance' | 'vocal' | 'read';
+  material?: string; // Link to PDF/MP3
+  assignedIds: number[];
 }
 
-const DEFAULT_AVATAR = "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
+const DEFAULT_SLOTS: CallbackSlot[] = [
+  { id: 'dance-1', time: '10:00 AM', title: 'General Dance Call', type: 'dance', assignedIds: [] },
+  { id: 'vocal-leads', time: '11:30 AM', title: 'Lead Vocals (Ariel/Eric)', type: 'vocal', assignedIds: [] },
+  { id: 'read-1', time: '01:00 PM', title: 'Sc 4: Ariel & Flounder', type: 'read', assignedIds: [] },
+];
 
-export default function CallbackPage() {
-  const [candidates, setCandidates] = useState<CallbackCandidate[]>([]);
+export default function CallbackMatrixPage() {
+  // --- STATE ---
+  const [students, setStudents] = useState<Student[]>([]);
+  const [slots, setSlots] = useState<CallbackSlot[]>(DEFAULT_SLOTS);
   const [loading, setLoading] = useState(true);
-  const [inspectingActor, setInspectingActor] = useState<CallbackCandidate | null>(null);
-  const [draggedActorId, setDraggedActorId] = useState<number | null>(null);
-
-  // View State
-  const [sortBy, setSortBy] = useState<'score' | 'dance' | 'name'>('score');
   
-  // STATS STATE (New!)
-  const [targetLimit, setTargetLimit] = useState(40); // Default to 40% limit
-
-  const [columns, setColumns] = useState<CallbackColumn[]>([
-    { id: 'pool', title: 'The Bench', type: 'pool', color: 'border-zinc-700 bg-zinc-900/50' },
-    { id: 'leads', title: 'Principal Roles', type: 'role', color: 'border-blue-500/30 bg-blue-900/10' },
-    { id: 'dance', title: 'Dance Call', type: 'dance', color: 'border-emerald-500/30 bg-emerald-900/10' },
-  ]);
-
-  // --- STATS CALCULATOR ---
-  const stats = useMemo(() => {
-    const total = candidates.length;
-    if (total === 0) return { total: 0, pool: 0, callbacks: 0, percent: 0, isOverLimit: false };
-
-    const poolCount = candidates.filter(c => c.groupId === 'pool').length;
-    const callbacksCount = total - poolCount;
-    const percent = Math.round((callbacksCount / total) * 100);
-    
-    return {
-        total,
-        pool: poolCount,
-        callbacks: callbacksCount,
-        percent,
-        isOverLimit: percent > targetLimit
-    };
-  }, [candidates, targetLimit]);
-
-  // --- HELPERS ---
-  const safeString = (val: any): string => {
-    if (val === null || val === undefined) return "";
-    if (typeof val === 'string') return val;
-    if (typeof val === 'number') return String(val);
-    if (Array.isArray(val)) return val.length > 0 ? safeString(val[0].value) : "";
-    if (typeof val === 'object') return val.value ? safeString(val.value) : "";
-    return String(val);
-  };
-
-  const getHeadshot = (raw: any) => {
-    if (Array.isArray(raw) && raw.length > 0 && raw[0].url) return raw[0].url;
-    if (typeof raw === 'string' && raw.includes('(') && raw.includes(')')) {
-      const match = raw.match(/\((.*?)\)/);
-      if (match) return match[1];
-    }
-    if (typeof raw === 'string' && raw.startsWith('http')) return raw;
-    return DEFAULT_AVATAR;
-  };
-
-  const formatDate = (raw: any) => {
-    const val = safeString(raw);
-    if (!val || val === "N/A") return "N/A";
-    try {
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return val;
-      return date.toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch (e) { return val; }
-  };
-
-  const calculateTenure = (rawPast: any) => {
-    const pastStr = safeString(rawPast);
-    if (!pastStr || pastStr.toLowerCase().includes("no past") || pastStr.length < 3) return "New Student";
-    return "Returning";
-  };
+  // UI State
+  const [benchOpen, setBenchOpen] = useState(false); // Mobile Drawer
+  const [search, setSearch] = useState("");
+  const [draggedStudentId, setDraggedStudentId] = useState<number | null>(null);
+  const [activeMobileStudent, setActiveMobileStudent] = useState<Student | null>(null);
 
   // --- DATA LOADING ---
   useEffect(() => {
-    async function loadData() {
-      try {
-        const rows = await getAuditionSlots();
-        const activeShowId = localStorage.getItem('activeShowId'); 
+    async function load() {
+      const rows = await getAuditionSlots();
+      const activeShowId = localStorage.getItem('activeShowId'); 
 
-        // Filter based on active show (Same logic as AuditionsPage)
-        const showRows = rows.filter((row: any) => {
-            const prodArray = row.Production || [];
+      const cleanData = rows
+        .filter((r: any) => {
+            const prodArray = r.Production || [];
             if (!prodArray.length) return false;
             if (activeShowId && prodArray.some((p: any) => String(p.id) === activeShowId)) return true;
             return (prodArray[0]?.value || "").toLowerCase().includes("mermaid");
-        });
-
-        const cleanCandidates = showRows.map((row: any) => {
-          const name = safeString(row.Performer) || "Unknown Actor";
-          const imageUrl = getHeadshot(row.Headshot);
-          const dbVocal = parseFloat(row["Vocal Score"]) || 0;
-          const dbActing = parseFloat(row["Acting Score"]) || 0;
-          const dbDance = parseFloat(row["Dance Score"]) || 0;
-          const isUnscored = dbVocal === 0;
-
-          const age = safeString(row.Age) || "N/A";
-          let height = safeString(row.Height);
-          if (height && !height.includes("'") && !isNaN(Number(height))) {
-             const inches = Number(height);
-             height = `${Math.floor(inches / 12)}'${inches % 12}"`;
-          } else if (!height) height = "-";
-
-          const rawBirth = row.Birthdate || row.birthdate || row["Date of Birth"];
-          const rawPast = safeString(row["Past Productions"]);
-
-          const actingNotes = safeString(row["Acting Notes"]);
-          const vocalNotes = safeString(row["Music Notes"]);
-          const danceNotes = safeString(row["Choreography Notes"]);
-          const adminNoteRaw = safeString(row["Admin Notes"]);
-          const dropInNoteRaw = safeString(row["Drop-In Notes"]);
-          const adminNotes = [adminNoteRaw, dropInNoteRaw].filter(Boolean).join(" | ");
-
-          return {
-            id: row.id,
-            name,
-            headshot: imageUrl,
-            score: isUnscored ? Number((Math.random() * (5 - 3) + 3).toFixed(1)) : dbVocal,
-            acting: isUnscored ? Number((Math.random() * (5 - 3) + 3).toFixed(1)) : dbActing,
-            dance: isUnscored ? Math.floor(Math.random() * 5) + 1 : dbDance,
-            groupId: 'pool',
-            gender: "Unknown", 
-            age,
-            height,
-            birthdate: formatDate(rawBirth),
-            tenure: calculateTenure(row["Past Productions"]),
-            conflicts: safeString(row.Conflicts) || "No known conflicts.",
-            song: safeString(row.Song) || "N/A",
-            monologue: safeString(row.Monologue) || "N/A",
-            bio: rawPast || "No past productions listed.",
-            pastRoles: rawPast ? [rawPast] : [], 
-            actingNotes,
-            vocalNotes,
-            danceNotes,
-            adminNotes,
-            notes: safeString(row.Notes) || "", // Fallback
-            email: "student@cyt.org",
-            phone: "555-0123"
-          };
-        });
-        setCandidates(cleanCandidates);
-      } catch (error) { console.error("Baserow Error:", error); } 
-      finally { setLoading(false); }
+        })
+        .map((r: any) => ({
+            id: r.id,
+            name: r.Performer?.[0]?.value || "Unknown",
+            avatar: r.Headshot?.[0]?.url || "",
+            age: r.Age?.value || "?",
+            gender: r.Gender?.value || "",
+            score: parseFloat(r["Vocal Score"]) || 0,
+            tags: [], // Could parse from notes if needed
+            callbackString: r["Callbacks"] || "" // Assuming you add a "Callbacks" text field
+        }));
+      
+      setStudents(cleanData);
+      setLoading(false);
     }
-    loadData();
+    load();
   }, []);
 
-  const getSortedCandidates = (groupId: string) => {
-    return candidates.filter(c => c.groupId === groupId).sort((a, b) => {
-        if (sortBy === 'score') return b.score - a.score; 
-        if (sortBy === 'dance') return b.dance - a.dance; 
-        if (sortBy === 'name') return a.name.localeCompare(b.name); 
-        return 0;
-    });
+  // --- ACTIONS ---
+
+  const handleAddSlot = () => {
+      const time = prompt("Time (e.g. 2:00 PM):", "2:00 PM");
+      if(!time) return;
+      const title = prompt("Title (e.g. Ursula Sides):", "New Slot");
+      if(!title) return;
+      
+      const newSlot: CallbackSlot = {
+          id: Date.now().toString(),
+          time,
+          title,
+          type: 'read',
+          assignedIds: []
+      };
+      setSlots(prev => [...prev, newSlot]);
   };
 
-  const addColumn = () => {
-    const name = prompt("Name your new callback group:");
-    if (!name) return;
-    const newId = name.toLowerCase().replace(/\s+/g, '-');
-    setColumns(prev => [...prev, { id: newId, title: name, type: 'role', color: 'border-white/10 bg-zinc-900/30' }]);
+  const handleRemoveSlot = (id: string) => {
+      if(confirm("Delete this callback slot?")) {
+          setSlots(prev => prev.filter(s => s.id !== id));
+      }
   };
 
-  const removeColumn = (colId: string) => {
-    if (colId === 'pool') return; 
-    if (!confirm("Remove this group? Actors will return to the Bench.")) return;
-    setCandidates(prev => prev.map(c => c.groupId === colId ? { ...c, groupId: 'pool' } : c));
-    setColumns(prev => prev.filter(col => col.id !== colId));
+  const handleAssign = (studentId: number, slotId: string) => {
+      setSlots(prev => prev.map(s => {
+          if (s.id === slotId && !s.assignedIds.includes(studentId)) {
+              return { ...s, assignedIds: [...s.assignedIds, studentId] };
+          }
+          return s;
+      }));
+      setActiveMobileStudent(null);
+      setBenchOpen(false);
   };
 
-  const moveStudent = (actorId: number, targetGroupId: string) => {
-    setCandidates(prev => prev.map(c => c.id === actorId ? { ...c, groupId: targetGroupId } : c));
+  const handleUnassign = (studentId: number, slotId: string) => {
+      setSlots(prev => prev.map(s => {
+          if (s.id === slotId) {
+              return { ...s, assignedIds: s.assignedIds.filter(id => id !== studentId) };
+          }
+          return s;
+      }));
   };
 
-  const handleDragStart = (e: React.DragEvent, id: number) => { setDraggedActorId(id); e.dataTransfer.effectAllowed = "move"; };
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleDrop = (e: React.DragEvent, targetGroupId: string) => {
-    e.preventDefault();
-    if (!draggedActorId) return;
-    moveStudent(draggedActorId, targetGroupId);
-    setDraggedActorId(null);
+  const handlePublish = async () => {
+      if(!confirm("Update the 'Callbacks' field in the database for all assigned students?")) return;
+      
+      // 1. Calculate strings for each student
+      const updates: Record<number, string> = {};
+      
+      slots.forEach(slot => {
+          slot.assignedIds.forEach(id => {
+              const entry = `${slot.time}: ${slot.title}`;
+              if (updates[id]) updates[id] += `\n${entry}`;
+              else updates[id] = entry;
+          });
+      });
+
+      // 2. Perform updates (In real app, bundle this or show progress bar)
+      let count = 0;
+      for (const [id, text] of Object.entries(updates)) {
+          // This assumes you made a text field called "Callbacks" in Baserow!
+          await updateAuditionSlot(Number(id), { "Callbacks": text });
+          count++;
+      }
+      alert(`Published schedules for ${count} students!`);
   };
 
-  if (loading) return (
-    <div className="h-screen bg-zinc-950 flex items-center justify-center text-white gap-3">
-        <Loader2 className="animate-spin text-blue-500" />
-        <p className="uppercase font-bold tracking-widest text-xs">Loading Bench...</p>
-    </div>
-  );
+  // --- FILTERED BENCH ---
+  const benchList = useMemo(() => {
+      return students
+        .filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => b.score - a.score); // Highest score first
+  }, [students, search]);
+
+  // --- DRAG HANDLERS ---
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+      setDraggedStudentId(id);
+      e.dataTransfer.effectAllowed = "copy";
+  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+  const handleDrop = (e: React.DragEvent, slotId: string) => {
+      e.preventDefault();
+      if(draggedStudentId) handleAssign(draggedStudentId, slotId);
+      setDraggedStudentId(null);
+  };
+
+  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white">Loading Matrix...</div>;
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-      
-      {/* HEADER */}
-      <header className="px-6 py-4 border-b border-white/5 bg-zinc-900/30 backdrop-blur-xl shrink-0 flex flex-col md:flex-row justify-between items-center gap-4">
+    <div className="h-screen bg-zinc-950 text-white flex flex-col md:grid md:grid-cols-[300px_1fr] divide-x divide-white/10 font-sans overflow-hidden">
         
-        {/* LEFT: TITLE & STATS DASHBOARD */}
-        <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-start">
-            <div>
-                <h1 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-white">Callbacks</h1>
-                <div className="flex items-center gap-2 mt-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Drafting Mode</p>
+        {/* === LEFT: THE BENCH (Desktop Sidebar / Mobile Drawer) === */}
+        <aside className={`
+            fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur transition-transform duration-300 md:relative md:translate-y-0 md:bg-zinc-900 md:flex flex-col
+            ${benchOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
+        `}>
+            {/* Header */}
+            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-zinc-900">
+                <div className="flex items-center gap-2">
+                    <Users size={18} className="text-zinc-400" />
+                    <h2 className="text-sm font-black uppercase tracking-widest">The Bench</h2>
+                    <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{benchList.length}</span>
                 </div>
+                <button onClick={() => setBenchOpen(false)} className="md:hidden p-2 text-zinc-500"><X size={20}/></button>
             </div>
 
-            {/* STATS (Visible on Mobile too, simplified) */}
-            <div className="flex flex-col gap-1.5 min-w-[120px] md:min-w-[200px] border-l border-white/10 pl-6">
-                <div className="flex justify-between items-end text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                    <span className="hidden md:inline">Callbacks: {stats.callbacks}/{stats.total}</span>
-                    <span className="md:hidden">{stats.percent}% Called</span>
-                    <span className={stats.isOverLimit ? "text-red-500" : "text-emerald-500"}>
-                        {stats.percent}%
-                    </span>
-                </div>
-                
-                <div className="h-1.5 md:h-2 w-full bg-zinc-800 rounded-full overflow-hidden relative">
-                    <div 
-                        className={`h-full transition-all duration-500 ${stats.isOverLimit ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${stats.percent}%` }}
+            {/* Search */}
+            <div className="p-2 border-b border-white/5">
+                <div className="bg-black/20 rounded-lg flex items-center px-3 py-2 border border-white/5">
+                    <Search size={14} className="text-zinc-600 mr-2" />
+                    <input 
+                        value={search} 
+                        onChange={(e) => setSearch(e.target.value)} 
+                        className="bg-transparent outline-none text-xs text-white placeholder:text-zinc-600 w-full" 
+                        placeholder="Search actors..." 
                     />
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-10" style={{ left: `${targetLimit}%` }} />
                 </div>
             </div>
-        </div>
 
-        {/* RIGHT: TOOLBAR */}
-        <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-             <div className="flex items-center bg-zinc-900 border border-white/10 rounded-lg px-3 py-1.5 gap-2 shrink-0">
-                {sortBy === 'name' ? <ArrowDownAZ size={14} className="text-zinc-400" /> : <ArrowUpNarrowWide size={14} className="text-zinc-400" />}
-                <select 
-                    value={sortBy} 
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="bg-transparent text-[11px] font-bold uppercase outline-none text-zinc-300"
-                >
-                    <option value="score">Sort: Vocal</option>
-                    <option value="dance">Sort: Dance</option>
-                    <option value="name">Sort: Name</option>
-                </select>
-             </div>
-             <button onClick={addColumn} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide transition-all shrink-0">
-                <Plus size={14} /> New Group
-             </button>
-        </div>
-      </header>
-
-      {/* KANBAN BOARD (Responsive) */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 md:p-6 pb-20 md:pb-6">
-        <div className="flex flex-col md:flex-row h-full gap-6">
-            {columns.map((col) => (
-                <div 
-                    key={col.id}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, col.id)}
-                    className={`flex-shrink-0 w-full md:w-80 lg:w-96 flex flex-col rounded-3xl border transition-all duration-200 h-auto md:h-full ${col.color} ${draggedActorId ? 'border-dashed opacity-90' : 'opacity-100'}`}
-                >
-                    {/* Column Header */}
-                    <div className="p-4 md:p-5 flex justify-between items-center border-b border-white/5 sticky top-0 bg-inherit z-10 rounded-t-3xl">
-                        <div className="flex items-center gap-2">
-                            {col.type === 'pool' ? <Users size={16} className="text-zinc-500" /> : <Star size={16} className="text-blue-400" />}
-                            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">{col.title}</h2>
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                {benchList.map(student => (
+                    <div 
+                        key={student.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, student.id)}
+                        onClick={() => {
+                            if (window.innerWidth < 768) {
+                                setActiveMobileStudent(student);
+                                setBenchOpen(false); // Close bench to show slots for assignment
+                            }
+                        }}
+                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer select-none transition-colors 
+                            ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border border-blue-500/30' : 'border border-transparent'}
+                        `}
+                    >
+                        <div className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden shrink-0">
+                            {student.avatar && <img src={student.avatar} className="w-full h-full object-cover" />}
                         </div>
-                        <div className="flex items-center gap-2">
-                             <span className="bg-black/30 text-zinc-400 px-2 py-0.5 rounded text-[10px] font-bold">{getSortedCandidates(col.id).length}</span>
-                             {col.id !== 'pool' && (
-                                 <button onClick={() => removeColumn(col.id)} className="text-zinc-600 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
-                             )}
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold truncate">{student.name}</p>
+                            <p className="text-[10px] text-zinc-500">{student.gender} • Score: {student.score || "-"}</p>
                         </div>
+                        {student.score >= 4 && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                        <GripVertical size={14} className="text-zinc-700 opacity-0 group-hover:opacity-100" />
                     </div>
+                ))}
+            </div>
+        </aside>
 
-                    {/* Draggable List */}
-                    <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 custom-scrollbar min-h-[150px] md:min-h-0">
-                        {getSortedCandidates(col.id).map(actor => (
-                            <div 
-                                key={actor.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, actor.id)}
-                                onClick={() => setInspectingActor(actor)}
-                                className="group cursor-pointer active:cursor-grabbing p-3 bg-zinc-950/40 hover:bg-zinc-800 border border-white/5 rounded-xl transition-all flex items-center gap-3 relative"
-                            >
-                                <img src={actor.headshot} alt={actor.name} className="w-10 h-10 rounded-full object-cover border border-white/10" />
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="text-sm font-bold text-zinc-200 truncate">{actor.name}</h4>
-                                    <div className="flex gap-2 mt-0.5">
-                                        <span className={`text-[10px] font-bold ${actor.score >= 4 ? 'text-emerald-400' : 'text-zinc-500'}`}>Voc: {actor.score}</span>
-                                        <span className={`text-[10px] font-bold ${actor.dance >= 4 ? 'text-blue-400' : 'text-zinc-500'}`}>Dan: {actor.dance}</span>
-                                    </div>
-                                </div>
-                                
-                                {/* MOBILE "MOVE" DROPDOWN (Replaces Dragging) */}
-                                <div 
-                                    className="md:hidden p-2 text-zinc-500 active:text-blue-500"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        // Simple cycle for now, or prompt? Let's do a simple cycle or prompt
-                                        const target = prompt("Move to which group? (Type name)", "Leads");
-                                        const targetCol = columns.find(c => c.title.toLowerCase().includes(target?.toLowerCase() || ""));
-                                        if (targetCol) moveStudent(actor.id, targetCol.id);
-                                    }}
-                                >
-                                    <MoveRight size={16} />
-                                </div>
 
-                                {/* DESKTOP "REMOVE" BUTTON */}
-                                {col.id !== 'pool' && (
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); moveStudent(actor.id, 'pool'); }}
-                                        className="hidden md:block opacity-0 group-hover:opacity-100 p-1.5 text-zinc-600 hover:text-red-400 transition-all"
-                                    >
-                                        <Trash2 size={14} />
+        {/* === RIGHT: THE MATRIX (Schedule) === */}
+        <main className="flex flex-col h-full overflow-hidden relative">
+            
+            {/* Header */}
+            <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-4 md:px-8 shrink-0">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setBenchOpen(true)} className="md:hidden p-2 bg-zinc-800 rounded-lg text-zinc-400">
+                        <Users size={18} />
+                    </button>
+                    <div>
+                        <h1 className="text-lg font-black uppercase italic tracking-tighter">Callback Matrix</h1>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase hidden md:block">Friday Night Planning</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <button onClick={handleAddSlot} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all">
+                        <Plus size={14} /> <span className="hidden md:inline">Add Slot</span>
+                    </button>
+                    <button onClick={handlePublish} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all shadow-lg shadow-blue-900/20">
+                        <Share size={14} /> <span className="hidden md:inline">Publish</span>
+                    </button>
+                </div>
+            </header>
+
+            {/* Mobile "Assigning Mode" Banner */}
+            {activeMobileStudent && (
+                <div className="bg-blue-600 text-white p-3 text-xs font-bold flex justify-between items-center shadow-lg z-20">
+                    <span>Assigning: {activeMobileStudent.name}</span>
+                    <button onClick={() => setActiveMobileStudent(null)} className="p-1 hover:bg-white/20 rounded"><X size={14}/></button>
+                </div>
+            )}
+
+            {/* Timeline */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar bg-zinc-950">
+                {slots.map((slot) => (
+                    <div 
+                        key={slot.id}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, slot.id)}
+                        onClick={() => {
+                            if (activeMobileStudent) {
+                                handleAssign(activeMobileStudent.id, slot.id);
+                            }
+                        }}
+                        className={`relative rounded-2xl border transition-all overflow-hidden group
+                            ${activeMobileStudent ? 'border-blue-500/50 bg-blue-900/5 cursor-pointer hover:bg-blue-900/10' : 'border-white/5 bg-zinc-900/30'}
+                        `}
+                    >
+                        {/* Time Column (Left Decorator) */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                            slot.type === 'dance' ? 'bg-emerald-500' : slot.type === 'vocal' ? 'bg-purple-500' : 'bg-blue-500'
+                        }`} />
+
+                        <div className="p-4 md:p-6 pl-6 flex flex-col md:flex-row gap-4 md:gap-8 items-start md:items-center">
+                            
+                            {/* Slot Info */}
+                            <div className="min-w-[150px] shrink-0">
+                                <div className="flex items-center gap-2 text-zinc-500 mb-1">
+                                    <Clock size={12} />
+                                    <span className="text-xs font-black uppercase tracking-wider">{slot.time}</span>
+                                </div>
+                                <h3 className="text-xl font-bold text-white leading-tight mb-2">{slot.title}</h3>
+                                {slot.material ? (
+                                    <a href="#" className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase">
+                                        <FileText size={12} /> View Sides
+                                    </a>
+                                ) : (
+                                    <button className="text-[10px] text-zinc-600 hover:text-zinc-400 font-bold uppercase flex items-center gap-1">
+                                        <Plus size={10} /> Add Material
                                     </button>
                                 )}
                             </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-      </div>
 
-      {/* MODAL */}
-      {inspectingActor && (
-        <ActorProfileModal 
-          actor={{
-             ...inspectingActor,
-             avatar: inspectingActor.headshot, 
-             dob: inspectingActor.birthdate,
-             vocalRange: "-",
-             pastRoles: inspectingActor.pastRoles
-          }} 
-          grades={{
-            vocal: inspectingActor.score, 
-            acting: inspectingActor.acting, 
-            dance: inspectingActor.dance, 
-            presence: 3.5, 
-            actingNotes: inspectingActor.actingNotes,
-            vocalNotes: inspectingActor.vocalNotes,
-            danceNotes: inspectingActor.danceNotes,
-            adminNotes: inspectingActor.adminNotes
-          }} 
-          onClose={() => setInspectingActor(null)} 
-        />
-      )}
+                            {/* Assigned Grid */}
+                            <div className="flex-1 w-full">
+                                {slot.assignedIds.length === 0 ? (
+                                    <div className="h-16 border-2 border-dashed border-white/5 rounded-xl flex items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-wider">
+                                        {activeMobileStudent ? "Tap here to assign" : "Drag students here"}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {slot.assignedIds.map(id => {
+                                            const student = students.find(s => s.id === id);
+                                            if (!student) return null;
+                                            return (
+                                                <div key={id} className="flex items-center gap-2 bg-zinc-800 border border-white/5 pl-1 pr-3 py-1 rounded-full group/chip hover:border-white/20 transition-colors">
+                                                    <img src={student.avatar || DEFAULT_AVATAR} className="w-5 h-5 rounded-full object-cover" />
+                                                    <span className="text-xs font-bold text-zinc-300">{student.name}</span>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleUnassign(id, slot.id); }}
+                                                        className="ml-1 text-zinc-600 hover:text-red-400"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="self-start md:self-center">
+                                <button onClick={() => handleRemoveSlot(slot.id)} className="p-2 text-zinc-600 hover:text-red-500 transition-colors">
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+
+                {/* Add Slot Placeholder */}
+                <button onClick={handleAddSlot} className="w-full py-8 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center text-zinc-600 hover:text-zinc-400 hover:border-white/10 transition-all gap-2 group">
+                    <Plus size={24} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black uppercase tracking-widest">Create New Slot</span>
+                </button>
+            </div>
+        </main>
     </div>
   );
 }
