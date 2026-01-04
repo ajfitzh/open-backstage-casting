@@ -201,36 +201,39 @@ export default function AuditionsPage() {
     loadData();
   }, [isReady]);
 
-  /* ---------- CHOREOGRAPHER AUTO-SAVE (FIXED) ---------- */
-  const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
-    // A. Update Local State Instantly
+// app/auditions/page.tsx
+
+const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
+    // 1. Check for Delete Command
+    const isDelete = videoUrl === "DELETE";
+
+    // 2. Update Local State
     setGrades(prev => ({
         ...prev,
         [actorId]: {
             ...prev[actorId],
             dance: score,
             choreoNotes: notes,
-            // Only update video locally if a new one was provided
-            video: videoUrl || prev[actorId]?.video 
+            // If DELETE, set null. If new URL, set it. Otherwise keep existing.
+            video: isDelete ? null : (videoUrl || prev[actorId]?.video)
         }
     }));
 
-    // B. Prepare Payload for Baserow
+    // 3. Prepare Payload
     const payload: any = {
-        // FIX: Send 'null' instead of 0 for Ratings (prevents 400 error)
         "Dance Score": score > 0 ? score : null, 
         "Choreography Notes": notes
     };
     
-    // FIX: Save to new "Dance Video" field
-    if (videoUrl) {
+    // 4. Handle Video Field
+    if (isDelete) {
+        payload["Dance Video"] = ""; // Clear it in Baserow
+    } else if (videoUrl) {
         payload["Dance Video"] = videoUrl; 
     }
     
-    // C. Fire & Forget DB Update
     updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
-  };
-
+};
   /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;

@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   ArrowLeft, ArrowRight, Move, 
   AlertTriangle, Star, Zap, Smile, ThumbsUp, MessageSquare,
-  Video, Users, Loader2, Play, RefreshCw, ChevronLeft, ChevronDown
+  Video, Users, Loader2, RefreshCw, ChevronDown, Trash2
 } from "lucide-react";
 
 // --- CONFIG ---
@@ -150,6 +150,19 @@ export default function ChoreoWorkspace({
       }
   };
 
+  const handleDeleteVideo = () => {
+      if(!confirm("Delete this group video? This cannot be undone.")) return;
+      
+      currentGroup.forEach(student => {
+          const oldScore = initialGrades[student.id]?.dance || 0;
+          const oldNotes = initialGrades[student.id]?.choreoNotes || "";
+          const cleanNotes = oldNotes.replace("[GROUP VIDEO]", "").trim();
+          
+          // Send "DELETE" signal which AuditionsPage now handles
+          onSave(student.id, oldScore, cleanNotes, "DELETE");
+      });
+  };
+
   // --- ACTIONS (NAV) ---
   const changeStudent = (delta: number) => {
       const newIndex = selectedIndex + delta;
@@ -172,7 +185,7 @@ export default function ChoreoWorkspace({
   return (
     <div className="flex flex-col h-full bg-black overflow-hidden relative">
       
-      {/* 0. TIME SLOTS (Only visible in Group Mode to save space in Grade Mode) */}
+      {/* 0. TIME SLOTS (Only visible in Group Mode) */}
       <div className={`h-14 bg-zinc-900 border-b border-white/5 flex items-center px-2 gap-2 overflow-x-auto shrink-0 custom-scrollbar transition-all duration-300 ${viewMode === 'grade' ? 'h-0 opacity-0 overflow-hidden border-none' : ''}`}>
           {slots.map((slot) => {
               const isActive = slot === activeSlot;
@@ -193,19 +206,37 @@ export default function ChoreoWorkspace({
       </div>
 
       {/* === PERSISTENT VIDEO PLAYER === */}
-      {/* We keep this mounted at all times so it doesn't stop playing */}
       <div className={`w-full bg-black border-b border-white/10 shrink-0 relative transition-all duration-500 ease-in-out
           ${viewMode === 'group' ? 'flex-1 max-h-[40vh]' : 'h-48 md:h-64'}
       `}>
           {groupVideoUrl ? (
-              <video 
-                  src={groupVideoUrl} 
-                  controls 
-                  playsInline
-                  className="w-full h-full object-contain bg-zinc-950"
-              />
+              <div className="relative w-full h-full group">
+                  <video 
+                      src={groupVideoUrl} 
+                      controls 
+                      playsInline
+                      className="w-full h-full object-contain bg-zinc-950"
+                  />
+                  
+                  {/* CONTROLS OVERLAY */}
+                  <div className="absolute top-2 right-2 flex gap-2 z-10">
+                     {/* RETAKE */}
+                     <label className="flex items-center gap-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors">
+                         <RefreshCw size={12} /> Retake
+                         <input type="file" accept="video/*" capture="environment" className="hidden" onChange={handleBatchVideoUpload} disabled={isUploading} />
+                     </label>
+
+                     {/* DELETE */}
+                     <button 
+                        onClick={handleDeleteVideo}
+                        className="flex items-center gap-2 bg-red-600/80 hover:bg-red-600 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors"
+                     >
+                         <Trash2 size={12} /> Delete
+                     </button>
+                  </div>
+              </div>
           ) : (
-              // PLACEHOLDER / RECORD BUTTON (Only visible if no video)
+              // PLACEHOLDER / RECORD BUTTON
               <label className={`w-full h-full flex flex-col items-center justify-center gap-3 transition-all cursor-pointer bg-zinc-900 ${isUploading ? 'opacity-50 cursor-wait' : ''}`}>
                   {isUploading ? (
                       <>
@@ -247,12 +278,14 @@ export default function ChoreoWorkspace({
                       <h3 className="text-zinc-400 font-black uppercase text-xs tracking-widest flex items-center gap-2">
                           <Users size={14} /> {activeSlot} Roster
                       </h3>
-                      <button 
-                        onClick={() => { setSelectedIndex(0); setViewMode('grade'); }} 
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
-                      >
-                          Start Grading <Play size={12} fill="currentColor" />
-                      </button>
+                      {currentGroup.length > 0 && (
+                          <button 
+                            onClick={() => { setSelectedIndex(0); setViewMode('grade'); }} 
+                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2"
+                          >
+                              Start Grading
+                          </button>
+                      )}
                   </div>
                   
                   <div className="grid grid-cols-4 gap-2 pb-20">
