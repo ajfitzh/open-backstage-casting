@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   ArrowLeft, ArrowRight, Move, 
   AlertTriangle, Star, Zap, Smile, ThumbsUp, MessageSquare,
-  Video, Users, Loader2, RefreshCw, ChevronDown, Trash2
+  Video, Users, Loader2, RefreshCw, ChevronDown, Trash2, Eraser
 } from "lucide-react";
 
 // --- CONFIG ---
@@ -295,7 +295,6 @@ export default function ChoreoWorkspace({
               </div>
           )}
 
-          {/* GRADE MODE: Flex-1 fills available space to remove "blank spot" */}
           {viewMode === 'grade' && activeStudent && (
               <div className="flex flex-col flex-1 h-full min-h-0">
                   
@@ -321,18 +320,30 @@ export default function ChoreoWorkspace({
                       <button onClick={() => changeStudent(1)} disabled={selectedIndex === currentGroup.length - 1} className="p-2 text-zinc-400 hover:text-white disabled:opacity-20"><ArrowRight size={20} /></button>
                   </div>
 
-                  {/* CONTROL PAD (Flex-1 makes it fill the rest of the screen) */}
+                  {/* CONTROL PAD */}
                   <div 
                     className="flex-1 bg-zinc-900 border-t border-white/10 p-4 pb-48 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col justify-start"
                     onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
                   >
-                      <div className="grid grid-cols-4 gap-2 mb-3 mt-2">
+                      <div className="grid grid-cols-4 gap-2 mb-1 mt-2">
                           {LEVELS.map((lvl) => (
                               <button key={lvl.val} onClick={() => handleScore(lvl.val)} className={`h-14 rounded-xl flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${activeGrade.dance === lvl.val ? `${lvl.color.replace('/30', '')} text-white shadow-lg scale-105` : `bg-transparent border-white/5 text-zinc-500 hover:bg-white/5`}`}>
                                   <span className="text-lg font-black">{lvl.val}</span>
                                   <span className="text-[8px] font-bold uppercase whitespace-nowrap">{lvl.label}</span>
                               </button>
                           ))}
+                      </div>
+
+                      {/* NEW: CLEAR BUTTON */}
+                      <div className="flex justify-end mb-3 h-5">
+                          {activeGrade.dance > 0 && (
+                              <button 
+                                  onClick={() => handleScore(0)} 
+                                  className="flex items-center gap-1 text-[10px] font-bold uppercase text-zinc-500 hover:text-red-400 transition-colors"
+                              >
+                                  <Eraser size={12} /> Clear Score
+                              </button>
+                          )}
                       </div>
 
                       <div className="mb-3 relative">
