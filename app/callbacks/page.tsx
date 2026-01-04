@@ -65,9 +65,24 @@ export default function CallbackMatrixPage() {
   const [inspectingStudent, setInspectingStudent] = useState<Student | null>(null);
   const [activeProductionId, setActiveProductionId] = useState<number | null>(null);
 
-  // --- NEW: ARCHIVE STATE ---
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
+
+  // --- HELPER: SAFE STRING (The Crash Fix) ---
+  const safeString = (val: any): string => {
+    if (val === null || val === undefined) return "";
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);
+    if (Array.isArray(val)) return val.length > 0 ? safeString(val[0].value || val[0]) : "";
+    if (typeof val === 'object') return val.value ? safeString(val.value) : "";
+    return String(val);
+  };
+
+  const safeNumber = (val: any): number => {
+      const s = safeString(val);
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+  };
 
   // --- DATA LOADING ---
   useEffect(() => {
@@ -77,7 +92,6 @@ export default function CallbackMatrixPage() {
       const activeShowId = activeShowIdStr ? parseInt(activeShowIdStr) : null;
       setActiveProductionId(activeShowId);
 
-      // Load Hidden IDs from LocalStorage
       if (activeShowId) {
           const savedHidden = localStorage.getItem(`hiddenCallbacks_${activeShowId}`);
           if (savedHidden) {
@@ -94,23 +108,23 @@ export default function CallbackMatrixPage() {
         })
         .map((r: any) => ({
             id: r.id,
-            name: r.Performer?.[0]?.value || "Unknown",
+            name: safeString(r.Performer), // Safe
             avatar: r.Headshot?.[0]?.url || "",
-            age: r.Age?.value || "?",
-            gender: r.Gender?.value || "",
-            score: parseFloat(r["Vocal Score"]) || 0,
-            callbackString: r["Callbacks"] || "",
-            conflicts: r["Conflicts"] || "None listed",
+            age: safeString(r.Age), // Safe
+            gender: safeString(r.Gender), // Safe
+            score: safeNumber(r["Vocal Score"]), // Safe
+            callbackString: safeString(r["Callbacks"]),
+            conflicts: safeString(r["Conflicts"]) || "None listed", // Safe
             breakdown: {
-                vocal: parseFloat(r["Vocal Score"]) || 0,
-                acting: parseFloat(r["Acting Score"]) || 0,
-                dance: parseFloat(r["Dance Score"]) || 0,
+                vocal: safeNumber(r["Vocal Score"]),
+                acting: safeNumber(r["Acting Score"]),
+                dance: safeNumber(r["Dance Score"]),
             },
             notes: {
-                vocal: r["Music Notes"] || "",
-                acting: r["Acting Notes"] || "",
-                dance: r["Choreography Notes"] || "",
-                admin: r["Admin Notes"] || ""
+                vocal: safeString(r["Music Notes"]),
+                acting: safeString(r["Acting Notes"]),
+                dance: safeString(r["Choreography Notes"]),
+                admin: safeString(r["Admin Notes"])
             }
         }));
       setStudents(cleanData);
@@ -119,7 +133,7 @@ export default function CallbackMatrixPage() {
           try {
               const remoteAssets = await getProductionAssets(activeShowId);
               setAssets(remoteAssets.map((a: any) => ({
-                  id: a.id, name: a.Name, url: a.Link, type: a.Type?.value || 'PDF'
+                  id: a.id, name: safeString(a.Name), url: a.Link, type: safeString(a.Type?.value || a.Type) as any
               })));
           } catch (e) { console.error(e); }
       }
@@ -233,7 +247,6 @@ export default function CallbackMatrixPage() {
       alert(`Published ${count} schedules!`);
   };
 
-  // --- FILTERED BENCH ---
   const benchList = useMemo(() => {
       return students
         .filter(s => {
@@ -303,12 +316,12 @@ export default function CallbackMatrixPage() {
                             </div>
                         </div>
 
-                        {/* ALWAYS VISIBLE ACTIONS */}
+                        {/* ACTIONS */}
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={(e) => toggleHideStudent(e, student.id)}
                                 className={`p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
-                                title={hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (No Callback needed, still in Casting)"}
+                                title={hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (No Callback needed)"}
                             >
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
                             </button>
@@ -340,7 +353,7 @@ export default function CallbackMatrixPage() {
                 </div>
             </header>
 
-            {/* Mobile Assignment Banner */}
+            {/* Mobile Banner */}
             {activeMobileStudent && (
                 <div className="bg-blue-600 text-white p-3 text-xs font-bold flex justify-between items-center shadow-lg z-20">
                     <span>Assigning: {activeMobileStudent.name}</span>
@@ -421,13 +434,11 @@ export default function CallbackMatrixPage() {
              <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInspectingStudent(null)}>
                  <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                      
-                     {/* Header */}
                      <div className="p-6 pb-4 border-b border-white/5 flex gap-4 items-start">
                          <img src={inspectingStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-20 h-20 rounded-xl object-cover bg-zinc-800" />
                          <div className="flex-1">
                              <h2 className="text-2xl font-black uppercase italic leading-none">{inspectingStudent.name}</h2>
                              <p className="text-zinc-500 text-xs font-bold uppercase mt-1">Age {inspectingStudent.age} • {inspectingStudent.gender}</p>
-                             
                              <div className="flex gap-2 mt-3">
                                 <div className="bg-blue-900/30 text-blue-300 px-3 py-1 rounded text-xs font-bold">Vocal: {inspectingStudent.breakdown.vocal || '-'}</div>
                                 <div className="bg-purple-900/30 text-purple-300 px-3 py-1 rounded text-xs font-bold">Dance: {inspectingStudent.breakdown.dance || '-'}</div>
@@ -437,52 +448,21 @@ export default function CallbackMatrixPage() {
                          <button onClick={() => setInspectingStudent(null)} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={20}/></button>
                      </div>
 
-                     {/* Content */}
                      <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
-                        
-                        {/* Conflicts */}
                         <div className="bg-red-900/10 border border-red-500/20 p-4 rounded-xl">
-                            <h3 className="text-red-400 font-black uppercase text-xs tracking-widest flex items-center gap-2 mb-2">
-                                <Calendar size={14} /> Conflicts
-                            </h3>
+                            <h3 className="text-red-400 font-black uppercase text-xs tracking-widest flex items-center gap-2 mb-2"><Calendar size={14} /> Conflicts</h3>
                             <p className="text-zinc-300 text-sm leading-relaxed">{inspectingStudent.conflicts}</p>
                         </div>
-
-                        {/* Notes */}
                         <div className="space-y-4">
-                            {inspectingStudent.notes.vocal && (
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Mic size={12}/> Music Notes</h4>
-                                    <p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.vocal}</p>
-                                </div>
-                            )}
-                             {inspectingStudent.notes.acting && (
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Theater size={12}/> Acting Notes</h4>
-                                    <p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.acting}</p>
-                                </div>
-                            )}
-                             {inspectingStudent.notes.dance && (
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Move size={12}/> Choreography Notes</h4>
-                                    <p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.dance}</p>
-                                </div>
-                            )}
-                             {inspectingStudent.notes.admin && (
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><AlertTriangle size={12}/> Admin / Drop-In Notes</h4>
-                                    <p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.admin}</p>
-                                </div>
-                            )}
-                             {(!inspectingStudent.notes.vocal && !inspectingStudent.notes.acting && !inspectingStudent.notes.dance) && (
-                                <p className="text-center text-zinc-600 italic text-sm py-4">No specific notes recorded.</p>
-                             )}
+                            {inspectingStudent.notes.vocal && <div><h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Mic size={12}/> Music Notes</h4><p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.vocal}</p></div>}
+                            {inspectingStudent.notes.acting && <div><h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Theater size={12}/> Acting Notes</h4><p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.acting}</p></div>}
+                            {inspectingStudent.notes.dance && <div><h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><Move size={12}/> Choreography Notes</h4><p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.dance}</p></div>}
+                            {inspectingStudent.notes.admin && <div><h4 className="text-xs font-bold uppercase text-zinc-500 mb-1 flex items-center gap-2"><AlertTriangle size={12}/> Admin Notes</h4><p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-white/5">{inspectingStudent.notes.admin}</p></div>}
                         </div>
                      </div>
                  </div>
              </div>
         )}
-
     </div>
   );
 }
