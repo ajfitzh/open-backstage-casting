@@ -220,13 +220,11 @@ export default function ChoreoWorkspace({
                   
                   {/* CONTROLS OVERLAY */}
                   <div className="absolute top-2 right-2 flex gap-2 z-10">
-                     {/* RETAKE */}
                      <label className="flex items-center gap-2 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors">
                          <RefreshCw size={12} /> Retake
                          <input type="file" accept="video/*" capture="environment" className="hidden" onChange={handleBatchVideoUpload} disabled={isUploading} />
                      </label>
 
-                     {/* DELETE */}
                      <button 
                         onClick={handleDeleteVideo}
                         className="flex items-center gap-2 bg-red-600/80 hover:bg-red-600 backdrop-blur text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase cursor-pointer border border-white/10 transition-colors"
@@ -268,7 +266,7 @@ export default function ChoreoWorkspace({
           )}
       </div>
 
-      {/* === CONTENT AREA (Scrollable) === */}
+      {/* === CONTENT AREA === */}
       <div className="flex-1 overflow-y-auto relative bg-zinc-950">
           
           {/* VIEW 1: ROSTER GRID */}
@@ -288,7 +286,7 @@ export default function ChoreoWorkspace({
                       )}
                   </div>
                   
-                  <div className="grid grid-cols-4 gap-2 pb-20">
+                  <div className="grid grid-cols-4 gap-2 pb-24">
                       {currentGroup.map((p, i) => {
                           const grade = initialGrades[p.id]?.dance || 0;
                           return (
@@ -341,15 +339,15 @@ export default function ChoreoWorkspace({
                       <button onClick={() => changeStudent(1)} disabled={selectedIndex === currentGroup.length - 1} className="p-2 text-zinc-400 hover:text-white disabled:opacity-20"><ArrowRight size={20} /></button>
                   </div>
 
-                  {/* SWIPE AREA (Invisible Trigger) */}
+                  {/* SWIPE AREA (Shrunk to allow more space for controls) */}
                   <div 
-                    className="flex-1 min-h-[20px]"
+                    className="flex-1 min-h-[10px]"
                     onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
                   ></div>
 
-                  {/* CONTROL PAD */}
-                  <div className="bg-zinc-900 border-t border-white/10 p-4 pb-8 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-                      <div className="grid grid-cols-4 gap-2 mb-4">
+                  {/* CONTROL PAD (Added pb-24 for footer clearance) */}
+                  <div className="bg-zinc-900 border-t border-white/10 p-4 pb-24 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                      <div className="grid grid-cols-4 gap-2 mb-2">
                           {LEVELS.map((lvl) => (
                               <button key={lvl.val} onClick={() => handleScore(lvl.val)} className={`h-14 rounded-xl flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${activeGrade.dance === lvl.val ? `${lvl.color.replace('/30', '')} text-white shadow-lg scale-105` : `bg-transparent border-white/5 text-zinc-500 hover:bg-white/5`}`}>
                                   <span className="text-lg font-black">{lvl.val}</span>
@@ -358,7 +356,7 @@ export default function ChoreoWorkspace({
                           ))}
                       </div>
 
-                      <div className="mb-4 relative">
+                      <div className="mb-2 relative">
                           <input value={localNotes} onChange={(e) => handleManualNoteChange(e.target.value)} onBlur={saveNotes} placeholder="Type note..." className="w-full bg-black/40 border border-white/5 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none" />
                           <MessageSquare size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
                       </div>
