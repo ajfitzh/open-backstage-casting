@@ -7,7 +7,7 @@ import {
   GripVertical, Link as LinkIcon, Music, FileText,
   Loader2, Copy, UploadCloud, Eye, AlertTriangle, 
   Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, CheckCircle2, Film,
-  Star, TrendingDown, TrendingUp
+  Star, TrendingDown
 } from 'lucide-react';
 import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
@@ -69,7 +69,7 @@ export default function CallbackMatrixPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
 
-  // --- NEW: SORT STATE ---
+  // --- SORT STATE ---
   const [sortMode, setSortMode] = useState<'overall' | 'vocal' | 'acting' | 'dance' | 'bottom'>('overall');
 
   // --- HELPER: SAFE STRING ---
@@ -116,7 +116,7 @@ export default function CallbackMatrixPage() {
             avatar: r.Headshot?.[0]?.url || "",
             age: safeString(r.Age),
             gender: safeString(r.Gender),
-            score: safeNumber(r["Average Score"] || r["Vocal Score"]), // Fallback if avg not calc'd
+            score: safeNumber(r["Average Score"] || r["Vocal Score"]), 
             callbackString: safeString(r["Callbacks"]),
             conflicts: safeString(r["Conflicts"]) || "None listed",
             breakdown: {
@@ -253,17 +253,26 @@ export default function CallbackMatrixPage() {
             if (sortMode === 'vocal') return b.breakdown.vocal - a.breakdown.vocal;
             if (sortMode === 'acting') return b.breakdown.acting - a.breakdown.acting;
             if (sortMode === 'dance') return b.breakdown.dance - a.breakdown.dance;
-            if (sortMode === 'bottom') return a.score - b.score; // Ascending
+            if (sortMode === 'bottom') return a.score - b.score; 
             return 0;
         });
   }, [students, search, hiddenIds, showHidden, sortMode]);
 
-  // --- DISPLAY HELPERS ---
   const getDisplayScore = (student: Student) => {
       if (sortMode === 'vocal') return `Vocal: ${student.breakdown.vocal}`;
       if (sortMode === 'acting') return `Act: ${student.breakdown.acting}`;
       if (sortMode === 'dance') return `Dance: ${student.breakdown.dance}`;
       return `Avg: ${student.score.toFixed(1)}`;
+  };
+
+  const getSortLabel = () => {
+      switch(sortMode) {
+          case 'overall': return "Top Overall Scores";
+          case 'vocal': return "Top Vocal Scores";
+          case 'acting': return "Top Acting Scores";
+          case 'dance': return "Top Dance Scores";
+          case 'bottom': return "Lowest Scores (Cuts)";
+      }
   };
 
   const handleDragStart = (e: React.DragEvent, id: number) => {
@@ -295,32 +304,48 @@ export default function CallbackMatrixPage() {
                 <div className="flex gap-2">
                     <button 
                         onClick={() => setShowHidden(!showHidden)}
-                        className={`p-2 rounded-lg transition-colors ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}
-                        title={showHidden ? "Hide Archived" : "Show Archived"}
+                        className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}
                     >
                         {showHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                        <span className="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50">
+                            {showHidden ? "Hide Archived" : "Show Archived"}
+                        </span>
                     </button>
                     <button onClick={() => setLeftPanelOpen(false)} className="md:hidden text-zinc-500"><X size={16}/></button>
                 </div>
             </div>
             
-            {/* SORT BAR */}
+            {/* SORT BAR WITH TOOLTIPS */}
             <div className="px-2 pt-2 flex gap-1 justify-between shrink-0">
-                <button onClick={() => setSortMode('overall')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'overall' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Overall">
-                    <Star size={14} />
-                </button>
-                <button onClick={() => setSortMode('vocal')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'vocal' ? 'bg-purple-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Vocal">
-                    <Mic size={14} />
-                </button>
-                <button onClick={() => setSortMode('acting')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'acting' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Acting">
-                    <Theater size={14} />
-                </button>
-                <button onClick={() => setSortMode('dance')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'dance' ? 'bg-pink-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Top Dance">
-                    <Move size={14} />
-                </button>
-                <button onClick={() => setSortMode('bottom')} className={`flex-1 py-2 rounded flex justify-center ${sortMode === 'bottom' ? 'bg-red-900/50 text-red-300' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'}`} title="Lowest Scores">
-                    <TrendingDown size={14} />
-                </button>
+                {[
+                    { id: 'overall', icon: Star, label: "Top Overall" },
+                    { id: 'vocal', icon: Mic, label: "Top Vocal" },
+                    { id: 'acting', icon: Theater, label: "Top Acting" },
+                    { id: 'dance', icon: Move, label: "Top Dance" },
+                    { id: 'bottom', icon: TrendingDown, label: "Lowest Scores" },
+                ].map((btn) => (
+                    <button 
+                        key={btn.id}
+                        onClick={() => setSortMode(btn.id as any)} 
+                        className={`group relative flex-1 py-2 rounded flex justify-center transition-colors 
+                            ${sortMode === btn.id 
+                                ? 'bg-blue-600 text-white' 
+                                : btn.id === 'bottom' ? 'bg-zinc-900 text-red-400 hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800'
+                            }`}
+                    >
+                        <btn.icon size={14} />
+                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
+                            {btn.label}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
+            {/* CURRENT SORT LABEL (For Mobile Context) */}
+            <div className="px-3 pb-2 pt-1 text-center border-b border-white/5 bg-zinc-900/50">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                    Sorting By: <span className="text-blue-400">{getSortLabel()}</span>
+                </p>
             </div>
 
             {/* Search */}
@@ -356,18 +381,23 @@ export default function CallbackMatrixPage() {
                         <div className="flex items-center gap-1">
                             <button 
                                 onClick={(e) => toggleHideStudent(e, student.id)}
-                                className={`p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
-                                title={hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (No Callback needed)"}
+                                className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}
                             >
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
+                                {/* TOOLTIP */}
+                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
+                                    {hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (Hide)"}
+                                </span>
                             </button>
                             
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }}
-                                className="p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors"
-                                title="View Details"
+                                className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors"
                             >
                                 <Eye size={14} />
+                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">
+                                    View Profile
+                                </span>
                             </button>
                         </div>
                     </div>
@@ -389,7 +419,6 @@ export default function CallbackMatrixPage() {
                 </div>
             </header>
 
-            {/* Mobile Banner */}
             {activeMobileStudent && (
                 <div className="bg-blue-600 text-white p-3 text-xs font-bold flex justify-between items-center shadow-lg z-20">
                     <span>Assigning: {activeMobileStudent.name}</span>
