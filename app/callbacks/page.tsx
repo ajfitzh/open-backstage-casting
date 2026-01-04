@@ -3,22 +3,41 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Users, Calendar, Clock, Plus, Trash2, 
-  FileText, Share, Search, MoreVertical, X, 
-  ChevronRight, GripVertical, CheckCircle2
+  Users, Clock, Plus, Trash2, 
+  Share, Search, X, GripVertical, 
+  Link as LinkIcon, Music, FileText,
+  Loader2, Copy, UploadCloud, CheckCircle2
 } from 'lucide-react';
 import { getAuditionSlots, updateAuditionSlot } from '@/app/lib/baserow'; 
 
+// --- CONFIGURATION ---
+
+const DISCLAIMER_TEXT = `
+*** NOTICE ***
+This schedule represents the maximum potential callbacks for each actor. 
+The creative team reserves the right to release actors early if vocal/dance requirements 
+for specific roles are not met during the morning sessions. 
+Please be prepared for all listed slots, but be aware the schedule may evolve in real-time.
+`;
+
+// You can edit this list for each show! No DB needed.
+const SMART_DEFAULTS: Record<string, { title: string, link: string }> = {
+    "ariel": { title: "Part of Your World", link: "" }, // Add your links here
+    "ursula": { title: "Poor Unfortunate Souls", link: "" },
+    "eric": { title: "One Step Closer", link: "" },
+    "sebastian": { title: "Under the Sea", link: "" },
+    "dance": { title: "Jazz Combo Video", link: "" },
+};
+
 // --- TYPES ---
+
 interface Student {
   id: number;
   name: string;
   avatar: string;
-  age: string;
   gender: string;
   score: number; // Avg audition score
-  tags: string[]; // "Mover", "Strong Vocal", etc.
-  callbackString: string; // The text saved to DB (e.g. "Dance, Ariel")
+  callbackString: string; // Current DB value
 }
 
 interface CallbackSlot {
@@ -26,26 +45,35 @@ interface CallbackSlot {
   time: string;
   title: string;
   type: 'dance' | 'vocal' | 'read';
-  material?: string; // Link to PDF/MP3
+  materialLink?: string; 
+  materialName?: string; 
   assignedIds: number[];
+}
+
+interface Asset {
+    url: string;
+    name: string;
+    type: 'pdf' | 'audio' | 'video';
 }
 
 const DEFAULT_SLOTS: CallbackSlot[] = [
   { id: 'dance-1', time: '10:00 AM', title: 'General Dance Call', type: 'dance', assignedIds: [] },
-  { id: 'vocal-leads', time: '11:30 AM', title: 'Lead Vocals (Ariel/Eric)', type: 'vocal', assignedIds: [] },
-  { id: 'read-1', time: '01:00 PM', title: 'Sc 4: Ariel & Flounder', type: 'read', assignedIds: [] },
+  { id: 'vocal-lead', time: '11:30 AM', title: 'Lead Vocals', type: 'vocal', assignedIds: [] },
 ];
 
 export default function CallbackMatrixPage() {
   // --- STATE ---
   const [students, setStudents] = useState<Student[]>([]);
   const [slots, setSlots] = useState<CallbackSlot[]>(DEFAULT_SLOTS);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   
   // UI State
-  const [benchOpen, setBenchOpen] = useState(false); // Mobile Drawer
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true); // Bench
+  const [rightPanelOpen, setRightPanelOpen] = useState(false); // Asset Library
   const [search, setSearch] = useState("");
   const [draggedStudentId, setDraggedStudentId] = useState<number | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [activeMobileStudent, setActiveMobileStudent] = useState<Student | null>(null);
 
   // --- DATA LOADING ---
@@ -65,11 +93,9 @@ export default function CallbackMatrixPage() {
             id: r.id,
             name: r.Performer?.[0]?.value || "Unknown",
             avatar: r.Headshot?.[0]?.url || "",
-            age: r.Age?.value || "?",
             gender: r.Gender?.value || "",
             score: parseFloat(r["Vocal Score"]) || 0,
-            tags: [], // Could parse from notes if needed
-            callbackString: r["Callbacks"] || "" // Assuming you add a "Callbacks" text field
+            callbackString: r["Callbacks"] || ""
         }));
       
       setStudents(cleanData);
@@ -78,19 +104,76 @@ export default function CallbackMatrixPage() {
     load();
   }, []);
 
-  // --- ACTIONS ---
+  // --- ASSET ACTIONS (DigitalOcean) ---
+  const handleUploadAsset = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || !e.target.files[0]) return;
+      const file = e.target.files[0];
+      
+      setIsUploading(true);
+      try {
+          // 1. Get Permission (Presigned URL)
+          const res = await fetch('/api/upload', {
+              method: 'POST',
+              body: JSON.stringify({ filename: `SIDE-${file.name}`, fileType: file.type }),
+          });
+          if (!res.ok) throw new Error("Sign failed");
+          const { uploadUrl, publicUrl } = await res.json();
 
+          // 2. Upload directly to DO Spaces
+          await fetch(uploadUrl, {
+              method: 'PUT',
+              body: file,
+              headers: { "Content-Type": file.type, "x-amz-acl": "public-read" },
+          });
+
+          // 3. Add to Local List
+          const type = file.type.includes('pdf') ? 'pdf' : file.type.includes('audio') ? 'audio' : 'video';
+          setAssets(prev => [...prev, { name: file.name, url: publicUrl, type }]);
+          
+      } catch (err) {
+          console.error(err);
+          alert("Upload failed. Check your API keys.");
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
+  const handleCopyAsset = (asset: Asset) => {
+      navigator.clipboard.writeText(asset.url);
+      alert("Link copied! Paste it when creating a slot.");
+  };
+
+  // --- SLOT ACTIONS ---
   const handleAddSlot = () => {
+      // 1. Basic Info
       const time = prompt("Time (e.g. 2:00 PM):", "2:00 PM");
       if(!time) return;
       const title = prompt("Title (e.g. Ursula Sides):", "New Slot");
       if(!title) return;
       
+      // 2. Check Smart Defaults
+      let defaultLink = "";
+      let defaultLabel = "";
+      const lowerTitle = title.toLowerCase();
+      
+      for (const [key, val] of Object.entries(SMART_DEFAULTS)) {
+          if (lowerTitle.includes(key)) {
+              defaultLink = val.link;
+              defaultLabel = val.title;
+              break;
+          }
+      }
+
+      // 3. User Override
+      const materialLink = prompt("Material Link (Optional - leave blank, paste link, or accept default):", defaultLink);
+      
       const newSlot: CallbackSlot = {
           id: Date.now().toString(),
           time,
           title,
-          type: 'read',
+          type: lowerTitle.includes('dance') ? 'dance' : lowerTitle.includes('vocal') ? 'vocal' : 'read',
+          materialLink: materialLink || undefined,
+          materialName: materialLink ? (defaultLabel || "Sides") : undefined,
           assignedIds: []
       };
       setSlots(prev => [...prev, newSlot]);
@@ -110,7 +193,6 @@ export default function CallbackMatrixPage() {
           return s;
       }));
       setActiveMobileStudent(null);
-      setBenchOpen(false);
   };
 
   const handleUnassign = (studentId: number, slotId: string) => {
@@ -123,24 +205,26 @@ export default function CallbackMatrixPage() {
   };
 
   const handlePublish = async () => {
-      if(!confirm("Update the 'Callbacks' field in the database for all assigned students?")) return;
+      if(!confirm("Update the 'Callbacks' field in the database for all assigned students? This will overwrite existing data.")) return;
       
-      // 1. Calculate strings for each student
       const updates: Record<number, string> = {};
       
+      // Build the strings
       slots.forEach(slot => {
           slot.assignedIds.forEach(id => {
-              const entry = `${slot.time}: ${slot.title}`;
+              let entry = `${slot.time}: ${slot.title}`;
+              if (slot.materialLink) entry += ` (Link: ${slot.materialLink})`;
+              
               if (updates[id]) updates[id] += `\n${entry}`;
               else updates[id] = entry;
           });
       });
 
-      // 2. Perform updates (In real app, bundle this or show progress bar)
+      // Send to Baserow with Disclaimer
       let count = 0;
       for (const [id, text] of Object.entries(updates)) {
-          // This assumes you made a text field called "Callbacks" in Baserow!
-          await updateAuditionSlot(Number(id), { "Callbacks": text });
+          const finalString = `${text}\n\n${DISCLAIMER_TEXT}`;
+          await updateAuditionSlot(Number(id), { "Callbacks": finalString });
           count++;
       }
       alert(`Published schedules for ${count} students!`);
@@ -150,7 +234,7 @@ export default function CallbackMatrixPage() {
   const benchList = useMemo(() => {
       return students
         .filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
-        .sort((a, b) => b.score - a.score); // Highest score first
+        .sort((a, b) => b.score - a.score); 
   }, [students, search]);
 
   // --- DRAG HANDLERS ---
@@ -165,41 +249,30 @@ export default function CallbackMatrixPage() {
       setDraggedStudentId(null);
   };
 
-  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white">Loading Matrix...</div>;
+  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500" /></div>;
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex flex-col md:grid md:grid-cols-[300px_1fr] divide-x divide-white/10 font-sans overflow-hidden">
+    <div className="h-screen bg-zinc-950 text-white flex overflow-hidden relative font-sans">
         
-        {/* === LEFT: THE BENCH (Desktop Sidebar / Mobile Drawer) === */}
-        <aside className={`
-            fixed inset-0 z-50 bg-zinc-900/95 backdrop-blur transition-transform duration-300 md:relative md:translate-y-0 md:bg-zinc-900 md:flex flex-col
-            ${benchOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
-        `}>
-            {/* Header */}
-            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-zinc-900">
+        {/* === LEFT: THE BENCH === */}
+        <aside className={`${leftPanelOpen ? 'w-[300px]' : 'w-0'} bg-zinc-900 border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
+            <div className="p-4 border-b border-white/5 flex justify-between items-center shrink-0 bg-zinc-900 z-10">
                 <div className="flex items-center gap-2">
                     <Users size={18} className="text-zinc-400" />
-                    <h2 className="text-sm font-black uppercase tracking-widest">The Bench</h2>
+                    <h2 className="text-sm font-black uppercase tracking-widest">Bench</h2>
                     <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{benchList.length}</span>
                 </div>
-                <button onClick={() => setBenchOpen(false)} className="md:hidden p-2 text-zinc-500"><X size={20}/></button>
+                <button onClick={() => setLeftPanelOpen(false)} className="md:hidden"><X size={16}/></button>
             </div>
-
-            {/* Search */}
-            <div className="p-2 border-b border-white/5">
+            
+            <div className="p-2 border-b border-white/5 shrink-0">
                 <div className="bg-black/20 rounded-lg flex items-center px-3 py-2 border border-white/5">
                     <Search size={14} className="text-zinc-600 mr-2" />
-                    <input 
-                        value={search} 
-                        onChange={(e) => setSearch(e.target.value)} 
-                        className="bg-transparent outline-none text-xs text-white placeholder:text-zinc-600 w-full" 
-                        placeholder="Search actors..." 
-                    />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} className="bg-transparent outline-none text-xs text-white placeholder:text-zinc-600 w-full" placeholder="Search actors..." />
                 </div>
             </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar pb-20">
                 {benchList.map(student => (
                     <div 
                         key={student.id}
@@ -208,107 +281,106 @@ export default function CallbackMatrixPage() {
                         onClick={() => {
                             if (window.innerWidth < 768) {
                                 setActiveMobileStudent(student);
-                                setBenchOpen(false); // Close bench to show slots for assignment
+                                setLeftPanelOpen(false); // Close bench to show slots
                             }
                         }}
-                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer select-none transition-colors 
-                            ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border border-blue-500/30' : 'border border-transparent'}
+                        className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border transition-colors 
+                             ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent hover:border-white/5'}
                         `}
                     >
-                        <div className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden shrink-0">
-                            {student.avatar && <img src={student.avatar} className="w-full h-full object-cover" />}
-                        </div>
+                        <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-8 h-8 rounded-full object-cover bg-zinc-800" />
                         <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold truncate">{student.name}</p>
-                            <p className="text-[10px] text-zinc-500">{student.gender} • Score: {student.score || "-"}</p>
+                            <div className="flex gap-2 text-[10px] text-zinc-500">
+                                <span>{student.gender}</span>
+                                {student.score > 0 && <span className="text-zinc-400">Score: {student.score}</span>}
+                            </div>
                         </div>
-                        {student.score >= 4 && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                        {student.score >= 4.5 && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>}
                         <GripVertical size={14} className="text-zinc-700 opacity-0 group-hover:opacity-100" />
                     </div>
                 ))}
             </div>
         </aside>
 
-
-        {/* === RIGHT: THE MATRIX (Schedule) === */}
-        <main className="flex flex-col h-full overflow-hidden relative">
+        {/* === CENTER: THE MATRIX === */}
+        <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
             
             {/* Header */}
-            <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-4 md:px-8 shrink-0">
+            <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-4 md:px-6 shrink-0">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => setBenchOpen(true)} className="md:hidden p-2 bg-zinc-800 rounded-lg text-zinc-400">
+                    <button onClick={() => setLeftPanelOpen(!leftPanelOpen)} className={`p-2 rounded-lg transition-colors ${!leftPanelOpen ? 'text-white bg-blue-600' : 'text-zinc-400 bg-zinc-800'}`}>
                         <Users size={18} />
                     </button>
                     <div>
                         <h1 className="text-lg font-black uppercase italic tracking-tighter">Callback Matrix</h1>
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase hidden md:block">Friday Night Planning</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase hidden md:block">Friday Night Strategy</p>
                     </div>
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={handleAddSlot} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all">
+                    <button onClick={() => setRightPanelOpen(!rightPanelOpen)} className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${rightPanelOpen ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-300'}`}>
+                        <UploadCloud size={14} /> <span className="hidden md:inline">Assets</span>
+                    </button>
+                    <button onClick={handleAddSlot} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 md:px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all">
                         <Plus size={14} /> <span className="hidden md:inline">Add Slot</span>
                     </button>
-                    <button onClick={handlePublish} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all shadow-lg shadow-blue-900/20">
+                    <button onClick={handlePublish} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-3 md:px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all shadow-lg shadow-blue-900/20">
                         <Share size={14} /> <span className="hidden md:inline">Publish</span>
                     </button>
                 </div>
             </header>
 
-            {/* Mobile "Assigning Mode" Banner */}
+            {/* Mobile Assignment Banner */}
             {activeMobileStudent && (
-                <div className="bg-blue-600 text-white p-3 text-xs font-bold flex justify-between items-center shadow-lg z-20">
-                    <span>Assigning: {activeMobileStudent.name}</span>
+                <div className="bg-blue-600 text-white p-3 text-xs font-bold flex justify-between items-center shadow-lg z-20 animate-in slide-in-from-top">
+                    <span>Tap a slot to assign: {activeMobileStudent.name}</span>
                     <button onClick={() => setActiveMobileStudent(null)} className="p-1 hover:bg-white/20 rounded"><X size={14}/></button>
                 </div>
             )}
 
-            {/* Timeline */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar bg-zinc-950">
+            {/* Scrollable Canvas */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar">
                 {slots.map((slot) => (
                     <div 
                         key={slot.id}
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, slot.id)}
-                        onClick={() => {
-                            if (activeMobileStudent) {
-                                handleAssign(activeMobileStudent.id, slot.id);
-                            }
-                        }}
+                        onClick={() => { if(activeMobileStudent) handleAssign(activeMobileStudent.id, slot.id); }}
                         className={`relative rounded-2xl border transition-all overflow-hidden group
-                            ${activeMobileStudent ? 'border-blue-500/50 bg-blue-900/5 cursor-pointer hover:bg-blue-900/10' : 'border-white/5 bg-zinc-900/30'}
+                            ${activeMobileStudent ? 'border-blue-500/50 bg-blue-900/5 cursor-pointer hover:bg-blue-900/10' : 'border-white/5 bg-zinc-900/30 hover:border-white/10'}
                         `}
                     >
-                        {/* Time Column (Left Decorator) */}
-                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                            slot.type === 'dance' ? 'bg-emerald-500' : slot.type === 'vocal' ? 'bg-purple-500' : 'bg-blue-500'
-                        }`} />
-
-                        <div className="p-4 md:p-6 pl-6 flex flex-col md:flex-row gap-4 md:gap-8 items-start md:items-center">
+                        {/* Type Indicator */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${slot.type === 'dance' ? 'bg-emerald-500' : slot.type === 'vocal' ? 'bg-purple-500' : 'bg-blue-500'}`} />
+                        
+                        <div className="p-4 pl-6 flex flex-col md:flex-row gap-6 md:items-center">
                             
                             {/* Slot Info */}
-                            <div className="min-w-[150px] shrink-0">
+                            <div className="min-w-[200px] shrink-0">
                                 <div className="flex items-center gap-2 text-zinc-500 mb-1">
                                     <Clock size={12} />
                                     <span className="text-xs font-black uppercase tracking-wider">{slot.time}</span>
                                 </div>
-                                <h3 className="text-xl font-bold text-white leading-tight mb-2">{slot.title}</h3>
-                                {slot.material ? (
-                                    <a href="#" className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase">
-                                        <FileText size={12} /> View Sides
+                                <h3 className="text-lg font-bold text-white leading-tight mb-2">{slot.title}</h3>
+                                {slot.materialLink ? (
+                                    <a 
+                                        href={slot.materialLink} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase bg-blue-900/20 px-2 py-1 rounded w-fit border border-blue-500/20"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <LinkIcon size={10} /> {slot.materialName || "View Sides"}
                                     </a>
-                                ) : (
-                                    <button className="text-[10px] text-zinc-600 hover:text-zinc-400 font-bold uppercase flex items-center gap-1">
-                                        <Plus size={10} /> Add Material
-                                    </button>
-                                )}
+                                ) : <p className="text-[10px] text-zinc-600 italic">No assets attached</p>}
                             </div>
 
                             {/* Assigned Grid */}
                             <div className="flex-1 w-full">
                                 {slot.assignedIds.length === 0 ? (
-                                    <div className="h-16 border-2 border-dashed border-white/5 rounded-xl flex items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-wider">
-                                        {activeMobileStudent ? "Tap here to assign" : "Drag students here"}
+                                    <div className="h-12 border-2 border-dashed border-white/5 rounded-xl flex items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-wider">
+                                        {activeMobileStudent ? "Tap Here" : "Drag Students Here"}
                                     </div>
                                 ) : (
                                     <div className="flex flex-wrap gap-2">
@@ -316,15 +388,10 @@ export default function CallbackMatrixPage() {
                                             const student = students.find(s => s.id === id);
                                             if (!student) return null;
                                             return (
-                                                <div key={id} className="flex items-center gap-2 bg-zinc-800 border border-white/5 pl-1 pr-3 py-1 rounded-full group/chip hover:border-white/20 transition-colors">
-                                                    <img src={student.avatar || DEFAULT_AVATAR} className="w-5 h-5 rounded-full object-cover" />
+                                                <div key={id} className="flex items-center gap-2 bg-zinc-800 border border-white/5 pl-1 pr-2 py-1 rounded-full group/chip">
+                                                    <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-5 h-5 rounded-full object-cover" />
                                                     <span className="text-xs font-bold text-zinc-300">{student.name}</span>
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleUnassign(id, slot.id); }}
-                                                        className="ml-1 text-zinc-600 hover:text-red-400"
-                                                    >
-                                                        <X size={12} />
-                                                    </button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleUnassign(id, slot.id); }} className="ml-1 text-zinc-600 hover:text-red-400 p-0.5 rounded-full hover:bg-white/10 transition-colors"><X size={12} /></button>
                                                 </div>
                                             )
                                         })}
@@ -332,23 +399,58 @@ export default function CallbackMatrixPage() {
                                 )}
                             </div>
 
-                            {/* Actions */}
-                            <div className="self-start md:self-center">
-                                <button onClick={() => handleRemoveSlot(slot.id)} className="p-2 text-zinc-600 hover:text-red-500 transition-colors">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
+                            {/* Slot Actions */}
+                            <button onClick={(e) => { e.stopPropagation(); handleRemoveSlot(slot.id); }} className="absolute top-2 right-2 md:static text-zinc-600 hover:text-red-500 p-2 md:p-0 transition-colors opacity-100 md:opacity-0 group-hover:opacity-100">
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                     </div>
                 ))}
-
-                {/* Add Slot Placeholder */}
-                <button onClick={handleAddSlot} className="w-full py-8 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center text-zinc-600 hover:text-zinc-400 hover:border-white/10 transition-all gap-2 group">
-                    <Plus size={24} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-xs font-black uppercase tracking-widest">Create New Slot</span>
-                </button>
             </div>
         </main>
+
+        {/* === RIGHT: ASSET LIBRARY === */}
+        <aside className={`${rightPanelOpen ? 'w-[300px]' : 'w-0'} bg-zinc-900 border-l border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
+             <div className="p-4 border-b border-white/5 bg-zinc-900 shrink-0 flex justify-between items-center">
+                <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                    <UploadCloud size={16} className="text-blue-500"/> Library
+                </h2>
+                <button onClick={() => setRightPanelOpen(false)} className="md:hidden"><X size={16}/></button>
+            </div>
+            
+            <div className="p-4 shrink-0 border-b border-white/5">
+                <label className={`w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-white/5 transition-colors ${isUploading ? 'opacity-50 cursor-wait' : ''}`}>
+                    {isUploading ? <Loader2 className="animate-spin text-blue-500" /> : <Plus className="text-zinc-500" />}
+                    <span className="text-[10px] font-bold uppercase text-zinc-500">{isUploading ? "Uploading..." : "Upload PDF / MP3"}</span>
+                    <input type="file" accept=".pdf,audio/*,video/*" className="hidden" onChange={handleUploadAsset} disabled={isUploading} />
+                </label>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                {assets.length === 0 && <p className="text-center text-zinc-600 text-xs mt-4 italic">No assets uploaded yet.</p>}
+                
+                {assets.map((asset, i) => (
+                    <div key={i} className="bg-zinc-950 p-3 rounded-xl border border-white/5 group relative">
+                        <div className="flex items-start gap-3 mb-2">
+                            <div className="w-8 h-8 rounded bg-zinc-800 flex items-center justify-center shrink-0">
+                                {asset.type === 'pdf' ? <FileText size={16} className="text-blue-400"/> : <Music size={16} className="text-purple-400"/>}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-zinc-300 truncate" title={asset.name}>{asset.name}</p>
+                                <p className="text-[10px] text-zinc-600 uppercase">{asset.type}</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => handleCopyAsset(asset)}
+                            className="w-full py-1.5 bg-zinc-800 hover:bg-blue-600 hover:text-white text-zinc-400 rounded text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-2 border border-white/5 hover:border-blue-500"
+                        >
+                            <Copy size={12} /> Copy Link
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </aside>
+
     </div>
   );
 }
