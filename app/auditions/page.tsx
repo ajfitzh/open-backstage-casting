@@ -1,11 +1,12 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import { getAuditionSlots, updateAuditionSlot, getAuditionees, submitAudition } from "@/app/lib/baserow";
+// NOTE: We switched getAuditionSlots to getAuditionees to fix the name issue
+import { getAuditionees, updateAuditionSlot, submitAudition } from "@/app/lib/baserow";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   User, Star, Music, Move, X, Save, Clock, CheckCircle2, 
-  MessageSquare, ShieldCheck, Search, UserPlus, PlayCircle, Film
+  MessageSquare, Search, UserPlus, PlayCircle, Film
 } from "lucide-react";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
@@ -25,6 +26,34 @@ const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string
   "Drop-In": { color: "border-amber-500", text: "text-amber-400", glow: "shadow-amber-500/20", weight: "Impression Only" },
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
+
+// --- HELPER COMPONENT: RUBRIC SLIDER ---
+const RubricSlider = ({ label, val, setVal, disabled }: { label: string, val: number, setVal: (n: number) => void, disabled: boolean }) => (
+  <div className={`space-y-3 ${disabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+    <div className="flex justify-between items-end">
+      <label className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+        {label === "Vocal Ability" && <Music size={14} className="text-purple-500" />}
+        {label === "Acting / Reads" && <Star size={14} className="text-blue-500" />}
+        {label === "Dance / Movement" && <Move size={14} className="text-emerald-500" />}
+        {label}
+      </label>
+      <span className={`text-xl font-black ${val > 0 ? 'text-white' : 'text-zinc-700'}`}>{val || "-"}</span>
+    </div>
+    <input 
+      type="range" min="0" max="5" step="1" value={val} 
+      onChange={(e) => setVal(Number(e.target.value))} 
+      className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+    />
+    <div className="flex justify-between text-[9px] font-bold uppercase text-zinc-600 px-1">
+      <span>N/A</span>
+      <span>Weak</span>
+      <span>Fair</span>
+      <span>Good</span>
+      <span>Great</span>
+      <span>Exc.</span>
+    </div>
+  </div>
+);
 
 export default function AuditionsPage() {
   const [isMounted, setIsMounted] = useState(false); 
@@ -69,7 +98,8 @@ export default function AuditionsPage() {
     const loadData = async () => {
       if (!isReady) return;
       try {
-        const slots = await getAuditionSlots();
+        // *** FIXED: Using getAuditionees() instead of getAuditionSlots() to fix names ***
+        const slots = await getAuditionees();
         const activeShowId = localStorage.getItem('activeShowId'); 
 
         const showAuditions = slots.filter((row: any) => {
@@ -124,15 +154,11 @@ export default function AuditionsPage() {
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
            }
            
-           // --- VIDEO EXTRACTION (New Priority Logic) ---
+           // --- VIDEO EXTRACTION ---
            let videoUrl = null;
-           
-           // 1. Try "Dance Video" (Your new field)
            if (row["Dance Video"]) {
                videoUrl = row["Dance Video"];
            } 
-           
-           // 2. Fallback to "Audition Video" if Dance Video is empty
            if (!videoUrl) {
                const rawVideo = row["Audition Video"]; 
                if (Array.isArray(rawVideo) && rawVideo.length > 0) videoUrl = rawVideo[0].url;
@@ -190,8 +216,8 @@ export default function AuditionsPage() {
         });
         setGrades(initialGrades);
 
-        const students = await getAuditionees();
-        setAllStudents(students);
+        // We can reuse getAuditionees here since we want the name fix for walk-ins too
+        setAllStudents(slots);
 
       } catch (err) {
         console.error("Load Error:", err);
@@ -201,39 +227,33 @@ export default function AuditionsPage() {
     loadData();
   }, [isReady]);
 
-// app/auditions/page.tsx
-
 const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
-    // 1. Check for Delete Command
     const isDelete = videoUrl === "DELETE";
 
-    // 2. Update Local State
     setGrades(prev => ({
         ...prev,
         [actorId]: {
             ...prev[actorId],
             dance: score,
             choreoNotes: notes,
-            // If DELETE, set null. If new URL, set it. Otherwise keep existing.
             video: isDelete ? null : (videoUrl || prev[actorId]?.video)
         }
     }));
 
-    // 3. Prepare Payload
     const payload: any = {
         "Dance Score": score > 0 ? score : null, 
         "Choreography Notes": notes
     };
     
-    // 4. Handle Video Field
     if (isDelete) {
-        payload["Dance Video"] = ""; // Clear it in Baserow
+        payload["Dance Video"] = ""; 
     } else if (videoUrl) {
         payload["Dance Video"] = videoUrl; 
     }
     
     updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
 };
+
   /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;
@@ -513,7 +533,7 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
           </div>
         </div>
 
-        {/* SCORING SIDEBAR (UNCHANGED) */}
+        {/* SCORING SIDEBAR */}
         {selectedPerson && (
           <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
              <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
