@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { getRoles, getAuditionSlots, getScenes, updateRole } from '@/app/lib/baserow'; 
 
 // Import your components
@@ -69,14 +69,11 @@ export default function CastingPage() {
 
             // Process Roles (Hydrate with Actor Objects)
             const processedRoles = showRoles.map((r: any) => {
-                // Parse Scene Data JSON or CSV
+                
+                // *** FIX: Use "Active Scenes" Link Field instead of "Scene Data" JSON ***
                 let sceneIds: number[] = [];
-                if (r["Scene Data"]) {
-                    try {
-                        const parsed = JSON.parse(r["Scene Data"]); // { "1": "scene", "2": "song" }
-                        // Convert your old map format to just IDs for the new Workspace
-                        sceneIds = Object.keys(parsed).map(Number);
-                    } catch(e) { /* ignore */ }
+                if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
+                    sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
                 // Get Assigned Actor (Confirmed)
@@ -193,12 +190,9 @@ export default function CastingPage() {
           return { ...r, sceneIds: newSceneIds };
       }));
 
-      // 2. Save to Baserow (as JSON string in "Scene Data")
-      // We convert [1, 2, 5] back to { "1": "scene", "2": "scene" } for compatibility
-      const sceneMap: Record<string, string> = {};
-      newSceneIds.forEach(id => sceneMap[id] = "scene"); // Defaulting to 'scene' type for toggle
-      
-      await updateRole(parseInt(roleId), { "Scene Data": JSON.stringify(sceneMap) });
+      // 2. Save to Baserow 
+      // *** FIX: Update the Link Field with an ARRAY OF IDs, not a JSON string ***
+      await updateRole(parseInt(roleId), { "Active Scenes": newSceneIds });
   };
 
   const handleDuplicateRole = async (roleId: string) => {
@@ -223,10 +217,6 @@ export default function CastingPage() {
       const assignments: Record<number, string> = {};
       
       roles.forEach(role => {
-          // If this role has a selected actor, and that actor is the one being inspected...
-          // Actually, the inspector needs to know ALL roles in a scene to show context,
-          // OR it needs to know if the *inspected actor* is in that scene via a role.
-          
           if (role.selectedActorIds.includes(inspectingActorId)) {
               role.sceneIds.forEach((sid: number) => {
                   assignments[sid] = assignments[sid] ? `${assignments[sid]} + ${role.name}` : role.name;
