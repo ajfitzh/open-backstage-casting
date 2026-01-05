@@ -8,18 +8,34 @@ const HEADERS = {
 };
 
 // TABLE IDS
-// Ensure these match your actual Baserow Table IDs
 const TABLES = {
   PEOPLE: process.env.NEXT_PUBLIC_BASEROW_TABLE_PEOPLE || "599",
   PRODUCTIONS: "600",
   ASSIGNMENTS: process.env.NEXT_PUBLIC_BASEROW_TABLE_ASSIGNMENTS || "603",
-  ROLES: "605", // Blueprint Roles
-  VOLUNTEERS: "619", // Volunteer Signup (Old/Backup)
-  COMMITTEE_PREFS: "620", // The "Super Form" for Committees
+  ROLES: "605",
+  VOLUNTEERS: "619",
+  COMMITTEE_PREFS: "620",
   SCENES: "627",
   AUDITIONS: process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630",
   ASSETS: "631" 
 };
+
+// --- HELPER: NAME MAPPER ---
+// This function fixes the "Digital ID" issue by creating a dictionary of ID -> Name
+async function getPersonNameMap() {
+  // Fetch up to 200 people (Increase size if you have more actors)
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/?user_field_names=true&size=200`, {
+    headers: HEADERS,
+    cache: "no-store",
+  });
+  
+  if (!res.ok) return new Map(); // Return empty map on fail
+  
+  const data = await res.json();
+  // Create a Map: Row ID (e.g. 195) => "Jackson Smith"
+  // Note: We map the internal 'id', not the 'Digital ID'
+  return new Map(data.results.map((p: any) => [p.id, p["Full Name"]]));
+}
 
 // --- READ FUNCTIONS (AUDITIONS & CASTING) ---
 
@@ -34,14 +50,33 @@ export async function getAuditionSlots() {
 }
 
 export async function getAuditionees() {
-  // Now pointing to Auditions table as the source of truth for current performers
-  const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.AUDITIONS}/?user_field_names=true&size=200`, {
+  // 1. Fetch the raw Audition data (which currently has numbers like "1" in the name field)
+  const auditionRes = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.AUDITIONS}/?user_field_names=true&size=200`, {
     headers: HEADERS,
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Failed to fetch auditionees");
-  const data = await res.json();
-  return data.results;
+  if (!auditionRes.ok) throw new Error("Failed to fetch auditionees");
+  const auditionData = await auditionRes.json();
+
+  // 2. Fetch the People data to get the real names
+  const nameMap = await getPersonNameMap();
+
+  // 3. "Hydrate" the data: Replace the number with the name
+  const hydratedResults = auditionData.results.map((row: any) => {
+    // Check if there is a Performer linked
+    if (row.Performer && row.Performer.length > 0) {
+      const personId = row.Performer[0].id; // This is the Row ID (e.g. 195)
+      const realName = nameMap.get(personId); // Look up "Jackson Smith"
+      
+      // If we found a name, overwrite the "1" with "Jackson Smith"
+      if (realName) {
+        row.Performer[0].value = realName;
+      }
+    }
+    return row;
+  });
+
+  return hydratedResults;
 }
 
 export async function getScenes() {
@@ -88,7 +123,6 @@ export async function getActiveProduction() {
 
 // --- READ FUNCTIONS (COMMITTEES & PEOPLE) ---
 
-// Used for linking volunteers to master records
 export async function getPeople() {
   const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/?user_field_names=true&size=200`, {
     headers: HEADERS,
@@ -99,7 +133,6 @@ export async function getPeople() {
   return data.results;
 }
 
-// Used for the Committee Dashboard
 export async function getCommitteePreferences() {
   const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/?user_field_names=true&size=200`, {
     headers: HEADERS,
@@ -115,7 +148,7 @@ export async function getVolunteers() {
     headers: HEADERS,
     cache: "no-store",
   });
-  if (!res.ok) return []; // Don't throw error if empty, just return empty array
+  if (!res.ok) return []; 
   const data = await res.json();
   return data.results;
 }
@@ -139,7 +172,9 @@ export async function updateAuditionSlot(rowId: number, data: any) {
 export async function submitAudition(personId: number, productionId: number, data: any) {
   const payload = {
     ...data,
-    "Performer": [personId],
+    // Note: Baserow always expects the Row ID (e.g. 195) for links, NOT the primary field.
+    // As long as personId is the Row ID, this will work regardless of the Primary Field change.
+    "Performer": [personId], 
     "Production": [productionId],
     "Date": new Date().toISOString()
   };
@@ -179,14 +214,12 @@ export async function deleteRole(id: number) {
 }
 
 export async function createCastAssignment(actorId: number, roleId: number, productionName: string) {
-  // Note: Using Person ID for the assignment table
   const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({
-      "Person": [actorId], 
+      "Person": [actorId], // Must be Row ID (195), not Digital ID (1)
       "Performance Identity": [roleId], 
-      // "Production": [productionName] // You might need to link by ID instead of name depending on your setup
     }),
   });
   if (!response.ok) throw new Error("Failed to assign role");
@@ -196,7 +229,6 @@ export async function createCastAssignment(actorId: number, roleId: number, prod
 // --- WRITE FUNCTIONS (COMMITTEES) ---
 
 export async function linkVolunteerToPerson(preferenceRowId: number, personRowId: number) {
-  // Patches Table 620 to link it to Table 599
   const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/${preferenceRowId}/?user_field_names=true`, {
     method: "PATCH",
     headers: HEADERS,
