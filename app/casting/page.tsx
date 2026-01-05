@@ -1,209 +1,107 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, Plus, Trash2, Copy, Search,
-  User, X, CheckCircle2, ChevronRight, Loader2, Link as LinkIcon
-} from 'lucide-react';
-import { getRoles, createRole, updateRole, deleteRole, getAuditionSlots, createCastAssignment } from '@/app/lib/baserow'; 
+import React, { useState, useEffect, useMemo } from 'react';
+import { Loader2, Save } from 'lucide-react';
+import { getRoles, getAuditionSlots, getScenes, updateRole } from '@/app/lib/baserow'; 
+
+// Import your components
+import CastWorkspace from '@/app/components/casting/CastWorkspace';
+import ChemistryWorkspace from '@/app/components/casting/ChemistryWorkspace';
+import CastingInspector from '@/app/components/casting/CastingInspector';
 
 // --- CONFIG ---
-const TOTAL_SCENES = 30; // Matches your CSV max scene
-const TARGET_SHOW_STRING = "Little Mermaid"; // Simple keyword match for safety
+const TARGET_SHOW_STRING = "Little Mermaid"; 
 
-// --- TYPES ---
-type SceneType = 'scene' | 'song' | 'dance' | null;
-
-interface Role {
-  id: number;
-  name: string;
-  type: string; // Lead, Supporting, etc.
-  scenes: Record<number, SceneType>;
-  assignedStudentId?: number; 
-}
-
-interface Student {
-    id: number; // This is the AUDITION ID (Table 630), not the Person ID
-    personId: number; // The actual Person ID (Table 599)
-    name: string;
-    avatar: string;
-    age: number;
-}
-
-const safeString = (val: any): string => {
-    if (val === null || val === undefined) return "";
-    return String(val);
-};
-
-// --- COMPONENT: CASTING MODAL ---
-const CastingModal = ({ 
-    roleName, 
-    students, 
-    onSelect, 
-    onClose 
-}: { 
-    roleName: string, 
-    students: Student[], 
-    onSelect: (studentId: number) => void, 
-    onClose: () => void 
-}) => {
-    const [search, setSearch] = useState("");
-    const filtered = students.filter(s => safeString(s.name).toLowerCase().includes(search.toLowerCase()));
-
-    return (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden max-h-[70vh]" onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
-                    <div>
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase">Casting For</p>
-                        <h2 className="text-xl font-black uppercase italic text-white">{roleName}</h2>
-                    </div>
-                    <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={16}/></button>
-                </div>
-                <div className="p-2 border-b border-white/5 bg-zinc-900 shrink-0">
-                    <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auditioners..." className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
-                </div>
-                <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar flex-1">
-                    {filtered.map(s => (
-                        <button key={s.id} onClick={() => onSelect(s.id)} className="w-full flex items-center gap-3 p-2 hover:bg-zinc-800 rounded-lg group transition-colors text-left">
-                            <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-blue-500" />
-                            <div className="flex-1">
-                                <p className="font-bold text-sm text-zinc-200 group-hover:text-white">{s.name}</p>
-                                <p className="text-[10px] text-zinc-500">Age {s.age}</p>
-                            </div>
-                            <ChevronRight size={16} className="text-zinc-600 group-hover:text-blue-500" />
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- COMPONENT: CHICLET ROW ---
-const CastingRow = ({ 
-    role, assignedStudent, onUpdate, onDelete, onCopy, onCastClick 
-}: { 
-    role: Role, assignedStudent?: Student, onUpdate: (id: number, sceneNum: number, type: SceneType) => void, onDelete: () => void, onCopy: () => void, onCastClick: () => void
-}) => {
-    const cycleType = (current: SceneType): SceneType => {
-        if (!current) return 'scene';
-        if (current === 'scene') return 'song';
-        if (current === 'song') return 'dance';
-        return null;
-    };
-
-    return (
-        <div className="bg-zinc-900 border border-white/5 rounded-xl p-3 mb-3 flex flex-col gap-3 shadow-sm group relative">
-            <div className="flex items-center gap-3">
-                <button onClick={onCastClick} className={`w-12 h-12 rounded-full shrink-0 flex items-center justify-center border-2 overflow-hidden transition-all ${assignedStudent ? 'border-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'border-dashed border-zinc-700 hover:border-zinc-500 bg-zinc-950'}`}>
-                    {assignedStudent ? <img src={assignedStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-full h-full object-cover" /> : <User size={20} className="text-zinc-600" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-black uppercase text-white tracking-wide leading-none">{safeString(role.name)}</h3>
-                                {role.type && <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 rounded border border-white/5">{role.type}</span>}
-                            </div>
-                            {assignedStudent ? <p className="text-[10px] font-bold text-blue-400 flex items-center gap-1 mt-1"><CheckCircle2 size={10} /> {assignedStudent.name}</p> : <p className="text-[10px] font-bold text-zinc-600 italic mt-1">Uncast</p>}
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={onCopy} className="p-1.5 text-zinc-500 hover:text-white bg-zinc-800 rounded-lg"><Copy size={14} /></button>
-                            <button onClick={onDelete} className="p-1.5 text-zinc-500 hover:text-red-500 bg-zinc-800 rounded-lg"><Trash2 size={14} /></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div className="w-full overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1 mt-1">
-                <div className="flex gap-1.5 min-w-max pl-1">
-                    {Array.from({ length: TOTAL_SCENES }).map((_, i) => {
-                        const num = i + 1;
-                        const type = role.scenes[num];
-                        return (
-                            <button key={num} onClick={() => onUpdate(role.id, num, cycleType(type))} className="flex flex-col items-center gap-1 group/btn">
-                                <span className={`text-[9px] font-bold ${type ? 'text-white' : 'text-zinc-600 group-hover/btn:text-zinc-400'}`}>{num}</span>
-                                <div className={`w-8 h-10 rounded-md border flex items-center justify-center transition-all relative overflow-hidden ${type === 'scene' ? 'bg-emerald-900/20 border-emerald-500/50' : type === 'song' ? 'bg-blue-900/20 border-blue-500/50' : type === 'dance' ? 'bg-purple-900/20 border-purple-500/50' : 'bg-zinc-950 border-white/5 hover:border-white/20'}`}>
-                                    {type && <div className={`absolute inset-0 opacity-40 ${type === 'scene' ? 'bg-emerald-500' : type === 'song' ? 'bg-blue-500' : 'bg-purple-500'}`} />}
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- MAIN PAGE ---
 export default function CastingPage() {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  // --- STATE ---
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [castingRoleId, setCastingRoleId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<'workspace' | 'chemistry'>('workspace');
+  
+  // Data Containers
+  const [roles, setRoles] = useState<any[]>([]);
+  const [actors, setActors] = useState<any[]>([]);
+  const [scenes, setScenes] = useState<any[]>([]);
+  
+  // UI State
+  const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
+  // --- 1. DATA LOADING ---
   useEffect(() => {
     async function load() {
         try {
-            const [roleRows, auditionRows] = await Promise.all([
-                getRoles(),
-                getAuditionSlots() // Fetching from AUDITIONS table (630)
+            const [roleRows, auditionRows, sceneRows] = await Promise.all([
+                getRoles(), 
+                getAuditionSlots(),
+                getScenes()
             ]);
 
-            // 1. Filter Roles for Current Show
-            // "Master Show Database" is a link field. We check the value.
+            // Filter for current show
             const showRoles = roleRows.filter((r: any) => {
-                const showName = r["Master Show Database"]?.[0]?.value || "";
-                return showName.includes(TARGET_SHOW_STRING) || showName.includes("Little Mermaid");
+                const s = r["Master Show Database"]?.[0]?.value || "";
+                return s.includes(TARGET_SHOW_STRING) || s.includes("Mermaid");
             });
 
-            const parsedRoles = showRoles.map((r: any) => {
-                // Scene Logic
-                let sceneMap: Record<number, SceneType> = {};
-                // Check if user has saved manual edits first
-                if (r["Scene Data"]) {
-                    try { 
-                        const parsed = JSON.parse(r["Scene Data"]); 
-                        if (Object.keys(parsed).length > 0) sceneMap = parsed;
-                    } catch(e) {}
-                } 
-                // Fallback to "Active Scenes" CSV data
-                if (Object.keys(sceneMap).length === 0) {
-                    const rawScenes = r["Active Scenes"] || "";
-                    if (rawScenes) {
-                        const nums = safeString(rawScenes).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-                        nums.forEach(n => sceneMap[n] = 'scene');
+            // Process Scenes (Sort by Act/Scene)
+            const sortedScenes = sceneRows
+                .filter((s: any) => s["Production"]?.[0]?.value?.includes(TARGET_SHOW_STRING) || s["Production"]?.[0]?.value?.includes("Mermaid"))
+                .sort((a: any, b: any) => a.id - b.id);
+
+            // Process Actors
+            const showActors = auditionRows
+                .filter((a: any) => {
+                     const p = a["Production"]?.[0]?.value || "";
+                     return p.includes(TARGET_SHOW_STRING) || p.includes("Mermaid");
+                })
+                .map((a: any) => ({
+                    ...a,
+                    // Normalize fields for the components
+                    id: a.id, 
+                    personId: a["Performer"]?.[0]?.id,
+                    Performer: a["Performer"]?.[0]?.value || "Unknown",
+                    Headshot: a["Headshot"]?.[0]?.url || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png",
+                    grades: {
+                        actingNotes: a["Acting Notes"],
+                        vocalNotes: a["Music Notes"],
+                        danceNotes: a["Choreography Notes"]
                     }
+                }));
+
+            // Process Roles (Hydrate with Actor Objects)
+            const processedRoles = showRoles.map((r: any) => {
+                // Parse Scene Data JSON or CSV
+                let sceneIds: number[] = [];
+                if (r["Scene Data"]) {
+                    try {
+                        const parsed = JSON.parse(r["Scene Data"]); // { "1": "scene", "2": "song" }
+                        // Convert your old map format to just IDs for the new Workspace
+                        sceneIds = Object.keys(parsed).map(Number);
+                    } catch(e) { /* ignore */ }
                 }
+
+                // Get Assigned Actor (Confirmed)
+                const assignedId = r["Assigned Actor"]?.[0]?.id; // This is PersonID
+                
+                // Find the actor object using PersonID
+                const assignedActor = showActors.find((a: any) => a.personId === assignedId);
 
                 return {
                     id: r.id,
-                    name: safeString(r["Role Name"] || r.Name || "Untitled Role"),
-                    type: r["Role Type"]?.value || "",
-                    scenes: sceneMap,
-                    assignedStudentId: (r["Assigned Actor"] || r["Actor"] || [])?.[0]?.id 
+                    name: r["Role Name"] || r.Name,
+                    type: r["Role Type"]?.value || "Ensemble",
+                    // Candidates: Start with just the assigned actor if any
+                    actors: assignedActor ? [assignedActor] : [],
+                    // Selected: The confirmed cast member
+                    selectedActorIds: assignedActor ? [assignedActor.id] : [], // Use Audition ID for UI
+                    selectedActorId: assignedActor ? assignedActor.id : null, // For Chemistry (Single)
+                    sceneIds: sceneIds
                 };
             });
-            
-            // 2. Filter Students for Current Show
-            const showStudents = auditionRows.filter((a: any) => {
-                const prodName = a["Production"]?.[0]?.value || "";
-                return prodName.includes(TARGET_SHOW_STRING) || prodName.includes("Little Mermaid");
-            });
 
-            const parsedStudents = showStudents.map((a: any) => ({
-                id: a.id, // Audition Row ID
-                personId: a["Performer"]?.[0]?.id, // Linked Person ID
-                name: a["Performer"]?.[0]?.value || "Unknown Actor",
-                // Correctly extract Headshot from Auditions table
-                avatar: a["Headshot"]?.[0]?.url || "",
-                age: a["Age"]?.[0]?.value || 0
-            }));
+            setRoles(processedRoles);
+            setActors(showActors);
+            setScenes(sortedScenes);
 
-            setRoles(parsedRoles);
-            setStudents(parsedStudents);
         } catch (e) {
             console.error("Load failed:", e);
         } finally {
@@ -213,104 +111,216 @@ export default function CastingPage() {
     load();
   }, []);
 
-  const handleUpdateScene = (roleId: number, sceneNum: number, newType: SceneType) => {
-      const role = roles.find(r => r.id === roleId);
+  // --- 2. EVENT HANDLERS ---
+
+  // Handle Drag & Drop: Add candidate to role
+  const handleDropActor = (e: React.DragEvent, roleId: string) => {
+    e.preventDefault();
+    const actorId = parseInt(e.dataTransfer.getData("actorId"));
+    if (!actorId) return;
+
+    const actor = actors.find(a => a.id === actorId);
+    if (!actor) return;
+
+    setRoles(prev => prev.map(role => {
+        if (role.id.toString() !== roleId.toString()) return role;
+        // Don't add if already there
+        if (role.actors.find((a: any) => a.id === actor.id)) return role;
+        return { ...role, actors: [...role.actors, actor] };
+    }));
+  };
+
+  const handleRemoveActor = (roleId: string, actorId: number) => {
+      setRoles(prev => prev.map(role => {
+          if (role.id.toString() !== roleId.toString()) return role;
+          return {
+              ...role,
+              actors: role.actors.filter((a: any) => a.id !== actorId),
+              selectedActorIds: role.selectedActorIds.filter((id: number) => id !== actorId),
+              selectedActorId: role.selectedActorId === actorId ? null : role.selectedActorId
+          };
+      }));
+  };
+
+  // Confirm Casting (Save to DB)
+  const handleConfirmRole = async (roleId: string, actorId: number) => {
+      const role = roles.find(r => r.id.toString() === roleId.toString());
       if (!role) return;
-      const newScenes = { ...role.scenes };
-      if (newType === null) delete newScenes[sceneNum];
-      else newScenes[sceneNum] = newType;
-      
-      setRoles(prev => prev.map(r => r.id === roleId ? { ...r, scenes: newScenes } : r));
-      updateRole(roleId, { "Scene Data": JSON.stringify(newScenes) });
-  };
 
-  const handleAddRole = async () => {
-      const name = prompt("Role Name:");
-      if (!name) return;
-      const tempId = Date.now();
-      setRoles(prev => [{ id: tempId, name, type: "Custom", scenes: {} }, ...prev]);
+      const actor = actors.find(a => a.id === actorId);
+      if (!actor) return;
+
+      const isSelecting = !role.selectedActorIds.includes(actorId);
+
+      // UI Update
+      setRoles(prev => prev.map(r => {
+          if (r.id.toString() !== roleId.toString()) return r;
+          
+          // Toggle selection
+          let newSelected = r.selectedActorIds;
+          if (isSelecting) newSelected = [...newSelected, actorId]; // Allow multi-cast for now?
+          else newSelected = newSelected.filter((id: number) => id !== actorId);
+
+          return { 
+              ...r, 
+              selectedActorIds: isSelecting ? [actorId] : [], // Forcing Single Cast for now to match DB
+              selectedActorId: isSelecting ? actorId : null 
+          };
+      }));
+
+      // DB Update
+      // Note: Baserow expects Person ID, not Audition ID.
       try {
-          const savedRow = await createRole(name);
-          setRoles(prev => prev.map(r => r.id === tempId ? { ...r, id: savedRow.id } : r));
-      } catch (e) { alert("Save failed"); }
+          const payload = isSelecting ? { "Assigned Actor": [actor.personId] } : { "Assigned Actor": [] };
+          await updateRole(parseInt(roleId), payload);
+      } catch (err) {
+          alert("Failed to save assignment to database.");
+          console.error(err);
+      }
   };
 
-  const handleDeleteRole = async (id: number) => {
-      if(!confirm("Delete this role?")) return;
-      setRoles(prev => prev.filter(r => r.id !== id));
-      await deleteRole(id);
-  };
+  const handleToggleScene = async (roleId: string, sceneId: number) => {
+      // 1. Update Local State
+      let newSceneIds: number[] = [];
+      setRoles(prev => prev.map(r => {
+          if (r.id.toString() !== roleId.toString()) return r;
+          
+          if (r.sceneIds.includes(sceneId)) {
+              newSceneIds = r.sceneIds.filter((id: number) => id !== sceneId);
+          } else {
+              newSceneIds = [...r.sceneIds, sceneId];
+          }
+          return { ...r, sceneIds: newSceneIds };
+      }));
 
-  const handleCopyRole = async (role: Role) => {
-      const newName = `${role.name} (Copy)`;
-      const tempId = Date.now();
-      const copy: Role = { ...role, id: tempId, name: newName };
-      setRoles(prev => [copy, ...prev]);
-      const savedRow = await createRole(newName);
-      await updateRole(savedRow.id, { "Scene Data": JSON.stringify(role.scenes) });
-      setRoles(prev => prev.map(r => r.id === tempId ? { ...copy, id: savedRow.id } : r));
-  };
-
-  const handleAssignStudent = async (studentId: number) => {
-      if (!castingRoleId) return;
+      // 2. Save to Baserow (as JSON string in "Scene Data")
+      // We convert [1, 2, 5] back to { "1": "scene", "2": "scene" } for compatibility
+      const sceneMap: Record<string, string> = {};
+      newSceneIds.forEach(id => sceneMap[id] = "scene"); // Defaulting to 'scene' type for toggle
       
-      const student = students.find(s => s.id === studentId);
-      if (!student) return;
-
-      // Optimistic UI Update
-      setRoles(prev => prev.map(r => r.id === castingRoleId ? { ...r, assignedStudentId: studentId } : r));
-      
-      // DB Save
-      // NOTE: We save the AUDITION ID to the role, or the Person ID?
-      // Usually "Assigned Actor" links to the People table.
-      // Since student.id is the Audition ID, we use student.personId
-      await updateRole(castingRoleId, { "Assigned Actor": [student.personId] });
-      
-      setCastingRoleId(null);
+      await updateRole(parseInt(roleId), { "Scene Data": JSON.stringify(sceneMap) });
   };
 
-  const filteredRoles = roles.filter(r => safeString(r.name).toLowerCase().includes(search.toLowerCase()));
+  const handleDuplicateRole = async (roleId: string) => {
+     alert("Feature: Duplicate Role " + roleId);
+  };
+  
+  const handleRemoveRole = async (roleId: string) => {
+     if(confirm("Remove this role?")) {
+         // Add DB delete logic here
+         setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString()));
+     }
+  };
 
-  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500" /></div>;
+  // --- 3. DERIVED DATA FOR INSPECTOR ---
+  const inspectorActor = useMemo(() => {
+      if (!inspectingActorId) return null;
+      return actors.find(a => a.id === inspectingActorId);
+  }, [inspectingActorId, actors]);
+
+  const inspectorStats = useMemo(() => {
+      // Create a map of { sceneId: "Role Name + Role Name" } for the conflict checker
+      const assignments: Record<number, string> = {};
+      
+      roles.forEach(role => {
+          // If this role has a selected actor, and that actor is the one being inspected...
+          // Actually, the inspector needs to know ALL roles in a scene to show context,
+          // OR it needs to know if the *inspected actor* is in that scene via a role.
+          
+          if (role.selectedActorIds.includes(inspectingActorId)) {
+              role.sceneIds.forEach((sid: number) => {
+                  assignments[sid] = assignments[sid] ? `${assignments[sid]} + ${role.name}` : role.name;
+              });
+          }
+      });
+
+      return {
+          assignments, // Scenes this actor is in
+          assignedRoleNames: roles.filter(r => r.selectedActorIds.includes(inspectingActorId)).map(r => r.name)
+      };
+  }, [roles, inspectingActorId]);
+
+
+  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500"/></div>;
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex flex-col font-sans relative">
-        <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-4 shrink-0 backdrop-blur-md sticky top-0 z-10">
-            <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Users size={18} className="text-white" /></div>
-                <h1 className="text-lg font-black uppercase italic tracking-tighter">Casting Plot</h1>
+    <div className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
+        
+        {/* TOP BAR */}
+        <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-zinc-900 shrink-0 z-20">
+            <div className="flex gap-4">
+                 <button 
+                    onClick={() => setViewMode('workspace')}
+                    className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'workspace' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}
+                 >
+                    Workspace
+                 </button>
+                 <button 
+                    onClick={() => setViewMode('chemistry')}
+                    className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'chemistry' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-purple-400'}`}
+                 >
+                    Chemistry
+                 </button>
             </div>
-            <button onClick={handleAddRole} className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-500 shadow-lg"><Plus size={18} /></button>
+            
+            {/* ACTOR DRAWER (Sidebar Source) */}
+            <div className="flex items-center gap-2 overflow-x-auto max-w-[50vw] no-scrollbar">
+                 <span className="text-[9px] font-bold text-zinc-600 uppercase mr-2 shrink-0">Cast Drawer:</span>
+                 {actors.map(actor => (
+                     <div 
+                        key={actor.id}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("actorId", actor.id.toString())}
+                        onClick={() => setInspectingActorId(actor.id)}
+                        className={`w-8 h-8 rounded-full border border-white/10 shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:border-blue-500 transition-colors
+                            ${inspectingActorId === actor.id ? 'ring-2 ring-blue-500' : ''}
+                        `}
+                        title={actor.Performer}
+                     >
+                        <img src={actor.Headshot} className="w-full h-full object-cover" />
+                     </div>
+                 ))}
+            </div>
         </header>
-        <div className="bg-zinc-900/80 border-b border-white/5 py-2 px-4 shrink-0 sticky top-16 z-10 backdrop-blur-sm space-y-2">
-            <div className="flex justify-center gap-6">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Scene</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-blue-500/40 border border-blue-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Song</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-purple-500/40 border border-purple-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Dance</span></div>
+
+        <div className="flex-1 overflow-hidden relative flex">
+            {/* MAIN WORKSPACE */}
+            <div className="flex-1 relative z-0 h-full">
+                {viewMode === 'workspace' ? (
+                    <CastWorkspace 
+                        roles={roles}
+                        scenes={scenes}
+                        onAddRole={() => alert("Add Role logic")}
+                        onRemoveRole={handleRemoveRole}
+                        onDuplicateRole={handleDuplicateRole}
+                        onDropActor={handleDropActor}
+                        onRemoveActor={handleRemoveActor}
+                        onToggleScene={handleToggleScene}
+                        onSelectRole={(r) => { /* Optional: Highlight logic */ }}
+                        onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)}
+                    />
+                ) : (
+                    <ChemistryWorkspace 
+                        roles={roles}
+                        onDropActor={handleDropActor}
+                        onRemoveActor={handleRemoveActor}
+                        onSelectRole={() => {}}
+                        onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)}
+                    />
+                )}
             </div>
-            <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-zinc-950 border border-white/10 rounded-lg py-2 pl-9 text-xs text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none" placeholder="Search roles..." />
-            </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar pb-24">
-            {filteredRoles.map(role => (
-                <CastingRow 
-                    key={role.id}
-                    role={role}
-                    // Find the student by matching the assigned ID
-                    assignedStudent={students.find(s => s.personId === role.assignedStudentId)}
-                    onUpdate={handleUpdateScene}
-                    onDelete={() => handleDeleteRole(role.id)}
-                    onCopy={() => handleCopyRole(role)}
-                    onCastClick={() => setCastingRoleId(role.id)}
+
+            {/* INSPECTOR (Right Sidebar) */}
+            {inspectingActorId && (
+                <CastingInspector 
+                    actor={inspectorActor}
+                    allScenes={scenes}
+                    stats={inspectorStats}
+                    onClose={() => setInspectingActorId(null)}
                 />
-            ))}
-            <button onClick={handleAddRole} className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-600 font-bold uppercase text-xs hover:bg-zinc-900 hover:border-zinc-700 transition-all flex items-center justify-center gap-2"><Plus size={14} /> Add Role</button>
+            )}
         </div>
-        {castingRoleId && (
-            <CastingModal roleName={roles.find(r => r.id === castingRoleId)?.name || "Role"} students={students} onSelect={handleAssignStudent} onClose={() => setCastingRoleId(null)} />
-        )}
+
     </div>
   );
 }
