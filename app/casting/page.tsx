@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Trash2, Copy, Search,
-  User, X, CheckCircle2, ChevronRight
+  User, X, CheckCircle2, ChevronRight, Loader2
 } from 'lucide-react';
+// Import the real DB functions
+import { getRoles, createRole, updateRole, deleteRole, getAuditionees, createCastAssignment } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
 const TOTAL_SCENES = 20;
@@ -14,10 +16,10 @@ const TOTAL_SCENES = 20;
 type SceneType = 'scene' | 'song' | 'dance' | null;
 
 interface Role {
-  id: string;
+  id: number; // Baserow uses Numbers
   name: string;
   scenes: Record<number, SceneType>;
-  assignedStudentId?: number; // NEW: Track the actor!
+  assignedStudentId?: number; 
 }
 
 interface Student {
@@ -25,21 +27,6 @@ interface Student {
     name: string;
     avatar: string;
 }
-
-// --- DEMO DATA ---
-const DEMO_STUDENTS: Student[] = [
-    { id: 101, name: "Jane Doe", avatar: "https://cdn.pixabay.com/photo/2014/04/12/14/59/portrait-322470_1280.jpg" },
-    { id: 102, name: "John Smith", avatar: "https://cdn.pixabay.com/photo/2015/01/08/18/29/entrepreneur-593358_1280.jpg" },
-    { id: 103, name: "Sarah Connor", avatar: "https://cdn.pixabay.com/photo/2016/11/29/06/46/adult-1867813_1280.jpg" },
-    { id: 104, name: "Michael Bay", avatar: "https://cdn.pixabay.com/photo/2016/11/21/14/53/man-1845814_1280.jpg" },
-];
-
-const INITIAL_ROLES: Role[] = [
-  { id: '1', name: 'Ariel', scenes: { 1: 'scene', 2: 'song', 5: 'scene', 14: 'dance' }, assignedStudentId: 101 },
-  { id: '2', name: 'Prince Eric', scenes: { 3: 'scene', 5: 'song', 8: 'scene' } }, // Uncast
-  { id: '3', name: 'Sebastian', scenes: { 1: 'scene', 2: 'song', 3: 'dance', 4: 'song' }, assignedStudentId: 104 },
-  { id: '4', name: 'Ursula', scenes: { 10: 'song', 11: 'scene', 18: 'dance' } },
-];
 
 // --- COMPONENT: CASTING MODAL ---
 const CastingModal = ({ 
@@ -53,10 +40,13 @@ const CastingModal = ({
     onSelect: (studentId: number) => void, 
     onClose: () => void 
 }) => {
+    const [search, setSearch] = useState("");
+    const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-white/10 bg-zinc-900 flex justify-between items-center">
+            <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden max-h-[70vh]" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <p className="text-[10px] font-bold text-zinc-500 uppercase">Casting For</p>
                         <h2 className="text-xl font-black uppercase italic text-white">{roleName}</h2>
@@ -64,14 +54,18 @@ const CastingModal = ({
                     <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={16}/></button>
                 </div>
                 
-                <div className="max-h-[60vh] overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                    {students.map(s => (
+                <div className="p-2 border-b border-white/5 bg-zinc-900 shrink-0">
+                    <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search actors..." className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
+                </div>
+
+                <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar flex-1">
+                    {filtered.map(s => (
                         <button 
                             key={s.id} 
                             onClick={() => onSelect(s.id)}
                             className="w-full flex items-center gap-3 p-2 hover:bg-zinc-800 rounded-lg group transition-colors text-left"
                         >
-                            <img src={s.avatar} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-blue-500" />
+                            <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-blue-500" />
                             <div className="flex-1">
                                 <p className="font-bold text-sm text-zinc-200 group-hover:text-white">{s.name}</p>
                             </div>
@@ -95,7 +89,7 @@ const CastingRow = ({
 }: { 
     role: Role, 
     assignedStudent?: Student,
-    onUpdate: (id: string, sceneNum: number, type: SceneType) => void,
+    onUpdate: (id: number, sceneNum: number, type: SceneType) => void,
     onDelete: () => void,
     onCopy: () => void,
     onCastClick: () => void
@@ -110,11 +104,8 @@ const CastingRow = ({
 
     return (
         <div className="bg-zinc-900 border border-white/5 rounded-xl p-3 mb-3 flex flex-col gap-3 shadow-sm group relative">
-            
-            {/* ROW HEADER & CASTING SLOT */}
             <div className="flex items-center gap-3">
-                
-                {/* 1. THE CASTING SLOT (Click to Cast) */}
+                {/* 1. CASTING SLOT */}
                 <button 
                     onClick={onCastClick}
                     className={`w-12 h-12 rounded-full shrink-0 flex items-center justify-center border-2 overflow-hidden transition-all
@@ -131,7 +122,7 @@ const CastingRow = ({
                     )}
                 </button>
 
-                {/* 2. ROLE NAME & ACTIONS */}
+                {/* 2. ROLE INFO */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                         <div>
@@ -144,8 +135,6 @@ const CastingRow = ({
                                 <p className="text-[10px] font-bold text-zinc-600 italic">Uncast</p>
                             )}
                         </div>
-                        
-                        {/* Actions (Only show on hover or if empty space clicked) */}
                         <div className="flex gap-2">
                             <button onClick={onCopy} className="p-1.5 text-zinc-500 hover:text-white bg-zinc-800 rounded-lg"><Copy size={14} /></button>
                             <button onClick={onDelete} className="p-1.5 text-zinc-500 hover:text-red-500 bg-zinc-800 rounded-lg"><Trash2 size={14} /></button>
@@ -193,90 +182,155 @@ const CastingRow = ({
 
 // --- MAIN PAGE ---
 export default function CastingPage() {
-  const [roles, setRoles] = useState<Role[]>(INITIAL_ROLES);
-  
-  // MODAL STATE
-  const [castingRoleId, setCastingRoleId] = useState<string | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [castingRoleId, setCastingRoleId] = useState<number | null>(null);
+
+  // --- DATA LOADING ---
+  useEffect(() => {
+    async function load() {
+        try {
+            const roleRows = await getRoles();
+            const parsedRoles = roleRows.map((r: any) => ({
+                id: r.id,
+                name: r.Name,
+                // Assumes you have a "Scene Data" text column in Baserow!
+                scenes: r["Scene Data"] ? JSON.parse(r["Scene Data"]) : {},
+                // Assumes "Assigned Actor" is a Link to Table field
+                assignedStudentId: r["Assigned Actor"]?.[0]?.id 
+            }));
+            
+            const peopleRows = await getAuditionees();
+            const parsedStudents = peopleRows.map((p: any) => ({
+                id: p.id,
+                name: p.Name,
+                avatar: p.Headshot?.[0]?.url || "",
+            }));
+
+            setRoles(parsedRoles);
+            setStudents(parsedStudents);
+        } catch (e) {
+            console.error("Load failed:", e);
+        } finally {
+            setLoading(false);
+        }
+    }
+    load();
+  }, []);
 
   // --- ACTIONS ---
-  const handleUpdateScene = (roleId: string, sceneNum: number, newType: SceneType) => {
-      setRoles(prev => prev.map(r => {
-          if (r.id !== roleId) return r;
-          const newScenes = { ...r.scenes };
-          if (newType === null) delete newScenes[sceneNum];
-          else newScenes[sceneNum] = newType;
-          return { ...r, scenes: newScenes };
-      }));
+
+  const handleUpdateScene = (roleId: number, sceneNum: number, newType: SceneType) => {
+      const role = roles.find(r => r.id === roleId);
+      if (!role) return;
+
+      const newScenes = { ...role.scenes };
+      if (newType === null) delete newScenes[sceneNum];
+      else newScenes[sceneNum] = newType;
+
+      // Optimistic UI Update
+      setRoles(prev => prev.map(r => r.id === roleId ? { ...r, scenes: newScenes } : r));
+
+      // DB Save
+      updateRole(roleId, { "Scene Data": JSON.stringify(newScenes) });
   };
 
-  const handleAddRole = () => {
+  const handleAddRole = async () => {
       const name = prompt("Role Name:");
       if (!name) return;
-      setRoles(prev => [{ id: Date.now().toString(), name, scenes: {} }, ...prev]);
+      
+      const tempId = Date.now();
+      const newRole: Role = { id: tempId, name, scenes: {} };
+      setRoles(prev => [newRole, ...prev]);
+
+      try {
+          const savedRow = await createRole(name);
+          setRoles(prev => prev.map(r => r.id === tempId ? { ...r, id: savedRow.id } : r));
+      } catch (e) { alert("Save failed"); }
   };
 
-  const handleDeleteRole = (id: string) => {
-      if(confirm("Delete this role?")) setRoles(prev => prev.filter(r => r.id !== id));
+  const handleDeleteRole = async (id: number) => {
+      if(!confirm("Delete this role?")) return;
+      setRoles(prev => prev.filter(r => r.id !== id));
+      await deleteRole(id);
   };
 
-  const handleCopyRole = (role: Role) => {
-      setRoles(prev => [{ ...role, id: Date.now().toString(), name: `${role.name} (Copy)` }, ...prev]);
+  const handleCopyRole = async (role: Role) => {
+      const newName = `${role.name} (Copy)`;
+      const tempId = Date.now();
+      const copy: Role = { ...role, id: tempId, name: newName };
+      setRoles(prev => [copy, ...prev]);
+
+      const savedRow = await createRole(newName);
+      await updateRole(savedRow.id, { "Scene Data": JSON.stringify(role.scenes) });
+      setRoles(prev => prev.map(r => r.id === tempId ? { ...copy, id: savedRow.id } : r));
   };
 
-  const handleAssignStudent = (studentId: number) => {
+  const handleAssignStudent = async (studentId: number) => {
       if (!castingRoleId) return;
+      
       setRoles(prev => prev.map(r => r.id === castingRoleId ? { ...r, assignedStudentId: studentId } : r));
-      setCastingRoleId(null); // Close modal
+      
+      await updateRole(castingRoleId, { "Assigned Actor": [studentId] });
+      
+      const roleName = roles.find(r => r.id === castingRoleId)?.name || "Unknown";
+      const activeShowName = localStorage.getItem('activeShowName') || "Current Show";
+      createCastAssignment(studentId, castingRoleId, activeShowName).catch(console.error);
+
+      setCastingRoleId(null);
   };
+
+  const filteredRoles = roles.filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500" /></div>;
 
   return (
     <div className="h-screen bg-zinc-950 text-white flex flex-col font-sans relative">
-        
-        {/* HEADER */}
         <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-4 shrink-0 backdrop-blur-md sticky top-0 z-10">
             <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Users size={18} className="text-white" />
-                </div>
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Users size={18} className="text-white" /></div>
                 <h1 className="text-lg font-black uppercase italic tracking-tighter">Casting Plot</h1>
             </div>
             <button onClick={handleAddRole} className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-500 shadow-lg"><Plus size={18} /></button>
         </header>
 
-        {/* LEGEND */}
-        <div className="bg-zinc-900/80 border-b border-white/5 py-2 px-4 flex justify-center gap-6 shrink-0 sticky top-16 z-10 backdrop-blur-sm">
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Scene</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-blue-500/40 border border-blue-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Song</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-purple-500/40 border border-purple-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Dance</span></div>
+        <div className="bg-zinc-900/80 border-b border-white/5 py-2 px-4 shrink-0 sticky top-16 z-10 backdrop-blur-sm space-y-2">
+            <div className="flex justify-center gap-6">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Scene</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-blue-500/40 border border-blue-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Song</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-purple-500/40 border border-purple-500"></div><span className="text-[10px] font-bold uppercase text-zinc-400">Dance</span></div>
+            </div>
+            <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-zinc-950 border border-white/10 rounded-lg py-2 pl-9 text-xs text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none" placeholder="Search roles..." />
+            </div>
         </div>
 
-        {/* GRID AREA */}
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar pb-24">
-            {roles.map(role => (
+            {filteredRoles.map(role => (
                 <CastingRow 
                     key={role.id}
                     role={role}
-                    assignedStudent={DEMO_STUDENTS.find(s => s.id === role.assignedStudentId)}
+                    assignedStudent={students.find(s => s.id === role.assignedStudentId)}
                     onUpdate={handleUpdateScene}
                     onDelete={() => handleDeleteRole(role.id)}
                     onCopy={() => handleCopyRole(role)}
-                    onCastClick={() => setCastingRoleId(role.id)} // OPEN MODAL
+                    onCastClick={() => setCastingRoleId(role.id)}
                 />
             ))}
-            
             <button onClick={handleAddRole} className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-600 font-bold uppercase text-xs hover:bg-zinc-900 hover:border-zinc-700 transition-all flex items-center justify-center gap-2"><Plus size={14} /> Add Role</button>
         </div>
 
-        {/* CASTING MODAL (Conditionally Rendered) */}
         {castingRoleId && (
             <CastingModal 
                 roleName={roles.find(r => r.id === castingRoleId)?.name || "Role"}
-                students={DEMO_STUDENTS}
+                students={students}
                 onSelect={handleAssignStudent}
                 onClose={() => setCastingRoleId(null)}
             />
         )}
-
     </div>
   );
 }
