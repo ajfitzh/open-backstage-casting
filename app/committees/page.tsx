@@ -3,14 +3,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Printer, Loader2, Link as LinkIcon, 
-  AlertCircle, Crown, Phone, Mail, ShieldAlert, Baby, 
-  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2
+  Printer, Loader2, Crown, Phone, Mail, ShieldAlert, Baby, 
+  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle
 } from 'lucide-react';
 import { getCommitteePreferences, getAuditionSlots } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
-// Strictly matched to your request
 const COMMITTEES = {
     'Pre-Show': [
         "Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", 
@@ -22,23 +20,17 @@ const COMMITTEES = {
     ]
 };
 
-const MIN_STAFFING = 2; // Threshold for "Starving" committees
+const MIN_STAFFING = 2; 
 
 export default function CommitteeDashboard() {
-  // Data State
   const [rawData, setRawData] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Assignment State (Mutable)
   const [assignments, setAssignments] = useState<Record<string, string>>({});
-  const [history, setHistory] = useState<Record<string, string>>({}); // For Reset
-  
-  // UI State
+  const [history, setHistory] = useState<Record<string, string>>({}); 
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
 
-  // --- 1. LOAD DATA (RUNS ONCE) ---
   useEffect(() => {
     async function loadData() {
         try {
@@ -47,42 +39,39 @@ export default function CommitteeDashboard() {
                 getAuditionSlots()
             ]);
             
-            // Process Preferences
             const processed = prefData.map((p: any) => {
                 const age = parseInt(p["Age"] || "0"); 
-                // Handle Multi-Select Chair Interest
                 const chairInterests = p["Chair Interest"]?.map((c: any) => c.value) || [];
                 
+                // ROBUST NAME FINDER: Checks all common column names
+                const pName = p["Parent Name"] || p["Parent/Guardian Name"] || p["Full Name"] || p["First and Last Name"] || p["Name"] || "Unknown Volunteer";
+
                 return {
                     ...p,
                     id: p.id,
-                    // Map Dropdown Values safely
                     preShow1: p["Pre-Show 1st"]?.value,
                     preShow2: p["Pre-Show 2nd"]?.value,
                     preShow3: p["Pre-Show 3rd"]?.value,
                     showWeek1: p["Show Week 1st"]?.value,
                     showWeek2: p["Show Week 2nd"]?.value,
                     showWeek3: p["Show Week 3rd"]?.value,
-                    
                     chairInterests: chairInterests,
                     
-                    // Student ID is now a NUMBER from your CSV import
+                    // Handle Student ID (Number or String)
                     studentIdLink: parseInt(p["Student ID"]) || null,
                     
-                    parentName: p["Parent Name"] || "Unknown Volunteer",
+                    parentName: pName, 
                     email: p["Email"] || "",
                     phone: p["Phone"] || "",
                     notes: p["Notes/Constraints"] || "",
                     
                     age: age,
                     isAdult: age >= 18,
-                    // If they have a Student ID linked, they are a Parent
-                    isParent: !!p["Student ID"], 
+                    isParent: !!p["Student ID"], // True if ID exists
                     bgStatus: p["Background Check Status"]?.value || "Pending", 
                 };
             });
 
-            // Initialize Assignments
             const initialAssignments: Record<string, string> = {};
             processed.forEach((p: any) => {
                  if (p.preShow1) initialAssignments[`pre-${p.id}`] = p.preShow1;
@@ -100,17 +89,25 @@ export default function CommitteeDashboard() {
         }
     }
     loadData();
-  }, []); // <--- Empty dependency array prevents infinite loop
+  }, []); 
 
-  // --- 2. LOGIC: LINKING & SORTING ---
+  // --- HELPERS ---
 
-  // Find student by matching ID (Robust!)
   const getLinkedStudentName = (linkId: number) => {
       if (!linkId) return null;
-      // Try to find by matching row ID (standard) or a specific "Student ID" field if you added one
-      // Assuming your CSV imported ID 1 maps to row ID 1 in Baserow:
+      
+      // 1. Find the Student Record
+      // Checks matches against Row ID OR a specific "Student ID" column
       const match = students.find(s => s.id === linkId || s["Student ID"] === linkId);
-      return match ? (match["Performer"]?.value || match["Full Name"] || match.Name || "Unknown Student") : null;
+      if (!match) return null;
+
+      // 2. Extract Name (Handles Array or String)
+      // "Performer" is usually a Link Row array: [{id: 1, value: "Name"}]
+      if (Array.isArray(match["Performer"])) {
+          return match["Performer"][0]?.value;
+      }
+      // Fallbacks
+      return match["Performer"]?.value || match["Full Name"] || match["Name"] || "Unknown Student";
   };
 
   const handleAutoBalance = () => {
@@ -120,7 +117,6 @@ export default function CommitteeDashboard() {
       const currentCommittees = COMMITTEES[groupBy];
       let movedCount = 0;
 
-      // Helper: Count people in a specific committee
       const getCount = (comm: string) => {
           return rawData.filter(p => {
               const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
@@ -128,19 +124,14 @@ export default function CommitteeDashboard() {
           }).length;
       };
 
-      // Iterate through committees to find "Starving" ones
       currentCommittees.forEach(targetComm => {
           if (getCount(targetComm) < MIN_STAFFING) {
-               // Find potential recruits
                rawData.forEach(p => {
                    const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
                    const currentComm = newAssignments[key];
-                   
-                   // Only recruit if their current committee is healthy
                    if (currentComm && getCount(currentComm) > MIN_STAFFING) {
                        const c2 = groupBy === 'Pre-Show' ? p.preShow2 : p.showWeek2;
                        const c3 = groupBy === 'Pre-Show' ? p.preShow3 : p.showWeek3;
-
                        if (c2 === targetComm || c3 === targetComm) {
                            newAssignments[key] = targetComm;
                            movedCount++;
@@ -149,7 +140,6 @@ export default function CommitteeDashboard() {
                });
           }
       });
-
       setAssignments(newAssignments);
       alert(`Auto-Balance Complete: Optimized ${movedCount} assignments.`);
   };
@@ -162,7 +152,6 @@ export default function CommitteeDashboard() {
       rawData.forEach(p => {
           const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
           const assignedVal = assignments[key];
-          // Ensure the assigned value is valid for this view (e.g. don't show "Box Office" in Pre-Show)
           if (assignedVal && groups[assignedVal]) {
               groups[assignedVal].push(p);
           } else {
@@ -239,9 +228,6 @@ export default function CommitteeDashboard() {
                             {team.map((p: any) => {
                                 const isExpanded = expandedCard === p.id;
                                 const studentName = getLinkedStudentName(p.studentIdLink);
-                                
-                                // Check if this person is willing to chair THIS committee
-                                const cleanComm = committee.replace(/\(.*\)\s*/, ""); // Remove "(Pre-Show)" prefix if present in comparison
                                 const wantsToChair = p.chairInterests.some((ci: string) => ci.includes(committee));
                                 const isMoved = (groupBy === 'Pre-Show' ? p.preShow1 : p.showWeek1) !== committee;
 
@@ -262,13 +248,19 @@ export default function CommitteeDashboard() {
                                                     </div>
                                                     
                                                     <div className="flex items-center gap-2 mt-0.5">
-                                                        {p.isParent && studentName ? (
-                                                            <span className="text-[10px] text-zinc-500 flex items-center gap-1 print:text-gray-600">
-                                                                <Baby size={10} /> {studentName}
-                                                            </span>
+                                                        {p.isParent ? (
+                                                            studentName ? (
+                                                                <span className="text-[10px] text-zinc-500 flex items-center gap-1 print:text-gray-600">
+                                                                    <Baby size={10} /> {studentName}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wide print:text-gray-500 flex items-center gap-1">
+                                                                    <AlertCircle size={8}/> Linking...
+                                                                </span>
+                                                            )
                                                         ) : (
                                                             <span className="text-[10px] text-purple-400/60 font-bold uppercase tracking-wide print:text-gray-500">
-                                                                {p.isParent ? <span className="text-amber-700 flex items-center gap-1"><AlertCircle size={8}/> Linking...</span> : "Community"}
+                                                                Community
                                                             </span>
                                                         )}
                                                     </div>
