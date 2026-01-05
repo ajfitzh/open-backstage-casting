@@ -205,18 +205,19 @@ export default function CastingPage() {
             const roleRows = await getRoles();
             const parsedRoles = roleRows.map((r: any) => ({
                 id: r.id,
-                name: safeString(r.Name), // SAFE STRING
-                // Parse "Scene Data" JSON string. Default to {} if empty
+                // ROBUST NAME CHECK: Check "Name", "Role", "Character", or "Title"
+                name: safeString(r.Name || r.Role || r.Character || r.Title || "Untitled Role"),
                 scenes: r["Scene Data"] ? JSON.parse(r["Scene Data"]) : {},
-                // If "Assigned Actor" exists (Link to People table), grab ID
-                assignedStudentId: r["Assigned Actor"]?.[0]?.id 
+                // ROBUST ACTOR CHECK: Check "Assigned Actor" or just "Actor"
+                assignedStudentId: (r["Assigned Actor"] || r["Actor"] || [])?.[0]?.id 
             }));
             
             // 2. Load Students
             const peopleRows = await getAuditionees();
             const parsedStudents = peopleRows.map((p: any) => ({
                 id: p.id,
-                name: safeString(p.Name), // SAFE STRING
+                // ROBUST NAME CHECK: Check "Name" or "Performer"
+                name: safeString(p.Name || p.Performer || p.Person || "Unknown"), 
                 avatar: p.Headshot?.[0]?.url || "",
             }));
 
@@ -258,7 +259,6 @@ export default function CastingPage() {
 
       try {
           const savedRow = await createRole(name);
-          // Sync real ID
           setRoles(prev => prev.map(r => r.id === tempId ? { ...r, id: savedRow.id } : r));
       } catch (e) { alert("Save failed"); }
   };

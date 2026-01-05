@@ -337,271 +337,258 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
   }, [visibleList, activeSession]);
 
 
-  return (
-    <>
-      {/* --- JUDGE SETUP MODAL --- */}
-      {!isReady && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-center justify-center">
-          <div className="w-[420px] bg-zinc-950 border border-white/10 rounded-2xl p-8 space-y-6 shadow-2xl">
-            <h2 className="text-2xl font-black uppercase tracking-tight">Judge Setup</h2>
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Judge Name</label>
-              <input value={judgeName} onChange={(e) => setJudgeName(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-all" placeholder="Enter your name" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Judge Role</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(ROLE_THEMES) as JudgeRole[]).map((role) => (
-                  <button key={role} onClick={() => setJudgeRole(role)} className={`p-3 rounded-lg border text-xs font-black uppercase transition-all ${judgeRole === role ? "bg-white text-black border-white shadow-lg" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}>{role}</button>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-3 pt-2">
-              {isMounted && localStorage.getItem("judgeName") && (
-                <button onClick={() => setIsReady(true)} className="px-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-colors">Cancel</button>
-              )}
-              <button disabled={!judgeName || !judgeRole} onClick={() => { localStorage.setItem("judgeName", judgeName); localStorage.setItem("judgeRole", judgeRole!); setIsReady(true); }} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-900/20">{isMounted && localStorage.getItem("judgeName") ? "Update Profile" : "Start Judging"}</button>
-            </div>
+ return (
+  <>
+    {/* --- JUDGE SETUP MODAL --- */}
+    {!isReady && (
+      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
+        <div className="w-full max-w-[420px] bg-zinc-950 border border-white/10 rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl">
+          <h2 className="text-2xl font-black uppercase tracking-tight">Judge Setup</h2>
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Judge Name</label>
+            <input value={judgeName} onChange={(e) => setJudgeName(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-all" placeholder="Enter your name" />
           </div>
-        </div>
-      )}
-
-      {/* --- CONDITIONAL VIEW --- */}
-      {isReady && judgeRole === 'Choreographer' ? (
-        // === CHOREOGRAPHER WORKSPACE ===
-        <div className="h-screen bg-black flex flex-col">
-            <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
-                 <button onClick={reopenJudgeSetup} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">
-                     Exit Dance Mode
-                 </button>
-                 <div className="flex gap-2">
-                      {(["Thursday", "Friday", "Walk-In"] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setActiveSession(s)}
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
-                            activeSession === s ? "bg-white text-black" : "bg-zinc-800 text-zinc-500"
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                 </div>
-            </div>
-            
-            <div className="flex-1 overflow-hidden">
-                <ChoreoWorkspace 
-                    people={visibleList} 
-                    initialGrades={grades} 
-                    onSave={handleChoreoSave} 
-                />
-            </div>
-        </div>
-      ) : (
-        // === STANDARD AUDITION DECK ===
-        isReady && (
-        <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
-          <div className="flex-1 flex flex-col">
-            
-            <header className={`p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color}`}>
-              <div className="flex justify-between items-center">
-                <button onClick={reopenJudgeSetup} className="text-left group">
-                  <h1 className="text-2xl font-black italic uppercase">Audition Deck</h1>
-                  <div className="flex items-center gap-2">
-                      <p className="text-[9px] uppercase text-zinc-500">{judgeName} • {judgeRole}</p>
-                      <span 
-                          onClick={(e) => {
-                              e.stopPropagation();
-                              if(confirm("Reload active production data?")) {
-                                  localStorage.removeItem('activeShowId'); 
-                                  window.location.href = "/"; 
-                              }
-                          }}
-                          className="text-[9px] text-blue-900 group-hover:text-blue-500 cursor-pointer transition-colors"
-                      >
-                          (Switch Show)
-                      </span>
-                  </div>
-                </button>
-
-                <div className="flex gap-2">
-                  {(["Thursday", "Friday", "Video/Remote", "Walk-In"] as const).map((s) => (
-                    <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors ${activeSession === s ? "bg-white text-black" : "text-zinc-500 hover:text-zinc-300"}`}>
-                      {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 relative w-64">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {activeSession === "Walk-In" && visibleList.length === 0 && (
-                <div className="text-center text-zinc-500 mt-20"><UserPlus size={48} className="mx-auto mb-4 opacity-20" /><p className="text-sm">Start typing to find a student...</p></div>
-              )}
-
-              {Object.entries(grouped).map(([time, people]) => (
-                <div key={time}>
-                  {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1"><Clock size={12} /> {time}</h3>}
-                  {people.map((person) => (
-                    <div key={person.id} className="flex gap-2 mb-3 group">
-                        <button
-                          onClick={() => {
-                            setSelectedPerson(person);
-                            const saved = grades[person.id] || {};
-                            let loadedNote = "";
-                            if (saved.notes) {
-                                loadedNote = saved.notes;
-                            } else {
-                                switch(judgeRole) {
-                                    case "Director": loadedNote = person.actingNotes; break;
-                                    case "Music": loadedNote = person.musicNotes; break;
-                                    case "Choreographer": loadedNote = person.choreoNotes; break;
-                                    case "Drop-In": loadedNote = person.dropInNotes; break;
-                                    case "Admin": loadedNote = person.adminNotes; break;
-                                }
-                            }
-
-                            setCurrentScores({
-                                vocal: saved.vocal || person.vocal || 0,
-                                acting: saved.acting || person.acting || 0,
-                                dance: saved.dance || person.dance || 0,
-                                presence: saved.presence || person.presence || 0,
-                                notes: loadedNote || "", 
-                            });
-                          }}
-                          className={`flex-1 flex items-center gap-4 p-3 rounded-xl transition-all border ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"}`}
-                        >
-                            <div className="relative flex-shrink-0">
-                                {person.avatar ? <img src={person.avatar} className="w-12 h-12 rounded-full object-cover" alt="" /> : <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
-                                {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={16} className="text-emerald-500" /></div>}
-                            </div>
-                            <div className="text-left">
-                                <p className="font-bold text-sm flex items-center gap-2">
-                                  {person.name}
-                                  {person.video && <Film size={12} className="text-blue-500" />}
-                                </p>
-                                <p className="text-[10px] text-zinc-500">{person.isWalkIn ? "Click to Audition Now" : `Age ${person.age}`}</p>
-                            </div>
-                        </button>
-                        
-                        {person.video && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(person.video, "_blank");
-                                }}
-                                className="px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30"
-                                title="Watch Audition in New Tab"
-                            >
-                                <PlayCircle size={20} />
-                            </button>
-                        )}
-                        
-                        <button onClick={() => setInspectingActor(person)} className="px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white" title="View Radar Profile"><User size={18} /></button>
-                    </div>
-                  ))}
-                </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Judge Role</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(ROLE_THEMES) as JudgeRole[]).map((role) => (
+                <button key={role} onClick={() => setJudgeRole(role)} className={`p-3 rounded-lg border text-xs font-black uppercase transition-all ${judgeRole === role ? "bg-white text-black border-white shadow-lg" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}>{role}</button>
               ))}
             </div>
           </div>
+          <div className="flex gap-3 pt-2">
+            {isMounted && localStorage.getItem("judgeName") && (
+              <button onClick={() => setIsReady(true)} className="px-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-colors">Cancel</button>
+            )}
+            <button disabled={!judgeName || !judgeRole} onClick={() => { localStorage.setItem("judgeName", judgeName); localStorage.setItem("judgeRole", judgeRole!); setIsReady(true); }} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-900/20">{isMounted && localStorage.getItem("judgeName") ? "Update Profile" : "Start Judging"}</button>
+          </div>
+        </div>
+      </div>
+    )}
 
-          {/* SCORING SIDEBAR */}
-          {selectedPerson && (
-            <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
-               <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
-                 <div className="flex justify-between items-start mb-4">
-                    <div className="flex gap-4">
-                      <div className="w-20 h-20 rounded-2xl bg-zinc-800 overflow-hidden shadow-inner border border-white/10 shrink-0">
-                        {selectedPerson.avatar ? <img src={selectedPerson.avatar} className="w-full h-full object-cover" alt={selectedPerson.name} /> : <div className="w-full h-full flex items-center justify-center text-zinc-600"><User size={32} /></div>}
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-black italic uppercase leading-none tracking-tight">{selectedPerson.name}</h2>
-                        <div className="flex items-center gap-2 mt-2">
-                           <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide">{selectedPerson.isWalkIn ? "Walk-In" : `Age ${selectedPerson.age}`}</span>
-                           {!selectedPerson.isWalkIn && <span className="border border-zinc-700 text-zinc-500 px-2 py-1 rounded text-[10px] font-bold uppercase">{selectedPerson.timeSlot}</span>}
-                        </div>
+    {/* --- CONDITIONAL VIEW --- */}
+    {isReady && judgeRole === 'Choreographer' ? (
+      // === CHOREOGRAPHER WORKSPACE ===
+      <div className="h-screen bg-black flex flex-col">
+          <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
+               <button onClick={reopenJudgeSetup} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">
+                   Exit Dance Mode
+               </button>
+               <div className="flex gap-2">
+                    {(["Thursday", "Friday", "Walk-In"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setActiveSession(s)}
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
+                          activeSession === s ? "bg-white text-black" : "bg-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+               </div>
+          </div>
+          
+          <div className="flex-1 overflow-hidden">
+              <ChoreoWorkspace 
+                  people={visibleList} 
+                  initialGrades={grades} 
+                  onSave={handleChoreoSave} 
+              />
+          </div>
+      </div>
+    ) : (
+      // === STANDARD AUDITION DECK (MOBILE OPTIMIZED) ===
+      isReady && (
+      <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
+        <div className="flex-1 flex flex-col min-w-0">
+          
+          {/* HEADER */}
+          <header className={`p-4 md:p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color} shrink-0`}>
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+              <button onClick={reopenJudgeSetup} className="text-left group shrink-0">
+                <h1 className="text-xl md:text-2xl font-black italic uppercase">Audition Deck</h1>
+                <div className="flex items-center gap-2">
+                    <p className="text-[9px] uppercase text-zinc-500">{judgeName} • {judgeRole}</p>
+                    <span 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if(confirm("Reload active production data?")) {
+                                localStorage.removeItem('activeShowId'); 
+                                window.location.href = "/"; 
+                            }
+                        }}
+                        className="text-[9px] text-blue-900 group-hover:text-blue-500 cursor-pointer transition-colors"
+                    >
+                        (Switch Show)
+                    </span>
+                </div>
+              </button>
+
+              {/* SCROLLABLE TABS */}
+              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar mask-linear-fade">
+                {(["Thursday", "Friday", "Video/Remote", "Walk-In"] as const).map((s) => (
+                  <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border border-transparent ${activeSession === s ? "bg-white text-black" : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-white/5"}`}>
+                    {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 relative w-full md:w-64">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none text-white" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
+            </div>
+          </header>
+
+          {/* LIST AREA */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+            {activeSession === "Walk-In" && visibleList.length === 0 && (
+              <div className="text-center text-zinc-500 mt-20"><UserPlus size={48} className="mx-auto mb-4 opacity-20" /><p className="text-sm">Start typing to find a student...</p></div>
+            )}
+
+            {Object.entries(grouped).map(([time, people]) => (
+              <div key={time}>
+                {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
+                {people.map((person) => (
+                  <div key={person.id} className="flex gap-2 mb-3 group">
+                      <button
+                        onClick={() => {
+                          setSelectedPerson(person);
+                          const saved = grades[person.id] || {};
+                          let loadedNote = "";
+                          if (saved.notes) {
+                              loadedNote = saved.notes;
+                          } else {
+                              switch(judgeRole) {
+                                  case "Director": loadedNote = person.actingNotes; break;
+                                  case "Music": loadedNote = person.musicNotes; break;
+                                  case "Choreographer": loadedNote = person.choreoNotes; break;
+                                  case "Drop-In": loadedNote = person.dropInNotes; break;
+                                  case "Admin": loadedNote = person.adminNotes; break;
+                              }
+                          }
+
+                          setCurrentScores({
+                              vocal: saved.vocal || person.vocal || 0,
+                              acting: saved.acting || person.acting || 0,
+                              dance: saved.dance || person.dance || 0,
+                              presence: saved.presence || person.presence || 0,
+                              notes: loadedNote || "", 
+                          });
+                        }}
+                        className={`flex-1 flex items-center gap-3 md:gap-4 p-3 rounded-xl transition-all border min-w-0 ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"}`}
+                      >
+                          <div className="relative flex-shrink-0">
+                              {person.avatar ? <img src={person.avatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
+                              {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
+                          </div>
+                          <div className="text-left min-w-0 flex-1">
+                              <p className="font-bold text-sm flex items-center gap-2 truncate">
+                                <span className="truncate">{person.name}</span>
+                                {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
+                              </p>
+                              <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : `Age ${person.age}`}</p>
+                          </div>
+                      </button>
+                      
+                      {person.video && (
+                          <button
+                              onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(person.video, "_blank");
+                              }}
+                              className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30 shrink-0"
+                              title="Watch Audition"
+                          >
+                              <PlayCircle size={18} />
+                          </button>
+                      )}
+                      
+                      <button onClick={() => setInspectingActor(person)} className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white shrink-0" title="View Profile"><User size={18} /></button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SCORING SIDEBAR (UNCHANGED) */}
+        {selectedPerson && (
+          <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
+             <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
+               <div className="flex justify-between items-start mb-4">
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 rounded-2xl bg-zinc-800 overflow-hidden shadow-inner border border-white/10 shrink-0">
+                      {selectedPerson.avatar ? <img src={selectedPerson.avatar} className="w-full h-full object-cover" alt={selectedPerson.name} /> : <div className="w-full h-full flex items-center justify-center text-zinc-600"><User size={32} /></div>}
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black italic uppercase leading-none tracking-tight">{selectedPerson.name}</h2>
+                      <div className="flex items-center gap-2 mt-2">
+                         <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide">{selectedPerson.isWalkIn ? "Walk-In" : `Age ${selectedPerson.age}`}</span>
+                         {!selectedPerson.isWalkIn && <span className="border border-zinc-700 text-zinc-500 px-2 py-1 rounded text-[10px] font-bold uppercase">{selectedPerson.timeSlot}</span>}
                       </div>
                     </div>
-                    <button onClick={() => setSelectedPerson(null)} className="text-zinc-500 hover:text-white transition-colors"><X size={24}/></button>
-                 </div>
+                  </div>
+                  <button onClick={() => setSelectedPerson(null)} className="text-zinc-500 hover:text-white transition-colors"><X size={24}/></button>
                </div>
+             </div>
 
-               <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-                  {selectedPerson.video && (
-                     <div className="rounded-xl overflow-hidden border border-white/10 bg-black aspect-video relative group shadow-2xl">
-                        <video 
-                            src={selectedPerson.video} 
-                            controls 
-                            className="w-full h-full object-contain"
-                            poster={selectedPerson.avatar}
-                        />
-                        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase text-white pointer-events-none border border-white/10">
-                            Audition Tape
-                        </div>
-                     </div>
-                  )}
-
-                  <div className={`p-4 rounded-xl border ${ROLE_THEMES[judgeRole!].color} bg-zinc-900/50`}>
-                      <div className="flex justify-between items-center">
-                        <div>
-                            <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-1">Your Rating</p>
-                            <p className="text-3xl font-black tabular-nums leading-none">{calculateWeightedScore(currentScores).toFixed(1)} <span className="text-sm text-zinc-600 font-normal">/ 5.0</span></p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[9px] uppercase text-zinc-500 font-bold leading-relaxed">{judgeRole} Priority:<br/><span className="text-zinc-300">{judgeRole === "Director" ? "Acting 70% | Vocal 30%" : ROLE_THEMES[judgeRole!].weight}</span></p>
-                        </div>
+             <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                {selectedPerson.video && (
+                   <div className="rounded-xl overflow-hidden border border-white/10 bg-black aspect-video relative group shadow-2xl">
+                      <video 
+                          src={selectedPerson.video} 
+                          controls 
+                          className="w-full h-full object-contain"
+                          poster={selectedPerson.avatar}
+                      />
+                      <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase text-white pointer-events-none border border-white/10">
+                          Audition Tape
                       </div>
-                  </div>
+                   </div>
+                )}
 
-                  <div className="space-y-6">
-                      <RubricSlider label="Vocal Ability" val={currentScores.vocal} setVal={(v) => setCurrentScores((s) => ({ ...s, vocal: v }))} disabled={judgeRole !== "Music" && judgeRole !== "Admin"} />
-                      <RubricSlider label="Acting / Reads" val={currentScores.acting} setVal={(v) => setCurrentScores((s) => ({ ...s, acting: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
-                      {(judgeRole === "Choreographer" || judgeRole === "Admin") && (
-                        <RubricSlider label="Dance / Movement" val={currentScores.dance} setVal={(v) => setCurrentScores((s) => ({ ...s, dance: v }))} disabled={false} />
-                      )}
-                      <RubricSlider label="Stage Presence" val={currentScores.presence} setVal={(v) => setCurrentScores((s) => ({ ...s, presence: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
-                  </div>
+                <div className={`p-4 rounded-xl border ${ROLE_THEMES[judgeRole!].color} bg-zinc-900/50`}>
+                    <div className="flex justify-between items-center">
+                      <div>
+                          <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-1">Your Rating</p>
+                          <p className="text-3xl font-black tabular-nums leading-none">{calculateWeightedScore(currentScores).toFixed(1)} <span className="text-sm text-zinc-600 font-normal">/ 5.0</span></p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] uppercase text-zinc-500 font-bold leading-relaxed">{judgeRole} Priority:<br/><span className="text-zinc-300">{judgeRole === "Director" ? "Acting 70% | Vocal 30%" : ROLE_THEMES[judgeRole!].weight}</span></p>
+                      </div>
+                    </div>
+                </div>
 
-                  <div className="pt-2 border-t border-white/5">
-                    <label className="text-xs uppercase text-zinc-500 font-bold mb-3 block tracking-widest flex items-center gap-2"><MessageSquare size={12}/> Notes</label>
-                    <textarea className="w-full bg-zinc-900 border border-white/10 p-4 rounded-xl text-sm min-h-[100px] focus:border-blue-500 outline-none resize-none transition-all placeholder:text-zinc-700" placeholder={`Internal notes for ${selectedPerson.name}...`} value={currentScores.notes} onChange={(e) => setCurrentScores((s) => ({ ...s, notes: e.target.value }))} />
-                  </div>
-               </div>
+                <div className="space-y-6">
+                    <RubricSlider label="Vocal Ability" val={currentScores.vocal} setVal={(v) => setCurrentScores((s) => ({ ...s, vocal: v }))} disabled={judgeRole !== "Music" && judgeRole !== "Admin"} />
+                    <RubricSlider label="Acting / Reads" val={currentScores.acting} setVal={(v) => setCurrentScores((s) => ({ ...s, acting: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
+                    {(judgeRole === "Choreographer" || judgeRole === "Admin") && (
+                      <RubricSlider label="Dance / Movement" val={currentScores.dance} setVal={(v) => setCurrentScores((s) => ({ ...s, dance: v }))} disabled={false} />
+                    )}
+                    <RubricSlider label="Stage Presence" val={currentScores.presence} setVal={(v) => setCurrentScores((s) => ({ ...s, presence: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
+                </div>
 
-               <div className="p-6 border-t border-white/10 bg-zinc-900/50">
-                 <button onClick={handleCommit} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-transform active:scale-95">
-                   <Save size={18} />
-                   {selectedPerson.isWalkIn ? "Submit Walk-In" : "Save Score"}
-                 </button>
-               </div>
-            </aside>
-          )}
-        </div>
-        )
-      )}
+                <div className="pt-2 border-t border-white/5">
+                  <label className="text-xs uppercase text-zinc-500 font-bold mb-3 block tracking-widest flex items-center gap-2"><MessageSquare size={12}/> Notes</label>
+                  <textarea className="w-full bg-zinc-900 border border-white/10 p-4 rounded-xl text-sm min-h-[100px] focus:border-blue-500 outline-none resize-none transition-all placeholder:text-zinc-700" placeholder={`Internal notes for ${selectedPerson.name}...`} value={currentScores.notes} onChange={(e) => setCurrentScores((s) => ({ ...s, notes: e.target.value }))} />
+                </div>
+             </div>
 
-      {inspectingActor && <ActorProfileModal actor={inspectingActor} grades={grades[inspectingActor.id]} onClose={() => setInspectingActor(null)} />}
-    </>
-  );
-}
-
-function RubricSlider({ label, val, setVal, disabled }: { label: string; val: number; setVal: (v: number) => void; disabled?: boolean }) {
-  return (
-    <div className={`mb-4 transition-opacity ${disabled ? "opacity-50 grayscale" : "opacity-100"}`}>
-      <div className="flex justify-between items-end mb-2">
-        <p className="text-[10px] uppercase font-black text-zinc-500 tracking-widest">{label} {disabled && "(View Only)"}</p>
-        <span className={`text-xs font-bold ${val > 0 ? 'text-white' : 'text-zinc-700'}`}>{val || '-'}</span>
+             <div className="p-6 border-t border-white/10 bg-zinc-900/50">
+               <button onClick={handleCommit} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-transform active:scale-95">
+                 <Save size={18} />
+                 {selectedPerson.isWalkIn ? "Submit Walk-In" : "Save Score"}
+               </button>
+             </div>
+          </aside>
+        )}
       </div>
-      <div className="flex gap-1.5">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} onClick={() => !disabled && setVal(n)} disabled={disabled} className={`flex-1 py-3 rounded-lg font-black transition-all border ${val === n ? "bg-white text-black border-white shadow-lg" : "bg-zinc-900 border-white/5 text-zinc-500"} ${!disabled && "hover:border-zinc-700 hover:text-zinc-300 cursor-pointer"} ${disabled && "cursor-not-allowed border-transparent"}`}>{n}</button>
-        ))}
-      </div>
-    </div>
-  );
+      )
+    )}
+
+    {inspectingActor && <ActorProfileModal actor={inspectingActor} grades={grades[inspectingActor.id]} onClose={() => setInspectingActor(null)} />}
+  </>
+);
 }
