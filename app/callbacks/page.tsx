@@ -5,11 +5,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, Clock, Plus, Trash2, Share, Search, X, 
   Link as LinkIcon, Music, FileText,
-  Loader2, Copy, UploadCloud, Eye, AlertTriangle, 
-  Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, Film,
+  Loader2, Copy, UploadCloud, Eye,
+  Mic, Move, Theater, Archive, EyeOff, RotateCcw, Film,
   Star, TrendingDown
 } from 'lucide-react';
-import { getAuditionSlots,getAuditionees updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
+// CRITICAL: Using getAuditionees ensures names are hydrated (not IDs)
+import { getAuditionees, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
 const DISCLAIMER_TEXT = `*** NOTICE ***
@@ -38,7 +39,7 @@ interface CallbackSlot {
   materialLink?: string; 
   materialName?: string; 
   assignedIds: number[];
-  // UPDATED: Now tracks role assignment per student
+  // Tracks role assignment per student
   pairs?: { 
       name: string, 
       assignments: { studentId: number, role: string }[] 
@@ -308,10 +309,34 @@ export default function CallbackMatrixPage() {
       return isNaN(n) ? 0 : n;
   };
 
+  // --- SAFETY NET: LOAD DRAFT ---
+  useEffect(() => {
+    const saved = localStorage.getItem('draft_callback_slots');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+                setSlots(parsed);
+                console.log("Restored draft schedule from local storage");
+            }
+        } catch (e) {
+            console.error("Failed to load draft slots", e);
+        }
+    }
+  }, []);
+
+  // --- SAFETY NET: SAVE DRAFT ---
+  useEffect(() => {
+    if (slots.length > 0 && JSON.stringify(slots) !== JSON.stringify(DEFAULT_SLOTS)) {
+        localStorage.setItem('draft_callback_slots', JSON.stringify(slots));
+    }
+  }, [slots]);
+
   // --- DATA LOADING ---
   useEffect(() => {
     async function load() {
-const rows = await getAuditionees();
+      const rows = await getAuditionees();
+      
       const activeShowIdStr = localStorage.getItem('activeShowId'); 
       const activeShowId = activeShowIdStr ? parseInt(activeShowIdStr) : null;
       setActiveProductionId(activeShowId);
@@ -326,6 +351,7 @@ const rows = await getAuditionees();
             const prodArray = r.Production || [];
             if (!prodArray.length) return false;
             if (activeShowId && prodArray.some((p: any) => p.id === activeShowId)) return true;
+            // Fallback for demo
             return (prodArray[0]?.value || "").toLowerCase().includes("mermaid");
         })
         .map((r: any) => ({
@@ -466,6 +492,10 @@ const rows = await getAuditionees();
           await updateAuditionSlot(Number(id), { "Callbacks": finalString });
           count++;
       }
+      
+      // Clear safety net on success
+      localStorage.removeItem('draft_callback_slots');
+      
       alert(`Published ${count} schedules!`);
   };
 
