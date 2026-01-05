@@ -9,7 +9,7 @@ import {
   Mic, Move, Theater, Calendar, Archive, EyeOff, RotateCcw, Film,
   Star, TrendingDown
 } from 'lucide-react';
-import { getAuditionSlots, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
+import { getAuditionSlots,getAuditionees updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
 const DISCLAIMER_TEXT = `*** NOTICE ***
@@ -311,7 +311,7 @@ export default function CallbackMatrixPage() {
   // --- DATA LOADING ---
   useEffect(() => {
     async function load() {
-      const rows = await getAuditionSlots();
+const rows = await getAuditionees();
       const activeShowIdStr = localStorage.getItem('activeShowId'); 
       const activeShowId = activeShowIdStr ? parseInt(activeShowIdStr) : null;
       setActiveProductionId(activeShowId);
