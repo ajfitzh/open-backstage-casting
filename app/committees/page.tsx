@@ -3,18 +3,43 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Users, Search, Printer, Loader2, Link as LinkIcon, 
-  AlertCircle, Crown, Phone, Mail, ShieldAlert, Baby, HeartHandshake, User
+  Printer, Loader2, Link as LinkIcon, 
+  AlertCircle, Crown, Phone, Mail, ShieldAlert, Baby, 
+  User, Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle
 } from 'lucide-react';
-import { getCommitteePreferences, getAuditionSlots } from '@/app/lib/baserow'; 
+import { getCommitteePreferences, getAuditionSlots, linkVolunteerToPerson } from '@/app/lib/baserow'; 
+
+// --- CONFIG ---
+const COMMITTEES = {
+    'Pre-Show': [
+        "Publicity", "Sets", "Set Dressing", "Raffles", "Greenroom", 
+        "Costumes", "Props", "Make Up", "Hair", "Tech"
+    ],
+    'Show Week': [
+        "Raffles", "Greenroom", "Costumes", "Props", "Make-Up", "Hair", 
+        "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"
+    ]
+};
+
+// Recommended minimum people per committee (for the auto-balancer)
+const MIN_STAFFING = 2; 
 
 export default function CommitteeDashboard() {
-  const [prefs, setPrefs] = useState<any[]>([]);
+  // Data State
+  const [rawData, setRawData] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Assignment State (The "Mutable" Layer)
+  // Maps digitalID -> "Committee Name"
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<Record<string, string>>({}); // For Undo
+  
+  // UI State
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
-  const [search, setSearch] = useState("");
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
+  // --- 1. LOAD DATA ---
   useEffect(() => {
     async function loadData() {
         const [prefData, studentData] = await Promise.all([
@@ -22,192 +47,308 @@ export default function CommitteeDashboard() {
             getAuditionSlots()
         ]);
         
-        const processedPrefs = prefData.map((p: any) => {
+        const processed = prefData.map((p: any) => {
             const age = parseInt(p["Age"] || "0"); 
-            const isAdult = age >= 18;
-            
-            // Logic: If "Student Name" is empty, they are a Community Volunteer
-            const studentName = p["Student Name"] || "";
-            const isParent = studentName.trim().length > 0;
-
             return {
                 ...p,
-                preShow1: p["Pre-Show 1st"]?.value || "Unassigned",
+                id: p.id,
+                digitalId: p.id, // Using Row ID as unique key
+                preShow1: p["Pre-Show 1st"]?.value,
                 preShow2: p["Pre-Show 2nd"]?.value,
                 preShow3: p["Pre-Show 3rd"]?.value,
-                showWeek1: p["Show Week 1st"]?.value || "Unassigned",
+                showWeek1: p["Show Week 1st"]?.value,
                 showWeek2: p["Show Week 2nd"]?.value,
                 showWeek3: p["Show Week 3rd"]?.value,
                 chairInterests: p["Chair Interest"]?.map((c: any) => c.value) || [],
-                studentName: studentName,
-                parentName: p["Parent Name"] || "Unknown Volunteer",
+                studentName: p["Student Name"] || "",
+                parentName: p["Parent Name"] || "Unknown",
                 email: p["Email"] || "",
                 phone: p["Phone"] || "",
-                
-                // INTELLIGENT FIELDS
                 age: age,
-                isAdult: isAdult,
-                isParent: isParent, // New Flag for Jenny
+                isAdult: age >= 18,
+                isParent: (p["Student Name"] || "").trim().length > 0,
                 bgStatus: p["Background Check Status"]?.value || "Pending", 
-                needsCheck: isAdult && (p["Background Check Status"]?.value !== 'Cleared' && p["Background Check Status"]?.value !== 'Not Applicable'),
-                availability: p["Availability"]?.map((a: any) => a.value) || []
             };
         });
 
-        setPrefs(processedPrefs);
+        // Initialize Assignments to 1st Choice
+        const initialAssignments: Record<string, string> = {};
+        processed.forEach((p: any) => {
+             // Default to Pre-Show 1st choice initially
+             if (p.preShow1) initialAssignments[`pre-${p.id}`] = p.preShow1;
+             if (p.showWeek1) initialAssignments[`show-${p.id}`] = p.showWeek1;
+        });
+
+        setRawData(processed);
         setStudents(studentData);
+        setAssignments(initialAssignments);
+        setHistory(initialAssignments); // Save initial state for reset
         setLoading(false);
     }
     loadData();
   }, []);
 
-  const groupedData = useMemo(() => {
-      const groups: Record<string, any[]> = {};
-      
-      prefs.forEach(p => {
-          const key = groupBy === 'Pre-Show' ? p.preShow1 : p.showWeek1;
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(p);
-      });
-      return groups;
-  }, [prefs, groupBy]);
+  // --- 2. THE ALGORITHM: "MAGIC BALANCE" ---
+  const handleAutoBalance = () => {
+      if(!confirm("This will move volunteers from over-staffed committees to under-staffed ones based on their 2nd/3rd choices. Proceed?")) return;
 
+      const newAssignments = { ...assignments };
+      const currentCommittees = COMMITTEES[groupBy];
+      
+      // Helper to count people in a committee
+      const getCount = (comm: string) => {
+          return rawData.filter(p => {
+              const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
+              return newAssignments[key] === comm;
+          }).length;
+      };
+
+      let movedCount = 0;
+
+      // Loop until we can't optimize anymore (simple 1-pass for stability)
+      currentCommittees.forEach(targetCommittee => {
+          const count = getCount(targetCommittee);
+          
+          // If this committee is "Starving" (< 2 people)
+          if (count < MIN_STAFFING) {
+               // Find people who want this as 2nd/3rd choice, but are currently in a "Healthy" committee (> 2)
+               rawData.forEach(p => {
+                   const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
+                   const currentComm = newAssignments[key];
+                   
+                   // Don't strip another starving committee
+                   if (currentComm && getCount(currentComm) > MIN_STAFFING) {
+                       
+                       // Check 2nd Choice
+                       const choice2 = groupBy === 'Pre-Show' ? p.preShow2 : p.showWeek2;
+                       if (choice2 === targetCommittee) {
+                           newAssignments[key] = targetCommittee;
+                           movedCount++;
+                           return; // Done with this person
+                       }
+
+                       // Check 3rd Choice
+                       const choice3 = groupBy === 'Pre-Show' ? p.preShow3 : p.showWeek3;
+                       if (choice3 === targetCommittee) {
+                           newAssignments[key] = targetCommittee;
+                           movedCount++;
+                       }
+                   }
+               });
+          }
+      });
+
+      setAssignments(newAssignments);
+      alert(`Magic Sort Complete: Moved ${movedCount} volunteers to balance teams.`);
+  };
+
+  const handleReset = () => {
+      setAssignments(history);
+  };
+
+  // --- 3. HELPERS ---
   const findStudentMatch = (typedName: string) => {
       if (!typedName) return null;
       return students.find(s => s.Performer.toLowerCase().includes(typedName.toLowerCase()));
   };
 
+  // Group data based on current assignments state
+  const groupedData = useMemo(() => {
+      const groups: Record<string, any[]> = {};
+      // Initialize all committees so empty ones show up
+      COMMITTEES[groupBy].forEach(c => groups[c] = []);
+      groups["Unassigned"] = [];
+
+      rawData.forEach(p => {
+          const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
+          const assignedComm = assignments[key] || "Unassigned";
+          
+          if (!groups[assignedComm]) groups[assignedComm] = [];
+          groups[assignedComm].push(p);
+      });
+      return groups;
+  }, [rawData, assignments, groupBy]);
+
   if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500"/></div>;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans p-6">
+    <div className="min-h-screen bg-zinc-950 text-white font-sans p-4 md:p-6 flex flex-col">
         
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 print:hidden">
+        {/* --- HEADER --- */}
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 print:hidden">
             <div>
-                <h1 className="text-2xl font-black uppercase italic">Committee Assignments</h1>
-                <p className="text-zinc-500 text-xs">Viewing {prefs.length} Responses</p>
+                <h1 className="text-2xl font-black uppercase italic tracking-tighter text-white">Committee Manager</h1>
+                <p className="text-zinc-500 text-xs font-medium">Drag-and-drop simulated via dropdowns • {rawData.length} Volunteers</p>
             </div>
-            <div className="flex gap-2 w-full md:w-auto">
+            
+            <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+                {/* TABS */}
                 <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex">
-                    <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${groupBy === 'Pre-Show' ? 'bg-blue-600' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
-                    <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${groupBy === 'Show Week' ? 'bg-blue-600' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
+                    <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
+                    <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
                 </div>
-                <button onClick={() => window.print()} className="bg-zinc-800 px-4 py-2 rounded-lg text-xs font-bold uppercase flex items-center gap-2 hover:bg-zinc-700 transition-colors"><Printer size={14}/> Print</button>
+
+                {/* MAGIC TOOLS */}
+                <button onClick={handleAutoBalance} className="bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all">
+                    <Wand2 size={14}/> Auto-Balance
+                </button>
+                <button onClick={handleReset} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-2 rounded-lg transition-all" title="Reset to 1st Choices">
+                    <RotateCcw size={14}/>
+                </button>
+                <button onClick={() => window.print()} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                    <Printer size={14}/> Print
+                </button>
             </div>
         </div>
 
-        {/* PRINT HEADER */}
-        <div className="hidden print:block mb-6 text-black">
-            <h1 className="text-3xl font-black uppercase">Committee Report: {groupBy}</h1>
+        {/* --- PRINT HEADER (Only visible on print) --- */}
+        <div className="hidden print:block mb-8 text-black">
+             <h1 className="text-4xl font-black uppercase mb-2">{groupBy} Assignments</h1>
+             <p className="text-sm text-gray-600">Generated from Open Backstage • {new Date().toLocaleDateString()}</p>
         </div>
 
-        {/* CARD GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 print:grid-cols-2 print:gap-4 print:block">
-            {Object.keys(groupedData).sort().map(committee => (
-                <div key={committee} className="bg-zinc-900/50 border border-white/10 rounded-xl overflow-hidden mb-6 print:border-2 print:border-black print:bg-white print:text-black break-inside-avoid">
-                    <div className="bg-zinc-900 p-3 border-b border-white/10 flex justify-between items-center print:bg-gray-200 print:border-black">
-                        <h3 className="font-black uppercase text-sm tracking-wide truncate">{committee}</h3>
-                        <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full print:bg-black">{groupedData[committee].length}</span>
+        {/* --- MASONRY GRID --- */}
+        <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 print:block print:columns-2">
+            
+            {/* Loop through Committees */}
+            {Object.keys(groupedData).map(committee => {
+                const team = groupedData[committee];
+                const isStarving = team.length < MIN_STAFFING && committee !== "Unassigned";
+                const isUnassigned = committee === "Unassigned";
+                
+                // Hide empty committees in print view to save paper
+                if (team.length === 0) return (
+                    <div key={committee} className="break-inside-avoid mb-4 print:hidden opacity-40 hover:opacity-100 transition-opacity">
+                         <div className="border border-dashed border-zinc-800 rounded-xl p-3 flex justify-between items-center">
+                            <span className="text-zinc-600 font-bold uppercase text-xs">{committee}</span>
+                            <span className="text-zinc-700 text-[10px] font-mono">0</span>
+                         </div>
                     </div>
-                    <div className="divide-y divide-white/5 print:divide-gray-300">
-                        {groupedData[committee].map((p: any) => {
-                            const studentMatch = findStudentMatch(p.studentName);
-                            const wantsToChairThis = p.chairInterests.includes(committee);
+                );
 
-                            return (
-                                <div key={p.id} className={`p-3 transition-colors print:hover:bg-transparent ${wantsToChairThis ? 'bg-amber-900/10' : 'hover:bg-white/5'}`}>
-                                    
-                                    {/* TOP ROW: Name & Badges */}
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <p className="font-bold text-sm">{p.parentName}</p>
-                                            
-                                            {/* PARENT vs COMMUNITY BADGE */}
-                                            {p.isParent ? (
-                                                <span className="bg-blue-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-1 print:text-black print:bg-transparent print:border print:border-black">
-                                                    <User size={8} /> Parent
-                                                </span>
-                                            ) : (
-                                                <span className="bg-purple-600 text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-1 print:text-black print:bg-transparent print:border print:border-black">
-                                                    <HeartHandshake size={8} /> Community
-                                                </span>
-                                            )}
+                return (
+                    <div key={committee} className={`break-inside-avoid mb-6 rounded-xl overflow-hidden border ${isStarving ? 'border-amber-500/50 bg-amber-900/10' : 'border-white/10 bg-zinc-900/40'} print:border-black print:bg-white print:mb-8`}>
+                        
+                        {/* COMMITTEE HEADER */}
+                        <div className={`p-3 border-b flex justify-between items-center ${isStarving ? 'border-amber-500/30 bg-amber-500/10' : 'border-white/5 bg-zinc-900'} print:border-b-2 print:border-black print:bg-gray-100`}>
+                            <div className="flex items-center gap-2">
+                                {isStarving && <AlertTriangle size={14} className="text-amber-500 print:hidden"/>}
+                                <h3 className={`font-black uppercase text-sm tracking-wider ${isStarving ? 'text-amber-400' : 'text-zinc-200'} print:text-black`}>{committee}</h3>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isStarving ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400'} print:bg-black print:text-white`}>
+                                {team.length}
+                            </span>
+                        </div>
 
-                                            {/* Chair Badge */}
-                                            {wantsToChairThis && (
-                                                <span className="bg-amber-500 text-black text-[8px] px-1.5 py-0.5 rounded uppercase font-black flex items-center gap-1 border border-amber-600">
-                                                    <Crown size={8} /> Chair?
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    {/* CONTACT & FLAGS */}
-                                    <div className="flex flex-wrap gap-3 text-[10px] text-zinc-400 print:text-gray-600 mb-2">
-                                        <span className="flex items-center gap-1"><Mail size={10}/> {p.email}</span>
-                                        <span className="flex items-center gap-1"><Phone size={10}/> {p.phone}</span>
+                        {/* VOLUNTEER LIST */}
+                        <div className="divide-y divide-white/5 print:divide-gray-300">
+                            {team.map((p: any) => {
+                                const isExpanded = expandedCard === p.id;
+                                const studentMatch = findStudentMatch(p.studentName);
+                                const wantsToChair = p.chairInterests.includes(committee);
+                                const isAssignedTo1st = (groupBy === 'Pre-Show' ? p.preShow1 : p.showWeek1) === committee;
+
+                                return (
+                                    <div key={p.id} className="group hover:bg-white/5 transition-colors print:hover:bg-transparent">
                                         
-                                        {/* SAFETY FLAGS */}
-                                        {p.needsCheck ? (
-                                            <span className="text-red-400 flex items-center gap-1 font-bold print:text-red-600">
-                                                <ShieldAlert size={10} /> BG Check Req
-                                            </span>
-                                        ) : !p.isAdult && p.age > 0 ? (
-                                            <span className="text-blue-300 flex items-center gap-1 font-bold print:text-black">
-                                                <Baby size={10} /> Minor ({p.age})
-                                            </span>
-                                        ) : null}
-                                    </div>
+                                        {/* COMPACT ROW (Always Visible) */}
+                                        <div 
+                                            className="p-3 cursor-pointer"
+                                            onClick={() => setExpandedCard(isExpanded ? null : p.id)}
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`font-bold text-sm ${p.isParent ? 'text-zinc-200' : 'text-purple-300'} print:text-black`}>
+                                                            {p.parentName}
+                                                        </span>
+                                                        {wantsToChair && <Crown size={12} className="text-amber-500 fill-amber-500/20" />}
+                                                        {!isAssignedTo1st && <span className="text-[8px] border border-zinc-700 text-zinc-500 px-1 rounded uppercase print:border-gray-400">Moved</span>}
+                                                    </div>
+                                                    
+                                                    {/* Sub-line */}
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {p.isParent ? (
+                                                            <span className="text-[10px] text-zinc-500 flex items-center gap-1 print:text-gray-600">
+                                                                <Baby size={10} /> {p.studentName}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] text-purple-400/60 font-bold uppercase tracking-wide print:text-gray-500">Community</span>
+                                                        )}
+                                                    </div>
+                                                </div>
 
-                                    {/* LINKED STUDENT (Only show if Parent) */}
-                                    {p.isParent && (
-                                        <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded border border-white/5 print:border-gray-200">
-                                            <span className="text-[9px] text-zinc-500 uppercase font-bold">Child:</span>
-                                            <span className="text-[10px] text-zinc-300 print:text-black font-bold">{p.studentName}</span>
-                                            
-                                            {/* Smart Match Indicators */}
-                                            {studentMatch ? (
-                                                 <span className="print:hidden text-emerald-500 flex items-center gap-0.5 text-[9px] ml-auto" title="Matched to Cast List"><LinkIcon size={10} /></span>
-                                            ) : (
-                                                 <span className="print:hidden text-amber-500 flex items-center gap-0.5 text-[9px] ml-auto" title="Name not found in cast list"><AlertCircle size={10} /></span>
-                                            )}
+                                                {/* Action / State Icon */}
+                                                <div className="print:hidden">
+                                                    {isExpanded ? <ChevronUp size={14} className="text-zinc-600"/> : <ChevronDown size={14} className="text-zinc-700 group-hover:text-zinc-500"/>}
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
 
-                                    {/* ALTERNATE CHOICES */}
-                                    <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-1 print:border-gray-300">
-                                        <span className="text-[8px] text-zinc-600 uppercase font-bold print:text-gray-500 self-center mr-1">Alternates:</span>
-                                        {groupBy === 'Pre-Show' ? (
-                                            <>
-                                                {p.preShow2 && <span className="text-[9px] bg-zinc-950 border border-white/10 px-1.5 rounded text-zinc-400 print:border-gray-300">{p.preShow2}</span>}
-                                                {p.preShow3 && <span className="text-[9px] bg-zinc-950 border border-white/10 px-1.5 rounded text-zinc-400 print:border-gray-300">{p.preShow3}</span>}
-                                            </>
-                                        ) : (
-                                            <>
-                                                {p.showWeek2 && <span className="text-[9px] bg-zinc-950 border border-white/10 px-1.5 rounded text-zinc-400 print:border-gray-300">{p.showWeek2}</span>}
-                                                {p.showWeek3 && <span className="text-[9px] bg-zinc-950 border border-white/10 px-1.5 rounded text-zinc-400 print:border-gray-300">{p.showWeek3}</span>}
-                                            </>
+                                        {/* EXPANDED DETAILS (Collapsible) */}
+                                        {isExpanded && (
+                                            <div className="px-3 pb-3 bg-zinc-950/30 shadow-inner border-t border-white/5 print:hidden">
+                                                
+                                                {/* Contact & Flags */}
+                                                <div className="flex gap-4 py-2 mb-2 border-b border-white/5">
+                                                     <a href={`mailto:${p.email}`} className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300"><Mail size={12}/> {p.email}</a>
+                                                     <a href={`tel:${p.phone}`} className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300"><Phone size={12}/> {p.phone}</a>
+                                                </div>
+                                                
+                                                {/* Safety Check */}
+                                                {p.isAdult && p.bgStatus !== 'Cleared' && (
+                                                    <div className="mb-3 bg-red-900/20 border border-red-900/50 rounded p-2 flex items-center gap-2 text-red-400 text-xs">
+                                                        <ShieldAlert size={14} />
+                                                        <span>Background Check: <strong>{p.bgStatus}</strong></span>
+                                                        <button onClick={() => alert("Simulate: Email sent to " + p.email)} className="ml-auto underline decoration-dotted hover:text-red-300">Remind</button>
+                                                    </div>
+                                                )}
+
+                                                {/* Manual Move Dropdown */}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] uppercase font-bold text-zinc-500">Move to:</span>
+                                                    <select 
+                                                        className="bg-zinc-800 border border-zinc-700 rounded text-xs text-white p-1 outline-none focus:border-blue-500"
+                                                        value={committee}
+                                                        onChange={(e) => {
+                                                            const newAssignments = { ...assignments };
+                                                            const key = groupBy === 'Pre-Show' ? `pre-${p.id}` : `show-${p.id}`;
+                                                            newAssignments[key] = e.target.value;
+                                                            setAssignments(newAssignments);
+                                                        }}
+                                                    >
+                                                        {COMMITTEES[groupBy].map(c => (
+                                                            <option key={c} value={c}>{c}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Preference History */}
+                                                <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+                                                    <div className="bg-zinc-900 p-1.5 rounded border border-white/5 opacity-50">
+                                                        <span className="block text-zinc-500 uppercase text-[8px]">1st Choice</span>
+                                                        {groupBy === 'Pre-Show' ? p.preShow1 : p.showWeek1}
+                                                    </div>
+                                                    <div className={`bg-zinc-900 p-1.5 rounded border border-white/5 ${isAssignedTo1st ? '' : 'border-blue-500/30 bg-blue-500/10'}`}>
+                                                        <span className="block text-zinc-500 uppercase text-[8px]">2nd Choice</span>
+                                                        {groupBy === 'Pre-Show' ? p.preShow2 : p.showWeek2}
+                                                    </div>
+                                                    <div className="bg-zinc-900 p-1.5 rounded border border-white/5">
+                                                        <span className="block text-zinc-500 uppercase text-[8px]">3rd Choice</span>
+                                                        {groupBy === 'Pre-Show' ? p.preShow3 : p.showWeek3}
+                                                    </div>
+                                                </div>
+
+                                            </div>
                                         )}
                                     </div>
-                                    
-                                    {/* AVAILABILITY (If present) */}
-                                    {p.availability.length > 0 && (
-                                        <div className="mt-1 flex flex-wrap gap-1">
-                                            {p.availability.map((date: string) => (
-                                                <span key={date} className="text-[8px] bg-blue-900/20 text-blue-300 border border-blue-500/20 px-1 rounded print:border-gray-400 print:text-black">
-                                                    {date}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
     </div>
   );
-}   
+}
