@@ -93,22 +93,57 @@ export default function AuditionsPage() {
     }
   }, []);
 
-  /* ---------- Data Fetching ---------- */
+/* ---------- Data Fetching ---------- */
   useEffect(() => {
     const loadData = async () => {
       if (!isReady) return;
+      
+      console.log("🚀 Starting Data Load...");
+      
       try {
-        // *** FIXED: Using getAuditionees() instead of getAuditionSlots() to fix names ***
+        // 1. Fetch raw data
         const slots = await getAuditionees();
-        const activeShowId = localStorage.getItem('activeShowId'); 
+        console.log(`📦 Raw Auditions Fetched: ${slots.length}`, slots[0]); // Log first item to see structure
 
+        const activeShowId = localStorage.getItem('activeShowId'); 
+        console.log(`🎭 Active Show ID from Storage:`, activeShowId);
+
+        // 2. Filter with Logging
         const showAuditions = slots.filter((row: any) => {
           const prodArray = row.Production || [];
-          if (!prodArray.length) return false;
-          if (activeShowId && prodArray.some((p: any) => String(p.id) === activeShowId)) return true;
-          return (prodArray[0]?.value || "").toLowerCase().includes("mermaid");
+          
+          // Debugging specific rows
+          if (!prodArray.length) {
+             console.warn(`⚠️ Row ${row.id} has no Production linked.`);
+             return false;
+          }
+
+          // CHECK 1: Local Storage Match (Most Reliable)
+          // We check equality loosely (==) to catch string "5" vs number 5
+          if (activeShowId && prodArray.some((p: any) => p.id == activeShowId)) {
+              return true;
+          }
+
+          // CHECK 2: Fallback String Match
+          const prodName = (prodArray[0]?.value || "").toString().toLowerCase();
+          const isMermaid = prodName.includes("mermaid");
+          
+          // CHECK 3: Safety Net - If the "Value" is just a number (e.g. "5"), assume it's the right show for now 
+          // (REMOVE THIS later once you fix the Primary Field in Baserow)
+          const isJustID = !isNaN(Number(prodName)); 
+
+          // Log failures to help you debug
+          if (!isMermaid && !isJustID) {
+              console.log(`❌ Row ${row.id} skipped. Prod Value: "${prodName}"`);
+          }
+
+          return isMermaid || isJustID; 
         });
 
+        console.log(`✅ Filtered down to ${showAuditions.length} actors for this show.`);
+
+        // ... (Rest of your formatting logic remains the same) ...
+        
         // Helper to extract baserow values
         const getLookupValue = (field: any) => {
           if (!field) return null;
@@ -140,8 +175,8 @@ export default function AuditionsPage() {
           return { label: count > 0 ? `Shows: ${count}` : "First Show", list: roleList };
         };
 
-        // Map Data
         const formattedSchedule = showAuditions.map((row: any) => {
+           // ... (Keep your existing mapping logic here) ...
            const rawDate = row.Date;
            let displayTime = "TBD";
            let session: AuditionSession = "Video/Remote";
@@ -154,7 +189,6 @@ export default function AuditionsPage() {
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
            }
            
-           // --- VIDEO EXTRACTION ---
            let videoUrl = null;
            if (row["Dance Video"]) {
                videoUrl = row["Dance Video"];
@@ -165,7 +199,6 @@ export default function AuditionsPage() {
                else if (typeof rawVideo === 'string' && rawVideo.startsWith('http')) videoUrl = rawVideo;
            }
 
-           // Headshot
            let headshotUrl = null;
            const rawHeadshot = row.Headshot;
            if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) headshotUrl = rawHeadshot[0].url;
@@ -175,35 +208,31 @@ export default function AuditionsPage() {
 
            return {
              id: row.id,
+             originalId: row.id, // Ensure this exists for saving
              performerId: row.Performer?.[0]?.id,
              name: Array.isArray(row.Performer) ? row.Performer[0]?.value : (row.Performer || "Unknown"),
              avatar: headshotUrl,
              age: String(getLookupValue(row.Age) || "?"),
              video: videoUrl,
-             
              height: formatHeight(getLookupValue(row.Height)),
              vocalRange: getLookupValue(row["Vocal Range"]),
              dob: getLookupValue(row.Birthdate),
              conflicts: getLookupValue(row.Conflicts),
              tenure: experienceData.label,
              pastRoles: experienceData.list,
-
              song: row.Song || "No song listed",
              monologue: row.Monologue || "No monologue listed",
              timeSlot: displayTime,
              session: session,
-             
              vocal: row["Vocal Score"] || 0,
              acting: row["Acting Score"] || 0,
              dance: row["Dance Score"] || 0,
              presence: row["Stage Presence Score"] || 0,
-             
              actingNotes: row["Acting Notes"] || "",
              musicNotes: row["Music Notes"] || "",
              choreoNotes: row["Choreography Notes"] || "",
              dropInNotes: row["Drop-In Notes"] || "",
              adminNotes: row["Admin Notes"] || "",
-             
              isWalkIn: false
            };
         });
@@ -216,17 +245,16 @@ export default function AuditionsPage() {
         });
         setGrades(initialGrades);
 
-        // We can reuse getAuditionees here since we want the name fix for walk-ins too
+        // For Walk-Ins
         setAllStudents(slots);
 
       } catch (err) {
-        console.error("Load Error:", err);
+        console.error("❌ CRITICAL LOAD ERROR:", err);
       }
     };
 
     loadData();
   }, [isReady]);
-
 const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
 
