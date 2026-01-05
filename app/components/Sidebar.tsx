@@ -2,12 +2,13 @@
 "use client";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Mic2, Layers, LogOut } from 'lucide-react';
+import { Users, Mic2, Layers, LogOut, HeartHandshake } from 'lucide-react';
 
 const NAV_ITEMS = [
   { name: 'Auditions', href: '/auditions', icon: Mic2 },
   { name: 'Callbacks', href: '/callbacks', icon: Layers },
   { name: 'Casting', href: '/casting', icon: Users },
+  { name: 'Committees', href: '/committees', icon: HeartHandshake }, // New Item
 ];
 
 export default function ResponsiveNav() {
@@ -18,8 +19,9 @@ export default function ResponsiveNav() {
       {/* --- DESKTOP SIDEBAR (Hidden on Mobile) --- */}
       <aside className="hidden md:flex flex-col w-20 lg:w-64 bg-zinc-900 border-r border-white/5 h-screen shrink-0">
         <div className="p-6">
-          <h1 className="text-xl font-black italic uppercase text-blue-500 hidden lg:block">Casting Deck</h1>
-          <h1 className="text-xl font-black italic uppercase text-blue-500 lg:hidden">CD</h1>
+          {/* Renamed to reflect broader scope */}
+          <h1 className="text-xl font-black italic uppercase text-blue-500 hidden lg:block">Production Deck</h1>
+          <h1 className="text-xl font-black italic uppercase text-blue-500 lg:hidden">PD</h1>
         </div>
         
         <nav className="flex-1 px-4 space-y-2">
@@ -59,7 +61,8 @@ export default function ResponsiveNav() {
                 <div className={`p-1.5 rounded-full ${isActive ? 'bg-blue-500/20' : 'bg-transparent'}`}>
                     <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                 </div>
-                <span className="text-[9px] font-bold uppercase tracking-wide">{item.name}</span>
+                {/* Text gets smaller to fit 4 items */}
+                <span className="text-[8px] font-bold uppercase tracking-wide">{item.name}</span>
               </Link>
             );
         })}
