@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Printer, Loader2, Crown, Phone, Mail, ShieldAlert, Baby, 
-  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle
+  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, AlertCircle // <--- Added here
 } from 'lucide-react';
 import { getCommitteePreferences, getAuditionSlots } from '@/app/lib/baserow'; 
 
@@ -97,16 +97,13 @@ export default function CommitteeDashboard() {
       if (!linkId) return null;
       
       // 1. Find the Student Record
-      // Checks matches against Row ID OR a specific "Student ID" column
       const match = students.find(s => s.id === linkId || s["Student ID"] === linkId);
       if (!match) return null;
 
       // 2. Extract Name (Handles Array or String)
-      // "Performer" is usually a Link Row array: [{id: 1, value: "Name"}]
       if (Array.isArray(match["Performer"])) {
           return match["Performer"][0]?.value;
       }
-      // Fallbacks
       return match["Performer"]?.value || match["Full Name"] || match["Name"] || "Unknown Student";
   };
 
