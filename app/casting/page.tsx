@@ -4,13 +4,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, Plus, Trash2, Copy, Search,
-  User, X, CheckCircle2, ChevronRight, Loader2
+  User, X, CheckCircle2, ChevronRight, Loader2, Link as LinkIcon
 } from 'lucide-react';
-import { getRoles, createRole, updateRole, deleteRole, getAuditionees, createCastAssignment } from '@/app/lib/baserow'; 
+import { getRoles, createRole, updateRole, deleteRole, getAuditionSlots, createCastAssignment } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
-// Adjusted to 30 to cover your scene numbers (highest in CSV is 27)
-const TOTAL_SCENES = 30;
+const TOTAL_SCENES = 30; // Matches your CSV max scene
+const TARGET_SHOW_STRING = "Little Mermaid"; // Simple keyword match for safety
 
 // --- TYPES ---
 type SceneType = 'scene' | 'song' | 'dance' | null;
@@ -18,14 +18,17 @@ type SceneType = 'scene' | 'song' | 'dance' | null;
 interface Role {
   id: number;
   name: string;
+  type: string; // Lead, Supporting, etc.
   scenes: Record<number, SceneType>;
   assignedStudentId?: number; 
 }
 
 interface Student {
-    id: number;
+    id: number; // This is the AUDITION ID (Table 630), not the Person ID
+    personId: number; // The actual Person ID (Table 599)
     name: string;
     avatar: string;
+    age: number;
 }
 
 const safeString = (val: any): string => {
@@ -59,7 +62,7 @@ const CastingModal = ({
                     <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={16}/></button>
                 </div>
                 <div className="p-2 border-b border-white/5 bg-zinc-900 shrink-0">
-                    <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search actors..." className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
+                    <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auditioners..." className="w-full bg-zinc-950 border border-white/10 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
                 </div>
                 <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar flex-1">
                     {filtered.map(s => (
@@ -67,6 +70,7 @@ const CastingModal = ({
                             <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-blue-500" />
                             <div className="flex-1">
                                 <p className="font-bold text-sm text-zinc-200 group-hover:text-white">{s.name}</p>
+                                <p className="text-[10px] text-zinc-500">Age {s.age}</p>
                             </div>
                             <ChevronRight size={16} className="text-zinc-600 group-hover:text-blue-500" />
                         </button>
@@ -99,8 +103,11 @@ const CastingRow = ({
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                         <div>
-                            <h3 className="text-sm font-black uppercase text-white tracking-wide leading-none mb-1">{safeString(role.name)}</h3>
-                            {assignedStudent ? <p className="text-[10px] font-bold text-blue-400 flex items-center gap-1"><CheckCircle2 size={10} /> {assignedStudent.name}</p> : <p className="text-[10px] font-bold text-zinc-600 italic">Uncast</p>}
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-black uppercase text-white tracking-wide leading-none">{safeString(role.name)}</h3>
+                                {role.type && <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 rounded border border-white/5">{role.type}</span>}
+                            </div>
+                            {assignedStudent ? <p className="text-[10px] font-bold text-blue-400 flex items-center gap-1 mt-1"><CheckCircle2 size={10} /> {assignedStudent.name}</p> : <p className="text-[10px] font-bold text-zinc-600 italic mt-1">Uncast</p>}
                         </div>
                         <div className="flex gap-2">
                             <button onClick={onCopy} className="p-1.5 text-zinc-500 hover:text-white bg-zinc-800 rounded-lg"><Copy size={14} /></button>
@@ -109,7 +116,7 @@ const CastingRow = ({
                     </div>
                 </div>
             </div>
-            <div className="w-full overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+            <div className="w-full overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1 mt-1">
                 <div className="flex gap-1.5 min-w-max pl-1">
                     {Array.from({ length: TOTAL_SCENES }).map((_, i) => {
                         const num = i + 1;
@@ -140,43 +147,59 @@ export default function CastingPage() {
   useEffect(() => {
     async function load() {
         try {
-            const roleRows = await getRoles();
-            const parsedRoles = roleRows.map((r: any) => {
-                // 1. Scene Parsing: Read from "Active Scenes" column (e.g. "18,19,20")
+            const [roleRows, auditionRows] = await Promise.all([
+                getRoles(),
+                getAuditionSlots() // Fetching from AUDITIONS table (630)
+            ]);
+
+            // 1. Filter Roles for Current Show
+            // "Master Show Database" is a link field. We check the value.
+            const showRoles = roleRows.filter((r: any) => {
+                const showName = r["Master Show Database"]?.[0]?.value || "";
+                return showName.includes(TARGET_SHOW_STRING) || showName.includes("Little Mermaid");
+            });
+
+            const parsedRoles = showRoles.map((r: any) => {
+                // Scene Logic
                 let sceneMap: Record<number, SceneType> = {};
-                
-                // First check if we have saved JSON data (from manual edits)
+                // Check if user has saved manual edits first
                 if (r["Scene Data"]) {
                     try { 
                         const parsed = JSON.parse(r["Scene Data"]); 
-                        // Only use if it's not empty object
                         if (Object.keys(parsed).length > 0) sceneMap = parsed;
                     } catch(e) {}
                 } 
-                
-                // If map is empty, fallback to "Active Scenes" column (from CSV/Blueprint)
+                // Fallback to "Active Scenes" CSV data
                 if (Object.keys(sceneMap).length === 0) {
                     const rawScenes = r["Active Scenes"] || "";
                     if (rawScenes) {
                         const nums = safeString(rawScenes).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-                        nums.forEach(n => sceneMap[n] = 'scene'); // Default color
+                        nums.forEach(n => sceneMap[n] = 'scene');
                     }
                 }
 
                 return {
                     id: r.id,
-                    // Use "Role Name" from CSV
                     name: safeString(r["Role Name"] || r.Name || "Untitled Role"),
+                    type: r["Role Type"]?.value || "",
                     scenes: sceneMap,
                     assignedStudentId: (r["Assigned Actor"] || r["Actor"] || [])?.[0]?.id 
                 };
             });
             
-            const peopleRows = await getAuditionees();
-            const parsedStudents = peopleRows.map((p: any) => ({
-                id: p.id,
-                name: safeString(p.Performer && typeof p.Performer === 'object' && p.Performer[0]?.value ? p.Performer[0].value : p.Performer),
-                avatar: p.Headshot?.[0]?.url || "",
+            // 2. Filter Students for Current Show
+            const showStudents = auditionRows.filter((a: any) => {
+                const prodName = a["Production"]?.[0]?.value || "";
+                return prodName.includes(TARGET_SHOW_STRING) || prodName.includes("Little Mermaid");
+            });
+
+            const parsedStudents = showStudents.map((a: any) => ({
+                id: a.id, // Audition Row ID
+                personId: a["Performer"]?.[0]?.id, // Linked Person ID
+                name: a["Performer"]?.[0]?.value || "Unknown Actor",
+                // Correctly extract Headshot from Auditions table
+                avatar: a["Headshot"]?.[0]?.url || "",
+                age: a["Age"]?.[0]?.value || 0
             }));
 
             setRoles(parsedRoles);
@@ -198,8 +221,6 @@ export default function CastingPage() {
       else newScenes[sceneNum] = newType;
       
       setRoles(prev => prev.map(r => r.id === roleId ? { ...r, scenes: newScenes } : r));
-      
-      // Save to "Scene Data" JSON column so manual changes persist
       updateRole(roleId, { "Scene Data": JSON.stringify(newScenes) });
   };
 
@@ -207,7 +228,7 @@ export default function CastingPage() {
       const name = prompt("Role Name:");
       if (!name) return;
       const tempId = Date.now();
-      setRoles(prev => [{ id: tempId, name, scenes: {} }, ...prev]);
+      setRoles(prev => [{ id: tempId, name, type: "Custom", scenes: {} }, ...prev]);
       try {
           const savedRow = await createRole(name);
           setRoles(prev => prev.map(r => r.id === tempId ? { ...r, id: savedRow.id } : r));
@@ -232,8 +253,19 @@ export default function CastingPage() {
 
   const handleAssignStudent = async (studentId: number) => {
       if (!castingRoleId) return;
+      
+      const student = students.find(s => s.id === studentId);
+      if (!student) return;
+
+      // Optimistic UI Update
       setRoles(prev => prev.map(r => r.id === castingRoleId ? { ...r, assignedStudentId: studentId } : r));
-      await updateRole(castingRoleId, { "Assigned Actor": [studentId] });
+      
+      // DB Save
+      // NOTE: We save the AUDITION ID to the role, or the Person ID?
+      // Usually "Assigned Actor" links to the People table.
+      // Since student.id is the Audition ID, we use student.personId
+      await updateRole(castingRoleId, { "Assigned Actor": [student.personId] });
+      
       setCastingRoleId(null);
   };
 
@@ -266,7 +298,8 @@ export default function CastingPage() {
                 <CastingRow 
                     key={role.id}
                     role={role}
-                    assignedStudent={students.find(s => s.id === role.assignedStudentId)}
+                    // Find the student by matching the assigned ID
+                    assignedStudent={students.find(s => s.personId === role.assignedStudentId)}
                     onUpdate={handleUpdateScene}
                     onDelete={() => handleDeleteRole(role.id)}
                     onCopy={() => handleCopyRole(role)}
