@@ -8,20 +8,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false); // New: Visual feedback
   const router = useRouter();
 
-  const handleLogin = async (e) => {
-    e.preventDefault(); // 1. Stops the page from refreshing
-    
-    if (!password) return; // 2. Don't submit empty passwords
+const handleLogin = async (e) => {
+    e.preventDefault(); 
+    if (!password) return; 
 
-    setIsLoading(true); // 3. Show the user something is happening
+    setIsLoading(true); 
 
-    // We set a cookie manually for simplicity
+    // 1. Set the cookie
     document.cookie = `cyt_auth=${password}; path=/; max-age=86400;`; 
     
-    router.push('/');
-    router.refresh();
-    // Note: We don't set isLoading(false) because we want the spinner 
-    // to stay visible until the new page actually loads.
+    // 2. THE NUCLEAR OPTION
+    // Instead of router.push('/'), use this:
+    window.location.href = '/'; 
   };
 
   return (
