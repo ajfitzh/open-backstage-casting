@@ -8,18 +8,24 @@ const NAV_ITEMS = [
   { name: 'Auditions', href: '/auditions', icon: Mic2 },
   { name: 'Callbacks', href: '/callbacks', icon: Layers },
   { name: 'Casting', href: '/casting', icon: Users },
-  { name: 'Committees', href: '/committees', icon: HeartHandshake }, // New Item
+  { name: 'Committees', href: '/committees', icon: HeartHandshake },
 ];
 
 export default function ResponsiveNav() {
   const pathname = usePathname();
+
+  // --- THE FIX STARTS HERE ---
+  // If we are on the Dashboard (/) or Login page, hide the sidebar completely.
+  if (pathname === "/" || pathname === "/login") {
+    return null;
+  }
+  // --- THE FIX ENDS HERE ---
 
   return (
     <>
       {/* --- DESKTOP SIDEBAR (Hidden on Mobile) --- */}
       <aside className="hidden md:flex flex-col w-20 lg:w-64 bg-zinc-900 border-r border-white/5 h-screen shrink-0">
         <div className="p-6">
-          {/* Renamed to reflect broader scope */}
           <h1 className="text-xl font-black italic uppercase text-blue-500 hidden lg:block">Production Deck</h1>
           <h1 className="text-xl font-black italic uppercase text-blue-500 lg:hidden">PD</h1>
         </div>
@@ -41,6 +47,7 @@ export default function ResponsiveNav() {
         </nav>
 
         <div className="p-4 border-t border-white/5">
+            {/* Note: I changed href to /login here since that seems to be your auth page */}
            <Link href="/login" className="flex items-center gap-4 p-3 text-zinc-500 hover:text-red-400 transition-colors">
               <LogOut size={20} />
               <span className="font-bold hidden lg:block text-xs uppercase tracking-widest">Logout</span>
@@ -48,7 +55,7 @@ export default function ResponsiveNav() {
         </div>
       </aside>
 
-      {/* --- MOBILE BOTTOM NAV (Visible only on small screens) --- */}
+      {/* --- MOBILE BOTTOM NAV --- */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-zinc-950 border-t border-white/10 z-[100] flex justify-around items-center px-2 pb-safe">
         {NAV_ITEMS.map((item) => {
             const isActive = pathname.startsWith(item.href);
@@ -61,7 +68,6 @@ export default function ResponsiveNav() {
                 <div className={`p-1.5 rounded-full ${isActive ? 'bg-blue-500/20' : 'bg-transparent'}`}>
                     <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                 </div>
-                {/* Text gets smaller to fit 4 items */}
                 <span className="text-[8px] font-bold uppercase tracking-wide">{item.name}</span>
               </Link>
             );
