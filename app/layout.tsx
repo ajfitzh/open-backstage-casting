@@ -1,4 +1,4 @@
-import GlobalHeader from '@/components/GlobalHeader'; // Import it
+import GlobalHeader from './components/GlobalHeader'; // Import it
 import './globals.css';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

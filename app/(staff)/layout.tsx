@@ -1,4 +1,4 @@
-import StaffSidebar from '@/components/StaffSidebar'; // A NEW, simpler sidebar
+import StaffSidebar from '../components/StaffSidebar'; // A NEW, simpler sidebar
 
 export default function StaffLayout({ children }: { children: React.ReactNode }) {
   return (
