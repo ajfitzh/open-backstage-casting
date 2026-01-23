@@ -1,5 +1,5 @@
 import { CastingProvider } from '@/lib/CastingContext';
-import Sidebar from './components/Sidebar'; // Import the component we just made
+import Sidebar from './components/Sidebar';
 import './globals.css';
 
 export const metadata = {
@@ -16,7 +16,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         <CastingProvider>
           <Sidebar />
-          <main className="flex-1 overflow-auto bg-zinc-900/50">
+          {/* REMOVED bg-zinc-900/50 so pages can set their own specific darkness */}
+          <main className="flex-1 overflow-auto">
             {children}
           </main>
         </CastingProvider>
