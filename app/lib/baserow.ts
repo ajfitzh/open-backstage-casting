@@ -170,6 +170,69 @@ export async function getPeople() {
   const data = await res.json();
   return data.results;
 }
+// lib/baserow.ts
+
+export async function getComplianceData() {
+  try {
+    // 1. Fetch Auditions (Table 630) - Contains the Headshots & Checkboxes
+    const auditionsRes = await fetch(`${BASE_URL}/api/database/rows/table/630/?user_field_names=true&size=200`, {
+      headers: HEADERS, 
+      cache: "no-store" 
+    });
+    
+    // 2. Fetch Assignments (Table 603) - Knows who is actually in the cast
+    const assignmentsRes = await fetch(`${BASE_URL}/api/database/rows/table/603/?user_field_names=true&size=200`, {
+      headers: HEADERS, 
+      cache: "no-store" 
+    });
+
+    if (!auditionsRes.ok || !assignmentsRes.ok) return [];
+
+    const auditions = (await auditionsRes.json()).results;
+    const assignments = (await assignmentsRes.json()).results;
+    const nameMap = await getPersonNameMap();
+
+    // 3. Create a "Set" of Person IDs who are Cast
+    // We look at the 'Person' column in Assignments
+    const castPersonIds = new Set();
+    assignments.forEach((a: any) => {
+      if (a.Person && a.Person.length > 0) {
+        castPersonIds.add(a.Person[0].id);
+      }
+    });
+
+    // 4. Filter Auditions to ONLY show Cast Members
+    const castAuditions = auditions.filter((row: any) => {
+      const personId = row.Performer?.[0]?.id;
+      return personId && castPersonIds.has(personId);
+    });
+
+    // 5. Map to your Dashboard format
+    return castAuditions.map((row: any) => {
+      // Resolve Name
+      const personId = row.Performer?.[0]?.id;
+      const performerName = nameMap.get(personId) || "Unknown Student";
+
+      // AUTO-DETECT: If the 'Headshot' file column has data, mark it true!
+      const hasFile = row['Headshot'] && row['Headshot'].length > 0;
+      const manualCheck = row['Headshot Received']?.value || false;
+
+      return {
+        id: row.id, // Keep the Audition ID for the checkbox PATCH updates
+        performerName: performerName,
+        // Safety checks (?.) prevent crashes if columns are missing
+        signedAgreement: row['Signed Agreement']?.value || false,
+        paidFees: row['Paid Fees']?.value || false,
+        measurementsTaken: row['Measurements Taken']?.value || false,
+        headshotSubmitted: hasFile || manualCheck, // True if file exists OR box is checked
+      };
+    });
+
+  } catch (error) {
+    console.error("Compliance Fetch Error:", error);
+    return [];
+  }
+}
 
 export async function getCommitteePreferences() {
   const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/?user_field_names=true&size=200`, {
