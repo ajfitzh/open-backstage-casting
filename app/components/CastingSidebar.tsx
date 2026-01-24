@@ -1,7 +1,7 @@
 "use client";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Mic2, Layers, LogOut, HeartHandshake } from 'lucide-react';
+import { Users, Mic2, Layers, LogOut, HeartHandshake, Calendar } from 'lucide-react';
 
 const NAV_ITEMS = [
   { name: 'Auditions', href: '/auditions', icon: Mic2 },

@@ -7,6 +7,6 @@ export default function CastingLayout({ children }: { children: React.ReactNode 
       <main className="flex-1 overflow-auto bg-zinc-900/50 relative">
         {children}
       </main>
-    </div>
+    </div>  
   );
 }

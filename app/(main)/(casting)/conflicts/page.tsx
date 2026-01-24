@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 
 export default function ConflictPage() {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>({ scenes: [], roles: [], assignments: [], people: [] });
+  const [data, setData] = useState<unknown>({ scenes: [], roles: [], assignments: [], people: [] });
 
   useEffect(() => {
     async function load() {

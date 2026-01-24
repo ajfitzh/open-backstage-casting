@@ -6,17 +6,12 @@ const nextConfig = {
     // your project has type errors.
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
-    ignoreDuringBuilds: true,
-  },
-  // Ensure images from external sources (like Baserow) work
+  // Images config
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'files.baserow.io', // Or your self-hosted domain
+        hostname: 'files.baserow.io',
         port: '',
         pathname: '/**',
       },
@@ -28,7 +23,7 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'open-backstage.org', // Add your self-hosted domain here!
+        hostname: 'open-backstage.org',
         port: '',
         pathname: '/**',
       },
