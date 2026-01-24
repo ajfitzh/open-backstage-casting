@@ -218,13 +218,15 @@ export async function getComplianceData() {
       const manualCheck = row['Headshot Received']?.value || false;
 
       return {
-        id: row.id, // Keep the Audition ID for the checkbox PATCH updates
+        id: row.id, // Keep the Audition ID for updates
         performerName: performerName,
-        // Safety checks (?.) prevent crashes if columns are missing
-        signedAgreement: row['Signed Agreement']?.value || false,
+        
+        // 👇 HERE IS THE CHANGE:
+        signedAgreement: row['Commitment to Character']?.value || false,
+        
         paidFees: row['Paid Fees']?.value || false,
         measurementsTaken: row['Measurements Taken']?.value || false,
-        headshotSubmitted: hasFile || manualCheck, // True if file exists OR box is checked
+        headshotSubmitted: hasFile || manualCheck,
       };
     });
 
