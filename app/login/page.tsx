@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, Loader2 } from 'lucide-react';
 
@@ -8,7 +8,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false); // New: Visual feedback
   const router = useRouter();
 
-const handleLogin = async (e) => {
+const handleLogin = async (e: FormEvent) => {
     e.preventDefault(); 
     if (!password) return; 
 

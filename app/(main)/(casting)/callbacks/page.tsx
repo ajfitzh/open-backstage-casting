@@ -1,15 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, Clock, Plus, Trash2, Share, Search, X, 
   Link as LinkIcon, Music, FileText,
   Loader2, Copy, UploadCloud, Eye,
   Mic, Move, Theater, Archive, EyeOff, RotateCcw, Film,
-  Star, TrendingDown
+  Star, TrendingDown, Calendar, AlertTriangle // <--- Added missing imports
 } from 'lucide-react';
-// CRITICAL: Using getAuditionees ensures names are hydrated (not IDs)
 import { getAuditionees, updateAuditionSlot, getProductionAssets, createProductionAsset } from '@/app/lib/baserow'; 
 
 // --- CONFIG ---
@@ -39,7 +38,6 @@ interface CallbackSlot {
   materialLink?: string; 
   materialName?: string; 
   assignedIds: number[];
-  // Tracks role assignment per student
   pairs?: { 
       name: string, 
       assignments: { studentId: number, role: string }[] 
@@ -94,20 +92,19 @@ const PartnerMatcher = ({
     onSave: (updatedSlot: CallbackSlot) => void, 
     onClose: () => void 
 }) => {
-    // 1. Detect Roles from Title (Simple Split)
+    // 1. Detect Roles
     const availableRoles = useMemo(() => {
-        // Split by common separators: " vs ", " & ", " / ", " and "
         const raw = slot.title.split(/ vs | & | \/ | and /i);
-        // If no split found (e.g. "General Reading"), just use "Reader"
         return raw.length > 1 ? raw.map(r => r.trim()) : ["Reader 1", "Reader 2"];
     }, [slot.title]);
 
     const [localPairs, setLocalPairs] = useState<{ name: string, assignments: { studentId: number, role: string }[] }[]>(slot.pairs || []);
-    const [unpairedIds, setUnpairedIds] = useState<number[]>([]);
-
-    useEffect(() => {
+    
+    // REFACTOR: Replaced useEffect with useMemo to avoid "Synchronous setState" warning
+    // This calculates unpairedIds on-the-fly whenever localPairs changes
+    const unpairedIds = useMemo(() => {
         const pairedSet = new Set(localPairs.flatMap(p => p.assignments.map(a => a.studentId)));
-        setUnpairedIds(slot.assignedIds.filter(id => !pairedSet.has(id)));
+        return slot.assignedIds.filter(id => !pairedSet.has(id));
     }, [slot.assignedIds, localPairs]);
 
     const addPair = () => {
@@ -118,22 +115,14 @@ const PartnerMatcher = ({
         const newPairs = [...localPairs];
         const currentPair = newPairs[pairIndex];
         
-        // Check if student is already in this pair
         const existingIdx = currentPair.assignments.findIndex(a => a.studentId === studentId);
 
         if (existingIdx >= 0) {
-            // REMOVE: Send back to tank
             currentPair.assignments.splice(existingIdx, 1);
-            setUnpairedIds([...unpairedIds, studentId]);
         } else {
-            // ADD: Assign first available role
-            // Find which roles are already taken in this pair
             const takenRoles = new Set(currentPair.assignments.map(a => a.role));
-            // Find first role NOT taken, or default to first role
             const nextRole = availableRoles.find(r => !takenRoles.has(r)) || availableRoles[0];
-            
             currentPair.assignments.push({ studentId, role: nextRole });
-            setUnpairedIds(unpairedIds.filter(id => id !== studentId));
         }
         setLocalPairs(newPairs);
     };
@@ -178,7 +167,7 @@ const PartnerMatcher = ({
                             if (!s) return null;
                             return (
                                 <div key={id} className="mb-2 p-2 bg-zinc-900 border border-white/10 rounded flex items-center gap-2 opacity-75 hover:opacity-100">
-                                    <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full object-cover" />
+                                    <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full object-cover" alt="" />
                                     <span className="text-xs font-bold text-zinc-300">{s.name}</span>
                                 </div>
                             );
@@ -190,7 +179,7 @@ const PartnerMatcher = ({
                     <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-zinc-900">
                         <div className="flex justify-between mb-4 items-center">
                             <h3 className="text-xs font-bold text-zinc-500 uppercase">Reads / Groups</h3>
-                            <button onClick={addPair} className="flex items-center gap-1 text-xs font-bold text-blue-400 uppercase hover:text-blue-300 bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-500/30"><Plus size={12}/> Add Read</button>
+                            <button onClick={addPair} title="Add Read" className="flex items-center gap-1 text-xs font-bold text-blue-400 uppercase hover:text-blue-300 bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-500/30"><Plus size={12}/> Add Read</button>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -206,11 +195,11 @@ const PartnerMatcher = ({
                                             }}
                                             className="bg-transparent font-bold text-sm text-blue-300 outline-none w-full placeholder:text-zinc-600"
                                             placeholder="Group Name"
+                                            aria-label="Group Name"
                                         />
-                                        <button onClick={() => setLocalPairs(localPairs.filter((_, i) => i !== idx))} className="text-zinc-600 hover:text-red-500"><X size={12}/></button>
+                                        <button onClick={() => setLocalPairs(localPairs.filter((_, i) => i !== idx))} className="text-zinc-600 hover:text-red-500" title="Remove Group"><X size={12}/></button>
                                     </div>
                                     
-                                    {/* ASSIGNED TO THIS PAIR */}
                                     <div className="space-y-1 mb-3 min-h-[40px]">
                                         {pair.assignments.map((assign, aIdx) => {
                                             const s = students.find(st => st.id === assign.studentId);
@@ -219,14 +208,13 @@ const PartnerMatcher = ({
                                                 <div key={assign.studentId} className="flex items-center justify-between bg-blue-600/20 border border-blue-500/30 text-blue-100 p-1.5 rounded group/item">
                                                     <div 
                                                         className="flex items-center gap-2 cursor-pointer"
-                                                        onClick={() => toggleStudentInPair(assign.studentId, idx)} // Click name to remove
+                                                        onClick={() => toggleStudentInPair(assign.studentId, idx)} 
                                                         title="Click to Remove"
                                                     >
-                                                        <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover" />
+                                                        <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover" alt="" />
                                                         <span className="text-[10px] font-bold">{s.name}</span>
                                                     </div>
                                                     
-                                                    {/* ROLE BADGE (Click to Cycle) */}
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); cycleRole(idx, aIdx); }}
                                                         className="ml-2 bg-blue-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded hover:bg-blue-400 transition-colors"
@@ -249,7 +237,7 @@ const PartnerMatcher = ({
                                                     const s = students.find(st => st.id === id);
                                                     if(!s) return null;
                                                     return (
-                                                        <button key={id} onClick={() => toggleStudentInPair(id, idx)} className="text-[8px] bg-zinc-950 border border-white/10 px-2 py-1 rounded hover:border-blue-500 hover:text-blue-400 text-zinc-400 transition-colors">
+                                                        <button key={id} onClick={() => toggleStudentInPair(id, idx)} className="text-[8px] bg-zinc-950 border border-white/10 px-2 py-1 rounded hover:border-blue-500 hover:text-blue-400 text-zinc-400 transition-colors" title={`Add ${s.name}`}>
                                                             {s.name.split(' ')[0]}
                                                         </button>
                                                     )
@@ -268,7 +256,6 @@ const PartnerMatcher = ({
 };
 
 export default function CallbackMatrixPage() {
-  // --- STATE ---
   const [students, setStudents] = useState<Student[]>([]);
   const [slots, setSlots] = useState<CallbackSlot[]>(DEFAULT_SLOTS);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -283,33 +270,31 @@ export default function CallbackMatrixPage() {
   const [inspectingStudent, setInspectingStudent] = useState<Student | null>(null);
   const [activeProductionId, setActiveProductionId] = useState<number | null>(null);
   
-  // Sorting & Filtering
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
   const [sortMode, setSortMode] = useState<'overall' | 'vocal' | 'acting' | 'dance' | 'bottom'>('overall');
 
-  // Modals
   const [isAddingSlot, setIsAddingSlot] = useState(false);
   const [newSlotData, setNewSlotData] = useState({ time: "02:00 PM", title: "", link: "", label: "" });
   const [pairingSlotId, setPairingSlotId] = useState<string | null>(null);
 
-  // --- HELPERS ---
-  const safeString = (val: any): string => {
+  // --- HELPERS (Memoized to satisfy linter) ---
+  const safeString = useCallback((val: any): string => {
     if (val === null || val === undefined) return "";
     if (typeof val === 'string') return val;
     if (typeof val === 'number') return String(val);
     if (Array.isArray(val)) return val.length > 0 ? safeString(val[0].value || val[0]) : "";
     if (typeof val === 'object') return val.value ? safeString(val.value) : "";
     return String(val);
-  };
+  }, []);
 
-  const safeNumber = (val: any): number => {
+  const safeNumber = useCallback((val: any): number => {
       const s = safeString(val);
       const n = parseFloat(s);
       return isNaN(n) ? 0 : n;
-  };
+  }, [safeString]);
 
-  // --- SAFETY NET: LOAD DRAFT ---
+  // --- SAFETY NETS ---
   useEffect(() => {
     const saved = localStorage.getItem('draft_callback_slots');
     if (saved) {
@@ -325,7 +310,6 @@ export default function CallbackMatrixPage() {
     }
   }, []);
 
-  // --- SAFETY NET: SAVE DRAFT ---
   useEffect(() => {
     if (slots.length > 0 && JSON.stringify(slots) !== JSON.stringify(DEFAULT_SLOTS)) {
         localStorage.setItem('draft_callback_slots', JSON.stringify(slots));
@@ -342,8 +326,8 @@ export default function CallbackMatrixPage() {
       setActiveProductionId(activeShowId);
 
       if (activeShowId) {
-          const savedHidden = localStorage.getItem(`hiddenCallbacks_${activeShowId}`);
-          if (savedHidden) setHiddenIds(new Set(JSON.parse(savedHidden)));
+         const savedHidden = localStorage.getItem(`hiddenCallbacks_${activeShowId}`);
+         if (savedHidden) setHiddenIds(new Set(JSON.parse(savedHidden)));
       }
 
       const cleanData = rows
@@ -351,7 +335,6 @@ export default function CallbackMatrixPage() {
             const prodArray = r.Production || [];
             if (!prodArray.length) return false;
             if (activeShowId && prodArray.some((p: any) => p.id === activeShowId)) return true;
-            // Fallback for demo
             return (prodArray[0]?.value || "").toLowerCase().includes("mermaid");
         })
         .map((r: any) => ({
@@ -378,17 +361,17 @@ export default function CallbackMatrixPage() {
       setStudents(cleanData);
 
       if (activeShowId) {
-          try {
-              const remoteAssets = await getProductionAssets(activeShowId);
-              setAssets(remoteAssets.map((a: any) => ({
-                  id: a.id, name: safeString(a.Name), url: a.Link, type: safeString(a.Type?.value || a.Type) as any
-              })));
-          } catch (e) { console.error(e); }
+         try {
+             const remoteAssets = await getProductionAssets(activeShowId);
+             setAssets(remoteAssets.map((a: any) => ({
+                 id: a.id, name: safeString(a.Name), url: a.Link, type: safeString(a.Type?.value || a.Type) as any
+             })));
+         } catch (e) { console.error(e); }
       }
       setLoading(false);
     }
     load();
-  }, []);
+  }, [safeString, safeNumber]);
 
   // --- ACTIONS ---
   const toggleHideStudent = (e: React.MouseEvent, id: number) => {
@@ -473,9 +456,7 @@ export default function CallbackMatrixPage() {
           slot.assignedIds.forEach(id => {
               let entry = `${slot.time}: ${slot.title}`;
               if (slot.materialLink) entry += ` (Link: ${slot.materialLink})`;
-              // UPDATED: Include Role Info
               if (slot.pairs && slot.pairs.length > 0) {
-                  // Find assignment
                   const pair = slot.pairs.find(p => p.assignments.some(a => a.studentId === id));
                   if (pair) {
                       const assignment = pair.assignments.find(a => a.studentId === id);
@@ -493,7 +474,6 @@ export default function CallbackMatrixPage() {
           count++;
       }
       
-      // Clear safety net on success
       localStorage.removeItem('draft_callback_slots');
       
       alert(`Published ${count} schedules!`);
@@ -559,13 +539,10 @@ export default function CallbackMatrixPage() {
                     <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{benchList.length}</span>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setShowHidden(!showHidden)} className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`}>
+                    <button onClick={() => setShowHidden(!showHidden)} className={`p-2 rounded-lg transition-colors group relative ${showHidden ? 'bg-amber-900/30 text-amber-500' : 'text-zinc-600 hover:text-zinc-400'}`} title={showHidden ? "Hide Archived" : "Show Archived"}>
                         {showHidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                        <span className="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50">
-                            {showHidden ? "Hide Archived" : "Show Archived"}
-                        </span>
                     </button>
-                    <button onClick={() => setLeftPanelOpen(false)} className="md:hidden text-zinc-500"><X size={16}/></button>
+                    <button onClick={() => setLeftPanelOpen(false)} className="md:hidden text-zinc-500" title="Close Panel"><X size={16}/></button>
                 </div>
             </div>
             
@@ -578,9 +555,8 @@ export default function CallbackMatrixPage() {
                     { id: 'dance', icon: Move, label: "Top Dance" },
                     { id: 'bottom', icon: TrendingDown, label: "Lowest Scores" },
                 ].map((btn) => (
-                    <button key={btn.id} onClick={() => setSortMode(btn.id as any)} className={`group relative flex-1 py-2 rounded flex justify-center transition-colors ${sortMode === btn.id ? 'bg-blue-600 text-white' : btn.id === 'bottom' ? 'bg-zinc-900 text-red-400 hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800'}`}>
+                    <button key={btn.id} onClick={() => setSortMode(btn.id as any)} title={btn.label} className={`group relative flex-1 py-2 rounded flex justify-center transition-colors ${sortMode === btn.id ? 'bg-blue-600 text-white' : btn.id === 'bottom' ? 'bg-zinc-900 text-red-400 hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800'}`}>
                         <btn.icon size={14} />
-                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">{btn.label}</span>
                     </button>
                 ))}
             </div>
@@ -592,7 +568,7 @@ export default function CallbackMatrixPage() {
             <div className="p-2 border-b border-white/5 shrink-0">
                 <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input value={search} onChange={(e) => setSearch(e.target.value)} className="bg-zinc-950 rounded p-2 pl-9 text-xs w-full border border-white/5 focus:border-blue-500 outline-none" placeholder="Search..." />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} className="bg-zinc-950 rounded p-2 pl-9 text-xs w-full border border-white/5 focus:border-blue-500 outline-none" placeholder="Search..." aria-label="Search Bench" />
                 </div>
             </div>
 
@@ -604,7 +580,7 @@ export default function CallbackMatrixPage() {
                         onClick={() => { if (window.innerWidth < 768) { setActiveMobileStudent(student); setLeftPanelOpen(false); }}}
                         className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-grab active:cursor-grabbing border relative transition-colors ${activeMobileStudent?.id === student.id ? 'bg-blue-900/20 border-blue-500/30' : 'border-transparent'} ${hiddenIds.has(student.id) ? 'opacity-50 grayscale' : ''}`}
                     >
-                        <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-8 h-8 rounded-full object-cover bg-zinc-800" />
+                        <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-8 h-8 rounded-full object-cover bg-zinc-800" alt="" />
                         <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold truncate">{student.name}</p>
                             <div className="flex gap-2 text-[10px] text-zinc-500">
@@ -612,13 +588,11 @@ export default function CallbackMatrixPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-1">
-                            <button onClick={(e) => toggleHideStudent(e, student.id)} className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`}>
+                            <button onClick={(e) => toggleHideStudent(e, student.id)} className={`group/btn relative p-1.5 rounded-full transition-colors ${hiddenIds.has(student.id) ? 'text-amber-500 bg-amber-900/20' : 'text-zinc-600 hover:text-white hover:bg-white/10'}`} title={hiddenIds.has(student.id) ? "Restore" : "Archive"}>
                                 {hiddenIds.has(student.id) ? <RotateCcw size={14} /> : <Archive size={14} />}
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">{hiddenIds.has(student.id) ? "Restore to Bench" : "Archive (Hide)"}</span>
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }} className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors">
+                            <button onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }} className="group/btn relative p-1.5 rounded-full text-zinc-600 hover:text-white hover:bg-white/10 transition-colors" title="Inspect">
                                 <Eye size={14} />
-                                <span className="absolute bottom-full right-0 mb-2 hidden group-hover/btn:block bg-black border border-white/10 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap z-50 shadow-xl">View Profile</span>
                             </button>
                         </div>
                     </div>
@@ -630,7 +604,7 @@ export default function CallbackMatrixPage() {
         <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
             <header className="h-16 border-b border-white/10 bg-zinc-900/50 flex items-center justify-between px-6 shrink-0">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => setLeftPanelOpen(!leftPanelOpen)} className={`p-2 rounded-lg ${!leftPanelOpen ? 'bg-blue-600' : 'bg-zinc-800'}`}><Users size={18} /></button>
+                    <button onClick={() => setLeftPanelOpen(!leftPanelOpen)} className={`p-2 rounded-lg ${!leftPanelOpen ? 'bg-blue-600' : 'bg-zinc-800'}`} title="Toggle Bench"><Users size={18} /></button>
                     <div><h1 className="text-lg font-black uppercase italic tracking-tighter">Callback Matrix</h1></div>
                 </div>
                 <div className="flex gap-2">
@@ -678,7 +652,7 @@ export default function CallbackMatrixPage() {
                                                         const s = students.find(st => st.id === a.studentId);
                                                         return s ? (
                                                             <div key={a.studentId} className="relative group/face">
-                                                                <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full border border-black object-cover" title={`${s.name} (${a.role})`} />
+                                                                <img src={s.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-6 h-6 rounded-full border border-black object-cover" title={`${s.name} (${a.role})`} alt={s.name} />
                                                                 <span className="absolute bottom-full mb-1 hidden group-hover/face:block bg-black text-white text-[8px] px-1 py-0.5 rounded whitespace-nowrap">{a.role}</span>
                                                             </div>
                                                         ) : null;
@@ -695,9 +669,9 @@ export default function CallbackMatrixPage() {
                                             if (!student) return null;
                                             return (
                                                 <div key={id} onClick={(e) => { e.stopPropagation(); setInspectingStudent(student); }} className="flex items-center gap-2 bg-zinc-800 border border-white/5 pl-1 pr-2 py-1 rounded-full cursor-pointer hover:bg-zinc-700">
-                                                    <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-5 h-5 rounded-full object-cover" />
+                                                    <img src={student.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-5 h-5 rounded-full object-cover" alt="" />
                                                     <span className="text-xs font-bold text-zinc-300">{student.name}</span>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleUnassign(id, slot.id); }} className="ml-1 text-zinc-600 hover:text-red-400"><X size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleUnassign(id, slot.id); }} className="ml-1 text-zinc-600 hover:text-red-400" title="Remove"><X size={12} /></button>
                                                 </div>
                                             )
                                         })}
@@ -708,7 +682,7 @@ export default function CallbackMatrixPage() {
                             {/* SLOT ACTIONS */}
                             <div className="flex flex-col gap-2 items-end">
                                 <button onClick={(e) => { e.stopPropagation(); setPairingSlotId(slot.id); }} className="text-zinc-500 hover:text-blue-400 p-1.5 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors" title="Manage Pairs / Reads"><Users size={16} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); handleRemoveSlot(slot.id); }} className="text-zinc-600 hover:text-red-500 p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleRemoveSlot(slot.id); }} className="text-zinc-600 hover:text-red-500 p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Delete Slot"><Trash2 size={16} /></button>
                             </div>
                         </div>
                     </div>
@@ -720,7 +694,7 @@ export default function CallbackMatrixPage() {
         <aside className={`${rightPanelOpen ? 'w-[300px]' : 'w-0'} bg-zinc-900 border-l border-white/5 transition-all duration-300 flex flex-col shrink-0 overflow-hidden`}>
              <div className="p-4 border-b border-white/5 bg-zinc-900 shrink-0 flex justify-between items-center">
                 <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><UploadCloud size={16} className="text-blue-500"/> Library</h2>
-                <button onClick={() => setRightPanelOpen(false)} className="md:hidden"><X size={16}/></button>
+                <button onClick={() => setRightPanelOpen(false)} className="md:hidden" title="Close Library"><X size={16}/></button>
             </div>
             <div className="p-4 shrink-0 border-b border-white/5">
                 <label className={`w-full h-24 border-2 border-dashed border-zinc-700 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-white/5 transition-colors ${isUploading ? 'opacity-50 cursor-wait' : ''}`}>
@@ -775,7 +749,7 @@ export default function CallbackMatrixPage() {
             </div>
         )}
 
-        {/* MODAL: PARTNER MATCHER (With Role Logic) */}
+        {/* MODAL: PARTNER MATCHER */}
         {pairingSlotId && (
             <PartnerMatcher 
                 slot={slots.find(s => s.id === pairingSlotId)!}
@@ -792,7 +766,7 @@ export default function CallbackMatrixPage() {
              <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInspectingStudent(null)}>
                  <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                      <div className="p-6 pb-4 border-b border-white/5 flex gap-4 items-start">
-                         <img src={inspectingStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-20 h-20 rounded-xl object-cover bg-zinc-800" />
+                         <img src={inspectingStudent.avatar || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-20 h-20 rounded-xl object-cover bg-zinc-800" alt={inspectingStudent.name} />
                          <div className="flex-1">
                              <h2 className="text-2xl font-black uppercase italic leading-none">{inspectingStudent.name}</h2>
                              <p className="text-zinc-500 text-xs font-bold uppercase mt-1">Age {inspectingStudent.age} • {inspectingStudent.gender}</p>
@@ -802,7 +776,7 @@ export default function CallbackMatrixPage() {
                                 <div className="bg-emerald-900/30 text-emerald-300 px-3 py-1 rounded text-xs font-bold">Act: {inspectingStudent.breakdown.acting || '-'}</div>
                              </div>
                          </div>
-                         <button onClick={() => setInspectingStudent(null)} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400"><X size={20}/></button>
+                         <button onClick={() => setInspectingStudent(null)} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400" title="Close"><X size={20}/></button>
                      </div>
                      <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
                         <div className="bg-red-900/10 border border-red-500/20 p-4 rounded-xl">

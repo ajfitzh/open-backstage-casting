@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -267,7 +267,7 @@ export default function CastingPage() {
                         `}
                         title={actor.Performer}
                      >
-                        <img src={actor.Headshot} className="w-full h-full object-cover" />
+                        <img alt="Headshot" src={actor.Headshot} className="w-full h-full object-cover" />
                      </div>
                  ))}
             </div>

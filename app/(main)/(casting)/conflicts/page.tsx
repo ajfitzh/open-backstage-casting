@@ -5,9 +5,16 @@ import { getScenes, getRoles, getAssignments, getPeople } from "@/app/lib/basero
 import ConflictMatrix from "@/app/components/ConflictMatrix";
 import { Loader2 } from "lucide-react";
 
+interface ConflictData {
+  scenes: any[];
+  roles: any[];
+  assignments: any[];
+  people: any[];
+}
+
 export default function ConflictPage() {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<unknown>({ scenes: [], roles: [], assignments: [], people: [] });
+  const [data, setData] = useState<ConflictData>({ scenes: [], roles: [], assignments: [], people: [] });
 
   useEffect(() => {
     async function load() {

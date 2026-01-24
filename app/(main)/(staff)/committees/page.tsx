@@ -277,13 +277,15 @@ export default function CommitteeDashboard() {
                                                 
                                                 {p.notes && (
                                                     <div className="mb-3 bg-blue-900/10 border border-blue-500/20 p-2 rounded text-[10px] text-blue-200 italic">
-                                                        "{p.notes}"
+                                                        &apos;{p.notes}&apos;
+                                                        &quot;{p.notes}&quot;
                                                     </div>
                                                 )}
 
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] uppercase font-bold text-zinc-500">Move to:</span>
                                                     <select 
+                                                        aria-label="Move to committee"
                                                         className="bg-zinc-800 border border-zinc-700 rounded text-xs text-white p-1 outline-none focus:border-blue-500"
                                                         value={committee}
                                                         onChange={(e) => {

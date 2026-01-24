@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Users, Filter, X, Check, Ruler, Scale, AlertOctagon, Trophy } from "lucide-react";
-import { usePeople } from "/components/PeopleProvider";
 import { Role } from "@/lib/types"; 
+import { usePeople } from "@/lib/PeopleContext";
 
 // --- 🛠️ UTILITIES ---
 // Keeps the component clean by moving data extraction logic out
@@ -96,7 +96,7 @@ function RoleComparisonCard({
                       <th key={actor.id} className={`p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col ${isSelected ? 'bg-purple-900/10' : ''}`}>
                          {/* HEADSHOT & ACTIONS */}
                          <div className={`relative aspect-[3/4] rounded-lg overflow-hidden border shadow-lg mb-2 transition-all ${isSelected ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-white/10'}`}>
-                            <img src={safeVal(actor.Headshot, "https://placehold.co/400x600/111/444?text=?")} className="w-full h-full object-cover" />
+                            <img title="headshot" src={safeVal(actor.Headshot, "https://placehold.co/400x600/111/444?text=?")} className="w-full h-full object-cover" />
                             <button onClick={() => onRemoveActor(String(role.id), actor.id)} className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/col:opacity-100 transition-opacity"><X size={14} /></button>
                             
                             {/* SELECT BUTTON */}

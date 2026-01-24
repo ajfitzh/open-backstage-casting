@@ -1,7 +1,6 @@
-/* eslint-disable react-hooks/rules-of-hooks */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
-// NOTE: We switched getAuditionSlots to getAuditionees to fix the name issue
+
 import { getAuditionees, updateAuditionSlot, submitAudition } from "@/app/lib/baserow";
 import React, { useState, useEffect, useMemo } from "react";
 import {
@@ -11,11 +10,37 @@ import {
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 
-const TARGET_PRODUCTION_STRING = "The Little Mermaid, Jr. - Spring - 2025-2026";
+// --- TYPES ---
+interface Performer {
+  id: number;
+  originalId: number;
+  performerId?: number;
+  name: string;
+  avatar: string | null;
+  age: string;
+  video: string | null;
+  height: string;
+  vocalRange: string;
+  dob: string;
+  conflicts: string;
+  tenure: string;
+  pastRoles: string | string[];
+  song: string;
+  monologue: string;
+  timeSlot: string;
+  session: AuditionSession;
+  vocal: number;
+  acting: number;
+  dance: number;
+  presence: number;
+  actingNotes: string;
+  musicNotes: string;
+  choreoNotes: string;
+  dropInNotes: string;
+  adminNotes: string;
+  isWalkIn: boolean;
+}
 
-/* =====================
-   Types & Config
-===================== */
 type AuditionSession = "Thursday" | "Friday" | "Video/Remote" | "Walk-In";
 type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 
@@ -43,6 +68,7 @@ const RubricSlider = ({ label, val, setVal, disabled }: { label: string, val: nu
       type="range" min="0" max="5" step="1" value={val} 
       onChange={(e) => setVal(Number(e.target.value))} 
       className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+      aria-label={`Score for ${label}`} // FIX: Accessibility Label
     />
     <div className="flex justify-between text-[9px] font-bold uppercase text-zinc-600 px-1">
       <span>N/A</span>
@@ -66,11 +92,11 @@ export default function AuditionsPage() {
   // App State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSession, setActiveSession] = useState<AuditionSession>("Thursday");
-  const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
-  const [inspectingActor, setInspectingActor] = useState<any | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Performer | null>(null);
+  const [inspectingActor, setInspectingActor] = useState<Performer | null>(null);
 
   // Data
-  const [scheduledPerformers, setScheduledPerformers] = useState<any[]>([]);
+  const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>([]);
   const [allStudents, setAllStudents] = useState<any[]>([]); 
   const [grades, setGrades] = useState<Record<number, any>>({});
   
@@ -103,23 +129,15 @@ export default function AuditionsPage() {
       try {
         // 1. Fetch raw data
         const slots = await getAuditionees();
-        console.log(`📦 Raw Auditions Fetched: ${slots.length}`, slots[0]); // Log first item to see structure
-
         const activeShowId = localStorage.getItem('activeShowId'); 
-        console.log(`🎭 Active Show ID from Storage:`, activeShowId);
 
         // 2. Filter with Logging
         const showAuditions = slots.filter((row: any) => {
           const prodArray = row.Production || [];
           
-          // Debugging specific rows
-          if (!prodArray.length) {
-             console.warn(`⚠️ Row ${row.id} has no Production linked.`);
-             return false;
-          }
+          if (!prodArray.length) return false;
 
           // CHECK 1: Local Storage Match (Most Reliable)
-          // We check equality loosely (==) to catch string "5" vs number 5
           if (activeShowId && prodArray.some((p: any) => p.id == activeShowId)) {
               return true;
           }
@@ -127,22 +145,12 @@ export default function AuditionsPage() {
           // CHECK 2: Fallback String Match
           const prodName = (prodArray[0]?.value || "").toString().toLowerCase();
           const isMermaid = prodName.includes("mermaid");
-          
-          // CHECK 3: Safety Net - If the "Value" is just a number (e.g. "5"), assume it's the right show for now 
-          // (REMOVE THIS later once you fix the Primary Field in Baserow)
           const isJustID = !isNaN(Number(prodName)); 
-
-          // Log failures to help you debug
-          if (!isMermaid && !isJustID) {
-              console.log(`❌ Row ${row.id} skipped. Prod Value: "${prodName}"`);
-          }
 
           return isMermaid || isJustID; 
         });
 
         console.log(`✅ Filtered down to ${showAuditions.length} actors for this show.`);
-
-        // ... (Rest of your formatting logic remains the same) ...
         
         // Helper to extract baserow values
         const getLookupValue = (field: any) => {
@@ -175,8 +183,7 @@ export default function AuditionsPage() {
           return { label: count > 0 ? `Shows: ${count}` : "First Show", list: roleList };
         };
 
-        const formattedSchedule = showAuditions.map((row: any) => {
-           // ... (Keep your existing mapping logic here) ...
+        const formattedSchedule: Performer[] = showAuditions.map((row: any) => {
            const rawDate = row.Date;
            let displayTime = "TBD";
            let session: AuditionSession = "Video/Remote";
@@ -208,7 +215,7 @@ export default function AuditionsPage() {
 
            return {
              id: row.id,
-             originalId: row.id, // Ensure this exists for saving
+             originalId: row.id, 
              performerId: row.Performer?.[0]?.id,
              name: Array.isArray(row.Performer) ? row.Performer[0]?.value : (row.Performer || "Unknown"),
              avatar: headshotUrl,
@@ -255,7 +262,8 @@ export default function AuditionsPage() {
 
     loadData();
   }, [isReady]);
-const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
+
+  const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
 
     setGrades(prev => ({
@@ -280,11 +288,18 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
     }
     
     updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
-};
+  };
 
   /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;
+    
+    // Capture stable values to avoid "Object is possibly null" and race conditions
+    const personId = selectedPerson.id;
+    const originalId = selectedPerson.originalId;
+    const isWalkIn = selectedPerson.isWalkIn;
+    const scoresToSave = { ...currentScores };
+
     const activeShowId = localStorage.getItem('activeShowId');
 
     let noteField = "";
@@ -297,41 +312,44 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
     }
 
     setGrades((prev) => {
-        const existingData = prev[selectedPerson.id] || {};
+        const existingData = prev[personId] || {};
         return {
             ...prev,
-            [selectedPerson.id]: {
+            [personId]: {
                 ...existingData,        
-                ...currentScores,       
-                [noteField]: currentScores.notes 
+                ...scoresToSave,       
+                [noteField]: scoresToSave.notes 
             }
         };
     });
 
     try {
       const payload: any = {
-          "Vocal Score": currentScores.vocal > 0 ? currentScores.vocal : null,
-          "Acting Score": currentScores.acting > 0 ? currentScores.acting : null,
-          "Dance Score": currentScores.dance > 0 ? currentScores.dance : null,
-          "Stage Presence Score": currentScores.presence > 0 ? currentScores.presence : null,
+          "Vocal Score": scoresToSave.vocal > 0 ? scoresToSave.vocal : null,
+          "Acting Score": scoresToSave.acting > 0 ? scoresToSave.acting : null,
+          "Dance Score": scoresToSave.dance > 0 ? scoresToSave.dance : null,
+          "Stage Presence Score": scoresToSave.presence > 0 ? scoresToSave.presence : null,
       };
 
       switch (judgeRole) {
-          case "Director": payload["Acting Notes"] = currentScores.notes; break;
-          case "Music": payload["Music Notes"] = currentScores.notes; break;
-          case "Choreographer": payload["Choreography Notes"] = currentScores.notes; break;
-          case "Drop-In": payload["Drop-In Notes"] = currentScores.notes; break;
-          case "Admin": payload["Admin Notes"] = currentScores.notes; break;
+          case "Director": payload["Acting Notes"] = scoresToSave.notes; break;
+          case "Music": payload["Music Notes"] = scoresToSave.notes; break;
+          case "Choreographer": payload["Choreography Notes"] = scoresToSave.notes; break;
+          case "Drop-In": payload["Drop-In Notes"] = scoresToSave.notes; break;
+          case "Admin": payload["Admin Notes"] = scoresToSave.notes; break;
       }
 
-      if (selectedPerson.isWalkIn) {
+      if (isWalkIn) {
         const productionId = Number(activeShowId) || 94; 
-        await submitAudition(selectedPerson.originalId, productionId, payload);
+        await submitAudition(originalId, productionId, payload);
         alert("Walk-In Created!");
       } else {
-        await updateAuditionSlot(selectedPerson.id, payload);
+        await updateAuditionSlot(personId, payload);
       }
-      setSelectedPerson(null);
+      
+      // Only close if the user hasn't selected someone else in the meantime
+      setSelectedPerson((current) => (current?.id === personId ? null : current));
+      
     } catch (err) {
       console.error(err);
       alert("Save failed! Check connection.");
@@ -361,10 +379,18 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
       return allStudents
         .filter(s => s["Full Name"]?.toLowerCase().includes(searchQuery.toLowerCase()))
         .map(s => ({
-          id: `walkin-${s.id}`, originalId: s.id, name: s["Full Name"],
-          avatar: s.Headshot?.[0]?.url || null, age: s.Age,
-          timeSlot: "WALK-IN", session: "Walk-In", isWalkIn: true,
-          vocal: 0, acting: 0, dance: 0, presence: 0, notes: "" 
+          id: -1, // Placeholder ID
+          originalId: s.id, 
+          name: s["Full Name"],
+          avatar: s.Headshot?.[0]?.url || null, 
+          age: s.Age,
+          timeSlot: "WALK-IN", 
+          session: "Walk-In" as AuditionSession, 
+          isWalkIn: true,
+          vocal: 0, acting: 0, dance: 0, presence: 0, 
+          actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
+          // Fill rest with dummy data for types
+          height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null
         }));
     }
     return scheduledPerformers.filter((p) => {
@@ -376,12 +402,12 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
 
   const grouped = useMemo(() => {
     if (activeSession === "Walk-In") return { "Walk-In Results": visibleList };
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, Performer[]> = {};
     visibleList.forEach((p) => {
       if (!groups[p.timeSlot]) groups[p.timeSlot] = [];
       groups[p.timeSlot].push(p);
     });
-    return Object.keys(groups).sort().reduce((acc, key) => { acc[key] = groups[key]; return acc; }, {} as Record<string, any[]>);
+    return Object.keys(groups).sort().reduce((acc, key) => { acc[key] = groups[key]; return acc; }, {} as Record<string, Performer[]>);
   }, [visibleList, activeSession]);
 
 
@@ -544,16 +570,24 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
                           <button
                               onClick={(e) => {
                                   e.stopPropagation();
-                                  window.open(person.video, "_blank");
+                                  window.open(person.video!, "_blank");
                               }}
                               className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30 shrink-0"
                               title="Watch Audition"
+                              aria-label="Watch Audition"
                           >
                               <PlayCircle size={18} />
                           </button>
                       )}
                       
-                      <button onClick={() => setInspectingActor(person)} className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white shrink-0" title="View Profile"><User size={18} /></button>
+                      <button 
+                        onClick={() => setInspectingActor(person)} 
+                        className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white shrink-0" 
+                        title="View Profile"
+                        aria-label="View Profile"
+                      >
+                        <User size={18} />
+                      </button>
                   </div>
                 ))}
               </div>
@@ -564,8 +598,8 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
         {/* SCORING SIDEBAR */}
         {selectedPerson && (
           <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
-             <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
-               <div className="flex justify-between items-start mb-4">
+              <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
+                <div className="flex justify-between items-start mb-4">
                   <div className="flex gap-4">
                     <div className="w-20 h-20 rounded-2xl bg-zinc-800 overflow-hidden shadow-inner border border-white/10 shrink-0">
                       {selectedPerson.avatar ? <img src={selectedPerson.avatar} className="w-full h-full object-cover" alt={selectedPerson.name} /> : <div className="w-full h-full flex items-center justify-center text-zinc-600"><User size={32} /></div>}
@@ -573,12 +607,12 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
                     <div>
                       <h2 className="text-2xl font-black italic uppercase leading-none tracking-tight">{selectedPerson.name}</h2>
                       <div className="flex items-center gap-2 mt-2">
-                         <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide">{selectedPerson.isWalkIn ? "Walk-In" : `Age ${selectedPerson.age}`}</span>
-                         {!selectedPerson.isWalkIn && <span className="border border-zinc-700 text-zinc-500 px-2 py-1 rounded text-[10px] font-bold uppercase">{selectedPerson.timeSlot}</span>}
+                          <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide">{selectedPerson.isWalkIn ? "Walk-In" : `Age ${selectedPerson.age}`}</span>
+                          {!selectedPerson.isWalkIn && <span className="border border-zinc-700 text-zinc-500 px-2 py-1 rounded text-[10px] font-bold uppercase">{selectedPerson.timeSlot}</span>}
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => setSelectedPerson(null)} className="text-zinc-500 hover:text-white transition-colors"><X size={24}/></button>
+                  <button onClick={() => setSelectedPerson(null)} className="text-zinc-500 hover:text-white transition-colors" aria-label="Close Panel"><X size={24}/></button>
                </div>
              </div>
 
@@ -589,7 +623,7 @@ const handleChoreoSave = (actorId: number, score: number, notes: string, videoUr
                           src={selectedPerson.video} 
                           controls 
                           className="w-full h-full object-contain"
-                          poster={selectedPerson.avatar}
+                          poster={selectedPerson.avatar || undefined}
                       />
                       <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase text-white pointer-events-none border border-white/10">
                           Audition Tape
