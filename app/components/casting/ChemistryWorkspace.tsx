@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Users, Filter, X, Check, Ruler, Scale, AlertOctagon, Trophy } from "lucide-react";
-import { usePeople } from "@/components/PeopleProvider";
+import { usePeople } from "/components/PeopleProvider";
 import { Role } from "@/lib/types"; 
 
 // --- 🛠️ UTILITIES ---
