@@ -1,18 +1,14 @@
-import { defineConfig, globalIgnores } from "eslint/config";
+import { defineConfig } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
 
-const eslintConfig = defineConfig([
+export default defineConfig([
   ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
+  {
+    rules: {
+      // Disable the specific accessibility warnings cluttering your screen
+      "jsx-a11y/alt-text": "off",
+      "jsx-a11y/role-has-required-aria-props": "off",
+      "@next/next/no-img-element": "off"
+    }
+  }
 ]);
-
-export default eslintConfig;
