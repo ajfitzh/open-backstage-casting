@@ -8,9 +8,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      {/* We set h-screen here on the body so it applies to EVERYTHING.
-         The Login Page will use this directly.
-         The Main App will fill this container via its own layout.
+      {/* This is the "Naked" layout. 
+        It provides CSS and HTML structure, but NO UI elements.
+        This allows the Login page to take over the full screen.
       */}
       <body className="bg-zinc-950 text-zinc-100 h-screen w-screen overflow-hidden">
         {children}

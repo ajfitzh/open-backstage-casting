@@ -2,13 +2,13 @@ import GlobalHeader from '@/app/components/GlobalHeader';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col h-full"> {/* Matches the parent h-screen */}
+    <div className="flex flex-col h-full w-full"> 
       
-      {/* The Top Bar - Only visible inside the App */}
+      {/* 1. The Header (Top Bar) */}
       <GlobalHeader />
 
-      {/* The Page Content */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 2. The Content Area (Fills remaining space) */}
+      <div className="flex-1 flex overflow-hidden relative">
           {children}
       </div>
 
