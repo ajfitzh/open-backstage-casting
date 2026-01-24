@@ -19,7 +19,36 @@ const TABLES = {
   ASSETS: "631" 
 };
 // app/lib/baserow.ts
+// lib/baserow.ts
 
+export async function getActiveShows() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/database/rows/table/600/?user_field_names=true&size=200`, {
+      headers: HEADERS,
+      cache: "no-store",
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    
+    // Filter for Active
+    const activeRows = data.results.filter((row: any) => row["Is Active"] === true);
+
+    return activeRows.map((row: any) => ({
+      id: row.id,
+      title: row.Title || "Untitled Show",
+      // CHECKPOINT: Ensure your Baserow column is named "Branch" or "Location"
+      // We removed the || "Main" fallback so blank data shows as blank (easier to debug)
+      location: row.Location?.value || row.Branch?.value || "Unknown Loc", 
+      type: row.Type?.value || "Main Stage",
+      status: row.Status?.value
+    }));
+  } catch (error) {
+    console.error("Failed to fetch shows:", error);
+    return [];
+  }
+}
 export async function getAssignments() {
   const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true&size=200`, {
     headers: HEADERS,

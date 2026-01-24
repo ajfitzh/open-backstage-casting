@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { getActiveProduction } from '@/app/lib/baserow'; // Assuming this import path is correct
-import { Loader2, Users, ClipboardList, Settings } from 'lucide-react'; // Added icons for the menu
+import Link from 'next/link';
+import { getActiveProduction } from '@/app/lib/baserow'; 
+import { Loader2, Users, ClipboardList, Settings, BookOpen, LayoutTemplate } from 'lucide-react'; 
 
 export default function RootPage() {
   const [loading, setLoading] = useState(true);
@@ -12,68 +13,116 @@ export default function RootPage() {
       try {
         const show = await getActiveProduction();
         if (show) {
-            // 1. Still save the ID for context
             localStorage.setItem('activeShowId', show.id.toString());
-            setShowName(show.Name || "Current Production"); // Adjust '.Name' to match your Baserow column
+            setShowName(show.Name || "Current Production"); 
         }
       } catch (e) {
         console.error("Failed to fetch show:", e);
       } finally {
-        // 2. STOP the loader, but DO NOT redirect.
         setLoading(false); 
       }
     }
     init();
   }, []);
 
-  // STATE 1: LOADING (Keep your original cool spinner)
   if (loading) {
     return (
-      <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center text-white gap-4">
+      <div className="h-full flex flex-col items-center justify-center text-white gap-4">
           <Loader2 className="animate-spin text-blue-500" size={48} />
           <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500">Loading Context...</h2>
       </div>
     );
   }
 
-  // STATE 2: THE DASHBOARD (This is what they see when loading finishes)
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-8 font-sans flex flex-col items-center">
+    // FIX: Using h-full (fits layout) and max-w-7xl (wider dashboard)
+    <div className="h-full bg-zinc-950 text-white p-6 md:p-10 font-sans flex flex-col items-center overflow-y-auto custom-scrollbar">
       
       {/* Header */}
-      <div className="max-w-4xl w-full mb-12 border-b border-zinc-800 pb-6 flex justify-between items-end">
+      <div className="max-w-7xl w-full mb-10 border-b border-zinc-800 pb-6 flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-                CYT PRODUCTION HUB
+            <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 tracking-tighter italic uppercase">
+                Open Backstage
             </h1>
-            <p className="text-zinc-400 mt-2">
-                Active Context: <span className="text-emerald-400 font-mono">{showName}</span>
+            <p className="text-zinc-400 mt-2 text-sm md:text-base font-medium">
+                Production Hub <span className="text-zinc-600 mx-2">/</span> <span className="text-emerald-400 font-mono font-bold tracking-wide">{showName}</span>
             </p>
+        </div>
+        <div className="text-xs font-mono text-zinc-500 bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800/50">
+            v1.0.4-beta
         </div>
       </div>
 
-      {/* The Menu Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl w-full">
+      {/* The Menu Grid - Wider and Responsive */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl w-full pb-12">
         
-        {/* Card 1: Link to Auditions (The page you were redirecting to) */}
-        <a 
+        {/* --- 1. CASTING (Blue) --- */}
+        <Link 
           href="/auditions" 
-          className="group block p-6 bg-zinc-900 rounded-xl border border-zinc-800 hover:border-blue-500 hover:bg-zinc-800/50 transition-all duration-200"
+          className="group relative flex flex-col p-6 bg-zinc-900 rounded-3xl border border-zinc-800 hover:border-blue-500/50 hover:bg-zinc-900/80 transition-all duration-300 hover:-translate-y-1 shadow-lg shadow-black/50"
         >
-          <div className="mb-4 p-3 bg-blue-500/10 w-fit rounded-lg text-blue-400 group-hover:text-blue-300">
-            <Users size={24} />
+          <div className="flex justify-between items-start mb-8">
+            <div className="p-4 bg-blue-500/10 w-fit rounded-2xl text-blue-400 group-hover:text-blue-300 group-hover:scale-110 transition-transform">
+                <Users size={32} />
+            </div>
+            <span className="text-[10px] font-black uppercase text-zinc-500 bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800 group-hover:border-blue-500/30 group-hover:text-blue-400">Active</span>
           </div>
-          <h2 className="text-xl font-bold mb-2 group-hover:text-blue-400">Casting & Auditions</h2>
-          <p className="text-zinc-500 text-sm">Process audition forms, manage callbacks, and build the cast list.</p>
-        </a>
+          <div className="mt-auto">
+            <h2 className="text-2xl font-bold mb-2 text-zinc-100 group-hover:text-blue-400 transition-colors">Casting</h2>
+            <p className="text-zinc-500 text-sm leading-relaxed">
+                Auditions, Callbacks, and Cast Lists.
+            </p>
+          </div>
+        </Link>
 
-        {/* Card 2: Placeholder for future tools */}
-        <div className="p-6 bg-zinc-900/40 rounded-xl border border-zinc-800/50 opacity-60 cursor-not-allowed">
-          <div className="mb-4 p-3 bg-zinc-700/20 w-fit rounded-lg text-zinc-600">
-            <ClipboardList size={24} />
+        {/* --- 2. STAFF DECK (Emerald) --- */}
+        <Link 
+          href="/committees" 
+          className="group relative flex flex-col p-6 bg-zinc-900 rounded-3xl border border-zinc-800 hover:border-emerald-500/50 hover:bg-zinc-900/80 transition-all duration-300 hover:-translate-y-1 shadow-lg shadow-black/50"
+        >
+          <div className="flex justify-between items-start mb-8">
+            <div className="p-4 bg-emerald-500/10 w-fit rounded-2xl text-emerald-400 group-hover:text-emerald-300 group-hover:scale-110 transition-transform">
+                <ClipboardList size={32} />
+            </div>
+            <span className="text-[10px] font-black uppercase text-zinc-500 bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800 group-hover:border-emerald-500/30 group-hover:text-emerald-400">Production</span>
           </div>
-          <h2 className="text-xl font-bold mb-2 text-zinc-600">Stage Management</h2>
-          <p className="text-zinc-600 text-sm">Reports and attendance tracking. (Coming Phase 2)</p>
+          <div className="mt-auto">
+            <h2 className="text-2xl font-bold mb-2 text-zinc-100 group-hover:text-emerald-400 transition-colors">Staff Deck</h2>
+            <p className="text-zinc-500 text-sm leading-relaxed">
+                Reports, Attendance, and Committees.
+            </p>
+          </div>
+        </Link>
+
+        {/* --- 3. ASSETS (Amber) --- */}
+        <div className="group relative flex flex-col p-6 bg-zinc-900/40 rounded-3xl border border-zinc-800/50 hover:border-amber-500/30 hover:bg-zinc-900/60 transition-all duration-300 cursor-not-allowed opacity-75">
+          <div className="flex justify-between items-start mb-8">
+            <div className="p-4 bg-amber-500/10 w-fit rounded-2xl text-amber-500/50 group-hover:text-amber-400 group-hover:scale-110 transition-transform">
+                <BookOpen size={32} />
+            </div>
+            <span className="text-[10px] font-black uppercase text-zinc-700 bg-zinc-950/50 px-3 py-1.5 rounded-full border border-zinc-800/50">Soon</span>
+          </div>
+          <div className="mt-auto">
+            <h2 className="text-2xl font-bold mb-2 text-zinc-500 group-hover:text-amber-500/80 transition-colors">Script & Score</h2>
+            <p className="text-zinc-600 text-sm leading-relaxed">
+                Digital scripts and rehearsal tracks.
+            </p>
+          </div>
+        </div>
+
+        {/* --- 4. SHOW SETTINGS (Zinc) --- */}
+        <div className="group relative flex flex-col p-6 bg-zinc-900/40 rounded-3xl border border-zinc-800/50 hover:border-white/20 hover:bg-zinc-900/60 transition-all duration-300 cursor-not-allowed opacity-75">
+          <div className="flex justify-between items-start mb-8">
+            <div className="p-4 bg-white/5 w-fit rounded-2xl text-zinc-500 group-hover:text-zinc-300 group-hover:scale-110 transition-transform">
+                <Settings size={32} />
+            </div>
+          </div>
+          <div className="mt-auto">
+            <h2 className="text-2xl font-bold mb-2 text-zinc-500 group-hover:text-white transition-colors">Settings</h2>
+            <p className="text-zinc-600 text-sm leading-relaxed">
+                Manage show context and users.
+            </p>
+          </div>
         </div>
 
       </div>

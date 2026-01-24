@@ -8,11 +8,13 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      {/* This is the "Naked" layout. 
-        It provides CSS and HTML structure, but NO UI elements.
-        This allows the Login page to take over the full screen.
+      {/* 1. suppressHydrationWarning: Keeps extensions like ColorZilla happy.
+        2. NO Header here: This ensures the Login page gets the full, empty screen.
       */}
-      <body className="bg-zinc-950 text-zinc-100 h-screen w-screen overflow-hidden">
+      <body 
+        className="bg-zinc-950 text-zinc-100 h-screen w-screen overflow-hidden"
+        suppressHydrationWarning={true}
+      >
         {children}
       </body>
     </html>
