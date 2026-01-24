@@ -19,7 +19,17 @@ const TABLES = {
   AUDITIONS: process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630",
   ASSETS: "631" 
 };
+// app/lib/baserow.ts
 
+export async function getAssignments() {
+  const res = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true&size=200`, {
+    headers: HEADERS,
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results;
+}
 // --- HELPER: NAME MAPPER ---
 // This function fixes the "Digital ID" issue by creating a dictionary of ID -> Name
 async function getPersonNameMap() {
