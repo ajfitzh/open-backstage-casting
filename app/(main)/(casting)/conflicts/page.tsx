@@ -5,7 +5,8 @@ import {
     getScenes,
     getRoles,
     getAssignments,
-    getPeople
+    getPeople,
+    getConflicts // <--- Make sure this is exported in baserow.ts
 } from '@/app/lib/baserow';
 import ConflictClient from '@/app/components/conflicts/ConflictClient';
 
@@ -15,9 +16,13 @@ export default async function ConflictsPage() {
   let activeId = Number(cookieStore.get('active_production_id')?.value);
   let showTitle = "Select a Production";
 
+  // Determine Active Show
   if (activeId) {
     const showData = await getShowById(activeId);
-    if (showData) showTitle = showData.Title;
+    // Safety check: getShowById might return an object or null
+    if (showData && !Array.isArray(showData)) {
+        showTitle = showData.Title;
+    }
   } else {
     const defaultShow = await getActiveProduction();
     if (defaultShow) {
@@ -26,38 +31,24 @@ export default async function ConflictsPage() {
     }
   }
 
-  // 2. Fetch Data
-  // We fetch EVERYTHING because the matrix needs to cross-reference multiple tables
-  // In a real production app, we would filter these queries by productionId on the server
-  // to save bandwidth, but for now we'll filter in the client logic we wrote.
-  const [scenes, roles, assignments, people] = await Promise.all([
-      getScenes(),
-      getRoles(),
-      getAssignments(),
-      getPeople()
+  // 2. Fetch Data (Optimized with Server-Side Filtering)
+  // passing 'activeId' tells the API to only send rows for this specific show.
+  const [scenes, roles, assignments, people, conflicts] = await Promise.all([
+      getScenes(activeId),       // ⚡ Filtered by API
+      getRoles(),                // Generic (Roles are often Master-linked)
+      getAssignments(activeId),  // ⚡ Filtered by API (Fixes 200 row limit)
+      getPeople(),               // Generic contact info
+      getConflicts(activeId)     // ⚡ Filtered by API (Table 623)
   ]);
-
-  // 3. Filter Data for Active Show (Server-Side Optimization)
-  // This keeps the Client payload lighter
-  const activeAssignments = assignments.filter((a: any) => 
-      a.Production && a.Production.some((p: any) => p.id === activeId)
-  );
-
-  const activeScenes = scenes.filter((s: any) => 
-      s.Production && s.Production.some((p: any) => p.id === activeId)
-  );
-
-  // Note: Roles & People are filtered dynamically inside the Client component 
-  // because "People" conflicts are universal (not per-show usually, unless structured that way)
-  // and Roles are linked via Blueprint logic we implemented earlier.
 
   return (
     <main className="h-screen bg-zinc-950 overflow-hidden">
       <ConflictClient 
-        scenes={activeScenes}
+        scenes={scenes}
         roles={roles}
-        assignments={activeAssignments}
+        assignments={assignments}
         people={people}
+        conflictRows={conflicts} // <--- Pass the raw conflict data here
         productionTitle={showTitle}
       />
     </main>

@@ -308,3 +308,11 @@ export async function createCastAssignment(personId: number, roleId: number, pro
     }),
   });
 }
+
+export async function getConflicts(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.CONFLICTS || "623"}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
+}
