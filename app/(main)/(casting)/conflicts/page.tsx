@@ -1,58 +1,65 @@
-"use client";
+import { cookies } from 'next/headers';
+import { 
+    getShowById, 
+    getActiveProduction,
+    getScenes,
+    getRoles,
+    getAssignments,
+    getPeople
+} from '@/app/lib/baserow';
+import ConflictClient from '@/app/components/conflicts/ConflictClient';
 
-import React, { useState, useEffect } from "react";
-import { getScenes, getRoles, getAssignments, getPeople } from "@/app/lib/baserow";
-import ConflictMatrix from "@/app/components/ConflictMatrix";
-import { Loader2 } from "lucide-react";
+export default async function ConflictsPage() {
+  // 1. Context Resolution
+  const cookieStore = await cookies();
+  let activeId = Number(cookieStore.get('active_production_id')?.value);
+  let showTitle = "Select a Production";
 
-interface ConflictData {
-  scenes: any[];
-  roles: any[];
-  assignments: any[];
-  people: any[];
-}
-
-export default function ConflictPage() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ConflictData>({ scenes: [], roles: [], assignments: [], people: [] });
-
-  useEffect(() => {
-    async function load() {
-      try {
-        // Fetch all 4 tables in parallel
-        const [scenes, roles, assignments, people] = await Promise.all([
-          getScenes(),
-          getRoles(),
-          getAssignments(),
-          getPeople()
-        ]);
-
-        setData({ scenes, roles, assignments, people });
-      } catch (e) {
-        console.error("Failed to load conflict data", e);
-      } finally {
-        setLoading(false);
-      }
+  if (activeId) {
+    const showData = await getShowById(activeId);
+    if (showData) showTitle = showData.Title;
+  } else {
+    const defaultShow = await getActiveProduction();
+    if (defaultShow) {
+      activeId = defaultShow.id;
+      showTitle = defaultShow.Title;
     }
-    load();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="h-screen bg-zinc-950 flex items-center justify-center text-white">
-        <Loader2 className="animate-spin text-red-500" size={48} />
-      </div>
-    );
   }
 
+  // 2. Fetch Data
+  // We fetch EVERYTHING because the matrix needs to cross-reference multiple tables
+  // In a real production app, we would filter these queries by productionId on the server
+  // to save bandwidth, but for now we'll filter in the client logic we wrote.
+  const [scenes, roles, assignments, people] = await Promise.all([
+      getScenes(),
+      getRoles(),
+      getAssignments(),
+      getPeople()
+  ]);
+
+  // 3. Filter Data for Active Show (Server-Side Optimization)
+  // This keeps the Client payload lighter
+  const activeAssignments = assignments.filter((a: any) => 
+      a.Production && a.Production.some((p: any) => p.id === activeId)
+  );
+
+  const activeScenes = scenes.filter((s: any) => 
+      s.Production && s.Production.some((p: any) => p.id === activeId)
+  );
+
+  // Note: Roles & People are filtered dynamically inside the Client component 
+  // because "People" conflicts are universal (not per-show usually, unless structured that way)
+  // and Roles are linked via Blueprint logic we implemented earlier.
+
   return (
-    <div className="h-screen bg-zinc-950 flex flex-col">
-      <ConflictMatrix 
-        scenes={data.scenes} 
-        roles={data.roles} 
-        assignments={data.assignments} 
-        people={data.people} 
+    <main className="h-screen bg-zinc-950 overflow-hidden">
+      <ConflictClient 
+        scenes={activeScenes}
+        roles={roles}
+        assignments={activeAssignments}
+        people={people}
+        productionTitle={showTitle}
       />
-    </div>
+    </main>
   );
 }
