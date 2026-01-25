@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, Wand2, Calculator, Check, AlertCircle, Trash2, RotateCcw } from 'lucide-react';
+import { Loader2, Wand2, Check, AlertCircle, RotateCcw, ClipboardList, X } from 'lucide-react';
 import { 
     getRoles, 
     getAuditionSlots, 
@@ -23,7 +23,8 @@ interface CastingClientProps {
 export default function CastingClient({ productionId, productionTitle, masterShowId }: CastingClientProps) {
   const [loading, setLoading] = useState(true);
   const [isAutoCasting, setIsAutoCasting] = useState(false);
-  const [isClearing, setIsClearing] = useState(false); // <--- New State for Clear Button
+  const [isClearing, setIsClearing] = useState(false);
+  const [showAudit, setShowAudit] = useState(false); // <--- NEW: Toggle for Audit Modal
   const [viewMode, setViewMode] = useState<'workspace' | 'chemistry'>('workspace');
   
   const [roles, setRoles] = useState<any[]>([]);
@@ -41,7 +42,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 getRoles(), getAuditionSlots(), getScenes()
             ]);
 
-            // Smart Filter: Matches Production ID OR Master Blueprint ID
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
                 const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
@@ -50,7 +50,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 return isDirectLink || isMasterLink;
             });
 
-            // Filter Scenes & Actors
             const showScenes = sceneRows
                 .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
                 .sort((a: any, b: any) => a.id - b.id);
@@ -70,14 +69,12 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     }
                 }));
 
-            // Hydrate Roles
             const processedRoles = showRoles.map((r: any) => {
                 let sceneIds: number[] = [];
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
-                // Check Assigned
                 const assignedRaw = r["Assigned Actor"] || [];
                 const assignedActors = assignedRaw.map((link: any) => showActors.find((a: any) => a.personId === link.id)).filter(Boolean);
 
@@ -106,73 +103,77 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   }, [productionId, masterShowId]);
 
 
+  // --- 🧮 STATS CALCULATOR (The Brains) ---
+  const getActorStats = (actorId: number) => {
+      // 1. Get assignments
+      const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
+      const mySceneIds = new Set(myRoles.flatMap(r => r.sceneIds));
+      
+      // 2. Logic (Split Scenes into Acts)
+      // Note: This assumes scenes are sorted by ID or Order
+      const splitIndex = Math.floor(scenes.length / 2);
+      const act1Scenes = scenes.slice(0, splitIndex).map(s => s.id);
+      const act2Scenes = scenes.slice(splitIndex).map(s => s.id);
 
-// --- 🪄 THE MAGIC: AUTO-CAST ALGORITHM ---
+      const hasAct1 = Array.from(mySceneIds).some(sid => act1Scenes.includes(sid as number));
+      const hasAct2 = Array.from(mySceneIds).some(sid => act2Scenes.includes(sid as number));
+      const count = mySceneIds.size;
+
+      // 3. THE RULESET
+      const isCompliant = count >= 3 && hasAct1 && hasAct2;
+
+      return { count, hasAct1, hasAct2, isCompliant, roleCount: myRoles.length };
+  };
+
+
+  // --- 🪄 AUTO-CAST ---
   const handleAutoCast = async () => {
-    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles first (1 actor each).\n2. Balance remaining students into ENSEMBLE.\n3. Verify scene counts (Min 3).`;
+    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles first.\n2. Balance remaining students into ENSEMBLE.\n3. Verify scene counts (Min 3).`;
     if (!confirm(confirmMsg)) return;
 
     setIsAutoCasting(true);
 
-    // 1. Define Boundaries
     const splitIndex = Math.floor(scenes.length / 2);
     const act1Scenes = new Set(scenes.slice(0, splitIndex).map(s => s.id));
     const act2Scenes = new Set(scenes.slice(splitIndex).map(s => s.id));
 
-    // 2. Clone State
     let newRoles = JSON.parse(JSON.stringify(roles));
     const updatesToSave: any[] = [];
 
-    // 3. Iterate through every Student
     actors.forEach(actor => {
-        // Calculate current status
         let currentAssignments = newRoles.filter((r: any) => r.selectedActorIds.includes(actor.id));
-        
-        // CHECK: Does this student already have a "Primary" role?
-        // (We don't want to cast Flounder as King Triton too)
-        const hasPrimaryRole = currentAssignments.some((r: any) => 
-            ['Lead', 'Supporting', 'Featured'].includes(r.type)
-        );
+        const hasPrimaryRole = currentAssignments.some((r: any) => ['Lead', 'Supporting', 'Featured'].includes(r.type));
 
         let currentSceneIds = new Set(currentAssignments.flatMap((r: any) => r.sceneIds));
         let hasAct1 = Array.from(currentSceneIds).some(sid => act1Scenes.has(sid as number));
         let hasAct2 = Array.from(currentSceneIds).some(sid => act2Scenes.has(sid as number));
         let totalScenes = currentSceneIds.size;
 
-        // Constraint Loop
         let attempts = 0;
         while ((totalScenes < 3 || !hasAct1 || !hasAct2) && attempts < 10) {
             attempts++;
             let bestRole = null;
 
-            // STRATEGY A: FILL EMPTY PRIMARY ROLES (Lead -> Supporting -> Featured)
-            // Condition: Student doesn't have a primary role yet.
             if (!hasPrimaryRole) {
-                // Find the first empty primary role that has scenes
                 bestRole = newRoles.find((r: any) => 
-                    ['Lead', 'Supporting', 'Featured'].includes(r.type) && // ✅ NOW INCLUDES SUPPORTING/FEATURED
+                    ['Lead', 'Supporting', 'Featured'].includes(r.type) && 
                     r.selectedActorIds.length === 0 && 
                     r.sceneIds.length > 0 &&
                     !r.selectedActorIds.includes(actor.id)
                 );
             }
 
-            // STRATEGY B: BALANCED ENSEMBLE (Fallback)
-            // If we didn't find a primary role (or student already has one), find an Ensemble role
             if (!bestRole) {
                 const ensembleOptions = newRoles.filter((r: any) => 
                     r.type === 'Ensemble' && 
                     !r.selectedActorIds.includes(actor.id) &&
                     r.sceneIds.length > 0
                 );
-
-                // Sort by population (Smallest first)
                 ensembleOptions.sort((a: any, b: any) => a.selectedActorIds.length - b.selectedActorIds.length);
 
                 bestRole = ensembleOptions.find((r: any) => {
                     const roleHasAct1 = r.sceneIds.some((sid: number) => act1Scenes.has(sid));
                     const roleHasAct2 = r.sceneIds.some((sid: number) => act2Scenes.has(sid));
-
                     if (!hasAct1 && roleHasAct1) return true;
                     if (!hasAct2 && roleHasAct2) return true;
                     if (totalScenes < 3) return true;
@@ -180,27 +181,17 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 });
             }
 
-            // ASSIGNMENT LOGIC
             if (bestRole) {
                 bestRole.selectedActorIds.push(actor.id);
                 if (!bestRole.actors.find((a: any) => a.id === actor.id)) {
                     bestRole.actors.push(actor);
                 }
-
-                // If we just assigned a primary role, mark the flag so they don't get another one next loop
-                if (['Lead', 'Supporting', 'Featured'].includes(bestRole.type)) {
-                    // We can break here if we want Primary Roles to "count" as satisfying the need, 
-                    // but the loop condition (3 scenes) will ensure they still get Ensemble if the Lead role is small.
-                }
-
-                // Update tracking
                 bestRole.sceneIds.forEach((sid: number) => {
                     if (act1Scenes.has(sid)) hasAct1 = true;
                     if (act2Scenes.has(sid)) hasAct2 = true;
                     currentSceneIds.add(sid);
                 });
                 totalScenes = currentSceneIds.size;
-
                 if (!updatesToSave.includes(bestRole)) updatesToSave.push(bestRole);
             } else {
                 break; 
@@ -208,67 +199,53 @@ export default function CastingClient({ productionId, productionTitle, masterSho
         }
     });
 
-    // 4. Commit
     setRoles(newRoles);
 
     try {
-        console.log(`Auto-Cast: Updating ${updatesToSave.length} roles...`);
         await Promise.all(updatesToSave.map(async (role) => {
             const personIds = role.selectedActorIds.map((auditionId: number) => {
                 const a = actors.find(act => act.id === auditionId);
                 return a ? a.personId : null;
             }).filter(Boolean);
-
             await updateRole(role.id, { "Assigned Actor": personIds });
         }));
         alert(`Auto-cast complete! Updated ${updatesToSave.length} roles.`);
     } catch (e) {
         console.error("Auto-cast partial failure", e);
-        alert("Visual update done, but some database saves may have timed out.");
     } finally {
         setIsAutoCasting(false);
     }
   };
-  // --- 🧹 CLEAR CAST FUNCTION ---
+
+  // --- CLEAR CAST ---
   const handleClearCast = async () => {
       if(!confirm("⚠️ RESET ENSEMBLE?\n\nThis will remove all actors from Ensemble, Featured, and Supporting roles.\n\nLeads will NOT be affected.")) return;
-      
       setIsClearing(true);
-      
       const newRoles = JSON.parse(JSON.stringify(roles));
       const updatesToSave: any[] = [];
 
       newRoles.forEach((role: any) => {
-          // Safety: Skip Leads
           if (role.type === "Lead") return;
-
-          // If the role has actors, clear them
           if (role.selectedActorIds.length > 0) {
               role.selectedActorIds = [];
-              role.actors = []; // Clear the visual card too
+              role.actors = []; 
               updatesToSave.push(role);
           }
       });
 
-      // Optimistic Update
       setRoles(newRoles);
-
       try {
           await Promise.all(updatesToSave.map(async (role) => {
-              // Send empty array to clear assignments in DB
               await updateRole(role.id, { "Assigned Actor": [] });
           }));
-          alert("Ensemble roles have been reset.");
       } catch (e) {
           console.error("Clear cast failure", e);
-          alert("Failed to clear some roles in the database.");
       } finally {
           setIsClearing(false);
       }
   };
 
-
-  // --- EVENT HANDLERS (Standard) ---
+  // --- STANDARD HANDLERS ---
   const handleDropActor = (e: React.DragEvent, roleId: string) => {
     e.preventDefault();
     const actorId = parseInt(e.dataTransfer.getData("actorId"));
@@ -299,7 +276,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       if (!role) return;
       const actor = actors.find(a => a.id === actorId);
       if (!actor) return;
-      
       const isSelecting = !role.selectedActorIds.includes(actorId);
 
       setRoles(prev => prev.map(r => {
@@ -314,14 +290,11 @@ export default function CastingClient({ productionId, productionTitle, masterSho
           const currentSelectedIds = isSelecting 
             ? [...role.selectedActorIds, actorId] 
             : role.selectedActorIds.filter((id: number) => id !== actorId);
-            
-          const personIds = currentSelectedIds.map((audId: any) => {
+          const personIds = currentSelectedIds.map(audId => {
              const a = actors.find(act => act.id === audId);
              return a ? a.personId : null;
           }).filter(Boolean);
-
           await updateRole(parseInt(roleId), { "Assigned Actor": personIds });
-          
           if (isSelecting) {
              await createCastAssignment(actor.personId, parseInt(roleId), productionId);
           }
@@ -347,12 +320,9 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const handleRemoveRole = async (roleId: string) => {
      if(confirm("Remove this role?")) setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString()));
   };
-  
   const handleDuplicateRole = async (roleId: string) => alert("Feature: Duplicate Role " + roleId);
 
-  // --- INSPECTOR ---
   const inspectorActor = useMemo(() => (!inspectingActorId ? null : actors.find(a => a.id === inspectingActorId)), [inspectingActorId, actors]);
-  
   const inspectorStats = useMemo(() => {
       const assignments: Record<number, string> = {};
       roles.forEach(role => {
@@ -384,45 +354,40 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                  </div>
 
                  <div className="flex items-center gap-2 border-l border-zinc-700 pl-4 ml-1">
-                     {/* 🪄 AUTO CAST */}
-                     <button 
-                        onClick={handleAutoCast} 
-                        disabled={isAutoCasting || isClearing}
-                        className="flex items-center gap-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
-                     >
-                        {isAutoCasting ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14} />}
-                        {isAutoCasting ? "Casting..." : "Quick Cast"}
+                     <button onClick={() => setShowAudit(true)} className="flex items-center gap-2 bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all">
+                        <ClipboardList size={14} /> Audit
+                     </button>
+                     
+                     <button onClick={handleAutoCast} disabled={isAutoCasting || isClearing} className="flex items-center gap-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50">
+                        {isAutoCasting ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14} />} Quick Cast
                      </button>
 
-                     {/* 🧹 CLEAR CAST */}
-                     <button 
-                        onClick={handleClearCast}
-                        disabled={isAutoCasting || isClearing}
-                        className="flex items-center gap-2 bg-red-600/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
-                        title="Reset Ensemble"
-                     >
-                        {isClearing ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14} />}
-                        {isClearing ? "Clearing..." : "Reset"}
+                     <button onClick={handleClearCast} disabled={isAutoCasting || isClearing} className="flex items-center gap-2 bg-red-600/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50">
+                        {isClearing ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14} />} Reset
                      </button>
                  </div>
             </div>
 
-            {/* DRAWER */}
+            {/* TOP DRAWER with RED DOTS */}
             <div className="flex items-center gap-2 overflow-x-auto max-w-[30vw] no-scrollbar mask-linear-fade-left">
                  <span className="text-[9px] font-bold text-zinc-600 uppercase mr-2 shrink-0">Cast Drawer:</span>
                  {actors.map(actor => {
                      const isAssigned = roles.some(r => r.selectedActorIds.includes(actor.id));
+                     const stats = getActorStats(actor.id);
+                     const hasWarning = isAssigned && !stats.isCompliant;
+
                      return (
                         <div 
                             key={actor.id} 
                             draggable 
                             onDragStart={(e) => e.dataTransfer.setData("actorId", actor.id.toString())} 
                             onClick={() => setInspectingActorId(actor.id)} 
-                            className={`w-8 h-8 rounded-full border shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:scale-110 transition-transform relative ${isAssigned ? 'border-emerald-500 opacity-50' : 'border-white/10'}`} 
-                            title={actor.Performer}
+                            className={`w-8 h-8 rounded-full border shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:scale-110 transition-transform relative 
+                                ${hasWarning ? 'border-red-500 ring-2 ring-red-500/20' : isAssigned ? 'border-emerald-500 opacity-50' : 'border-white/10'}`} 
+                            title={`${actor.Performer} ${hasWarning ? '(Non-Compliant)' : ''}`}
                         >
                             <img alt="Headshot" src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" />
-                            {isAssigned && <div className="absolute inset-0 bg-emerald-500/30 flex items-center justify-center"><Check size={12} className="text-white"/></div>}
+                            {isAssigned && !hasWarning && <div className="absolute inset-0 bg-emerald-500/30 flex items-center justify-center"><Check size={12} className="text-white"/></div>}
                         </div>
                      )
                  })}
@@ -433,39 +398,67 @@ export default function CastingClient({ productionId, productionTitle, masterSho
         <div className="flex-1 overflow-hidden relative flex">
             <div className="flex-1 relative z-0 h-full">
                 {viewMode === 'workspace' ? (
-                    <CastWorkspace 
-                        roles={roles}
-                        scenes={scenes}
-                        onAddRole={() => alert("Add Role logic")}
-                        onRemoveRole={handleRemoveRole}
-                        onDuplicateRole={handleDuplicateRole}
-                        onDropActor={handleDropActor}
-                        onRemoveActor={handleRemoveActor}
-                        onToggleScene={handleToggleScene}
-                        onSelectRole={() => {}}
-                        onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)}
-                    />
+                    <CastWorkspace roles={roles} scenes={scenes} onAddRole={() => {}} onRemoveRole={handleRemoveRole} onDuplicateRole={handleDuplicateRole} onDropActor={handleDropActor} onRemoveActor={handleRemoveActor} onToggleScene={handleToggleScene} onSelectRole={() => {}} onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)} />
                 ) : (
-                    <ChemistryWorkspace 
-                        roles={roles}
-                        onDropActor={handleDropActor}
-                        onRemoveActor={handleRemoveActor}
-                        onSelectRole={() => {}}
-                        onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)}
-                    />
+                    <ChemistryWorkspace roles={roles} onDropActor={handleDropActor} onRemoveActor={handleRemoveActor} onSelectRole={() => {}} onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)} />
                 )}
             </div>
-            
-            {/* INSPECTOR PANEL */}
-            {inspectingActorId && (
-                <CastingInspector 
-                    actor={inspectorActor}
-                    allScenes={scenes}
-                    stats={inspectorStats}
-                    onClose={() => setInspectingActorId(null)}
-                />
-            )}
+            {inspectingActorId && <CastingInspector actor={inspectorActor} allScenes={scenes} stats={inspectorStats} onClose={() => setInspectingActorId(null)} />}
         </div>
+
+        {/* AUDIT MODAL */}
+        {showAudit && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-8" onClick={() => setShowAudit(false)}>
+                <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 border-b border-white/10 flex justify-between items-center bg-zinc-900 rounded-t-2xl">
+                        <div>
+                            <h2 className="text-xl font-black uppercase italic text-white flex items-center gap-2"><ClipboardList size={20}/> Casting Audit</h2>
+                            <p className="text-xs text-zinc-500 mt-1">Rules: Min 3 Scenes • Must have Act 1 • Must have Act 2</p>
+                        </div>
+                        <button onClick={() => setShowAudit(false)}><X className="text-zinc-500 hover:text-white"/></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-0">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-zinc-950 text-zinc-500 uppercase text-[10px] font-bold tracking-wider sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-6 py-3">Actor</th>
+                                    <th className="px-6 py-3 text-center">Roles</th>
+                                    <th className="px-6 py-3 text-center">Scenes (3+)</th>
+                                    <th className="px-6 py-3 text-center">Act 1</th>
+                                    <th className="px-6 py-3 text-center">Act 2</th>
+                                    <th className="px-6 py-3 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {actors.map(actor => {
+                                    const stats = getActorStats(actor.id);
+                                    if(stats.roleCount === 0) return null; // Skip unassigned for clutter reduction? Or show them? Let's hide unassigned to focus on cast.
+                                    
+                                    return (
+                                        <tr key={actor.id} className="hover:bg-white/5">
+                                            <td className="px-6 py-3 font-bold text-white flex items-center gap-3">
+                                                <img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-8 h-8 rounded-full object-cover" />
+                                                {actor.Performer}
+                                            </td>
+                                            <td className="px-6 py-3 text-center font-mono text-zinc-400">{stats.roleCount}</td>
+                                            <td className={`px-6 py-3 text-center font-black ${stats.count >= 3 ? 'text-emerald-500' : 'text-red-500'}`}>{stats.count}</td>
+                                            <td className="px-6 py-3 text-center">{stats.hasAct1 ? <Check size={16} className="mx-auto text-emerald-500"/> : <X size={16} className="mx-auto text-red-500 opacity-50"/>}</td>
+                                            <td className="px-6 py-3 text-center">{stats.hasAct2 ? <Check size={16} className="mx-auto text-emerald-500"/> : <X size={16} className="mx-auto text-red-500 opacity-50"/>}</td>
+                                            <td className="px-6 py-3 text-right">
+                                                {stats.isCompliant ? 
+                                                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">Pass</span> : 
+                                                    <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider"><AlertCircle size={12}/> Fail</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 }
