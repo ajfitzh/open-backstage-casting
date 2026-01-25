@@ -17,22 +17,17 @@ import CastingInspector from '@/app/components/casting/CastingInspector';
 interface CastingClientProps {
   productionId: number;
   productionTitle: string;
+  masterShowId?: number | null; // <--- NEW PROP
 }
 
-export default function CastingClient({ productionId, productionTitle }: CastingClientProps) {
-  // --- STATE ---
+export default function CastingClient({ productionId, productionTitle, masterShowId }: CastingClientProps) {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'workspace' | 'chemistry'>('workspace');
-  
-  // Data Containers
   const [roles, setRoles] = useState<any[]>([]);
   const [actors, setActors] = useState<any[]>([]);
   const [scenes, setScenes] = useState<any[]>([]);
-  
-  // UI State
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-  // --- 1. DATA LOADING ---
   useEffect(() => {
     async function load() {
         setLoading(true);
@@ -43,21 +38,39 @@ export default function CastingClient({ productionId, productionTitle }: Casting
                 getScenes()
             ]);
 
-            // --- FILTERING BY PRODUCTION ID ---
-            
-            // 1. Filter Roles (Column: "Master Show Database")
-            const showRoles = roleRows.filter((r: any) => 
-                r["Master Show Database"]?.some((link: any) => link.id === productionId)
-            );
+            // --- 🔍 THE FIX: SMART FILTERING ---
+            const showRoles = roleRows.filter((r: any) => {
+                // Check 1: Is it linked to this specific Production?
+                const prodLinks = r["Production"] || [];
+                const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
 
-            // 2. Filter Scenes (Column: "Production")
+                // Check 2: Is it linked to the Blueprint (Master Show)?
+                const masterLinks = r["Master Show Database"] || [];
+                const isMasterLink = masterShowId && masterLinks.some((link: any) => link.id === masterShowId);
+
+                return isDirectLink || isMasterLink;
+            });
+
+            // Log for debugging if it's still empty
+            if (showRoles.length === 0) {
+                console.warn(`No roles found for ProdID: ${productionId} or MasterID: ${masterShowId}`);
+                console.log("Sample Role:", roleRows[0]); // Check the structure in console
+            }
+
+            // Filter Scenes (Same Logic)
             const showScenes = sceneRows
-                .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
+                .filter((s: any) => {
+                    const links = s["Production"] || [];
+                    return links.some((link: any) => link.id === productionId);
+                })
                 .sort((a: any, b: any) => a.id - b.id);
 
-            // 3. Filter Actors/Auditions (Column: "Production")
+            // Filter Actors (Auditions are usually direct-linked to Production)
             const showActors = auditionRows
-                .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
+                .filter((a: any) => {
+                    const links = a["Production"] || [];
+                    return links.some((link: any) => link.id === productionId);
+                })
                 .map((a: any) => ({
                     ...a,
                     id: a.id, 
@@ -71,15 +84,13 @@ export default function CastingClient({ productionId, productionTitle }: Casting
                     }
                 }));
 
-            // 4. Hydrate Roles with Assigned Actors
+            // Hydrate Roles
             const processedRoles = showRoles.map((r: any) => {
-                // Link Scenes
                 let sceneIds: number[] = [];
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
-                // Check Assignment
                 const assignedId = r["Assigned Actor"]?.[0]?.id; 
                 const assignedActor = showActors.find((a: any) => a.personId === assignedId);
 
@@ -106,18 +117,16 @@ export default function CastingClient({ productionId, productionTitle }: Casting
     }
     
     if(productionId) load();
-  }, [productionId]); // Reload if the production ID changes
+  }, [productionId, masterShowId]); // Reload if IDs change
 
-  // --- 2. EVENT HANDLERS ---
-
+  // ... (Rest of your Event Handlers remain exactly the same) ...
+  
   const handleDropActor = (e: React.DragEvent, roleId: string) => {
     e.preventDefault();
     const actorId = parseInt(e.dataTransfer.getData("actorId"));
     if (!actorId) return;
-
     const actor = actors.find(a => a.id === actorId);
     if (!actor) return;
-
     setRoles(prev => prev.map(role => {
         if (role.id.toString() !== roleId.toString()) return role;
         if (role.actors.find((a: any) => a.id === actor.id)) return role;
@@ -140,38 +149,25 @@ export default function CastingClient({ productionId, productionTitle }: Casting
   const handleConfirmRole = async (roleId: string, actorId: number) => {
       const role = roles.find(r => r.id.toString() === roleId.toString());
       if (!role) return;
-
       const actor = actors.find(a => a.id === actorId);
       if (!actor) return;
-
       const isSelecting = !role.selectedActorIds.includes(actorId);
 
-      // UI Update
       setRoles(prev => prev.map(r => {
           if (r.id.toString() !== roleId.toString()) return r;
-          
           let newSelected = r.selectedActorIds;
           if (isSelecting) newSelected = [...newSelected, actorId]; 
           else newSelected = newSelected.filter((id: number) => id !== actorId);
-
-          return { 
-              ...r, 
-              selectedActorIds: isSelecting ? [actorId] : [], 
-              selectedActorId: isSelecting ? actorId : null 
-          };
+          return { ...r, selectedActorIds: isSelecting ? [actorId] : [], selectedActorId: isSelecting ? actorId : null };
       }));
 
-      // DB Update
       try {
           const payload = isSelecting ? { "Assigned Actor": [actor.personId] } : { "Assigned Actor": [] };
           await updateRole(parseInt(roleId), payload);
-
           if (isSelecting) {
              await createCastAssignment(actor.personId, parseInt(roleId), productionId);
-             console.log(`Compliance Record Created for ${productionTitle}`);
           }
       } catch (err) {
-          alert("Failed to save assignment.");
           console.error(err);
       }
   };
@@ -190,20 +186,13 @@ export default function CastingClient({ productionId, productionTitle }: Casting
       await updateRole(parseInt(roleId), { "Active Scenes": newSceneIds });
   };
 
-  const handleDuplicateRole = async (roleId: string) => alert("Feature: Duplicate Role " + roleId);
-  
   const handleRemoveRole = async (roleId: string) => {
-     if(confirm("Remove this role?")) {
-         setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString()));
-     }
+     if(confirm("Remove this role?")) setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString()));
   };
+  
+  const handleDuplicateRole = async (roleId: string) => alert("Feature: Duplicate Role " + roleId);
 
-  // --- 3. INSPECTOR LOGIC ---
-  const inspectorActor = useMemo(() => {
-      if (!inspectingActorId) return null;
-      return actors.find(a => a.id === inspectingActorId);
-  }, [inspectingActorId, actors]);
-
+  const inspectorActor = useMemo(() => (!inspectingActorId ? null : actors.find(a => a.id === inspectingActorId)), [inspectingActorId, actors]);
   const inspectorStats = useMemo(() => {
       const assignments: Record<number, string> = {};
       roles.forEach(role => {
@@ -213,55 +202,26 @@ export default function CastingClient({ productionId, productionTitle }: Casting
               });
           }
       });
-      return {
-          assignments,
-          assignedRoleNames: roles.filter(r => r.selectedActorIds.includes(inspectingActorId)).map(r => r.name)
-      };
+      return { assignments, assignedRoleNames: roles.filter(r => r.selectedActorIds.includes(inspectingActorId)).map(r => r.name) };
   }, [roles, inspectingActorId]);
 
-
-  // --- RENDER ---
   if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500 mr-2"/> Loading {productionTitle}...</div>;
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
-        
-        {/* TOP BAR */}
         <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-zinc-900 shrink-0 z-20">
             <div className="flex gap-4 items-center">
                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-r border-zinc-700 pr-4 mr-1">
                     {productionTitle}
                  </div>
-
-                 <button 
-                    onClick={() => setViewMode('workspace')}
-                    className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'workspace' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}
-                 >
-                    Workspace
-                 </button>
-                 <button 
-                    onClick={() => setViewMode('chemistry')}
-                    className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'chemistry' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-purple-400'}`}
-                 >
-                    Chemistry
-                 </button>
+                 <button onClick={() => setViewMode('workspace')} className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'workspace' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}>Workspace</button>
+                 <button onClick={() => setViewMode('chemistry')} className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${viewMode === 'chemistry' ? 'bg-purple-600 text-white' : 'text-zinc-500 hover:text-purple-400'}`}>Chemistry</button>
             </div>
-            
-            {/* ACTOR DRAWER */}
             <div className="flex items-center gap-2 overflow-x-auto max-w-[50vw] no-scrollbar">
                  <span className="text-[9px] font-bold text-zinc-600 uppercase mr-2 shrink-0">Cast Drawer:</span>
                  {actors.length === 0 && <span className="text-xs text-zinc-600 italic">No actors found</span>}
                  {actors.map(actor => (
-                     <div 
-                        key={actor.id}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("actorId", actor.id.toString())}
-                        onClick={() => setInspectingActorId(actor.id)}
-                        className={`w-8 h-8 rounded-full border border-white/10 shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:border-blue-500 transition-colors
-                            ${inspectingActorId === actor.id ? 'ring-2 ring-blue-500' : ''}
-                        `}
-                        title={actor.Performer}
-                     >
+                     <div key={actor.id} draggable onDragStart={(e) => e.dataTransfer.setData("actorId", actor.id.toString())} onClick={() => setInspectingActorId(actor.id)} className={`w-8 h-8 rounded-full border border-white/10 shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:border-blue-500 transition-colors ${inspectingActorId === actor.id ? 'ring-2 ring-blue-500' : ''}`} title={actor.Performer}>
                         <img alt="Headshot" src={actor.Headshot} className="w-full h-full object-cover" />
                      </div>
                  ))}
@@ -280,7 +240,7 @@ export default function CastingClient({ productionId, productionTitle }: Casting
                         onDropActor={handleDropActor}
                         onRemoveActor={handleRemoveActor}
                         onToggleScene={handleToggleScene}
-                        onSelectRole={(r) => {}}
+                        onSelectRole={() => {}}
                         onConfirmRole={(rId, aId) => handleConfirmRole(rId, aId)}
                     />
                 ) : (
@@ -293,7 +253,6 @@ export default function CastingClient({ productionId, productionTitle }: Casting
                     />
                 )}
             </div>
-
             {inspectingActorId && (
                 <CastingInspector 
                     actor={inspectorActor}

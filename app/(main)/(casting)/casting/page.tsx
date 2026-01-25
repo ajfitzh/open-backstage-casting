@@ -1,33 +1,39 @@
 import { cookies } from 'next/headers';
 import { getShowById, getActiveProduction } from '@/app/lib/baserow';
 import CastingClient from '@/app/components/casting/CastingClient';
+
 export default async function CastingPage() {
-  // 1. Try to get ID from Cookie
   const cookieStore = await cookies();
   let activeId = Number(cookieStore.get('active_production_id')?.value);
-  let showTitle = "Select a Production";
+  
+  // 1. Fetch the Full Production Object
+  let productionData = null;
 
-  // 2. Resolve the ID
   if (activeId) {
-    const showData = await getShowById(activeId);
-    if (showData) {
-      showTitle = showData.Title;
-    }
+    productionData = await getShowById(activeId);
   } 
   
-  // 3. FALLBACK: If no cookie, fetch the default Active Show
-  if (!activeId || showTitle === "Select a Production") {
-    const defaultShow = await getActiveProduction();
-    if (defaultShow) {
-      activeId = defaultShow.id;
-      showTitle = defaultShow.Title;
-    }
+  // Fallback if no cookie
+  if (!productionData) {
+    productionData = await getActiveProduction();
   }
 
-  // 4. Pass the resolved context to the Client App
+  // 2. Extract Key IDs
+  const productionId = productionData?.id || 0;
+  const productionTitle = productionData?.Title || "Select a Production";
+  
+  // 🔍 THE FIX: Get the Blueprint ID (Master Show)
+  // This looks at the "Master Show Database" column in your Productions table
+  const masterShowLink = productionData?.["Master Show Database"];
+  const masterShowId = (masterShowLink && masterShowLink.length > 0) ? masterShowLink[0].id : null;
+
   return (
     <main className="min-h-screen bg-zinc-950">
-      <CastingClient productionId={activeId} productionTitle={showTitle} />
+      <CastingClient 
+        productionId={productionId} 
+        productionTitle={productionTitle}
+        masterShowId={masterShowId} // <--- Passing the Blueprint ID
+      />
     </main>
   );
 }

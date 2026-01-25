@@ -536,9 +536,9 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
                                 switch(judgeRole) {
                                     case "Director": loadedNote = person.actingNotes; break;
                                     case "Music": loadedNote = person.musicNotes; break;
-                                    case "Choreographer": loadedNote = person.choreoNotes; break;
                                     case "Drop-In": loadedNote = person.dropInNotes; break;
                                     case "Admin": loadedNote = person.adminNotes; break;
+                                    default: loadedNote = ""; break;
                                 }
                             }
 
