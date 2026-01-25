@@ -7,15 +7,14 @@ import { usePathname } from 'next/navigation';
 import { switchProduction } from '@/app/actions'; 
 import { 
   Menu, X, ChevronRight, ChevronsUpDown,
-  LayoutGrid, Calendar, Users, UserSquare2, 
-  AlertOctagon, BarChart3, ShieldCheck,
-  Settings, LogOut, Check, Sparkles, MapPin, 
-  Tent, Star, Home, Search
+  Calendar, Users, UserSquare2, 
+  AlertOctagon, BarChart3, Settings, LogOut, Check, Sparkles, MapPin, 
+  Home, Star, LayoutGrid
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showContextList, setShowContextList] = useState(false);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(true); // Default to OPEN so they see it
   
   const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname(); 
@@ -34,7 +33,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
   const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
 
-  // Grouping Logic for the Switcher
+  // Grouping Logic
   const groupedShows = shows.reduce((groups, show) => {
     const season = show.season || 'Other';
     if (!groups[season]) groups[season] = [];
@@ -48,8 +47,8 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
       {/* --- THE STRIP (Always Visible) --- */}
       <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
         
-        {/* LEFT: THE ONE MENU BUTTON */}
-        <div className="flex items-center gap-4">
+        {/* LEFT: MENU + TITLE (Both Clickable) */}
+        <div className="flex items-center gap-3">
             <button 
                 onClick={() => setIsOpen(!isOpen)}
                 className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
@@ -57,16 +56,21 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                 {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
             
-            {/* CURRENT CONTEXT LABEL (Non-clickable, just info) */}
-            <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Current Production</span>
-                <span className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
-                    {activeShow.title}
+            {/* CLICKING THE TITLE OPENS THE MENU TOO */}
+            <button onClick={() => setIsOpen(true)} className="flex flex-col items-start text-left group">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-400 transition-colors">
+                    Current Production
                 </span>
-            </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md group-hover:text-emerald-400 transition-colors">
+                        {activeShow.title}
+                    </span>
+                    <ChevronsUpDown size={12} className="text-zinc-600 group-hover:text-zinc-400"/>
+                </div>
+            </button>
         </div>
 
-        {/* RIGHT: USER (Visual only, distinct from nav) */}
+        {/* RIGHT: USER AVATAR */}
         <div className="flex items-center gap-3">
              <div className="hidden md:flex flex-col items-end leading-tight">
                 <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
@@ -78,7 +82,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         </div>
       </header>
 
-      {/* --- THE MEGA DRAWER (The "One Menu") --- */}
+      {/* --- THE DRAWER (The "One Menu") --- */}
       {isOpen && (
         <div className="fixed inset-0 z-40 flex">
             {/* Backdrop */}
@@ -87,29 +91,21 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
             {/* Sidebar Content */}
             <div ref={menuRef} className="relative w-80 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
                 
-                {/* 1. CONTEXT SWITCHER SECTION */}
-                <div className="p-4 border-b border-white/5">
+                {/* 1. PRODUCTION SWITCHER (Top of Menu) */}
+                <div className="bg-black/20 p-4 border-b border-white/5">
                     <button 
-                        onClick={() => setShowContextList(!showContextList)}
-                        className="w-full bg-zinc-950 border border-zinc-800 p-3 rounded-xl flex items-center justify-between group hover:border-zinc-700 transition-all"
+                        onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+                        className="w-full flex items-center justify-between mb-2 text-zinc-400 hover:text-white transition-colors"
                     >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
-                                <LayoutGrid size={16}/>
-                            </div>
-                            <div className="text-left overflow-hidden">
-                                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Active Show</div>
-                                <div className="text-xs font-bold text-white truncate group-hover:text-emerald-400 transition-colors">
-                                    {activeShow.title}
-                                </div>
-                            </div>
+                        <div className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                            <LayoutGrid size={12}/> Switch Production
                         </div>
-                        <ChevronsUpDown size={14} className="text-zinc-600"/>
+                        <ChevronsUpDown size={12}/>
                     </button>
 
-                    {/* EXPANDABLE SHOW LIST */}
-                    {showContextList && (
-                        <div className="mt-2 pl-2 space-y-4 max-h-60 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2">
+                    {/* The List */}
+                    {isSwitcherOpen && (
+                        <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar animate-in slide-in-from-top-2">
                              {sortedSeasons.map(season => (
                                 <div key={season}>
                                     <div className="px-2 py-1 text-[9px] font-black text-zinc-600 uppercase tracking-widest">{season}</div>
@@ -206,14 +202,19 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   if (prod.location?.includes('Stafford')) dotColor = 'bg-amber-500';
   if (prod.location?.includes('NoVa')) dotColor = 'bg-indigo-500';
 
+  const isCamp = prod.type?.includes('Camp');
+
   return (
-    <button disabled={pending} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800 transition-all text-left group">
+    <button disabled={pending} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'hover:bg-zinc-800/50'}`}>
        <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+       
        <div className="flex-1 min-w-0">
           <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
             {prod.title}
           </div>
        </div>
+
+       {isCamp && <Home size={10} className="text-purple-400 opacity-50"/>}
        {isActive && !pending && <Check size={12} className="text-emerald-500" />}
        {pending && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
     </button>
