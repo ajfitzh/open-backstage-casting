@@ -35,7 +35,8 @@ const handleLogin = async (e: FormEvent) => {
         {/* NEW: Wrapping in a form makes 'Enter' key work automatically */}
         <form onSubmit={handleLogin} className="space-y-4">
             <input 
-                type="password" 
+                type="passcode" 
+                autoComplete="one-time-code"
                 placeholder="Enter Access Code..." 
                 className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none text-lg tracking-widest placeholder:text-zinc-600 transition-all"
                 value={password}
