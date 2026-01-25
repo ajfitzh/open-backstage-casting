@@ -44,7 +44,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [allAssignments, setAllAssignments] = useState<any[]>([]);
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-// --- DATA LOADING (Source of Truth: Assignments Table) ---
+// --- DATA LOADING (Robust & Fixes "Blank" Roles) ---
   useEffect(() => {
     async function load() {
         setLoading(true);
@@ -56,14 +56,16 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 getAssignments()
             ]);
 
-            // 1. Process Actors FIRST (Filter for THIS Production)
-            // We need this list ready so we can match Assignments to valid Auditions
+            console.log(`Debug: Loaded ${assignmentRows.length} total assignments.`);
+
+            // 1. Process Actors (Filter for THIS Production)
             const showActors = auditionRows
-                .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
+                .filter((a: any) => a["Production"]?.some((link: any) => link.id == productionId)) // Use loose equality (==)
                 .map((a: any) => ({
                     ...a,
-                    id: a.id, // Audition ID
-                    personId: a["Performer"]?.[0]?.id, // Person ID (Link to Table 599)
+                    id: a.id, 
+                    personId: a["Performer"]?.[0]?.id, // The ID of the Person Record
+                    performerName: a["Performer"]?.[0]?.value || "Unknown", // Store Name for Fallback
                     Performer: a["Performer"]?.[0]?.value || "Unknown",
                     Headshot: a["Headshot"]?.[0]?.url || null,
                     grades: {
@@ -73,49 +75,64 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     }
                 }));
             
-            setActors(showActors); // Save to state immediately
+            setActors(showActors);
 
-            // 2. Process Assignments
+            // 2. Process Assignments (Filter for THIS Production)
+            // Safety: Use loose equality (==) in case API returns string IDs
             const currentAssignments = assignmentRows.filter((a: any) => 
-                a.Production?.some((p: any) => p.id === productionId)
+                a.Production?.some((p: any) => p.id == productionId)
             );
-            setAllAssignments(currentAssignments); // Keep for deletion logic
+            
+            setAllAssignments(currentAssignments);
+            console.log(`Debug: Found ${currentAssignments.length} assignments for Prod #${productionId}.`);
 
-            // 3. Create Map: Role ID -> Array of Correct Actor Objects
+            // 3. Create Map: Role ID -> Array of Actors
             const assignmentMap: Record<number, any[]> = {};
             
             currentAssignments.forEach((a: any) => {
                 const roleId = a["Performance Identity"]?.[0]?.id;
-                const personId = a["Person"]?.[0]?.id;
                 
-                if (roleId && personId) {
-                    // FIX: Look for the actor in *this show's* actor list
-                    // This prevents grabbing an old audition record from a different show
-                    const actorObj = showActors.find(sa => sa.personId === personId);
+                // Get Person Info from Assignment
+                const assignedPersonId = a["Person"]?.[0]?.id;
+                const assignedPersonName = a["Person"]?.[0]?.value;
+
+                if (roleId && assignedPersonId) {
+                    // ATTEMPT 1: Match by Person ID (Best)
+                    let actorObj = showActors.find(sa => sa.personId == assignedPersonId);
+
+                    // ATTEMPT 2: Match by Name (Fallback)
+                    // This fixes cases where tables link to different sources but represent the same human
+                    if (!actorObj && assignedPersonName) {
+                        actorObj = showActors.find(sa => sa.performerName === assignedPersonName);
+                        if(actorObj) console.log(`Recovered link for ${assignedPersonName} via Name Match.`);
+                    }
 
                     if (actorObj) {
                         if (!assignmentMap[roleId]) assignmentMap[roleId] = [];
-                        assignmentMap[roleId].push(actorObj);
+                        // Avoid duplicates
+                        if (!assignmentMap[roleId].find(x => x.id === actorObj.id)) {
+                            assignmentMap[roleId].push(actorObj);
+                        }
                     }
                 }
             });
 
-            // 4. Process Roles (Hydrate from Map)
+            // 4. Process Roles
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
-                const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
+                const isDirectLink = prodLinks.some((link: any) => link.id == productionId);
                 const masterLinks = r["Master Show Database"] || [];
-                const isMasterLink = masterShowId && masterLinks.some((link: any) => link.id === masterShowId);
+                const isMasterLink = masterShowId && masterLinks.some((link: any) => link.id == masterShowId);
                 return isDirectLink || isMasterLink;
             });
 
+            // 5. Hydrate Roles
             const processedRoles = showRoles.map((r: any) => {
                 let sceneIds: number[] = [];
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
-                // Hydrate from the Assignment Map
                 const assignedActors = assignmentMap[r.id] || [];
 
                 return {
@@ -123,21 +140,19 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     name: r["Role Name"] || r.Name,
                     type: r["Role Type"]?.value || "Ensemble",
                     actors: assignedActors, 
-                    selectedActorIds: assignedActors.map(a => a.id), // Maps to Audition IDs
+                    selectedActorIds: assignedActors.map(a => a.id), 
                     selectedActorId: assignedActors[0]?.id || null, 
                     sceneIds: sceneIds
                 };
             });
 
-            // 5. Process Scenes
+            // 6. Process Scenes
             const showScenes = sceneRows
-                .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
+                .filter((s: any) => s["Production"]?.some((link: any) => link.id == productionId))
                 .sort((a: any, b: any) => a.id - b.id);
 
             setRoles(processedRoles);
             setScenes(showScenes);
-
-            console.log(`✅ Loaded ${showActors.length} Actors, ${processedRoles.length} Roles, ${currentAssignments.length} Assignments.`);
 
         } catch (e) {
             console.error("Load failed:", e);
@@ -147,18 +162,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     }
     if(productionId) load();
   }, [productionId, masterShowId]);
-  const getActorStats = (actorId: number) => {
-      const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
-      const mySceneIds = new Set(myRoles.flatMap(r => r.sceneIds));
-      const splitIndex = Math.floor(scenes.length / 2);
-      const act1Scenes = scenes.slice(0, splitIndex).map(s => s.id);
-      const act2Scenes = scenes.slice(splitIndex).map(s => s.id);
-      const hasAct1 = Array.from(mySceneIds).some(sid => act1Scenes.includes(sid as number));
-      const hasAct2 = Array.from(mySceneIds).some(sid => act2Scenes.includes(sid as number));
-      const count = mySceneIds.size;
-      return { count, hasAct1, hasAct2, isCompliant: count >= 3 && hasAct1 && hasAct2, roleCount: myRoles.length };
-  };
-
+  
   // --- 🪄 SMART AUTO-CAST ---
   const handleAutoCast = async () => {
     const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining students into ENSEMBLE.\n3. Verify min 3 scenes.`;
