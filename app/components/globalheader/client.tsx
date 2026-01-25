@@ -3,18 +3,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation'; // 👈 IMPORT THIS
 import { switchProduction } from '@/app/actions'; 
 import { 
   LayoutGrid, LogOut, ChevronRight, ChevronDown, 
   Users, ClipboardCheck, Settings, Sparkles, Check,
-  MapPin, Music, Calendar // <--- Added Calendar icon
+  MapPin, Music, Calendar 
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  // 1. Get the current URL path (e.g. "/casting" or "/staff")
+  const pathname = usePathname(); 
 
-  // Close menu when clicking outside
+  // ... (Keep existing useEffect for click outside) ...
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -25,29 +29,22 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Resolve Active Show Details
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
-  
-  // Mock User
   const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
 
-  // --- 🪄 THE MAGIC: Group Shows by Season ---
   const groupedShows = shows.reduce((groups, show) => {
     const season = show.season || 'Other';
-    if (!groups[season]) {
-      groups[season] = [];
-    }
+    if (!groups[season]) groups[season] = [];
     groups[season].push(show);
     return groups;
   }, {} as Record<string, typeof shows>);
 
-  // Sort seasons (Newest first usually, assuming string comparison works for years)
   const sortedSeasons = Object.keys(groupedShows).sort().reverse();
 
   return (
     <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
       
-      {/* LEFT: Logo & Quick-Change Menu Trigger */}
+      {/* ... Left Logo Section ... */}
       <div className="flex items-center gap-3" ref={menuRef}>
         <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -58,11 +55,9 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
             <ChevronDown size={14} className={`transition-transform duration-200 ${isMenuOpen ? 'rotate-180 text-emerald-500' : ''}`} />
         </button>
 
-        {/* The Quick-Change Popout Menu */}
         {isMenuOpen && (
           <div className="absolute top-16 left-4 w-80 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-left">
             
-            {/* Context Switcher Area */}
             <div className="bg-zinc-900/50 p-2 border-b border-zinc-800">
                <div className="px-2 pt-2 pb-1 flex justify-between items-center">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Switch Context</span>
@@ -72,20 +67,20 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                <div className="space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
                  {shows.length === 0 && <div className="p-2 text-xs text-zinc-500 italic">No active shows found.</div>}
                  
-                 {/* Iterate through Seasons */}
                  {sortedSeasons.map(season => (
                    <div key={season} className="mb-3">
-                     {/* SEASON HEADER */}
                      <div className="px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
                         <Calendar size={10} />
                         {season}
                      </div>
 
-                     {/* SHOWS IN THIS SEASON */}
                      <div className="space-y-0.5">
                        {groupedShows[season].map((prod) => (
                          <form key={prod.id} action={switchProduction}>
                            <input type="hidden" name="productionId" value={prod.id} />
+                           {/* 2. 👇 PASS THE CURRENT PATH TO THE SERVER */}
+                           <input type="hidden" name="redirectPath" value={pathname} />
+                           
                            <ContextButton prod={prod} isActive={prod.id === activeId} />
                          </form>
                        ))}
@@ -95,14 +90,12 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                </div>
             </div>
 
-            {/* Navigation Links */}
+            {/* ... Navigation Links Section (Unchanged) ... */}
             <div className="p-2 space-y-1">
               <div className="px-2 pt-2 pb-1"><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span></div>
               <MenuLink href="/casting" icon={<Users size={16} />} title="Casting" subtitle="Auditions & Callbacks" onClick={() => setIsMenuOpen(false)} />
-
               <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
               <MenuLink href="/staff" icon={<ClipboardCheck size={16} />} title="Staff Deck" subtitle="Compliance & Reports" onClick={() => setIsMenuOpen(false)} />
-            
               <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soon</span></div>
               <div className="flex items-start gap-3 p-2 rounded-lg opacity-50 cursor-not-allowed">
                  <div className="mt-1 text-zinc-500"><Music size={16} /></div>
@@ -112,19 +105,19 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                  </div>
               </div>
             </div>
-
+            
             <div className="p-2 border-t border-zinc-800 bg-zinc-900/30">
                <MenuLink href="/settings" icon={<Settings size={16} />} title="Settings" subtitle="Manage Context" onClick={() => setIsMenuOpen(false)} />
             </div>
           </div>
         )}
 
-        {/* Breadcrumb (Visible when menu closed) */}
+        {/* ... Breadcrumb (Unchanged) ... */}
         {!isMenuOpen && (
           <>
             <ChevronRight size={14} className="text-zinc-700" />
             <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900 rounded-md border border-zinc-800">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${activeShow.branch?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <div className={`w-2 h-2 rounded-full animate-pulse ${activeShow.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500'}`} />
               <span className="text-zinc-300 text-xs font-medium max-w-[150px] truncate">
                  {activeShow.title}
               </span>
@@ -133,7 +126,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         )}
       </div>
 
-      {/* RIGHT: User Profile */}
+      {/* ... Right User Section (Unchanged) ... */}
       <div className="flex items-center gap-4">
         <div className="hidden md:flex flex-col items-end leading-tight">
           <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
@@ -149,7 +142,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   );
 }
 
-// Sub-components
+// ... ContextButton and MenuLink components (Unchanged) ...
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
   const locationColor = prod.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500';
