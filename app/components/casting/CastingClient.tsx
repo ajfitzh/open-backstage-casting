@@ -107,8 +107,9 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
 
 // --- 🪄 THE MAGIC: AUTO-CAST ALGORITHM ---
+// --- 🪄 THE MAGIC: AUTO-CAST ALGORITHM ---
   const handleAutoCast = async () => {
-    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill EMPTY Lead roles first.\n2. Balance students into ENSEMBLE roles.\n3. Ignored: Supporting/Featured & Leads that are already cast.`;
+    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles first (1 actor each).\n2. Balance remaining students into ENSEMBLE.\n3. Verify scene counts (Min 3).`;
     if (!confirm(confirmMsg)) return;
 
     setIsAutoCasting(true);
@@ -124,69 +125,75 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
     // 3. Iterate through every Student
     actors.forEach(actor => {
-        // Calculate current status (Where are they right now?)
+        // Calculate current status
         let currentAssignments = newRoles.filter((r: any) => r.selectedActorIds.includes(actor.id));
-        let currentSceneIds = new Set(currentAssignments.flatMap((r: any) => r.sceneIds));
         
+        // CHECK: Does this student already have a "Primary" role?
+        // (We don't want to cast Flounder as King Triton too)
+        const hasPrimaryRole = currentAssignments.some((r: any) => 
+            ['Lead', 'Supporting', 'Featured'].includes(r.type)
+        );
+
+        let currentSceneIds = new Set(currentAssignments.flatMap((r: any) => r.sceneIds));
         let hasAct1 = Array.from(currentSceneIds).some(sid => act1Scenes.has(sid as number));
         let hasAct2 = Array.from(currentSceneIds).some(sid => act2Scenes.has(sid as number));
         let totalScenes = currentSceneIds.size;
 
-        // Constraint Loop: Keep finding roles until they have 3 scenes & both acts
+        // Constraint Loop
         let attempts = 0;
         while ((totalScenes < 3 || !hasAct1 || !hasAct2) && attempts < 10) {
             attempts++;
-
             let bestRole = null;
 
-            // STRATEGY A: FILL EMPTY LEADS
-            // Only if this student isn't already a lead? (Optional constraint, but let's keep it simple)
-            // We look for a Lead role that has NO ONE assigned yet.
-            bestRole = newRoles.find((r: any) => 
-                r.type === 'Lead' && 
-                r.selectedActorIds.length === 0 && 
-                r.sceneIds.length > 0 &&
-                !r.selectedActorIds.includes(actor.id)
-            );
+            // STRATEGY A: FILL EMPTY PRIMARY ROLES (Lead -> Supporting -> Featured)
+            // Condition: Student doesn't have a primary role yet.
+            if (!hasPrimaryRole) {
+                // Find the first empty primary role that has scenes
+                bestRole = newRoles.find((r: any) => 
+                    ['Lead', 'Supporting', 'Featured'].includes(r.type) && // ✅ NOW INCLUDES SUPPORTING/FEATURED
+                    r.selectedActorIds.length === 0 && 
+                    r.sceneIds.length > 0 &&
+                    !r.selectedActorIds.includes(actor.id)
+                );
+            }
 
-            // STRATEGY B: BALANCED ENSEMBLE
+            // STRATEGY B: BALANCED ENSEMBLE (Fallback)
+            // If we didn't find a primary role (or student already has one), find an Ensemble role
             if (!bestRole) {
-                // 1. Get all valid Ensemble options
                 const ensembleOptions = newRoles.filter((r: any) => 
                     r.type === 'Ensemble' && 
                     !r.selectedActorIds.includes(actor.id) &&
                     r.sceneIds.length > 0
                 );
 
-                // 2. SORT BY POPULATION (Ascending) -> This creates the BALANCE!
-                // It puts "Chefs (0)" before "Flounders (50)"
+                // Sort by population (Smallest first)
                 ensembleOptions.sort((a: any, b: any) => a.selectedActorIds.length - b.selectedActorIds.length);
 
-                // 3. Pick the first one that helps us meet our missing constraints
                 bestRole = ensembleOptions.find((r: any) => {
                     const roleHasAct1 = r.sceneIds.some((sid: number) => act1Scenes.has(sid));
                     const roleHasAct2 = r.sceneIds.some((sid: number) => act2Scenes.has(sid));
 
-                    // Does it fix a missing Act?
                     if (!hasAct1 && roleHasAct1) return true;
                     if (!hasAct2 && roleHasAct2) return true;
-                    
-                    // Or does it just add volume if we are under 3 scenes?
                     if (totalScenes < 3) return true;
-
                     return false;
                 });
             }
 
-            // DID WE FIND ONE?
+            // ASSIGNMENT LOGIC
             if (bestRole) {
-                // Update the Role Object
                 bestRole.selectedActorIds.push(actor.id);
                 if (!bestRole.actors.find((a: any) => a.id === actor.id)) {
                     bestRole.actors.push(actor);
                 }
 
-                // Update Local tracking vars for the loop
+                // If we just assigned a primary role, mark the flag so they don't get another one next loop
+                if (['Lead', 'Supporting', 'Featured'].includes(bestRole.type)) {
+                    // We can break here if we want Primary Roles to "count" as satisfying the need, 
+                    // but the loop condition (3 scenes) will ensure they still get Ensemble if the Lead role is small.
+                }
+
+                // Update tracking
                 bestRole.sceneIds.forEach((sid: number) => {
                     if (act1Scenes.has(sid)) hasAct1 = true;
                     if (act2Scenes.has(sid)) hasAct2 = true;
@@ -194,18 +201,16 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 });
                 totalScenes = currentSceneIds.size;
 
-                // Queue for DB Save
                 if (!updatesToSave.includes(bestRole)) updatesToSave.push(bestRole);
             } else {
-                break; // No roles left that fit criteria
+                break; 
             }
         }
     });
 
-    // 4. Commit to UI
+    // 4. Commit
     setRoles(newRoles);
 
-    // 5. Commit to Database
     try {
         console.log(`Auto-Cast: Updating ${updatesToSave.length} roles...`);
         await Promise.all(updatesToSave.map(async (role) => {
@@ -216,7 +221,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
             await updateRole(role.id, { "Assigned Actor": personIds });
         }));
-        alert(`Auto-cast complete! Balanced ${updatesToSave.length} roles.`);
+        alert(`Auto-cast complete! Updated ${updatesToSave.length} roles.`);
     } catch (e) {
         console.error("Auto-cast partial failure", e);
         alert("Visual update done, but some database saves may have timed out.");
