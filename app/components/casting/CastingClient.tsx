@@ -44,26 +44,55 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [allAssignments, setAllAssignments] = useState<any[]>([]);
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-  // --- DATA LOADING (Unchanged) ---
+// --- DATA LOADING (Source of Truth: Assignments Table) ---
   useEffect(() => {
     async function load() {
         setLoading(true);
         try {
             const [roleRows, auditionRows, sceneRows, assignmentRows] = await Promise.all([
-                getRoles(), getAuditionSlots(), getScenes(), getAssignments()
+                getRoles(), 
+                getAuditionSlots(), 
+                getScenes(),
+                getAssignments()
             ]);
 
+            // 1. Process Actors FIRST (Filter for THIS Production)
+            // We need this list ready so we can match Assignments to valid Auditions
+            const showActors = auditionRows
+                .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
+                .map((a: any) => ({
+                    ...a,
+                    id: a.id, // Audition ID
+                    personId: a["Performer"]?.[0]?.id, // Person ID (Link to Table 599)
+                    Performer: a["Performer"]?.[0]?.value || "Unknown",
+                    Headshot: a["Headshot"]?.[0]?.url || null,
+                    grades: {
+                        actingNotes: a["Acting Notes"],
+                        vocalNotes: a["Music Notes"],
+                        danceNotes: a["Choreography Notes"]
+                    }
+                }));
+            
+            setActors(showActors); // Save to state immediately
+
+            // 2. Process Assignments
             const currentAssignments = assignmentRows.filter((a: any) => 
                 a.Production?.some((p: any) => p.id === productionId)
             );
-            setAllAssignments(currentAssignments);
+            setAllAssignments(currentAssignments); // Keep for deletion logic
 
+            // 3. Create Map: Role ID -> Array of Correct Actor Objects
             const assignmentMap: Record<number, any[]> = {};
+            
             currentAssignments.forEach((a: any) => {
                 const roleId = a["Performance Identity"]?.[0]?.id;
                 const personId = a["Person"]?.[0]?.id;
+                
                 if (roleId && personId) {
-                    const actorObj = auditionRows.find((ar: any) => ar["Performer"]?.[0]?.id === personId);
+                    // FIX: Look for the actor in *this show's* actor list
+                    // This prevents grabbing an old audition record from a different show
+                    const actorObj = showActors.find(sa => sa.personId === personId);
+
                     if (actorObj) {
                         if (!assignmentMap[roleId]) assignmentMap[roleId] = [];
                         assignmentMap[roleId].push(actorObj);
@@ -71,17 +100,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 }
             });
 
-            const showActors = auditionRows
-                .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
-                .map((a: any) => ({
-                    ...a,
-                    id: a.id, 
-                    personId: a["Performer"]?.[0]?.id,
-                    Performer: a["Performer"]?.[0]?.value || "Unknown",
-                    Headshot: a["Headshot"]?.[0]?.url || null,
-                    grades: { actingNotes: a["Acting Notes"], vocalNotes: a["Music Notes"], danceNotes: a["Choreography Notes"] }
-                }));
-
+            // 4. Process Roles (Hydrate from Map)
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
                 const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
@@ -95,33 +114,39 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
-                const assignedActorsRaw = assignmentMap[r.id] || [];
-                const assignedActors = assignedActorsRaw.map(raw => showActors.find(sa => sa.id === raw.id) || null).filter(Boolean);
+
+                // Hydrate from the Assignment Map
+                const assignedActors = assignmentMap[r.id] || [];
 
                 return {
                     id: r.id,
                     name: r["Role Name"] || r.Name,
                     type: r["Role Type"]?.value || "Ensemble",
                     actors: assignedActors, 
-                    selectedActorIds: assignedActors.map((a: any) => a.id), 
+                    selectedActorIds: assignedActors.map(a => a.id), // Maps to Audition IDs
                     selectedActorId: assignedActors[0]?.id || null, 
                     sceneIds: sceneIds
                 };
             });
 
+            // 5. Process Scenes
             const showScenes = sceneRows
                 .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
                 .sort((a: any, b: any) => a.id - b.id);
 
             setRoles(processedRoles);
-            setActors(showActors);
             setScenes(showScenes);
 
-        } catch (e) { console.error("Load failed:", e); } finally { setLoading(false); }
+            console.log(`✅ Loaded ${showActors.length} Actors, ${processedRoles.length} Roles, ${currentAssignments.length} Assignments.`);
+
+        } catch (e) {
+            console.error("Load failed:", e);
+        } finally {
+            setLoading(false);
+        }
     }
     if(productionId) load();
   }, [productionId, masterShowId]);
-
   const getActorStats = (actorId: number) => {
       const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
       const mySceneIds = new Set(myRoles.flatMap(r => r.sceneIds));
