@@ -3,81 +3,52 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Save, X, AlertTriangle, Clock, 
-  Users, ChevronRight, Search 
+  Users, ChevronRight, ChevronLeft, Search,
+  MoreHorizontal, PlayCircle, CheckCircle2,
+  Maximize2, Minimize2, Plus, Minus
 } from 'lucide-react';
 
 // --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
-
-interface TimeSlot {
-  id: string;
-  day: string;
-  label: string;
-  isHourStart: boolean;
-  timeValue: number; // For sorting/logic
-}
+type SceneStatus = "New" | "Worked" | "Polished";
 
 interface ScheduledItem {
   id: string;
   sceneId: number;
   track: TrackType;
-  slotId: string;
+  day: 'Fri' | 'Sat';
+  weekOffset: number; // 0 = this week, 1 = next week
+  startTime: number; // e.g. 18.0 = 6pm
+  duration: number; // in minutes (15, 30, 45...)
+  status: SceneStatus;
 }
 
-// --- CONFIG: 15-Minute Grid ---
-const generateTimeSlots = () => {
-  const slots: TimeSlot[] = [];
-  
-  // Friday 6:00 PM - 9:00 PM
-  for (let h = 18; h < 21; h++) {
-    ['00', '15', '30', '45'].forEach(m => {
-      slots.push({ 
-        id: `fri-${h}${m}`, 
-        day: 'Friday', 
-        label: `${h > 12 ? h-12 : h}:${m} PM`, 
-        isHourStart: m === '00',
-        timeValue: h + (parseInt(m)/60)
-      });
-    });
-  }
-
-  // Saturday 10:00 AM - 5:00 PM
-  for (let h = 10; h < 17; h++) {
-    ['00', '15', '30', '45'].forEach(m => {
-      slots.push({ 
-        id: `sat-${h}${m}`, 
-        day: 'Saturday', 
-        label: `${h > 12 ? h-12 : h}:${m} ${h >= 12 ? 'PM' : 'AM'}`, 
-        isHourStart: m === '00',
-        timeValue: h + (parseInt(m)/60)
-      });
-    });
-  }
-  return slots;
-};
-
-const TIME_SLOTS = generateTimeSlots();
+// --- CONFIG ---
+const FRI_START = 18; // 6 PM
+const FRI_END = 21;   // 9 PM
+const SAT_START = 10; // 10 AM
+const SAT_END = 17;   // 5 PM
 
 export default function SchedulerClient({ scenes, roles, assignments, people, productionTitle }: any) {
   
+  // State
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]);
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
-  const [viewDay, setViewDay] = useState<'Friday' | 'Saturday'>('Friday');
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isCallListExpanded, setIsCallListExpanded] = useState(false);
 
-  // --- 🧠 DATA PREP: THE INHERITANCE ENGINE ---
+  // --- 🧠 DATA PREP ---
   const sceneData = useMemo(() => {
-    
-    // 1. Create a "Rolodex": Map Person ID -> Name
+    // 1. Map Person ID -> Name
     const personMap = new Map();
     people.forEach((p: any) => {
         personMap.set(p.id, { 
             name: p["Full Name"] || `ID ${p.id}`, 
-            conflicts: p["Rehearsal Conflicts"] || [] // Could parse this if needed
         });
     });
 
-    // 2. Create "Cast List": Map Role ID -> Array of Person IDs
+    // 2. Map Role -> Cast
     const roleCastMap = new Map<number, number[]>();
     assignments.forEach((a: any) => {
         const roleId = a["Performance Identity"]?.[0]?.id;
@@ -88,95 +59,176 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
         }
     });
 
-    // 3. Hydrate Scenes with Derived Cast
+    // 3. Hydrate Scenes
     return scenes.map((s: any) => {
-        // Find all Roles linked to this scene (via Blueprint)
         const linkedRoles = roles.filter((r: any) => 
             r["Active Scenes"]?.some((link:any) => link.id === s.id)
         );
-
-        // Collect all People assigned to those roles
         const castIds = new Set<number>();
         linkedRoles.forEach((r: any) => {
             const pIds = roleCastMap.get(r.id) || [];
             pIds.forEach(id => castIds.add(id));
         });
 
-        // Convert IDs to Actor Objects
-        const castList = Array.from(castIds).map(id => personMap.get(id)).filter(Boolean);
+        // Determine Status based on schedule history
+        // (In a real app, this would come from DB, here we infer from local state)
+        const isPolished = schedule.some(i => i.sceneId === s.id && i.status === 'Polished');
+        const isWorked = schedule.some(i => i.sceneId === s.id && i.status === 'Worked');
 
         return {
             id: s.id,
             name: s["Scene Name"],
             act: s["Act"]?.value || "1",
             type: s["Scene Type"]?.value || "Scene",
-            cast: castList,
-            size: castList.length // This should now be > 0!
+            cast: Array.from(castIds).map(id => personMap.get(id)).filter(Boolean),
+            status: isPolished ? 'Polished' : isWorked ? 'Worked' : 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
+  }, [scenes, roles, assignments, people, schedule]); // Re-calc when schedule changes for status updates
 
-  }, [scenes, roles, assignments, people]);
+  // --- ACTIONS ---
 
-
-  // --- LOGIC ---
-  const filteredScenes = sceneData.filter((s: any) => 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const getSlotConflicts = (sceneId: number, slotId: string) => {
-      // Future: Implement conflict checking logic here
-      return [];
-  };
-
-  const handleDrop = (e: React.DragEvent, slotId: string, track: TrackType) => {
+  const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
       if(!sceneId) return;
-      setSchedule(prev => [...prev, { id: Date.now().toString(), sceneId, track, slotId }]);
+
+      const startTime = hour + (min / 60);
+      
+      const newBlock: ScheduledItem = {
+          id: Date.now().toString(),
+          sceneId,
+          track,
+          day,
+          weekOffset: currentWeekOffset,
+          startTime,
+          duration: 30, // Default to 30 mins
+          status: 'New'
+      };
+
+      setSchedule(prev => [...prev, newBlock]);
       setDraggedSceneId(null);
   };
 
-  // Who is called today?
-  const calledActors = useMemo(() => {
-      const activeSlots = TIME_SLOTS.filter(t => t.day === viewDay).map(t => t.id);
-      const scheduledScenes = schedule
-          .filter(item => activeSlots.includes(item.slotId))
-          .map(item => item.sceneId);
-      
-      const uniqueActors = new Set<string>();
-      scheduledScenes.forEach(sid => {
-          const scene = sceneData.find((s: any) => s.id === sid);
-          scene?.cast.forEach((p: any) => uniqueActors.add(p.name));
+  const updateDuration = (itemId: string, change: number) => {
+      setSchedule(prev => prev.map(item => {
+          if (item.id !== itemId) return item;
+          const newDur = item.duration + change;
+          return newDur >= 15 ? { ...item, duration: newDur } : item;
+      }));
+  };
+
+  const toggleStatus = (itemId: string) => {
+      const cycle: Record<SceneStatus, SceneStatus> = { 'New': 'Worked', 'Worked': 'Polished', 'Polished': 'New' };
+      setSchedule(prev => prev.map(item => 
+          item.id === itemId ? { ...item, status: cycle[item.status] } : item
+      ));
+  };
+
+  // --- CALCULATIONS ---
+
+  // 1. Current Week Label
+  const weekLabel = useMemo(() => {
+      const today = new Date();
+      // Find next Friday
+      const nextFri = new Date(today);
+      nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7);
+      // Add Offset
+      nextFri.setDate(nextFri.getDate() + (currentWeekOffset * 7));
+      return `Week of ${nextFri.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  }, [currentWeekOffset]);
+
+  // 2. Call List Logic (Start/End Times)
+  const callList = useMemo(() => {
+      const activeItems = schedule.filter(i => i.weekOffset === currentWeekOffset);
+      const actorMap = new Map<string, { name: string, start: number, end: number, day: string }>();
+
+      activeItems.forEach(item => {
+          const scene = sceneData.find((s: any) => s.id === item.sceneId);
+          if (!scene) return;
+          
+          const itemEnd = item.startTime + (item.duration / 60);
+
+          scene.cast.forEach((actor: any) => {
+              const key = `${actor.name}-${item.day}`; // Unique per day
+              const current = actorMap.get(key);
+
+              if (!current) {
+                  actorMap.set(key, { 
+                      name: actor.name, 
+                      start: item.startTime, 
+                      end: itemEnd,
+                      day: item.day 
+                  });
+              } else {
+                  actorMap.set(key, {
+                      ...current,
+                      start: Math.min(current.start, item.startTime),
+                      end: Math.max(current.end, itemEnd)
+                  });
+              }
+          });
       });
-      return Array.from(uniqueActors).sort();
-  }, [schedule, viewDay, sceneData]);
+
+      return Array.from(actorMap.values()).sort((a, b) => {
+          if (a.day !== b.day) return a.day === 'Fri' ? -1 : 1;
+          return a.start - b.start;
+      });
+  }, [schedule, currentWeekOffset, sceneData]);
+
+  // 3. Show Health
+  const showHealth = useMemo(() => {
+      const total = sceneData.length;
+      const worked = sceneData.filter((s:any) => s.status === 'Worked').length;
+      const polished = sceneData.filter((s:any) => s.status === 'Polished').length;
+      return { total, worked, polished };
+  }, [sceneData]);
+
+
+  // --- RENDER HELPERS ---
+  const formatTime = (decimalTime: number) => {
+      const h = Math.floor(decimalTime);
+      const m = Math.round((decimalTime - h) * 60);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h;
+      return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`;
+  };
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
         
-        {/* SIDEBAR: RESOURCES */}
-        <aside className="w-80 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
-            <div className="p-4 border-b border-white/10 bg-zinc-900">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                        <Clock size={12}/> Scenes Bank
-                    </h2>
-                    <span className="text-[10px] font-mono bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{sceneData.length}</span>
+        {/* --- LEFT SIDEBAR: SCENE BANK --- */}
+        <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
+            {/* Header */}
+            <div className="p-4 border-b border-white/10">
+                <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Show Health</div>
+                <div className="flex h-2 bg-zinc-800 rounded-full overflow-hidden mb-2">
+                    <div className="bg-emerald-500" style={{ width: `${(showHealth.polished / showHealth.total) * 100}%` }} title="Polished"/>
+                    <div className="bg-blue-500" style={{ width: `${(showHealth.worked / showHealth.total) * 100}%` }} title="Worked"/>
                 </div>
-                
+                <div className="flex justify-between text-[9px] text-zinc-500 font-bold uppercase">
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> {showHealth.polished} Polished</span>
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"/> {showHealth.worked} Worked</span>
+                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-zinc-700"/> {showHealth.total - showHealth.polished - showHealth.worked} New</span>
+                </div>
+            </div>
+
+            {/* Search */}
+            <div className="p-2">
                 <div className="relative">
                     <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"/>
                     <input 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search scenes..." 
-                        className="w-full bg-zinc-950 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600"
+                        placeholder="Filter scenes..." 
+                        className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none placeholder:text-zinc-600"
                     />
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar p-3 space-y-2">
-                {filteredScenes.map((scene: any) => (
+            {/* List */}
+            <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
+                {sceneData.filter((s:any) => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
                     <div 
                         key={scene.id}
                         draggable
@@ -185,150 +237,210 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
                             setDraggedSceneId(scene.id);
                         }}
                         onDragEnd={() => setDraggedSceneId(null)}
-                        className="bg-zinc-900 border border-white/5 p-3 rounded hover:border-white/30 cursor-grab active:cursor-grabbing group transition-all relative overflow-hidden"
+                        className={`
+                            border p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all
+                            ${scene.status === 'Polished' ? 'border-emerald-500/30 bg-emerald-900/10' : 
+                              scene.status === 'Worked' ? 'border-blue-500/30 bg-blue-900/10' : 
+                              'border-white/5 bg-zinc-900'}
+                        `}
                     >
-                        <div className="flex justify-between items-start mb-1 relative z-10">
-                            <span className="font-bold text-sm text-zinc-200 leading-tight pr-4">{scene.name}</span>
-                            <span className="text-[9px] font-mono bg-black/50 px-1.5 py-0.5 rounded text-zinc-400 whitespace-nowrap">Act {scene.act}</span>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
+                            {scene.status === 'Polished' && <CheckCircle2 size={10} className="text-emerald-500"/>}
+                            {scene.status === 'Worked' && <PlayCircle size={10} className="text-blue-500"/>}
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-zinc-500 relative z-10">
-                            {scene.size > 0 ? (
-                                <span className="text-emerald-500 font-bold flex items-center gap-1">
-                                    <Users size={10} /> {scene.size} Actors
-                                </span>
-                            ) : (
-                                <span className="text-red-500 font-bold flex items-center gap-1">
-                                    <AlertTriangle size={10} /> 0 Actors (Check Roles)
-                                </span>
-                            )}
-                            <span className="text-zinc-600">•</span>
-                            <span>{scene.type}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                             <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
+                             <span>{scene.cast.length} Actors</span>
                         </div>
                     </div>
                 ))}
             </div>
-            
-            {/* CALL BOARD PREVIEW */}
-            <div className="flex flex-col bg-zinc-950 border-t border-white/10 h-1/3">
-                <div className="p-3 border-b border-white/10 bg-zinc-900 flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-2"><Users size={12}/> Call List ({viewDay})</span>
-                    <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded-full">{calledActors.length}</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-3 content-start custom-scrollbar">
-                    <div className="flex flex-wrap gap-1.5">
-                        {calledActors.map(name => (
-                            <span key={name} className="text-[10px] bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-300 hover:text-white transition-colors cursor-default">
-                                {name}
-                            </span>
-                        ))}
-                        {calledActors.length === 0 && <div className="w-full text-center mt-4 text-zinc-700 italic text-xs">Drag scenes to build the call list...</div>}
-                    </div>
-                </div>
+
+            {/* Call List Preview */}
+            <div className="border-t border-white/10 bg-zinc-950">
+                <button 
+                    onClick={() => setIsCallListExpanded(true)}
+                    className="w-full p-3 flex justify-between items-center hover:bg-zinc-900 transition-colors"
+                >
+                    <span className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-2">
+                        <Users size={12}/> Call List
+                    </span>
+                    <Maximize2 size={12} className="text-zinc-500"/>
+                </button>
             </div>
         </aside>
 
-        {/* MAIN: THE GRID */}
+        {/* --- MAIN: CALENDAR GRID --- */}
         <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
             
-            {/* HEADER TOOLBAR */}
-            <header className="h-14 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-10 shadow-lg">
+            {/* Header: Week Navigator */}
+            <header className="h-14 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 shadow-lg z-30">
                 <div className="flex items-center gap-4">
-                     <div className="flex bg-black/50 rounded-lg p-1 border border-white/5">
-                        <button onClick={() => setViewDay('Friday')} className={`px-5 py-1.5 rounded-md text-xs font-black uppercase tracking-wide transition-all ${viewDay === 'Friday' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Friday</button>
-                        <button onClick={() => setViewDay('Saturday')} className={`px-5 py-1.5 rounded-md text-xs font-black uppercase tracking-wide transition-all ${viewDay === 'Saturday' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Saturday</button>
+                    <div className="flex items-center gap-2 bg-black/40 rounded-lg p-1 border border-white/5">
+                        <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="p-1 hover:text-white text-zinc-500 transition-colors"><ChevronLeft size={16}/></button>
+                        <span className="text-xs font-bold text-zinc-300 w-32 text-center select-none">{weekLabel}</span>
+                        <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="p-1 hover:text-white text-zinc-500 transition-colors"><ChevronRight size={16}/></button>
                     </div>
                     <div className="h-6 w-px bg-white/10 mx-2"></div>
-                    <h1 className="text-sm font-bold text-zinc-400">{productionTitle} Schedule</h1>
+                    <h1 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{productionTitle}</h1>
                 </div>
-
-                <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-emerald-900/20">
-                    <Save size={14} /> Publish Schedule
+                <button className="bg-white text-black px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-all">
+                    Publish Schedule
                 </button>
             </header>
 
-            {/* SCROLLABLE GRID AREA */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-zinc-950">
-                <div className="min-w-[900px] pb-20">
+            {/* The Grid Canvas */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
+                <div className="flex gap-4 h-full min-h-[600px]">
                     
-                    {/* STICKY COLUMN HEADERS */}
-                    <div className="sticky top-0 z-30 grid grid-cols-[80px_1fr_1fr_1fr] border-b border-white/10 shadow-lg">
-                        <div className="bg-zinc-900 p-3 text-[10px] font-black uppercase text-zinc-500 text-center border-r border-white/10 flex items-center justify-center">Time</div>
-                        <div className="bg-blue-950/30 p-3 text-xs font-black uppercase text-blue-400 text-center border-r border-white/10 border-t-4 border-t-blue-500 backdrop-blur-sm">Acting</div>
-                        <div className="bg-purple-950/30 p-3 text-xs font-black uppercase text-purple-400 text-center border-r border-white/10 border-t-4 border-t-purple-500 backdrop-blur-sm">Music</div>
-                        <div className="bg-emerald-950/30 p-3 text-xs font-black uppercase text-emerald-400 text-center border-t-4 border-t-emerald-500 backdrop-blur-sm">Dance</div>
+                    {/* FRIDAY COLUMN */}
+                    <DayColumn 
+                        day="Fri" 
+                        startHour={FRI_START} 
+                        endHour={FRI_END} 
+                        schedule={schedule}
+                        weekOffset={currentWeekOffset}
+                        onDrop={handleDrop}
+                        onDurationChange={updateDuration}
+                        onStatusToggle={toggleStatus}
+                        draggedSceneId={draggedSceneId}
+                        sceneData={sceneData}
+                    />
+
+                    {/* SATURDAY COLUMN */}
+                    <DayColumn 
+                        day="Sat" 
+                        startHour={SAT_START} 
+                        endHour={SAT_END} 
+                        schedule={schedule}
+                        weekOffset={currentWeekOffset}
+                        onDrop={handleDrop}
+                        onDurationChange={updateDuration}
+                        onStatusToggle={toggleStatus}
+                        draggedSceneId={draggedSceneId}
+                        sceneData={sceneData}
+                    />
+                </div>
+            </div>
+        </main>
+
+        {/* --- MODAL: EXPANDED CALL LIST --- */}
+        {isCallListExpanded && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8 animate-in fade-in">
+                <div className="bg-zinc-900 w-full max-w-4xl h-[80vh] rounded-2xl border border-white/10 flex flex-col shadow-2xl overflow-hidden">
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-800">
+                        <h2 className="text-lg font-black uppercase italic tracking-wider text-emerald-500">Weekly Call List</h2>
+                        <button onClick={() => setIsCallListExpanded(false)} className="text-zinc-500 hover:text-white"><X size={24}/></button>
                     </div>
-
-                    {/* TIME SLOTS */}
-                    {TIME_SLOTS.filter(t => t.day === viewDay).map((slot, index) => (
-                        <div 
-                            key={slot.id} 
-                            className={`grid grid-cols-[80px_1fr_1fr_1fr] min-h-[60px] border-b border-white/5 group hover:bg-white/[0.01] transition-colors ${slot.isHourStart ? 'border-b-white/10' : ''}`}
-                        >
-                            {/* TIME LABEL */}
-                            <div className="border-r border-white/10 p-3 text-[11px] font-bold text-zinc-500 text-right bg-zinc-900/50 sticky left-0 z-10 flex flex-col justify-start">
-                                {slot.label}
-                                {slot.isHourStart && <div className="mt-1 w-full h-px bg-white/10"/>}
+                    
+                    <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-8 custom-scrollbar">
+                        {['Fri', 'Sat'].map(day => (
+                            <div key={day}>
+                                <h3 className="text-sm font-bold text-white mb-4 border-b border-white/10 pb-2">{day === 'Fri' ? 'Friday' : 'Saturday'}</h3>
+                                <div className="space-y-2">
+                                    {callList.filter(c => c.day === day).map((actor, i) => (
+                                        <div key={i} className="flex justify-between items-center p-2 bg-black/20 rounded border border-white/5">
+                                            <span className="text-sm text-zinc-300 font-bold">{actor.name}</span>
+                                            <div className="text-xs font-mono text-zinc-500 bg-black/40 px-2 py-1 rounded">
+                                                {formatTime(actor.start)} - {formatTime(actor.end)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {callList.filter(c => c.day === day).length === 0 && <p className="text-zinc-600 text-xs italic">No calls.</p>}
+                                </div>
                             </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+    </div>
+  );
+}
 
-                            {/* COLUMNS (Acting, Music, Dance) */}
-                            {(['Acting', 'Music', 'Dance'] as const).map(track => {
-                                const items = schedule.filter(i => i.slotId === slot.id && i.track === track);
-                                
-                                // Conflict Check for Dragging
-                                const conflicts = draggedSceneId ? getSlotConflicts(draggedSceneId, slot.id) : [];
-                                const hasConflict = conflicts.length > 0;
+// --- SUB-COMPONENT: DAY COLUMN ---
+function DayColumn({ day, startHour, endHour, schedule, weekOffset, onDrop, onDurationChange, onStatusToggle, draggedSceneId, sceneData }: any) {
+    
+    // Generate Time Slots (15 min increments)
+    const slots = [];
+    for (let h = startHour; h < endHour; h++) {
+        [0, 15, 30, 45].forEach(m => slots.push({ h, m, val: h + m/60 }));
+    }
 
-                                // Column Styles
-                                const colStyle = track === 'Acting' ? 'bg-blue-900/5 border-blue-500/10' : 
-                                                 track === 'Music' ? 'bg-purple-900/5 border-purple-500/10' : 
-                                                 'bg-emerald-900/5 border-emerald-500/10';
-                                
-                                return (
-                                    <div 
-                                        key={track}
-                                        onDragOver={(e) => e.preventDefault()}
-                                        onDrop={(e) => handleDrop(e, slot.id, track)}
-                                        className={`
-                                            border-r border-white/5 p-1 relative transition-all duration-200
-                                            ${colStyle}
-                                            ${draggedSceneId && hasConflict ? '!bg-red-900/20 shadow-[inset_0_0_0_2px_rgba(220,38,38,0.5)]' : 
-                                              draggedSceneId ? '!bg-white/5' : ''}
-                                        `}
-                                    >
-                                        {/* SCHEDULED CARDS */}
-                                        {items.map(item => {
-                                            const sData = sceneData.find((s: any) => s.id === item.sceneId);
-                                            const cardColor = track === 'Acting' ? 'bg-blue-600 border-blue-400' : 
-                                                              track === 'Music' ? 'bg-purple-600 border-purple-400' : 
-                                                              'bg-emerald-600 border-emerald-400';
+    return (
+        <div className="flex-1 flex flex-col bg-zinc-900 border border-white/10 rounded-xl overflow-hidden shadow-lg">
+            <div className="p-3 bg-zinc-800 border-b border-white/10 text-center font-black uppercase text-zinc-400">
+                {day === 'Fri' ? 'Friday Rehearsal' : 'Saturday Rehearsal'}
+            </div>
+            
+            <div className="flex-1 relative overflow-y-auto custom-scrollbar flex">
+                
+                {/* Time Labels */}
+                <div className="w-12 bg-zinc-950/50 border-r border-white/5 flex flex-col text-[10px] text-zinc-600 font-mono text-right py-2">
+                    {slots.filter(s => s.m === 0).map(s => (
+                        <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">
+                            {s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}
+                        </div>
+                    ))}
+                </div>
 
-                                            return (
-                                                <div key={item.id} className={`${cardColor} border-l-4 text-white p-2 rounded shadow-lg relative group/item mb-1 animate-in zoom-in-95 duration-200`}>
-                                                    <div className="flex justify-between items-start">
-                                                        <span className="text-xs font-black leading-tight drop-shadow-md">{sData?.name}</span>
-                                                        <button 
-                                                            onClick={() => setSchedule(prev => prev.filter(p => p.id !== item.id))}
-                                                            className="text-white/50 hover:text-white transition-colors"
-                                                        >
-                                                            <X size={12}/>
-                                                        </button>
-                                                    </div>
-                                                    
-                                                    <div className="mt-1 flex justify-between items-end opacity-80">
-                                                        <span className="text-[9px] uppercase font-bold tracking-wider">Act {sData?.act}</span>
-                                                        <span className="text-[9px] font-mono bg-black/20 px-1 rounded">{sData?.size} ppl</span>
-                                                    </div>
+                {/* Tracks Container */}
+                <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative min-h-[800px]">
+                    {['Acting', 'Music', 'Dance'].map((track, i) => (
+                        <div key={track} className="relative group/track">
+                             <div className="absolute top-0 left-0 right-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/80 z-10">{track}</div>
+                             
+                             {/* Render Slots (Targets) */}
+                             {slots.map((slot) => (
+                                 <div 
+                                    key={slot.val} 
+                                    className={`h-8 border-b border-white/[0.03] transition-colors ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => onDrop(e, day, slot.h, slot.m, track)}
+                                 />
+                             ))}
+
+                             {/* Render Blocks */}
+                             {schedule
+                                .filter((item: ScheduledItem) => item.day === day && item.track === track && item.weekOffset === weekOffset)
+                                .map((item: ScheduledItem) => {
+                                    // Calculate Position
+                                    const top = (item.startTime - startHour) * 128; // 32px per 15 min * 4 = 128px per hour
+                                    const height = (item.duration / 60) * 128;
+                                    const scene = sceneData.find((s:any) => s.id === item.sceneId);
+
+                                    // Color Logic
+                                    let colorClass = "bg-zinc-700 border-zinc-500"; // Default (New)
+                                    if (item.status === 'Worked') colorClass = "bg-blue-600 border-blue-400 shadow-blue-900/20";
+                                    if (item.status === 'Polished') colorClass = "bg-emerald-600 border-emerald-400 shadow-emerald-900/20";
+
+                                    return (
+                                        <div 
+                                            key={item.id}
+                                            onContextMenu={(e) => { e.preventDefault(); onStatusToggle(item.id); }}
+                                            className={`absolute left-1 right-1 rounded border-l-4 p-2 shadow-lg text-white text-xs overflow-hidden flex flex-col justify-between group/block transition-all z-20 ${colorClass}`}
+                                            style={{ top: `${top}px`, height: `${height}px` }}
+                                        >
+                                            <div className="font-bold leading-tight drop-shadow-md truncate">{scene?.name || 'Unknown'}</div>
+                                            
+                                            {/* HOVER CONTROLS */}
+                                            <div className="opacity-0 group-hover/block:opacity-100 flex justify-between items-end transition-opacity">
+                                                <div className="flex bg-black/30 rounded">
+                                                    <button onClick={() => onDurationChange(item.id, -15)} className="p-0.5 hover:bg-white/20"><Minus size={10}/></button>
+                                                    <button onClick={() => onDurationChange(item.id, 15)} className="p-0.5 hover:bg-white/20"><Plus size={10}/></button>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })}
+                                                <div className="text-[9px] font-mono bg-black/30 px-1 rounded">
+                                                    {item.duration}m
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                             })}
                         </div>
                     ))}
                 </div>
             </div>
-        </main>
-    </div>
-  );
+        </div>
+    )
 }
