@@ -1,4 +1,4 @@
-import GlobalHeader from '../components/GlobalHeader/GlobalHeader';
+import GlobalHeader from '../components/GlobalHeader';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
