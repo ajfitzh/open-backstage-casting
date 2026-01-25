@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Mail, Phone, Search, User, Users, Ticket, MoreHorizontal, 
   ShieldAlert, Scissors, Receipt, GraduationCap, Star, 
-  CheckCircle2, AlertTriangle, MessageSquare
+  CheckCircle2, AlertTriangle, MessageSquare, Copy
 } from 'lucide-react';
 
 export default function StaffClient({ productionTitle, assignments, people, complianceData }) {
