@@ -9,7 +9,7 @@ import {
   Menu, X, ChevronRight, ChevronsUpDown,
   Calendar, Users, UserSquare2, 
   AlertOctagon, BarChart3, Settings, LogOut, Check, Sparkles, MapPin, 
-  Home, Star, GraduationCap, LayoutGrid, VenetianMask
+  Home, Star, GraduationCap, LayoutGrid, VenetianMask, Mic2, Megaphone
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
