@@ -35,14 +35,15 @@ export async function getActiveShows() {
     // Filter for Active
     const activeRows = data.results.filter((row: any) => row["Is Active"] === true);
 
-    return activeRows.map((row: any) => ({
+return activeRows.map((row: any) => ({
       id: row.id,
       title: row.Title || "Untitled Show",
-      // CHECKPOINT: Ensure your Baserow column is named "Branch" or "Location"
-      // We removed the || "Main" fallback so blank data shows as blank (easier to debug)
-      location: row.Location?.value || row.Branch?.value || "Unknown Loc", 
+      location: row.Location?.value || row.Branch?.value || "Unknown Loc",
       type: row.Type?.value || "Main Stage",
-      status: row.Status?.value
+      status: row.Status?.value,
+      // 👇 ADD THIS: Capture the Season and Session
+      season: row.Season?.value || "General", 
+      session: row.Session?.value || "" 
     }));
   } catch (error) {
     console.error("Failed to fetch shows:", error);

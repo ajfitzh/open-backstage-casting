@@ -5,20 +5,11 @@ import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { switchProduction } from '@/app/actions'; 
 import { 
-  LayoutGrid, 
-  LogOut, 
-  ChevronRight, 
-  ChevronDown, 
-  Users, 
-  ClipboardCheck, 
-  Settings, 
-  Sparkles, 
-  Check,
-  MapPin, // <--- Added this based on your snippet
-  Music
+  LayoutGrid, LogOut, ChevronRight, ChevronDown, 
+  Users, ClipboardCheck, Settings, Sparkles, Check,
+  MapPin, Music, Calendar // <--- Added Calendar icon
 } from 'lucide-react';
 
-// ✅ THIS IS THE MISSING DEFAULT EXPORT
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,9 +27,22 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
 
   // Resolve Active Show Details
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
-
+  
   // Mock User
   const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
+
+  // --- 🪄 THE MAGIC: Group Shows by Season ---
+  const groupedShows = shows.reduce((groups, show) => {
+    const season = show.season || 'Other';
+    if (!groups[season]) {
+      groups[season] = [];
+    }
+    groups[season].push(show);
+    return groups;
+  }, {} as Record<string, typeof shows>);
+
+  // Sort seasons (Newest first usually, assuming string comparison works for years)
+  const sortedSeasons = Object.keys(groupedShows).sort().reverse();
 
   return (
     <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
@@ -65,14 +69,28 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                   <span className="text-[10px] font-mono text-zinc-600 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">v1.0.4</span>
                </div>
                
-               <div className="space-y-1">
+               <div className="space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
                  {shows.length === 0 && <div className="p-2 text-xs text-zinc-500 italic">No active shows found.</div>}
                  
-                 {shows.map((prod) => (
-                   <form key={prod.id} action={switchProduction}>
-                     <input type="hidden" name="productionId" value={prod.id} />
-                     <ContextButton prod={prod} isActive={prod.id === activeId} />
-                   </form>
+                 {/* Iterate through Seasons */}
+                 {sortedSeasons.map(season => (
+                   <div key={season} className="mb-3">
+                     {/* SEASON HEADER */}
+                     <div className="px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                        <Calendar size={10} />
+                        {season}
+                     </div>
+
+                     {/* SHOWS IN THIS SEASON */}
+                     <div className="space-y-0.5">
+                       {groupedShows[season].map((prod) => (
+                         <form key={prod.id} action={switchProduction}>
+                           <input type="hidden" name="productionId" value={prod.id} />
+                           <ContextButton prod={prod} isActive={prod.id === activeId} />
+                         </form>
+                       ))}
+                     </div>
+                   </div>
                  ))}
                </div>
             </div>
@@ -131,11 +149,9 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   );
 }
 
-// ✅ YOUR UPDATED SUB-COMPONENT
+// Sub-components
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
-  
-  // Dynamic Color logic
   const locationColor = prod.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500';
 
   return (
@@ -149,15 +165,12 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
           <div className="text-sm font-medium truncate text-zinc-200 group-hover:text-white">
             {prod.title}
           </div>
-          
           <div className="flex items-center gap-2 mt-0.5">
             <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wide">
               <MapPin size={10} />
               {prod.location}
             </div>
-            
             <span className="text-[8px] text-zinc-700">•</span>
-            
             <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-wide">
               {prod.type}
             </div>
