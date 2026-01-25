@@ -9,7 +9,7 @@ import {
   Menu, X, ChevronRight, ChevronsUpDown,
   Calendar, Users, UserSquare2, 
   AlertOctagon, BarChart3, Settings, LogOut, Check, Sparkles, MapPin, 
-  Home, Star, GraduationCap, LayoutGrid
+  Home, Star, GraduationCap, LayoutGrid, VenetianMask
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
@@ -58,9 +58,10 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         <div className="flex items-center gap-4">
             
             {/* 1. HAMBURGER (Opens Nav Drawer) */}
+            {/* ADDED 'md:hidden' so this vanishes on desktop where the sidebar exists */}
             <button 
                 onClick={(e) => { e.stopPropagation(); setIsNavOpen(!isNavOpen); setIsContextOpen(false); }}
-                className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors md:hidden"
             >
                 {isNavOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -125,9 +126,9 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         </div>
       </header>
 
-      {/* --- THE NAV DRAWER (Links Only) --- */}
+      {/* --- THE NAV DRAWER (Mobile Only - Links) --- */}
       {isNavOpen && (
-        <div className="fixed inset-0 z-40 flex">
+        <div className="fixed inset-0 z-40 flex md:hidden">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsNavOpen(false)} />
             
@@ -152,23 +153,11 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                         <div className="space-y-1">
                             <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Roster & Forms" active={pathname === '/roster'} />
                             <MenuLink onClick={() => setIsNavOpen(false)} href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflicts" active={pathname === '/conflicts'} />
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
                             <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Reports" active={pathname === '/reports'} />
                         </div>
-                        <MenuLink 
-            onClick={() => setIsNavOpen(false)} 
-            href="/conflicts" 
-            icon={<AlertOctagon size={18}/>} 
-            label="Conflicts" 
-            active={pathname === '/conflicts'} 
-        />
                     </div>
-<MenuLink 
-            onClick={() => setIsNavOpen(false)} 
-            href="/committees" 
-            icon={<Users size={18}/>} 
-            label="Committees" 
-            active={pathname === '/committees'} 
-        />
+
                     {/* Education */}
                     <div>
                         <SectionHeader label="Education" />
