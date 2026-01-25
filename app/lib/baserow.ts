@@ -323,18 +323,6 @@ export async function deleteRole(id: number) {
   });
 }
 
-export async function createCastAssignment(actorId: number, roleId: number, productionName: string) {
-  const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true`, {
-    method: "POST",
-    headers: HEADERS,
-    body: JSON.stringify({
-      "Person": [actorId],
-      "Performance Identity": [roleId], 
-    }),
-  });
-  if (!response.ok) throw new Error("Failed to assign role");
-  return await response.json();
-}
 
 export async function linkVolunteerToPerson(preferenceRowId: number, personRowId: number) {
   const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/${preferenceRowId}/?user_field_names=true`, {
@@ -372,4 +360,18 @@ export async function createProductionAsset(name: string, url: string, type: str
       "Production": [productionId] 
     })
   });
+}
+
+export async function createCastAssignment(actorId: number, roleId: number, productionId: number) { // Pass ID, not Name
+  const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({
+      "Person": [actorId],
+      "Performance Identity": [roleId],
+      "Production": [productionId] // <--- CRITICAL for Compliance Filter
+    }),
+  });
+  if (!response.ok) throw new Error("Failed to assign role");
+  return await response.json();
 }
