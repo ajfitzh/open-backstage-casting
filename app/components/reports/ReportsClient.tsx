@@ -180,7 +180,7 @@ export default function ReportsClient({ productionTitle, assignments, people, co
                          <div className="bg-zinc-900 border border-white/10 rounded-xl p-6 flex flex-col justify-center items-center text-center opacity-70 border-dashed">
                             <Activity size={40} className="text-zinc-700 mb-2"/>
                             <div className="text-zinc-500 font-bold">Historical Comparison</div>
-                            <div className="text-xs text-zinc-600">Need last year's data to calculate Year-Over-Year growth.</div>
+                            <div className="text-xs text-zinc-600">Need last years data to calculate Year-Over-Year growth.</div>
                         </div>
                     </div>
                 </div>

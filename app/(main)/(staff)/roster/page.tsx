@@ -5,7 +5,7 @@ import {
     getComplianceData, // <--- We fetch this too now
     getPeople 
 } from '@/app/lib/baserow';
-import StaffClient from '@/app/components/staff/StaffClient';
+import StaffClient from '../../../components/staff/StaffClient';
 
 export default async function RosterPage() {
   const cookieStore = await cookies();
