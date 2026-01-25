@@ -2,50 +2,47 @@ import { cookies } from 'next/headers';
 import { 
     getShowById, 
     getActiveProduction,
-    getScenes, 
-    getRoles, 
-    getAssignments, 
-    getPeople 
+    getScenes,
+    getRoles,
+    getAssignments,
+    getPeople,
+    getProductionEvents // Fetch events if we want to show existing schedule
 } from '@/app/lib/baserow';
-import SchedulerClient from '@/app/components/schedule/SchedulerClient'; // Make sure path matches
+import SchedulerClient from '@/app/components/schedule/SchedulerClient';
 
-export default async function SchedulePage() {
-  // 1. Context Resolution
+export default async function SchedulerPage() {
   const cookieStore = await cookies();
   let activeId = Number(cookieStore.get('active_production_id')?.value);
-  
-  // Fallback to default
-  if (!activeId) {
+  let showTitle = "Select a Production";
+
+  if (activeId) {
+    const showData = await getShowById(activeId);
+    if (showData && !Array.isArray(showData)) showTitle = showData.Title;
+  } else {
     const defaultShow = await getActiveProduction();
-    if (defaultShow) activeId = defaultShow.id;
+    if (defaultShow) {
+      activeId = defaultShow.id;
+      showTitle = defaultShow.Title;
+    }
   }
 
-  // 2. Fetch ALL Data needed for the matrix
-  // (In real production, filter these queries by Show ID on server for performance)
+  // Fetch ALL necessary data to calculate who is in what scene
   const [scenes, roles, assignments, people] = await Promise.all([
-      getScenes(),
-      getRoles(),
-      getAssignments(),
-      getPeople()
+      getScenes(activeId),      // Filtered for this show
+      getRoles(),               // All roles (blueprint)
+      getAssignments(activeId), // Filtered cast list
+      getPeople()               // Names/Photos
   ]);
 
-  // 3. Filter for Active Show
-  const activeScenes = scenes.filter((s: any) => 
-      s.Production && s.Production.some((p: any) => p.id === activeId)
-  );
-  
-  const activeAssignments = assignments.filter((a: any) => 
-      a.Production && a.Production.some((p: any) => p.id === activeId)
-  );
-
   return (
-    <main className="min-h-screen bg-zinc-950">
+    <main className="h-screen bg-zinc-950 overflow-hidden">
       <SchedulerClient 
-        productionId={activeId}
-        scenes={activeScenes}
+        scenes={scenes}
         roles={roles}
-        assignments={activeAssignments}
+        assignments={assignments}
         people={people}
+        productionTitle={showTitle}
+        productionId={activeId}
       />
     </main>
   );
