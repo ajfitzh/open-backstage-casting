@@ -1,16 +1,15 @@
-import GlobalHeader from '@/app/components/globalheader'; 
+import GlobalHeader from '@/app/components/globalheader/GlobalHeader';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col h-full w-full"> 
+    <div className="flex flex-col h-screen bg-zinc-950 text-white">
+      {/* The One Menu */}
+      <GlobalHeader /> 
       
-      {/* The Header now lives ONLY here, inside (main) */}
-      <GlobalHeader />
-
-      <div className="flex-1 flex overflow-hidden relative">
-          {children}
+      {/* Full Page Content */}
+      <div className="flex-1 overflow-hidden relative">
+        {children}
       </div>
-
     </div>
   );
 }
