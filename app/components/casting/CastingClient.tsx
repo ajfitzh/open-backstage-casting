@@ -106,7 +106,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   }, [productionId, masterShowId]);
 
 
-// --- 🪄 THE MAGIC: AUTO-CAST ALGORITHM ---
+
 // --- 🪄 THE MAGIC: AUTO-CAST ALGORITHM ---
   const handleAutoCast = async () => {
     const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles first (1 actor each).\n2. Balance remaining students into ENSEMBLE.\n3. Verify scene counts (Min 3).`;
@@ -315,7 +315,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             ? [...role.selectedActorIds, actorId] 
             : role.selectedActorIds.filter((id: number) => id !== actorId);
             
-          const personIds = currentSelectedIds.map(audId => {
+          const personIds = currentSelectedIds.map((audId: any) => {
              const a = actors.find(act => act.id === audId);
              return a ? a.personId : null;
           }).filter(Boolean);

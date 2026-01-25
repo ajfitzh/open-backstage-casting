@@ -114,7 +114,7 @@ const PartnerMatcher = ({ slot, students, onSave, onClose }: any) => {
                         <button onClick={addPair} className="w-full py-2 border border-dashed border-zinc-700 rounded text-xs text-zinc-500 hover:text-white hover:border-zinc-500 uppercase font-bold">+ Add Group</button>
                         {localPairs.map((pair, idx) => (
                             <div key={idx} className="bg-zinc-800/50 border border-white/10 rounded-xl p-3">
-                                <input value={pair.name} onChange={(e) => {const c=[...localPairs]; c[idx].name=e.target.value; setLocalPairs(c)}} className="bg-transparent font-bold text-blue-300 w-full mb-2 outline-none text-sm" />
+                                <input title="pair name" value={pair.name} onChange={(e) => {const c=[...localPairs]; c[idx].name=e.target.value; setLocalPairs(c)}} className="bg-transparent font-bold text-blue-300 w-full mb-2 outline-none text-sm" />
                                 <div className="space-y-1">
                                     {pair.assignments.map((assign:any) => {
                                          const s = students.find((st:any) => st.id === assign.studentId);
