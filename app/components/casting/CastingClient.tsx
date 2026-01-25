@@ -41,17 +41,17 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [roles, setRoles] = useState<any[]>([]);
   const [actors, setActors] = useState<any[]>([]);
   const [scenes, setScenes] = useState<any[]>([]);
-  const [allAssignments, setAllAssignments] = useState<any[]>([]);
+  const [allAssignments, setAllAssignments] = useState<any[]>([]); // Crucial for deletion
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-// --- DATA LOADING (Crash-Proof Version) ---
+  // --- 1. DATA LOADING (The Fix) ---
   useEffect(() => {
     async function load() {
         setLoading(true);
         try {
             console.log("Fetching Casting Data...");
             
-            // 1. Fetch Raw Data
+            // A. Fetch Raw Data (Parallel)
             const [rawRoles, rawAuditions, rawScenes, rawAssignments] = await Promise.all([
                 getRoles(), 
                 getAuditionSlots(), 
@@ -59,7 +59,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 getAssignments()
             ]);
 
-            // 🛡️ SAFETY HELPER: Handle { results: [...] } vs [...]
+            // 🛡️ Safety Helper: Handle { results: [...] } vs [...]
+            // (Even though baserow.ts handles this, double safety never hurts)
             const safeArray = (data: any) => {
                 if (!data) return [];
                 if (Array.isArray(data)) return data;
@@ -72,54 +73,49 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             const sceneRows = safeArray(rawScenes);
             const assignmentRows = safeArray(rawAssignments);
 
-            console.log(`Debug: Loaded ${assignmentRows.length} assignments, ${auditionRows.length} auditions.`);
-
-            // 2. Process Actors (Filter for THIS Production)
+            // B. Process Actors (Filter for THIS Production)
             const showActors = auditionRows
                 .filter((a: any) => a["Production"]?.some((link: any) => link.id == productionId)) 
-                .map((a: any) => ({
-                    ...a,
-                    id: a.id, 
-                    personId: a["Performer"]?.[0]?.id, 
-                    performerName: a["Performer"]?.[0]?.value || "Unknown", 
-                    Performer: a["Performer"]?.[0]?.value || "Unknown",
-                    Headshot: a["Headshot"]?.[0]?.url || null,
-                    grades: {
-                        actingNotes: a["Acting Notes"],
-                        vocalNotes: a["Music Notes"],
-                        danceNotes: a["Choreography Notes"]
-                    }
-                }));
+                .map((a: any) => {
+                    // Extract Person ID carefully
+                    const personId = a["Performer"]?.[0]?.id;
+                    const performerName = a["Performer"]?.[0]?.value || "Unknown";
+                    
+                    return {
+                        id: a.id, // This is the Audition ID (Table 630)
+                        personId: personId, // This is the Person ID (Table 599) - THE BRIDGE
+                        performerName: performerName,
+                        Performer: performerName,
+                        // Handle Headshot Array
+                        Headshot: (a["Headshot"] && a["Headshot"].length > 0) ? a["Headshot"][0].url : null,
+                        grades: {
+                            actingNotes: a["Acting Notes"] || "",
+                            vocalNotes: a["Music Notes"] || "",
+                            danceNotes: a["Choreography Notes"] || ""
+                        }
+                    };
+                });
             
             setActors(showActors);
 
-            // 3. Process Assignments (Filter for THIS Production)
+            // C. Process Assignments (Filter for THIS Production)
             const currentAssignments = assignmentRows.filter((a: any) => 
-                a.Production?.some((p: any) => p.id == productionId)
+                a["Production"]?.some((p: any) => p.id == productionId)
             );
             
-            setAllAssignments(currentAssignments);
+            setAllAssignments(currentAssignments); // Save for the "Delete" function
 
-            // 4. Create Map: Role ID -> Array of Actors
+            // D. Create Map: Role ID -> Array of Actors
+            // 🌟 THE BRIDGE LOGIC: Match Assignment (PersonID) -> Actor (PersonID)
             const assignmentMap: Record<number, any[]> = {};
             
             currentAssignments.forEach((a: any) => {
                 const roleId = a["Performance Identity"]?.[0]?.id;
                 const assignedPersonId = a["Person"]?.[0]?.id;
-                const assignedPersonName = a["Person"]?.[0]?.value;
-
-                if (roleId) {
-                    let actorObj = null;
-
-                    // Strategy A: Match by Person ID (Link to Link)
-                    if (assignedPersonId) {
-                        actorObj = showActors.find(sa => sa.personId == assignedPersonId);
-                    }
-
-                    // Strategy B: Match by Name (Fallback)
-                    if (!actorObj && assignedPersonName) {
-                        actorObj = showActors.find(sa => sa.performerName === assignedPersonName);
-                    }
+                
+                if (roleId && assignedPersonId) {
+                    // Find the actor in our loaded list using the PERSON ID
+                    const actorObj = showActors.find(sa => sa.personId == assignedPersonId);
 
                     if (actorObj) {
                         if (!assignmentMap[roleId]) assignmentMap[roleId] = [];
@@ -131,7 +127,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 }
             });
 
-            // 5. Process Roles (Hydrate from Map)
+            // E. Process Roles (Hydrate from Map)
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
                 const isDirectLink = prodLinks.some((link: any) => link.id == productionId);
@@ -146,6 +142,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
+                // Hydrate from the Assignment Map
                 const assignedActors = assignmentMap[r.id] || [];
 
                 return {
@@ -153,13 +150,13 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     name: r["Role Name"] || r.Name,
                     type: r["Role Type"]?.value || "Ensemble",
                     actors: assignedActors, 
-                    selectedActorIds: assignedActors.map(a => a.id), 
+                    selectedActorIds: assignedActors.map(a => a.id), // Maps to Audition IDs
                     selectedActorId: assignedActors[0]?.id || null, 
                     sceneIds: sceneIds
                 };
             });
 
-            // 6. Process Scenes
+            // F. Process Scenes
             const showScenes = sceneRows
                 .filter((s: any) => s["Production"]?.some((link: any) => link.id == productionId))
                 .sort((a: any, b: any) => a.id - b.id);
@@ -167,16 +164,38 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             setRoles(processedRoles);
             setScenes(showScenes);
 
+            console.log(`✅ Loaded ${showActors.length} Actors, ${processedRoles.length} Roles, ${currentAssignments.length} Assignments.`);
+
         } catch (e) {
-            console.error("CRITICAL LOAD ERROR:", e);
+            console.error("Load failed:", e);
         } finally {
             setLoading(false);
         }
     }
     if(productionId) load();
   }, [productionId, masterShowId]);
-  
-  // --- 🪄 SMART AUTO-CAST ---
+
+
+  // --- 🧮 STATS LOGIC ---
+  const getActorStats = (actorId: number) => {
+      const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
+      const mySceneIds = new Set(myRoles.flatMap(r => r.sceneIds));
+      
+      const splitIndex = Math.floor(scenes.length / 2);
+      const act1Scenes = scenes.slice(0, splitIndex).map(s => s.id);
+      const act2Scenes = scenes.slice(splitIndex).map(s => s.id);
+
+      const hasAct1 = Array.from(mySceneIds).some(sid => act1Scenes.includes(sid as number));
+      const hasAct2 = Array.from(mySceneIds).some(sid => act2Scenes.includes(sid as number));
+      const count = mySceneIds.size;
+
+      const isCompliant = count >= 3 && hasAct1 && hasAct2;
+
+      return { count, hasAct1, hasAct2, isCompliant, roleCount: myRoles.length };
+  };
+
+
+  // --- 🪄 SMART AUTO-CAST (Sequential & Safe) ---
   const handleAutoCast = async () => {
     const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining students into ENSEMBLE.\n3. Verify min 3 scenes.`;
     if (!confirm(confirmMsg)) return;
@@ -245,11 +264,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     setRoles(newRoles);
 
     // --- CALCULATE TOTAL OPERATIONS ---
-    // Total = (Roles to update) + (Assignments to create)
-    // Actually, updateRole is fast. createCastAssignment is the bottleneck. 
-    // Let's count total assignment creations.
     let totalOps = 0;
-    updatesToSave.forEach(r => totalOps += r.selectedActorIds.length); // Rough estimate (re-assigns existing ones too, but good enough for bar)
+    updatesToSave.forEach(r => totalOps += r.selectedActorIds.length);
     
     setProgress({ current: 0, total: totalOps, message: "Starting Database Sync..." });
 
@@ -261,11 +277,10 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 return a ? a.personId : null;
             }).filter(Boolean);
 
-            // Update Role
-            setProgress(prev => ({ ...prev, message: `Updating Role: ${role.name}...` }));
+            // Visual Update
             await updateRole(role.id, { "Assigned Actor": personIds });
 
-            // Create Assignments (The Slow Part)
+            // Database Creation (Sequential Loop)
             for (const personId of personIds) {
                  opCount++;
                  setProgress(prev => ({ 
@@ -274,12 +289,10 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                      message: `Assigning ${role.name} (${opCount}/${totalOps})` 
                  }));
                  
-                 // Fire and wait
                  await createCastAssignment(personId, role.id, productionId);
             }
         }
         
-        // Done
         setProgress(prev => ({ ...prev, message: "Done! Reloading..." }));
         setTimeout(() => window.location.reload(), 1000);
 
@@ -290,7 +303,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     }
   };
 
-  // --- ☢️ CLEAR CAST ---
+
+  // --- ☢️ CLEAR CAST (Nuclear) ---
   const handleClearCast = async () => {
       const mode = prompt("Type 'ENSEMBLE' to clear only ensemble.\nType 'ALL' to wipe EVERYTHING.\n\n(Deletes DB records)");
       if (!mode) return;
@@ -299,11 +313,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
       setIsClearing(true);
       
-      // Calculate what to delete
+      // Calculate what to delete using the raw assignment rows we fetched on load
       const rowsToDelete = allAssignments.filter((assignmentRow: any) => {
           const roleId = assignmentRow["Performance Identity"]?.[0]?.id;
           const roleDef = roles.find(r => r.id === roleId);
-          if (!roleDef) return false;
+          
+          // Safety: If we can't find the role definition, leave it alone (or delete if ALL)
+          if (!roleDef) return cleanMode === 'ALL';
+
           if (cleanMode === 'ALL') return true;
           if (cleanMode === 'ENSEMBLE') return roleDef.type !== 'Lead'; 
           return false;
@@ -314,8 +331,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
       try {
           let count = 0;
-          // Batch delete in chunks of 5 for speed + safety? 
-          // Or just sequential for safety. Let's do sequential to be safe with rate limits.
           for (const row of rowsToDelete) {
               count++;
               setProgress({ 
@@ -337,7 +352,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       }
   };
 
-  // --- HANDLERS (Unchanged) ---
+
+  // --- EVENT HANDLERS ---
   const handleDropActor = (e: React.DragEvent, roleId: string) => {
     e.preventDefault();
     const actorId = parseInt(e.dataTransfer.getData("actorId"));
@@ -386,7 +402,10 @@ export default function CastingClient({ productionId, productionTitle, masterSho
              const a = actors.find(act => act.id === audId);
              return a ? a.personId : null;
           }).filter(Boolean);
+          
           await updateRole(parseInt(roleId), { "Assigned Actor": personIds });
+          
+          // Only create new row if adding. Deleting handled by Reset for now.
           if (isSelecting) await createCastAssignment(actor.personId, parseInt(roleId), productionId);
       } catch (err) { console.error(err); }
   };
@@ -408,6 +427,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const handleRemoveRole = async (roleId: string) => { if(confirm("Remove this role?")) setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString())); };
   const handleDuplicateRole = async (roleId: string) => alert("Feature: Duplicate Role " + roleId);
 
+  // --- INSPECTOR ---
   const inspectorActor = useMemo(() => (!inspectingActorId ? null : actors.find(a => a.id === inspectingActorId)), [inspectingActorId, actors]);
   const inspectorStats = useMemo(() => {
       const assignments: Record<number, string> = {};
@@ -452,11 +472,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                  </div>
             </div>
 
+            {/* EXPANDABLE DRAWER TRIGGER */}
             <div className="flex items-center gap-4 h-full">
                 <div className="flex items-center gap-2 h-full cursor-pointer hover:bg-white/5 px-2 rounded transition-colors" onClick={() => setDrawerExpanded(!drawerExpanded)}>
                     <span className="text-[9px] font-bold text-zinc-600 uppercase">Cast Drawer</span>
                     {drawerExpanded ? <ChevronUp size={14} className="text-zinc-400"/> : <ChevronDown size={14} className="text-zinc-400"/>}
                 </div>
+                
+                {/* PREVIEW STRIP */}
                 {!drawerExpanded && (
                     <div className="flex items-center gap-2 overflow-x-auto max-w-[20vw] no-scrollbar mask-linear-fade-left">
                         {actors.map(actor => {
@@ -474,7 +497,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             </div>
         </header>
 
-        {/* PROGRESS OVERLAY (New Feature) */}
+        {/* PROGRESS OVERLAY */}
         {(isAutoCasting || isClearing) && (
             <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
                 <div className="bg-zinc-900 border border-white/10 p-8 rounded-2xl w-full max-w-md text-center shadow-2xl">
@@ -484,7 +507,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     <h2 className="text-2xl font-black uppercase italic text-white mb-2">{isClearing ? "Clearing Database..." : "Casting Magic..."}</h2>
                     <p className="text-sm text-zinc-400 font-mono mb-6">{progress.message}</p>
                     
-                    {/* Progress Bar */}
                     <div className="h-4 bg-zinc-800 rounded-full overflow-hidden border border-white/5 relative">
                         <div 
                             className={`h-full transition-all duration-300 ease-out ${isClearing ? 'bg-red-600' : 'bg-emerald-500'}`}
@@ -509,19 +531,37 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                         </h2>
                         <button onClick={() => setDrawerExpanded(false)} className="text-zinc-500 hover:text-white flex items-center gap-2 text-xs font-bold uppercase"><X size={16}/> Close Drawer</button>
                     </div>
+                    
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                         {actors.map(actor => {
                             const isAssigned = roles.some(r => r.selectedActorIds.includes(actor.id));
                             const stats = getActorStats(actor.id);
                             const hasWarning = isAssigned && !stats.isCompliant;
+
                             return (
-                                <div key={actor.id} draggable onDragStart={(e) => { e.dataTransfer.setData("actorId", actor.id.toString()); setDrawerExpanded(false); }} onClick={() => setInspectingActorId(actor.id)} className={`relative bg-zinc-900 border rounded-xl p-3 hover:bg-zinc-800 transition-all cursor-grab active:cursor-grabbing group ${hasWarning ? 'border-red-500/50 hover:border-red-500' : isAssigned ? 'border-emerald-500/30' : 'border-white/5 hover:border-white/20'}`}>
+                                <div 
+                                    key={actor.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData("actorId", actor.id.toString()); setDrawerExpanded(false); }} 
+                                    onClick={() => setInspectingActorId(actor.id)}
+                                    className={`relative bg-zinc-900 border rounded-xl p-3 hover:bg-zinc-800 transition-all cursor-grab active:cursor-grabbing group 
+                                        ${hasWarning ? 'border-red-500/50 hover:border-red-500' : isAssigned ? 'border-emerald-500/30' : 'border-white/5 hover:border-white/20'}
+                                    `}
+                                >
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-zinc-950 border border-white/10"><img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" /></div>
-                                        <div className="min-w-0"><p className="text-xs font-bold text-white truncate">{actor.Performer}</p><p className="text-[10px] text-zinc-500 font-mono">ID: {actor.id}</p></div>
+                                        <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-zinc-950 border border-white/10">
+                                            <img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-white truncate">{actor.Performer}</p>
+                                            <p className="text-[10px] text-zinc-500 font-mono">ID: {actor.id}</p>
+                                        </div>
                                     </div>
+                                    
                                     <div className="flex gap-1 flex-wrap">
-                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${isAssigned ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-red-900/10 text-red-400 border-red-900/20'}`}>{isAssigned ? `${stats.roleCount} Roles` : 'Uncast'}</span>
+                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${isAssigned ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-red-900/10 text-red-400 border-red-900/20'}`}>
+                                            {isAssigned ? `${stats.roleCount} Roles` : 'Uncast'}
+                                        </span>
                                         {hasWarning && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500 text-white flex items-center gap-1"><AlertCircle size={8}/> Needs Scenes</span>}
                                     </div>
                                 </div>
@@ -549,13 +589,23 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-8" onClick={() => setShowAudit(false)}>
                 <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                     <div className="p-6 border-b border-white/10 flex justify-between items-center bg-zinc-900 rounded-t-2xl">
-                        <div><h2 className="text-xl font-black uppercase italic text-white flex items-center gap-2"><ClipboardList size={20}/> Casting Audit</h2><p className="text-xs text-zinc-500 mt-1">Rules: Min 3 Scenes • Must have Act 1 • Must have Act 2</p></div>
+                        <div>
+                            <h2 className="text-xl font-black uppercase italic text-white flex items-center gap-2"><ClipboardList size={20}/> Casting Audit</h2>
+                            <p className="text-xs text-zinc-500 mt-1">Rules: Min 3 Scenes • Must have Act 1 • Must have Act 2</p>
+                        </div>
                         <button onClick={() => setShowAudit(false)}><X className="text-zinc-500 hover:text-white"/></button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-0">
                         <table className="w-full text-left text-sm">
                             <thead className="bg-zinc-950 text-zinc-500 uppercase text-[10px] font-bold tracking-wider sticky top-0 z-10">
-                                <tr><th className="px-6 py-3">Actor</th><th className="px-6 py-3 text-center">Roles</th><th className="px-6 py-3 text-center">Scenes (3+)</th><th className="px-6 py-3 text-center">Act 1</th><th className="px-6 py-3 text-center">Act 2</th><th className="px-6 py-3 text-right">Status</th></tr>
+                                <tr>
+                                    <th className="px-6 py-3">Actor</th>
+                                    <th className="px-6 py-3 text-center">Roles</th>
+                                    <th className="px-6 py-3 text-center">Scenes (3+)</th>
+                                    <th className="px-6 py-3 text-center">Act 1</th>
+                                    <th className="px-6 py-3 text-center">Act 2</th>
+                                    <th className="px-6 py-3 text-right">Status</th>
+                                </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {actors.map(actor => {
@@ -563,12 +613,20 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                                     if(stats.roleCount === 0) return null;
                                     return (
                                         <tr key={actor.id} className="hover:bg-white/5">
-                                            <td className="px-6 py-3 font-bold text-white flex items-center gap-3"><img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-8 h-8 rounded-full object-cover" />{actor.Performer}</td>
+                                            <td className="px-6 py-3 font-bold text-white flex items-center gap-3">
+                                                <img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-8 h-8 rounded-full object-cover" />
+                                                {actor.Performer}
+                                            </td>
                                             <td className="px-6 py-3 text-center font-mono text-zinc-400">{stats.roleCount}</td>
                                             <td className={`px-6 py-3 text-center font-black ${stats.count >= 3 ? 'text-emerald-500' : 'text-red-500'}`}>{stats.count}</td>
                                             <td className="px-6 py-3 text-center">{stats.hasAct1 ? <Check size={16} className="mx-auto text-emerald-500"/> : <X size={16} className="mx-auto text-red-500 opacity-50"/>}</td>
                                             <td className="px-6 py-3 text-center">{stats.hasAct2 ? <Check size={16} className="mx-auto text-emerald-500"/> : <X size={16} className="mx-auto text-red-500 opacity-50"/>}</td>
-                                            <td className="px-6 py-3 text-right">{stats.isCompliant ? <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">Pass</span> : <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider"><AlertCircle size={12}/> Fail</span>}</td>
+                                            <td className="px-6 py-3 text-right">
+                                                {stats.isCompliant ? 
+                                                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">Pass</span> : 
+                                                    <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider"><AlertCircle size={12}/> Fail</span>
+                                                }
+                                            </td>
                                         </tr>
                                     );
                                 })}
