@@ -6,13 +6,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation'; 
 import { switchProduction } from '@/app/actions'; 
 import { 
-  LayoutGrid, LogOut, ChevronRight, ChevronDown, 
-  Users, ClipboardCheck, Settings, Sparkles, Check,
-  MapPin, Music, Calendar, Menu, X, ChevronsUpDown
+  LayoutGrid, LogOut, ChevronDown, 
+  Users, Settings, Sparkles, Check,
+  MapPin, Music, Calendar, Menu, X, ChevronsUpDown,
+  ShieldCheck, BarChart3, UserSquare2, AlertOctagon
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
-  // We use a single state to track which menu is open ('context', 'nav', or null)
   const [openMenu, setOpenMenu] = useState<'context' | 'nav' | null>(null);
   
   const contextRef = useRef<HTMLDivElement>(null);
@@ -94,10 +94,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                 </div>
                 ))}
             </div>
-            
-            <div className="p-2 bg-zinc-900 border-t border-zinc-800 text-[10px] text-center text-zinc-600">
-                Tip: Switching shows reloads the dashboard.
-            </div>
           </div>
         )}
       </div>
@@ -105,7 +101,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
       {/* --- RIGHT: NAVIGATION MENU (Where to go?) --- */}
       <div className="flex items-center gap-3" ref={navRef}>
         
-        {/* User Profile (Desktop Only for info, Mobile handled in menu) */}
+        {/* User Profile (Desktop) */}
         <div className="hidden md:flex flex-col items-end leading-tight mr-2">
           <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
           <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">{user.role}</span>
@@ -123,22 +119,24 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         {openMenu === 'nav' && (
             <div className="absolute top-16 right-4 w-64 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-100 z-50 flex flex-col max-h-[80vh]">
                 
-                {/* Mobile User Info Header */}
-                <div className="md:hidden p-4 border-b border-zinc-800 bg-zinc-900/50">
-                    <div className="text-sm font-bold text-white">{user.name}</div>
-                    <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider">{user.role}</div>
-                </div>
-
                 <div className="p-2 overflow-y-auto custom-scrollbar">
                     
+                    {/* SECTION: ACTIVE */}
                     <div className="px-2 pt-2 pb-1"><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span></div>
                     <MenuLink href="/casting" icon={<Users size={16} />} title="Casting" subtitle="Auditions & Callbacks" onClick={() => setOpenMenu(null)} />
                     
+                    {/* SECTION: PRODUCTION */}
                     <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
                     <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Rehearsal Grid" onClick={() => setOpenMenu(null)} />
-                    <MenuLink href="/staff" icon={<ClipboardCheck size={16} />} title="Staff Deck" subtitle="Compliance & Reports" onClick={() => setOpenMenu(null)} />
-                    <MenuLink href="/conflicts" icon={<Calendar size={16} className="text-amber-500" />} title="Conflicts" subtitle="Availability Matrix" onClick={() => setOpenMenu(null)} />
 
+                    {/* SECTION: COMPANY MANAGEMENT (Formerly "Staff") */}
+                    <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Company Manager</span></div>
+                    <MenuLink href="/staff" icon={<UserSquare2 size={16} />} title="Cast List" subtitle="Roster & Contact Info" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/conflicts" icon={<AlertOctagon size={16} />} title="Conflicts" subtitle="Availability Matrix" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/staff" icon={<ShieldCheck size={16} />} title="Compliance" subtitle="Safety & Forms" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/staff" icon={<BarChart3 size={16} />} title="Reports" subtitle="Cast Health & Stats" onClick={() => setOpenMenu(null)} />
+
+                    {/* SECTION: SOON */}
                     <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soon</span></div>
                     <div className="flex items-start gap-3 p-2 rounded-lg opacity-50 cursor-not-allowed">
                         <div className="mt-1 text-zinc-500"><Music size={16} /></div>
@@ -149,6 +147,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     </div>
                 </div>
 
+                {/* FOOTER */}
                 <div className="p-2 border-t border-zinc-800 bg-zinc-900/50 mt-auto">
                     <MenuLink href="/settings" icon={<Settings size={16} />} title="Settings" subtitle="System & Accounts" onClick={() => setOpenMenu(null)} />
                     <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-red-900/20 group transition-colors mt-1">
@@ -169,7 +168,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
 
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
-  // Location color coding: Stafford=Amber, Others=Emerald
   const locationColor = prod.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500';
 
   return (
@@ -177,7 +175,6 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
       disabled={pending} 
       className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group ${isActive ? 'bg-zinc-800 text-white ring-1 ring-zinc-700' : 'hover:bg-zinc-900 text-zinc-400'}`}
     >
-       {/* Status Indicator */}
        <div className={`h-8 w-1 rounded-full shrink-0 transition-opacity ${pending ? 'opacity-50' : ''} ${locationColor}`} />
        
        <div className="flex-1 min-w-0">
