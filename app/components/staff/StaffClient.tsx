@@ -6,7 +6,7 @@ import {
   User, MoreHorizontal, Check, AlertCircle,
   CheckCircle2, XCircle
 } from 'lucide-react';
-import { getStudentClassData } from '../../lib/mockEducation';
+import { getStudentClassData } from '../../lib/educationFillerData';
 
 export default function StaffClient({ productionTitle, assignments, people, complianceData }: any) {
   const [filter, setFilter] = useState("");
