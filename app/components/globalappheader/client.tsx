@@ -154,8 +154,21 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                             <MenuLink onClick={() => setIsNavOpen(false)} href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflicts" active={pathname === '/conflicts'} />
                             <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Reports" active={pathname === '/reports'} />
                         </div>
+                        <MenuLink 
+            onClick={() => setIsNavOpen(false)} 
+            href="/conflicts" 
+            icon={<AlertOctagon size={18}/>} 
+            label="Conflicts" 
+            active={pathname === '/conflicts'} 
+        />
                     </div>
-
+<MenuLink 
+            onClick={() => setIsNavOpen(false)} 
+            href="/committees" 
+            icon={<Users size={18}/>} 
+            label="Committees" 
+            active={pathname === '/committees'} 
+        />
                     {/* Education */}
                     <div>
                         <SectionHeader label="Education" />
