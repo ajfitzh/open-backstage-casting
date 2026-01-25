@@ -6,7 +6,7 @@ const HEADERS = {
 };
 
 // TABLE IDS
-const TABLES = {
+export const TABLES = {
   PEOPLE: process.env.NEXT_PUBLIC_BASEROW_TABLE_PEOPLE || "599",
   PRODUCTIONS: "600",
   ASSIGNMENTS: process.env.NEXT_PUBLIC_BASEROW_TABLE_ASSIGNMENTS || "603",
@@ -323,7 +323,14 @@ export async function deleteRole(id: number) {
   });
 }
 
-
+// Add this to your existing baserow.ts file
+export async function deleteRow(tableId: number, rowId: number) {
+  const response = await fetch(`${BASE_URL}/api/database/rows/table/${tableId}/${rowId}/`, {
+    method: "DELETE",
+    headers: HEADERS,
+  });
+  if (!response.ok) throw new Error(`Failed to delete row ${rowId}`);
+}
 export async function linkVolunteerToPerson(preferenceRowId: number, personRowId: number) {
   const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/${preferenceRowId}/?user_field_names=true`, {
     method: "PATCH",

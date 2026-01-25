@@ -76,7 +76,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                      </div>
 
                      <div className="space-y-0.5">
-                       {groupedShows[season].map((prod) => (
+                       {groupedShows[season].map((prod: unknown) => (
                          <form key={prod.id} action={switchProduction}>
                            <input type="hidden" name="productionId" value={prod.id} />
                            {/* PASS CURRENT PATH FOR REDIRECT */}

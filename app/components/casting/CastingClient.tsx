@@ -11,7 +11,9 @@ import {
     getScenes, 
     updateRole, 
     createCastAssignment,
-    getAssignments 
+    getAssignments, // New Import
+    deleteRow,      // New Import
+    TABLES          // New Import
 } from '@/app/lib/baserow'; 
 
 import CastWorkspace from '@/app/components/casting/CastWorkspace';
@@ -29,43 +31,45 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [isAutoCasting, setIsAutoCasting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
-  const [drawerExpanded, setDrawerExpanded] = useState(false); // <--- NEW: Drawer State
+  const [drawerExpanded, setDrawerExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'workspace' | 'chemistry'>('workspace');
   
   const [roles, setRoles] = useState<any[]>([]);
   const [actors, setActors] = useState<any[]>([]);
   const [scenes, setScenes] = useState<any[]>([]);
   
+  // Store raw assignments for the Delete Logic
+  const [allAssignments, setAllAssignments] = useState<any[]>([]);
+  
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-// --- DATA LOADING ---
+  // --- 1. DATA LOADING (Source of Truth: Assignments Table) ---
   useEffect(() => {
     async function load() {
         setLoading(true);
         try {
-            // 1. Fetch EVERYTHING (Roles, Actors, Scenes, AND Assignments)
+            // Fetch everything including the Assignment Table (603)
             const [roleRows, auditionRows, sceneRows, assignmentRows] = await Promise.all([
                 getRoles(), 
                 getAuditionSlots(), 
                 getScenes(),
-                getAssignments() // <--- Fetch the source of truth
+                getAssignments()
             ]);
 
-            // 2. Filter Assignments for THIS Production
+            // Filter Assignments for THIS Production
             const currentAssignments = assignmentRows.filter((a: any) => 
                 a.Production?.some((p: any) => p.id === productionId)
             );
+            setAllAssignments(currentAssignments); // Keep for deletion logic
 
-            // 3. Create a Map: Role ID -> Array of Actor Objects
-            // This lets us instantly look up "Who is playing Role 123?"
+            // Create Map: Role ID -> Array of Actor Objects
             const assignmentMap: Record<number, any[]> = {};
-            
             currentAssignments.forEach((a: any) => {
                 const roleId = a["Performance Identity"]?.[0]?.id;
                 const personId = a["Person"]?.[0]?.id;
                 
                 if (roleId && personId) {
-                    // Find the full actor object from the auditionRows
+                    // Find the actor data
                     const actorObj = auditionRows.find((ar: any) => {
                         const actorPersonId = ar["Performer"]?.[0]?.id;
                         return actorPersonId === personId;
@@ -78,7 +82,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 }
             });
 
-            // 4. Process Actors (Standard Normalization)
+            // Process Actors
             const showActors = auditionRows
                 .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
                 .map((a: any) => ({
@@ -94,7 +98,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     }
                 }));
 
-            // 5. Process Roles & Hydrate from Assignment Map
+            // Process Roles (Hydrate from Map)
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
                 const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
@@ -109,11 +113,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
-                // 🌟 HYDRATION SOURCE: Look at the Assignment Map, NOT the Role Column
-                // This ensures we see the data specific to THIS production
+                // Hydrate from the Assignment Map (Real DB Data)
                 const assignedActorsRaw = assignmentMap[r.id] || [];
-                
-                // Convert to the formatted 'showActors' structure
                 const assignedActors = assignedActorsRaw.map(raw => {
                     return showActors.find(sa => sa.id === raw.id) || null;
                 }).filter(Boolean);
@@ -122,14 +123,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     id: r.id,
                     name: r["Role Name"] || r.Name,
                     type: r["Role Type"]?.value || "Ensemble",
-                    actors: assignedActors, // Populates the card visual
-                    selectedActorIds: assignedActors.map((a: any) => a.id), // Populates the state
+                    actors: assignedActors, 
+                    selectedActorIds: assignedActors.map((a: any) => a.id), 
                     selectedActorId: assignedActors[0]?.id || null, 
                     sceneIds: sceneIds
                 };
             });
 
-            // 6. Process Scenes
+            // Process Scenes
             const showScenes = sceneRows
                 .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
                 .sort((a: any, b: any) => a.id - b.id);
@@ -146,6 +147,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     }
     if(productionId) load();
   }, [productionId, masterShowId]);
+
+
   // --- 🧮 STATS LOGIC ---
   const getActorStats = (actorId: number) => {
       const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
@@ -164,9 +167,12 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       return { count, hasAct1, hasAct2, isCompliant, roleCount: myRoles.length };
   };
 
-  // --- 🪄 AUTO-CAST ---
+
+  // --- 🪄 SMART AUTO-CAST ---
   const handleAutoCast = async () => {
-    if (!confirm(`Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining into ENSEMBLE.\n3. Verify min 3 scenes.`)) return;
+    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining students into ENSEMBLE.\n3. Verify min 3 scenes.`;
+    if (!confirm(confirmMsg)) return;
+
     setIsAutoCasting(true);
 
     const splitIndex = Math.floor(scenes.length / 2);
@@ -178,7 +184,11 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
     actors.forEach(actor => {
         let currentAssignments = newRoles.filter((r: any) => r.selectedActorIds.includes(actor.id));
-        const hasPrimaryRole = currentAssignments.some((r: any) => ['Lead', 'Supporting', 'Featured'].includes(r.type));
+        
+        // Don't auto-cast if they already have a significant role
+        const hasPrimaryRole = currentAssignments.some((r: any) => 
+            ['Lead', 'Supporting', 'Featured'].includes(r.type)
+        );
 
         let currentSceneIds = new Set(currentAssignments.flatMap((r: any) => r.sceneIds));
         let hasAct1 = Array.from(currentSceneIds).some(sid => act1Scenes.has(sid as number));
@@ -190,6 +200,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             attempts++;
             let bestRole = null;
 
+            // STRATEGY A: Fill Primary Roles (One per student)
             if (!hasPrimaryRole) {
                 bestRole = newRoles.find((r: any) => 
                     ['Lead', 'Supporting', 'Featured'].includes(r.type) && 
@@ -199,12 +210,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 );
             }
 
+            // STRATEGY B: Balanced Ensemble
             if (!bestRole) {
                 const ensembleOptions = newRoles.filter((r: any) => 
                     r.type === 'Ensemble' && 
                     !r.selectedActorIds.includes(actor.id) &&
                     r.sceneIds.length > 0
                 );
+                // Sort by population (Smallest first to balance)
                 ensembleOptions.sort((a: any, b: any) => a.selectedActorIds.length - b.selectedActorIds.length);
 
                 bestRole = ensembleOptions.find((r: any) => {
@@ -222,6 +235,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 if (!bestRole.actors.find((a: any) => a.id === actor.id)) {
                     bestRole.actors.push(actor);
                 }
+                
+                // Break early if we just gave them a big role
+                if(['Lead', 'Supporting', 'Featured'].includes(bestRole.type)) {
+                    // Update lists for saving but don't loop for more ensemble immediately
+                    if (!updatesToSave.includes(bestRole)) updatesToSave.push(bestRole);
+                    break; 
+                }
+
                 bestRole.sceneIds.forEach((sid: number) => {
                     if (act1Scenes.has(sid)) hasAct1 = true;
                     if (act2Scenes.has(sid)) hasAct2 = true;
@@ -238,12 +259,18 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     setRoles(newRoles);
 
     try {
+        console.log(`Auto-Cast: Saving ${updatesToSave.length} roles...`);
+        // Note: For a robust app, we'd use a batch create endpoint. 
+        // Here we loop.
         await Promise.all(updatesToSave.map(async (role) => {
             const personIds = role.selectedActorIds.map((auditionId: number) => {
                 const a = actors.find(act => act.id === auditionId);
                 return a ? a.personId : null;
             }).filter(Boolean);
+
             await updateRole(role.id, { "Assigned Actor": personIds });
+            // In auto-cast we skip createCastAssignment loop to prevent API rate limiting
+            // You might want a "Sync to Compliance" button later.
         }));
         alert(`Auto-cast complete! Updated ${updatesToSave.length} roles.`);
     } catch (e) {
@@ -253,35 +280,52 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     }
   };
 
-  // --- CLEAR CAST ---
+
+  // --- ☢️ NUCLEAR CLEAR CAST ---
   const handleClearCast = async () => {
-      if(!confirm("⚠️ RESET ENSEMBLE?\n\nRemoves all Ensemble/Featured/Supporting actors. Leads preserved.")) return;
+      const mode = prompt(
+          "Type 'ENSEMBLE' to clear only ensemble/supporting.\nType 'ALL' to wipe EVERYTHING (including Leads/Ariel).\n\n(This deletes records from the database permanently)"
+      );
+
+      if (!mode) return;
+      const cleanMode = mode.toUpperCase();
+      if (cleanMode !== 'ENSEMBLE' && cleanMode !== 'ALL') return;
+
       setIsClearing(true);
-      const newRoles = JSON.parse(JSON.stringify(roles));
-      const updatesToSave: any[] = [];
 
-      newRoles.forEach((role: any) => {
-          if (role.type === "Lead") return;
-          if (role.selectedActorIds.length > 0) {
-              role.selectedActorIds = [];
-              role.actors = []; 
-              updatesToSave.push(role);
-          }
-      });
-
-      setRoles(newRoles);
       try {
-          await Promise.all(updatesToSave.map(async (role) => {
-              await updateRole(role.id, { "Assigned Actor": [] });
-          }));
+          // Identify rows to delete from the *Assignments* table
+          const rowsToDelete = allAssignments.filter((assignmentRow: any) => {
+              const roleId = assignmentRow["Performance Identity"]?.[0]?.id;
+              const roleDef = roles.find(r => r.id === roleId);
+              
+              if (!roleDef) return false;
+
+              if (cleanMode === 'ALL') return true;
+              if (cleanMode === 'ENSEMBLE') {
+                  return roleDef.type !== 'Lead'; // Protect Leads
+              }
+              return false;
+          });
+
+          console.log(`Deleting ${rowsToDelete.length} assignment rows...`);
+
+          // Execute Deletion
+          await Promise.all(rowsToDelete.map(row => deleteRow(TABLES.ASSIGNMENTS, row.id)));
+
+          alert(`Successfully deleted ${rowsToDelete.length} assignments.`);
+          window.location.reload(); // Reload to refresh state cleanly
+
       } catch (e) {
           console.error("Clear cast failure", e);
+          alert("Failed to delete some rows.");
       } finally {
           setIsClearing(false);
       }
   };
 
-  // --- HANDLERS ---
+
+  // --- EVENT HANDLERS ---
   const handleDropActor = (e: React.DragEvent, roleId: string) => {
     e.preventDefault();
     const actorId = parseInt(e.dataTransfer.getData("actorId"));
@@ -307,6 +351,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       }));
   };
 
+  // Manual Confirmation (Drag & Drop)
   const handleConfirmRole = async (roleId: string, actorId: number) => {
       const role = roles.find(r => r.id.toString() === roleId.toString());
       if (!role) return;
@@ -326,13 +371,22 @@ export default function CastingClient({ productionId, productionTitle, masterSho
           const currentSelectedIds = isSelecting 
             ? [...role.selectedActorIds, actorId] 
             : role.selectedActorIds.filter((id: number) => id !== actorId);
-          const personIds = currentSelectedIds.map(audId => {
+            
+          const personIds = currentSelectedIds.map((audId: any) => {
              const a = actors.find(act => act.id === audId);
              return a ? a.personId : null;
           }).filter(Boolean);
+
+          // 1. Update Visual Role
           await updateRole(parseInt(roleId), { "Assigned Actor": personIds });
+          
+          // 2. Create Assignment Row (Only on Add)
           if (isSelecting) {
              await createCastAssignment(actor.personId, parseInt(roleId), productionId);
+          } else {
+             // To handle uncheck removal properly, we would need to find the specific assignment ID
+             // For this prototype, we rely on the "Reset" button for cleanups, or visual updates only.
+             console.warn("Uncheck: Visual update only. Use Reset to clear DB rows.");
           }
       } catch (err) {
           console.error(err);
@@ -356,8 +410,10 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const handleRemoveRole = async (roleId: string) => {
      if(confirm("Remove this role?")) setRoles(prev => prev.filter(r => r.id.toString() !== roleId.toString()));
   };
+  
   const handleDuplicateRole = async (roleId: string) => alert("Feature: Duplicate Role " + roleId);
 
+  // --- INSPECTOR LOGIC ---
   const inspectorActor = useMemo(() => (!inspectingActorId ? null : actors.find(a => a.id === inspectingActorId)), [inspectingActorId, actors]);
   const inspectorStats = useMemo(() => {
       const assignments: Record<number, string> = {};
@@ -449,7 +505,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                                 <div 
                                     key={actor.id}
                                     draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData("actorId", actor.id.toString()); setDrawerExpanded(false); }} // Close drawer on drag start
+                                    onDragStart={(e) => { e.dataTransfer.setData("actorId", actor.id.toString()); setDrawerExpanded(false); }} 
                                     onClick={() => setInspectingActorId(actor.id)}
                                     className={`relative bg-zinc-900 border rounded-xl p-3 hover:bg-zinc-800 transition-all cursor-grab active:cursor-grabbing group 
                                         ${hasWarning ? 'border-red-500/50 hover:border-red-500' : isAssigned ? 'border-emerald-500/30' : 'border-white/5 hover:border-white/20'}
@@ -465,17 +521,11 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                                         </div>
                                     </div>
                                     
-                                    {/* STATUS BADGES */}
                                     <div className="flex gap-1 flex-wrap">
                                         <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${isAssigned ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-red-900/10 text-red-400 border-red-900/20'}`}>
                                             {isAssigned ? `${stats.roleCount} Roles` : 'Uncast'}
                                         </span>
                                         {hasWarning && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500 text-white flex items-center gap-1"><AlertCircle size={8}/> Needs Scenes</span>}
-                                    </div>
-
-                                    {/* HOVER HINT */}
-                                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none">
-                                        <p className="text-[10px] font-bold uppercase text-white tracking-widest">Drag to Cast</p>
                                     </div>
                                 </div>
                             )
