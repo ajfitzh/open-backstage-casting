@@ -113,22 +113,19 @@ async function getPersonNameMap() {
 export async function getComplianceData(productionId?: number) {
   if (!productionId) return [];
 
+  // Use the smart getters below (which now handle filtering)
   const [auditions, assignments] = await Promise.all([
-    fetchBaserow(`/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`),
-    fetchBaserow(`/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`)
+    getAuditionSlots(productionId),
+    getAssignments(productionId)
   ]);
 
   if (!Array.isArray(auditions) || !Array.isArray(assignments)) return [];
 
   const nameMap = await getPersonNameMap();
 
-  // Filter Assignments for THIS Production
-  const activeAssignments = assignments.filter((a: any) => 
-    a.Production && a.Production.some((p: any) => p.id === productionId)
-  );
-
+  // Create a "Set" of Person IDs who are Cast
   const castPersonIds = new Set();
-  activeAssignments.forEach((a: any) => {
+  assignments.forEach((a: any) => {
     if (a.Person && a.Person.length > 0) {
       castPersonIds.add(a.Person[0].id);
     }
@@ -157,18 +154,28 @@ export async function getComplianceData(productionId?: number) {
 }
 
 
-// --- READ FUNCTIONS (DATA GETTERS) ---
+// --- SMART READ FUNCTIONS (Now with Server-Side Filtering!) ---
 
-export async function getAssignments() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`);
+// 1. ASSIGNMENTS: Fixes the "Blank Cast" bug by filtering on server
+export async function getAssignments(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
 }
 
-export async function getAuditionSlots() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`);
+// 2. AUDITIONS: Filter by Production ID
+export async function getAuditionSlots(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
 }
 
-export async function getAuditionees() {
-  const data = await getAuditionSlots(); // Reuse the safe function above
+export async function getAuditionees(productionId?: number) {
+  const data = await getAuditionSlots(productionId);
   if (!Array.isArray(data)) return [];
 
   const nameMap = await getPersonNameMap();
@@ -183,11 +190,17 @@ export async function getAuditionees() {
   });
 }
 
-export async function getScenes() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.SCENES}/?size=200`);
+// 3. SCENES: Filter by Production ID
+export async function getScenes(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.SCENES}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
 }
 
 export async function getRoles() {
+  // Roles are often generic (Master Show), so we fetch more rows but filter client-side
   return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/?size=200`);
 }
 
@@ -204,12 +217,11 @@ export async function getVolunteers() {
 }
 
 export async function getProductionAssets(productionId: number) {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.ASSETS}/?size=200`);
-  if (!Array.isArray(data)) return [];
-  
-  return data.filter((row: any) => 
-    row.Production && row.Production.some((p: any) => p.id === productionId)
-  );
+  let endpoint = `/api/database/rows/table/${TABLES.ASSETS}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
 }
 
 
