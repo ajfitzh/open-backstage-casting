@@ -112,15 +112,30 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
 
   const reopenJudgeSetup = () => setIsReady(false);
 
-  // Initial Load (Device Settings)
+  // ✅ UPDATED INITIALIZATION LOGIC
   useEffect(() => {
     setIsMounted(true); 
     const savedName = localStorage.getItem("judgeName");
     const savedRole = localStorage.getItem("judgeRole") as JudgeRole | null;
+    
     if (savedName && savedRole) {
+      // Case A: User has used this before
       setJudgeName(savedName);
       setJudgeRole(savedRole);
       setIsReady(true);
+    } else {
+      // Case B: First time (or cleared cache) -> Default to Austin/Director
+      const defaultName = "Austin Fitzhugh";
+      const defaultRole: JudgeRole = "Director";
+
+      setJudgeName(defaultName);
+      setJudgeRole(defaultRole);
+      
+      // Save defaults so we don't have to set them again
+      localStorage.setItem("judgeName", defaultName);
+      localStorage.setItem("judgeRole", defaultRole);
+      
+      setIsReady(true); // Skip the modal!
     }
   }, []);
 
