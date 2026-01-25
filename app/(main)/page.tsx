@@ -15,9 +15,15 @@ export default async function DashboardPage() {
   const show = activeId ? await getShowById(activeId) : await getActiveProduction();
   const assignments = await getAssignments(activeId);
   const people = await getPeople();
-
-  const castCount = assignments.filter((a: any) => a["Person"]?.length > 0).length;
-
+// --- THE FIX: UNIQUE CAST COUNT ---
+  // We extract the Person ID from each assignment and put it in a Set 
+  // to strip away the duplicates.
+  const uniqueCastIds = new Set(
+    assignments
+      .filter((a: any) => a["Person"] && a["Person"].length > 0)
+      .map((a: any) => a["Person"][0].id)
+  );
+const castCount = uniqueCastIds.size; // This should now correctly say 41
   return (
     <div className="min-h-screen bg-zinc-950 p-6 pb-20">
       {/* 1. HERO SECTION: THE SHOW */}
