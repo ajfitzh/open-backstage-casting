@@ -10,7 +10,7 @@ import {
   Users, Settings, Sparkles, Check,
   MapPin, Music, Calendar, Menu, X, ChevronsUpDown,
   BarChart3, UserSquare2, AlertOctagon,
-  Tent, Star
+  Star, Home // <--- REPLACED 'Tent' WITH 'Home' TO FIX BUILD
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
@@ -141,11 +141,11 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     
                     {/* PRODUCTION */}
                     <div className="px-2 pt-4 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
-                    <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Rehearsal Grid" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Grid" onClick={() => setOpenMenu(null)} />
 
                     {/* COMPANY MANAGER */}
                     <div className="px-2 pt-4 pb-1"><span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Company Manager</span></div>
-                    <MenuLink href="/roster" icon={<UserSquare2 size={16} />} title="Cast List" subtitle="Roster & Compliance" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/roster" icon={<UserSquare2 size={16} />} title="Cast List" subtitle="Roster & Contacts" onClick={() => setOpenMenu(null)} />
                     <MenuLink href="/conflicts" icon={<AlertOctagon size={16} />} title="Conflicts" subtitle="Availability Matrix" onClick={() => setOpenMenu(null)} />
                     <MenuLink href="/reports" icon={<BarChart3 size={16} />} title="Reports" subtitle="Demographics & Stats" onClick={() => setOpenMenu(null)} />
 
@@ -217,7 +217,7 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
             {/* Type Badge */}
             {isCamp ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-purple-400 uppercase tracking-wide bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">
-                    <Tent size={8}/> Camp
+                    <Home size={8}/> Camp 
                 </span>
             ) : isLite ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-zinc-400 uppercase tracking-wide bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">
