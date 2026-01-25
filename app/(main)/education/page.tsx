@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { getPeople } from '@/app/lib/baserow';
-import { MOCK_CLASSES } from '@/app/lib/mockEducation';
+import { MOCK_CLASSES } from '../../lib/mockEducation';
 import ClassManager from '@/app/components/education/ClassManager';
 
 export default async function EducationPage() {
