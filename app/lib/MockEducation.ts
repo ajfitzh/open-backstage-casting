@@ -9,7 +9,7 @@ export const MOCK_CLASSES = [
   { id: 105, name: "Dancing Through Life", teacher: "Staff", time: "Mon 6-8pm", enrolled: 12 }
 ];
 
-// 2. Generate Random Enrollment & Attendance History
+// 2.   Generate Random Enrollment & Attendance History
 // We generate this on the fly so it matches YOUR existing 'people' IDs
 export function getStudentClassData(personId: number) {
     // Deterministic random (so it stays consistent for the demo)
