@@ -2,331 +2,311 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  BarChart3, Users, Ruler, Activity, 
-  Wallet, Star, LayoutGrid, ArrowUpRight, 
-  ArrowDownRight, CheckCircle2, UserPlus,
-  Copy, DollarSign, Microscope, PieChart,
-  TrendingUp, Ticket, Calendar, MapPin,
-  PieChart as PieIcon
+  Search, User, Users, Ticket, 
+  ShieldAlert, Scissors, Receipt, MessageSquare, X,
+  FileText, Star, ShieldCheck, ClipboardCheck, CircleDollarSign,
+  Info, Check, AlertCircle
 } from 'lucide-react';
 
-export default function ReportsClient({ productionTitle, assignments, people, compliance }: any) {
-  const [activeTab, setActiveTab] = useState<'health' | 'finance'>('health');
+// --- 🗺️ THE ROSETTA STONE: Mapping Old Forms to New Data ---
+const LEGACY_MAP = {
+  legal: {
+    title: "Legal & Safety",
+    forms: [
+      { id: "Form B", label: "Medical Release" },
+      { id: "Form B", label: "Liability Waiver" },
+      { id: "Form B", label: "Photo Release" }
+    ]
+  },
+  financial: {
+    title: "Financials",
+    forms: [
+      { id: "Fee", label: "Production Fee" },
+      { id: "Cash", label: "$5 Pizza Money" },
+      { id: "Tix", label: "Ticket Quota (20)" }
+    ]
+  },
+  production: {
+    title: "Production Ops",
+    forms: [
+      { id: "Form K", label: "Performer Bio" },
+      { id: "Form F", label: "Measurements" },
+      { id: "Form G", label: "Conflict Sheet" }
+    ]
+  },
+  family: {
+    title: "Family Commitment",
+    forms: [
+      { id: "Form H", label: "Committee Selection" },
+      { id: "Form I", label: "Parent Character Contract" },
+      { id: "Form A", label: "Student Character Contract" }
+    ]
+  }
+};
 
-  // --- 🧠 ANALYTICS ENGINE ---
-  const stats = useMemo(() => {
-    // 1. Identify unique cast members (Heads, not Roles)
-    const castIds = new Set(
-        assignments
-        .filter((a: any) => a["Person"] && a["Person"].length > 0)
-        .map((a: any) => a["Person"][0].id)
-    );
-    const castSize = castIds.size;
-    const castMembers = people.filter((p: any) => castIds.has(p.id));
+export default function StaffClient({ productionTitle, assignments, people }) {
+  const [filter, setFilter] = useState("");
+  const [selectedMember, setSelectedMember] = useState(null);
 
-    let totalHeightInches = 0;
-    let heightCount = 0;
-    let female = 0; 
-    let male = 0;
-    let veterans = 0;
-    let totalPrevRoles = 0;
+  // --- 🧠 DYNAMIC DATA ENGINE ---
+  const roster = useMemo(() => {
+    if (!Array.isArray(assignments)) return [];
+    const personMap = new Map();
 
-    castMembers.forEach((p: any) => {
-        // --- GENDER DETECTIVE ---
-        // Handles Baserow "Select" objects { value: "Female" } and raw strings
-        const rawGender = p["Gender"];
-        let g = "";
-        
-        if (typeof rawGender === 'object' && rawGender !== null) {
-            g = String(rawGender.value || "");
-        } else {
-            g = String(rawGender || "");
-        }
-        
-        const normalizedGender = g.trim().toLowerCase();
-        if (normalizedGender === 'female') female++;
-        else if (normalizedGender === 'male') male++;
+    assignments.forEach((a) => {
+      const personId = a["Person"]?.[0]?.id;
+      if (!personId || personMap.has(personId)) return;
 
-        // --- HEIGHT DETECTIVE ---
-        const rawTotalInches = parseFloat(p["Height (Total Inches)"]);
-        if (!isNaN(rawTotalInches) && rawTotalInches > 0) {
-            totalHeightInches += rawTotalInches;
-            heightCount++;
-        } 
-        else if (p["Height (Formatted)"] && p["Height (Formatted)"] !== "0'0\"") {
-            const hStr = String(p["Height (Formatted)"]).replace('"', '');
-            const parts = hStr.split("'");
-            if (parts.length >= 2) {
-                const ft = parseInt(parts[0]) || 0;
-                const inch = parseFloat(parts[1]) || 0;
-                totalHeightInches += (ft * 12) + inch;
-                heightCount++;
-            }
-        }
+      const personName = a["Person"]?.[0]?.value || "Unknown";
+      const contact = people.find((p) => p.id === personId);
+      
+      // Deterministic Mock Data based on ID
+      const isEven = personId % 2 === 0;
+      const isThird = personId % 3 === 0;
+      const tickets = (personId * 7) % 25;
 
-        // --- EXPERIENCE / RETENTION ---
-        const rawAssignments = p["Cast/Crew Assignments"];
-        let rolesCount = 0;
-        if (Array.isArray(rawAssignments)) {
-            rolesCount = rawAssignments.length;
-        } else if (typeof rawAssignments === 'string' && rawAssignments.trim() !== "") {
-            rolesCount = rawAssignments.split(',').length;
-        }
-        totalPrevRoles += rolesCount;
-        if (rolesCount > 2) veterans++;
+      personMap.set(personId, {
+        id: personId,
+        name: personName,
+        roles: [a["Performance Identity"]?.[0]?.value || "Chorus"],
+        avatar: contact?.["Headshot"]?.[0]?.url,
+        // The Audit Object tracks the granular "Truth"
+        audit: {
+          // Legal
+          medical: isEven, liability: isEven, photo: isEven,
+          // Financial
+          fees: personId % 5 !== 0, pizza: personId % 7 !== 0, ticketsMet: tickets >= 20,
+          // Production
+          bio: isThird, measurements: isThird, conflicts: personId % 4 !== 0,
+          // Family
+          committee: isEven, parentContract: isEven, studentContract: isThird
+        },
+        ticketsSold: tickets,
+        ticketGoal: 20,
+        committeeName: isEven ? "Costumes" : isThird ? "Props" : "None",
+      });
     });
 
-    // Percentages for the Pie Chart
-    const fPercent = castSize > 0 ? Math.round((female / castSize) * 100) : 0;
-    const mPercent = castSize > 0 ? Math.round((male / castSize) * 100) : 0;
+    return Array.from(personMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignments, people]);
 
-    // --- BOX OFFICE DATA ---
-    const ticketsSold = 412;
-    const goal = 1200;
-    const lastYearSameTime = 408; // Comparison metric
-    const momentum = ticketsSold - lastYearSameTime;
-
+  // --- 📊 STATS CALCULATOR ---
+  const stats = useMemo(() => {
+    const total = roster.length || 1;
+    const calc = (fn) => Math.round((roster.filter(fn).length / total) * 100);
+    
     return {
-        castSize,
-        female,
-        male,
-        fPercent,
-        mPercent,
-        totalRolesCurrent: assignments.length,
-        avgRolesPerKid: castSize > 0 ? (assignments.length / castSize).toFixed(1) : "0",
-        avgHeightStr: heightCount > 0 ? `${Math.floor((totalHeightInches/heightCount)/12)}'${Math.round((totalHeightInches/heightCount)%12)}"` : "N/A",
-        heightSample: heightCount,
-        retentionRate: castSize > 0 ? Math.round((veterans / castSize) * 100) : 0,
-        veterans,
-        avgPrevExp: castSize > 0 ? (totalPrevRoles / castSize).toFixed(1) : "0",
-        ticketsSold,
-        goal,
-        momentum,
-        daysToOpening: 22,
-        revenue: ticketsSold * 15
+      count: roster.length,
+      legal: calc(p => p.audit.medical && p.audit.liability),
+      prod: calc(p => p.audit.bio && p.audit.measurements && p.audit.conflicts),
+      money: calc(p => p.audit.fees && p.audit.pizza),
     };
-  }, [assignments, people, compliance]);
+  }, [roster]);
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-white font-sans">
+    <div className="flex h-screen bg-zinc-950 text-white font-sans overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         
         {/* HEADER */}
-        <header className="h-16 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-30">
-            <h1 className="text-lg font-black uppercase italic tracking-wider flex items-center gap-2 text-zinc-400">
-                <BarChart3 className="text-blue-500" /> {productionTitle} Reports
-            </h1>
+        <header className="h-20 border-b border-white/10 flex items-center justify-between px-8 bg-zinc-900/50 backdrop-blur-xl shrink-0 z-30">
+            <div className="flex flex-col border-r border-white/10 pr-8 mr-8">
+              <h1 className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-500 mb-1">Open Backstage</h1>
+              <h2 className="text-xl font-bold tracking-tighter truncate max-w-[220px]">{productionTitle}</h2>
+            </div>
             
-            <div className="flex bg-black/20 p-1 rounded-lg border border-white/5">
-                <button 
-                  onClick={() => setActiveTab('health')} 
-                  className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'health' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Show Health
-                </button>
-                <button 
-                  onClick={() => setActiveTab('finance')} 
-                  className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all ${activeTab === 'finance' ? 'bg-emerald-900/50 text-emerald-400 shadow border border-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    Box Office
-                </button>
+            <div className="hidden xl:flex items-center gap-10 flex-1">
+               <HeaderStat label="Cast" value={stats.count} sub="Total" icon={<Users size={14}/>} />
+               <HeaderStat label="Legal" value={`${stats.legal}%`} sub="Form B" color="text-emerald-400" icon={<ShieldCheck size={14}/>} />
+               <HeaderStat label="Production" value={`${stats.prod}%`} sub="Form K/F/G" color="text-blue-400" icon={<ClipboardCheck size={14}/>} />
+               <HeaderStat label="Financials" value={`${stats.money}%`} sub="Fees + Pizza" color="text-amber-400" icon={<CircleDollarSign size={14}/>} />
+            </div>
+
+            <div className="relative w-64 ml-auto">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
+              <input onChange={(e) => setFilter(e.target.value)} placeholder="Search actor..." className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500" />
             </div>
         </header>
 
-        {/* CONTENT AREA */}
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            
-            {/* === TAB: SHOW HEALTH === */}
-            {activeTab === 'health' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    
-                    {/* STAT CARDS */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                        <StatCard label="Cast Size" value={stats.castSize} sublabel="Unique Students" icon={<Users size={18} className="text-blue-400"/>} />
-                        <StatCard label="Avg. Roles" value={stats.avgRolesPerKid} sublabel="Utilization" icon={<LayoutGrid size={18} className="text-emerald-400"/>} />
-                        <StatCard label="Avg Height" value={stats.avgHeightStr} sublabel={`Sample: ${stats.heightSample}`} icon={<Ruler size={18} className="text-purple-400"/>} />
-                        <StatCard label="Retention" value={`${stats.retentionRate}%`} sublabel="Veterans" icon={<Activity size={18} className="text-orange-400"/>} trend="up" />
-                        <StatCard label="Total Roles" value={stats.totalRolesCurrent} sublabel="Assignments" icon={<Star size={18} className="text-yellow-400"/>} />
-                        <StatCard label="Prev. Exp" value={stats.avgPrevExp} sublabel="Show Avg" icon={<TrendingUp size={18} className="text-zinc-400"/>} />
+        {/* MAIN GRID */}
+        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[radial-gradient(circle_at_20%_20%,rgba(24,24,27,1)_0%,rgba(9,9,11,1)_100%)]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+            {roster.filter(p => p.name.toLowerCase().includes(filter.toLowerCase())).map((member) => (
+              <div 
+                key={member.id} 
+                onClick={() => setSelectedMember(member)}
+                className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-white/20 transition-all cursor-pointer relative overflow-visible"
+              >
+                {/* TICKET BAR */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-white/5 rounded-t-2xl overflow-hidden">
+                  <div className={`h-full transition-all duration-1000 ${member.ticketsSold >= 20 ? 'bg-amber-400' : 'bg-blue-600'}`} style={{ width: `${Math.min((member.ticketsSold / 20) * 100, 100)}%` }} />
+                </div>
+
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex gap-4 min-w-0">
+                    <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-white/5 overflow-hidden shadow-inner shrink-0">
+                      {member.avatar ? <img src={member.avatar} className="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all" /> : <div className="w-full h-full flex items-center justify-center text-zinc-700"><User size={24}/></div>}
                     </div>
+                    <div className="min-w-0 pt-1">
+                      <h3 className="font-bold text-lg text-zinc-100 truncate">{member.name}</h3>
+                      <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.1em] truncate">{member.roles[0]}</p>
+                    </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* GENDER PIE CHART (DONUT STYLE) */}
-                        <div className="bg-zinc-900 border border-white/10 rounded-2xl p-8 shadow-xl">
-                            <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-10 flex items-center gap-2">
-                                <PieIcon size={14}/> Gender Composition
-                            </h3>
-                            <div className="flex flex-col sm:flex-row items-center gap-12">
-                                <div 
-                                    className="relative w-44 h-44 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.6)] shrink-0 transition-transform hover:scale-105 duration-500"
-                                    style={{ background: `conic-gradient(#ec4899 0% ${stats.fPercent}%, #3b82f6 ${stats.fPercent}% 100%)` }}
-                                >
-                                    <div className="absolute inset-8 bg-zinc-900 rounded-full flex flex-col items-center justify-center border border-white/5 shadow-inner">
-                                        <span className="text-3xl font-black text-white">{stats.castSize}</span>
-                                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-tighter">Students</span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 space-y-6 w-full">
-                                    <LegendItem color="bg-pink-500" label="Female" percent={stats.fPercent} count={stats.female} />
-                                    <div className="h-px bg-white/5" />
-                                    <LegendItem color="bg-blue-500" label="Male" percent={stats.mPercent} count={stats.male} />
-                                </div>
-                            </div>
-                        </div>
+                  {/* --- RICH TOOLTIP ICONS --- */}
+                  <div className="flex flex-col gap-1.5 shrink-0 z-20">
+                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                        <RichStatusIcon type="legal" member={member} />
+                        <RichStatusIcon type="financial" member={member} />
+                     </div>
+                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                        <RichStatusIcon type="production" member={member} />
+                        <RichStatusIcon type="family" member={member} />
+                     </div>
+                  </div>
+                </div>
 
-                        {/* ARTISTIC OBSERVATIONS */}
-                        <div className="bg-zinc-900 border border-white/10 rounded-2xl p-8 shadow-xl flex flex-col">
-                            <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-6 flex items-center gap-2 italic">
-                                <Microscope size={14}/> Artistic Observations
-                            </h3>
-                            <div className="space-y-4 flex-1">
-                                <ObservationCard 
-                                    icon={<LayoutGrid className="text-blue-500" size={18}/>}
-                                    title="High Ensemble Density"
-                                    desc={`The average student is performing ${stats.avgRolesPerKid} roles. This indicates a highly engaged ensemble with minimal 'downtime' for performers.`}
-                                />
-                                <ObservationCard 
-                                    icon={<Activity className="text-emerald-500" size={18}/>}
-                                    title="Retention Momentum"
-                                    desc={`${stats.retentionRate}% of the cast are returning veterans. Institutional knowledge is high, which often speeds up tech week transitions.`}
-                                />
-                                <div className="p-4 bg-zinc-950/50 border border-white/5 rounded-2xl mt-4">
-                                    <div className="text-[10px] font-black uppercase text-zinc-600 mb-2">Technical Note</div>
-                                    <div className="text-[11px] text-zinc-500 leading-relaxed">
-                                        Height data is currently verified for {stats.heightSample} of {stats.castSize} students. Costume leads should prioritize the remaining {stats.castSize - stats.heightSample} performers.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                <div className="mt-2 flex justify-between items-end border-t border-white/5 pt-4">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-zinc-600 uppercase mb-1">Ticket Sales</span>
+                      <span className={`text-sm font-black ${member.audit.ticketsMet ? 'text-amber-400' : 'text-white'}`}>{member.ticketsSold} <span className="text-zinc-700 font-normal">/ 20</span></span>
+                    </div>
+                    <div className={`px-3 py-1 rounded-lg text-[10px] font-bold ${member.committeeName === 'None' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-zinc-800 text-zinc-400 border border-white/5'}`}>
+                        {member.committeeName}
                     </div>
                 </div>
-            )}
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+      
+      {/* DRAWER COMPONENT (Simulated) */}
+      {selectedMember && (
+         <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setSelectedMember(null)} />
+            <aside className="relative w-full max-w-md bg-zinc-900 border-l border-white/10 shadow-2xl p-8 flex flex-col animate-in slide-in-from-right duration-300">
+               <button onClick={() => setSelectedMember(null)} className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full"><X/></button>
+               <h3 className="text-3xl font-black uppercase tracking-tighter mb-2">{selectedMember.name}</h3>
+               <div className="space-y-6 mt-8">
+                  {/* Reusing logic to show expanded list */}
+                  {Object.entries(LEGACY_MAP).map(([key, section]) => (
+                    <div key={key}>
+                      <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3 border-b border-white/10 pb-1">{section.title}</h4>
+                      {section.forms.map(form => {
+                         // Simple logic mapping for demo
+                         let isDone = false;
+                         if (form.label.includes("Medical")) isDone = selectedMember.audit.medical;
+                         else if (form.label.includes("Liability")) isDone = selectedMember.audit.liability;
+                         else if (form.label.includes("Photo")) isDone = selectedMember.audit.photo;
+                         else if (form.label.includes("Bio")) isDone = selectedMember.audit.bio;
+                         else if (form.label.includes("Measurements")) isDone = selectedMember.audit.measurements;
+                         else if (form.label.includes("Conflict")) isDone = selectedMember.audit.conflicts;
+                         else if (form.label.includes("Fee")) isDone = selectedMember.audit.fees;
+                         else if (form.label.includes("Pizza")) isDone = selectedMember.audit.pizza;
+                         else if (form.label.includes("Ticket")) isDone = selectedMember.audit.ticketsMet;
+                         else if (form.label.includes("Committee")) isDone = selectedMember.audit.committee;
+                         else isDone = true; // Fallback
 
-            {/* === TAB: BOX OFFICE & FINANCE === */}
-            {activeTab === 'finance' && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    
-                    {/* TOP ROW MOMENTUM */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-zinc-900 border border-white/10 p-8 rounded-3xl relative overflow-hidden group shadow-2xl">
-                             <div className="absolute -right-6 -top-6 opacity-5 group-hover:opacity-10 transition-opacity"><Ticket size={160}/></div>
-                             <h3 className="text-[10px] font-black uppercase text-blue-500 tracking-[0.2em] mb-2">Tickets Sold</h3>
-                             <div className="text-6xl font-black text-white tracking-tighter">{stats.ticketsSold}</div>
-                             <div className="mt-6 flex items-center gap-2 text-xs">
-                                <div className="px-3 py-1 bg-emerald-900/30 text-emerald-400 rounded-full font-bold flex items-center gap-1.5 border border-emerald-500/20">
-                                    <ArrowUpRight size={14}/> +{stats.momentum}
-                                </div>
-                                <span className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">vs. last fall (Same Day)</span>
-                             </div>
-                        </div>
-
-                        <div className="bg-zinc-900 border border-white/10 p-8 rounded-3xl relative overflow-hidden group shadow-2xl">
-                             <div className="absolute -right-6 -top-6 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingUp size={160}/></div>
-                             <h3 className="text-[10px] font-black uppercase text-emerald-500 tracking-[0.2em] mb-2">Gross Revenue</h3>
-                             <div className="text-6xl font-black text-white tracking-tighter">${stats.revenue.toLocaleString()}</div>
-                             <div className="mt-6 w-full bg-zinc-800 h-2 rounded-full overflow-hidden shadow-inner">
-                                <div className="bg-emerald-500 h-full shadow-[0_0_15px_rgba(16,185,129,0.4)]" style={{ width: `${(stats.ticketsSold/stats.goal)*100}%` }} />
-                             </div>
-                             <div className="mt-3 text-[10px] text-zinc-500 font-black uppercase flex justify-between tracking-widest">
-                                <span>{Math.round((stats.ticketsSold/stats.goal)*100)}% of Goal</span>
-                                <span>Goal: {stats.goal} Tickets</span>
-                             </div>
-                        </div>
-
-                        <div className="bg-zinc-900 border border-white/10 p-8 rounded-3xl flex flex-col justify-center items-center text-center shadow-2xl">
-                             <Calendar size={40} className="text-blue-500 mb-3 animate-pulse"/>
-                             <div className="text-5xl font-black text-white tracking-tighter">{stats.daysToOpening}</div>
-                             <div className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] mt-2">Days To Opening</div>
-                        </div>
+                         return (
+                           <div key={form.label} className="flex justify-between py-2 text-sm border-b border-white/5 last:border-0">
+                             <span className="text-zinc-400">{form.label}</span>
+                             {isDone ? <Check size={16} className="text-emerald-500"/> : <X size={16} className="text-red-500"/>}
+                           </div>
+                         )
+                      })}
                     </div>
-
-                    {/* KRISTA'S SITE AUDITOR */}
-                    <div className="bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
-                        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-zinc-950/40">
-                            <div>
-                                <h3 className="text-sm font-black uppercase text-zinc-200 tracking-[0.2em] flex items-center gap-3">
-                                    <MapPin size={18} className="text-red-500"/> Site Auditor
-                                </h3>
-                                <p className="text-[11px] text-zinc-500 mt-1 font-medium">Class-based student distribution by campus location</p>
-                            </div>
-                        </div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <CampusCard name="River of Life" classes={3} students={59} color="text-emerald-400" />
-                            <CampusCard name="River Club Church" classes={4} students={44} color="text-blue-400" />
-                            <CampusCard name="Hope Presbyterian" classes={3} students={31} color="text-purple-400" />
-                            <CampusCard name="Highway Assembly" classes={2} students={20} color="text-amber-400" />
-                        </div>
-                    </div>
-
-                </div>
-            )}
-        </div>
+                  ))}
+               </div>
+            </aside>
+         </div>
+      )}
     </div>
   );
 }
 
-// --- SUB-COMPONENTS ---
+// --- 🪄 THE MAGIC TOOLTIP COMPONENT ---
+function RichStatusIcon({ type, member }) {
+  const config = LEGACY_MAP[type];
+  
+  // Icon Mapping
+  const icons = {
+    legal: <ShieldCheck size={12} />,
+    financial: <CircleDollarSign size={12} />,
+    production: <ClipboardCheck size={12} />,
+    family: <Users size={12} />
+  };
 
-function StatCard({ label, value, sublabel, icon, trend }: any) {
-    return (
-        <div className="bg-zinc-900 border border-white/10 p-5 rounded-2xl shadow-lg hover:border-zinc-700 hover:bg-zinc-800/40 transition-all group">
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-2.5 bg-black/40 rounded-xl border border-white/5 text-zinc-400 group-hover:text-white transition-colors group-hover:scale-110 duration-300">
-                    {icon}
-                </div>
-                {trend === 'up' && (
-                  <div className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-0.5 border border-emerald-500/20">
-                    <ArrowUpRight size={10}/> 12%
-                  </div>
-                )}
-            </div>
-            <div className="text-3xl font-black text-white tracking-tighter">{value}</div>
-            <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mt-1 group-hover:text-zinc-400 transition-colors">{label}</div>
-            <div className="text-[9px] text-zinc-600 font-bold leading-none mt-1.5">{sublabel}</div>
+  // Determine Overall Status for color
+  let status = 'valid'; // default
+  // Simple logic to detect if ANY item in this category is missing
+  const audit = member.audit;
+  let missingCount = 0;
+  
+  if (type === 'legal') { if(!audit.medical || !audit.liability) missingCount++; }
+  if (type === 'financial') { if(!audit.fees || !audit.pizza) missingCount++; }
+  if (type === 'production') { if(!audit.bio || !audit.measurements) missingCount++; }
+  if (type === 'family') { if(!audit.committee) missingCount++; }
+
+  if (missingCount > 0) status = 'emergency';
+
+  const colors = {
+    emergency: "text-red-500 bg-red-500/10 border-red-500/40 animate-pulse",
+    valid: "text-emerald-500 bg-emerald-500/10 border-emerald-500/30",
+  };
+
+  return (
+    <div className={`group relative p-1.5 rounded-md border transition-all duration-300 cursor-help ${colors[status]}`}>
+      {icons[type]}
+
+      {/* --- HOVER TOOLTIP (THE TRAINING WHEELS) --- */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">
+          {config.title}
         </div>
-    )
+        <div className="space-y-1.5">
+          {config.forms.map((form) => {
+             // Logic to check individual status for tooltip
+             let isDone = false;
+             if (form.label.includes("Medical")) isDone = audit.medical;
+             else if (form.label.includes("Liability")) isDone = audit.liability;
+             else if (form.label.includes("Photo")) isDone = audit.photo;
+             else if (form.label.includes("Fee")) isDone = audit.fees;
+             else if (form.label.includes("Pizza")) isDone = audit.pizza;
+             else if (form.label.includes("Ticket")) isDone = audit.ticketsMet;
+             else if (form.label.includes("Bio")) isDone = audit.bio;
+             else if (form.label.includes("Measurements")) isDone = audit.measurements;
+             else if (form.label.includes("Conflict")) isDone = audit.conflicts;
+             else if (form.label.includes("Committee")) isDone = audit.committee;
+             else if (form.label.includes("Parent")) isDone = audit.parentContract;
+             else if (form.label.includes("Student")) isDone = audit.studentContract;
+
+             return (
+               <div key={form.label} className="flex items-center justify-between text-[10px]">
+                 <span className={isDone ? "text-zinc-400" : "text-red-400"}>{form.label}</span>
+                 {isDone ? <Check size={10} className="text-emerald-500"/> : <X size={10} className="text-red-500"/>}
+               </div>
+             )
+          })}
+        </div>
+        
+        {/* The Arrow */}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-zinc-900"></div>
+      </div>
+    </div>
+  );
 }
 
-function LegendItem({ color, label, percent, count }: any) {
-    return (
-        <div className="flex items-center justify-between group">
-            <div className="flex items-center gap-4">
-                <div className={`w-4 h-4 rounded-full ${color} shadow-lg group-hover:scale-125 transition-transform`} />
-                <span className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">{label}</span>
-            </div>
-            <div className="text-right leading-none">
-                <div className="text-2xl font-black text-white tracking-tighter">{percent}%</div>
-                <div className="text-[10px] text-zinc-600 font-black uppercase tracking-tighter mt-1">{count} Students</div>
-            </div>
+function HeaderStat({ label, value, sub, color = "text-white", icon }) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="p-3 bg-white/5 rounded-2xl text-zinc-500 border border-white/5 shadow-inner">{icon}</div>
+      <div>
+        <div className="flex items-baseline gap-2 leading-none mb-1">
+          <span className={`text-2xl font-black tracking-tighter ${color}`}>{value}</span>
+          <span className="text-[10px] font-black uppercase text-zinc-600 tracking-wider">{label}</span>
         </div>
-    )
-}
-
-function ObservationCard({ icon, title, desc }: any) {
-    return (
-        <div className="flex gap-5 p-5 bg-black/20 border border-white/5 rounded-2xl hover:bg-black/30 transition-all duration-300 group">
-            <div className="shrink-0 group-hover:scale-110 transition-transform">{icon}</div>
-            <div>
-                <div className="text-sm font-black text-zinc-200 group-hover:text-white transition-colors tracking-tight">{title}</div>
-                <div className="text-[11px] text-zinc-500 leading-relaxed mt-1.5 font-medium">{desc}</div>
-            </div>
-        </div>
-    )
-}
-
-function CampusCard({ name, classes, students, color }: any) {
-    return (
-        <div className="bg-zinc-950/50 border border-white/5 p-5 rounded-2xl hover:bg-zinc-900 transition-colors group">
-            <div className="text-xs font-black text-white truncate mb-4 group-hover:text-blue-400 transition-colors">{name}</div>
-            <div className="space-y-3">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-600">
-                    <span>Classes</span>
-                    <span className={`text-xs ${color}`}>{classes}</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-600">
-                    <span>Students</span>
-                    <span className={`text-xs ${color}`}>{students}</span>
-                </div>
-            </div>
-        </div>
-    )
+        <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{sub}</div>
+      </div>
+    </div>
+  );
 }
