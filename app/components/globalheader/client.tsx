@@ -9,7 +9,7 @@ import {
   LayoutGrid, LogOut, ChevronDown, 
   Users, Settings, Sparkles, Check,
   MapPin, Music, Calendar, Menu, X, ChevronsUpDown,
-  ShieldCheck, BarChart3, UserSquare2, AlertOctagon,
+  BarChart3, UserSquare2, AlertOctagon,
   Tent, Star
 } from 'lucide-react';
 
@@ -45,14 +45,13 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
     return groups;
   }, {} as Record<string, typeof shows>);
 
-  // Sort seasons descending (e.g. 2026-2027 before 2025-2026)
   const sortedSeasons = Object.keys(groupedShows).sort((a, b) => b.localeCompare(a));
 
   // --- STYLING HELPER (Branch Colors) ---
   const getBranchColor = (location: string = "") => {
       if (location.includes('Stafford')) return 'text-amber-500';
       if (location.includes('NoVa')) return 'text-indigo-400';
-      return 'text-emerald-500'; // Default / Fredericksburg
+      return 'text-emerald-500'; 
   };
 
   return (
@@ -81,7 +80,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         {/* CONTEXT DROPDOWN */}
         {openMenu === 'context' && (
           <div className="absolute top-14 left-0 w-80 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl shadow-black/80 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-100 z-50 flex flex-col max-h-[75vh]">
-            
             <div className="bg-zinc-900/80 p-3 border-b border-zinc-800 sticky top-0 backdrop-blur-md z-10">
                 <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                     <LayoutGrid size={12}/> Active Productions
@@ -115,7 +113,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
       {/* --- RIGHT: NAVIGATION MENU --- */}
       <div className="flex items-center gap-3" ref={navRef}>
         
-        {/* User Info (Desktop) */}
+        {/* User Info */}
         <div className="hidden md:flex flex-col items-end leading-tight mr-2">
           <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">{user.role}</span>
@@ -134,6 +132,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
             <div className="absolute top-16 right-4 w-64 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-100 z-50 flex flex-col max-h-[80vh]">
                 
                 <div className="p-2 overflow-y-auto custom-scrollbar">
+                    
                     {/* ACTIVE */}
                     <div className="px-2 pt-2 pb-1 flex items-center justify-between">
                         <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active Workspace</span>
@@ -142,14 +141,13 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     
                     {/* PRODUCTION */}
                     <div className="px-2 pt-4 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
-                    <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Grid" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Rehearsal Grid" onClick={() => setOpenMenu(null)} />
 
                     {/* COMPANY MANAGER */}
                     <div className="px-2 pt-4 pb-1"><span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Company Manager</span></div>
-                    <MenuLink href="/staff" icon={<UserSquare2 size={16} />} title="Cast List" subtitle="Roster & Contacts" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/roster" icon={<UserSquare2 size={16} />} title="Cast List" subtitle="Roster & Compliance" onClick={() => setOpenMenu(null)} />
                     <MenuLink href="/conflicts" icon={<AlertOctagon size={16} />} title="Conflicts" subtitle="Availability Matrix" onClick={() => setOpenMenu(null)} />
-                    <MenuLink href="/compliance" icon={<ShieldCheck size={16} />} title="Compliance" subtitle="Safety & Forms" onClick={() => setOpenMenu(null)} />
-                    <MenuLink href="/reports" icon={<BarChart3 size={16} />} title="Reports" subtitle="Cast Health & Stats" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/reports" icon={<BarChart3 size={16} />} title="Reports" subtitle="Demographics & Stats" onClick={() => setOpenMenu(null)} />
 
                     {/* SOON */}
                     <div className="px-2 pt-4 pb-1"><span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Coming Soon</span></div>
@@ -185,7 +183,7 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
   
   // 1. Branch Logic (Color)
-  let branchColor = 'bg-emerald-500'; // Default/Fredericksburg
+  let branchColor = 'bg-emerald-500'; 
   if (prod.location?.includes('Stafford')) branchColor = 'bg-amber-500';
   if (prod.location?.includes('NoVa')) branchColor = 'bg-indigo-500';
 
