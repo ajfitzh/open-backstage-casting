@@ -369,14 +369,14 @@ export async function createProductionAsset(name: string, url: string, type: str
   });
 }
 
-export async function createCastAssignment(actorId: number, roleId: number, productionId: number) { // Pass ID, not Name
+export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
   const response = await fetch(`${BASE_URL}/api/database/rows/table/${TABLES.ASSIGNMENTS}/?user_field_names=true`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({
-      "Person": [actorId],
+      "Person": [personId],
       "Performance Identity": [roleId],
-      "Production": [productionId] // <--- CRITICAL for Compliance Filter
+      "Production": [productionId] 
     }),
   });
   if (!response.ok) throw new Error("Failed to assign role");

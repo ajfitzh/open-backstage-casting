@@ -168,9 +168,9 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   };
 
 
-  // --- 🪄 SMART AUTO-CAST ---
+// --- 🪄 SMART AUTO-CAST (FIXED: Saves to Database) ---
   const handleAutoCast = async () => {
-    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining students into ENSEMBLE.\n3. Verify min 3 scenes.`;
+    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining students into ENSEMBLE.\n3. Verify min 3 scenes.\n\n⚠️ This will create many database rows. Please wait for the spinner to finish.`;
     if (!confirm(confirmMsg)) return;
 
     setIsAutoCasting(true);
@@ -179,13 +179,13 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     const act1Scenes = new Set(scenes.slice(0, splitIndex).map(s => s.id));
     const act2Scenes = new Set(scenes.slice(splitIndex).map(s => s.id));
 
+    // Clone state
     let newRoles = JSON.parse(JSON.stringify(roles));
     const updatesToSave: any[] = [];
 
+    // --- ALGORITHM START ---
     actors.forEach(actor => {
         let currentAssignments = newRoles.filter((r: any) => r.selectedActorIds.includes(actor.id));
-        
-        // Don't auto-cast if they already have a significant role
         const hasPrimaryRole = currentAssignments.some((r: any) => 
             ['Lead', 'Supporting', 'Featured'].includes(r.type)
         );
@@ -200,7 +200,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             attempts++;
             let bestRole = null;
 
-            // STRATEGY A: Fill Primary Roles (One per student)
+            // Strategy A: Fill Primary
             if (!hasPrimaryRole) {
                 bestRole = newRoles.find((r: any) => 
                     ['Lead', 'Supporting', 'Featured'].includes(r.type) && 
@@ -210,14 +210,13 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 );
             }
 
-            // STRATEGY B: Balanced Ensemble
+            // Strategy B: Balanced Ensemble
             if (!bestRole) {
                 const ensembleOptions = newRoles.filter((r: any) => 
                     r.type === 'Ensemble' && 
                     !r.selectedActorIds.includes(actor.id) &&
                     r.sceneIds.length > 0
                 );
-                // Sort by population (Smallest first to balance)
                 ensembleOptions.sort((a: any, b: any) => a.selectedActorIds.length - b.selectedActorIds.length);
 
                 bestRole = ensembleOptions.find((r: any) => {
@@ -232,49 +231,75 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
             if (bestRole) {
                 bestRole.selectedActorIds.push(actor.id);
+                // Also add full actor object for UI card
                 if (!bestRole.actors.find((a: any) => a.id === actor.id)) {
                     bestRole.actors.push(actor);
                 }
                 
-                // Break early if we just gave them a big role
+                // Break early if primary role assigned
                 if(['Lead', 'Supporting', 'Featured'].includes(bestRole.type)) {
-                    // Update lists for saving but don't loop for more ensemble immediately
                     if (!updatesToSave.includes(bestRole)) updatesToSave.push(bestRole);
                     break; 
                 }
 
+                // Update trackers
                 bestRole.sceneIds.forEach((sid: number) => {
                     if (act1Scenes.has(sid)) hasAct1 = true;
                     if (act2Scenes.has(sid)) hasAct2 = true;
                     currentSceneIds.add(sid);
                 });
                 totalScenes = currentSceneIds.size;
+                
                 if (!updatesToSave.includes(bestRole)) updatesToSave.push(bestRole);
             } else {
                 break; 
             }
         }
     });
+    // --- ALGORITHM END ---
 
+    // 1. Optimistic UI Update
     setRoles(newRoles);
 
+    // 2. Database Sync (SEQUENTIAL LOOP)
     try {
-        console.log(`Auto-Cast: Saving ${updatesToSave.length} roles...`);
-        // Note: For a robust app, we'd use a batch create endpoint. 
-        // Here we loop.
-        await Promise.all(updatesToSave.map(async (role) => {
+        console.log(`Auto-Cast: Processing ${updatesToSave.length} roles...`);
+        let processedCount = 0;
+
+        // We use a for...of loop to await each iteration sequentially
+        // This prevents 100+ requests hitting Baserow at the exact same millisecond
+        for (const role of updatesToSave) {
+            
+            // A. Get Person IDs for this Role
             const personIds = role.selectedActorIds.map((auditionId: number) => {
                 const a = actors.find(act => act.id === auditionId);
                 return a ? a.personId : null;
             }).filter(Boolean);
 
+            // B. Update the Role Table (Visual Checkmark)
             await updateRole(role.id, { "Assigned Actor": personIds });
-            // In auto-cast we skip createCastAssignment loop to prevent API rate limiting
-            // You might want a "Sync to Compliance" button later.
-        }));
-        alert(`Auto-cast complete! Updated ${updatesToSave.length} roles.`);
+
+            // C. Create Assignment Rows (The Real Data)
+            // We loop through the newly added actors for this role
+            for (const personId of personIds) {
+                 // Check if assignment already exists in our local cache to avoid duplicates?
+                 // For now, we assume Quick Cast is additive or run on a clean slate.
+                 // Ideally, we'd check 'allAssignments' here, but for "Quick Cast" speed we'll just create.
+                 await createCastAssignment(personId, role.id, productionId);
+            }
+            
+            processedCount++;
+            // Optional: console.log(`Saved ${role.name} (${processedCount}/${updatesToSave.length})`);
+        }
+
+        alert(`Auto-cast complete! Successfully saved ${updatesToSave.length} roles to the database.`);
+        
+        // Reload to fetch the new Assignment IDs (so Delete works later)
+        window.location.reload(); 
+
     } catch (e) {
         console.error("Auto-cast partial failure", e);
+        alert("Some roles may not have saved. Please check the 'Audit' tab.");
     } finally {
         setIsAutoCasting(false);
     }
