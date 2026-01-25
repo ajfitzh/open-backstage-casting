@@ -44,28 +44,44 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [allAssignments, setAllAssignments] = useState<any[]>([]);
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-// --- DATA LOADING (Robust & Fixes "Blank" Roles) ---
+// --- DATA LOADING (Crash-Proof Version) ---
   useEffect(() => {
     async function load() {
         setLoading(true);
         try {
-            const [roleRows, auditionRows, sceneRows, assignmentRows] = await Promise.all([
+            console.log("Fetching Casting Data...");
+            
+            // 1. Fetch Raw Data
+            const [rawRoles, rawAuditions, rawScenes, rawAssignments] = await Promise.all([
                 getRoles(), 
                 getAuditionSlots(), 
                 getScenes(),
                 getAssignments()
             ]);
 
-            console.log(`Debug: Loaded ${assignmentRows.length} total assignments.`);
+            // 🛡️ SAFETY HELPER: Handle { results: [...] } vs [...]
+            const safeArray = (data: any) => {
+                if (!data) return [];
+                if (Array.isArray(data)) return data;
+                if (data.results && Array.isArray(data.results)) return data.results;
+                return [];
+            };
 
-            // 1. Process Actors (Filter for THIS Production)
+            const roleRows = safeArray(rawRoles);
+            const auditionRows = safeArray(rawAuditions);
+            const sceneRows = safeArray(rawScenes);
+            const assignmentRows = safeArray(rawAssignments);
+
+            console.log(`Debug: Loaded ${assignmentRows.length} assignments, ${auditionRows.length} auditions.`);
+
+            // 2. Process Actors (Filter for THIS Production)
             const showActors = auditionRows
-                .filter((a: any) => a["Production"]?.some((link: any) => link.id == productionId)) // Use loose equality (==)
+                .filter((a: any) => a["Production"]?.some((link: any) => link.id == productionId)) 
                 .map((a: any) => ({
                     ...a,
                     id: a.id, 
-                    personId: a["Performer"]?.[0]?.id, // The ID of the Person Record
-                    performerName: a["Performer"]?.[0]?.value || "Unknown", // Store Name for Fallback
+                    personId: a["Performer"]?.[0]?.id, 
+                    performerName: a["Performer"]?.[0]?.value || "Unknown", 
                     Performer: a["Performer"]?.[0]?.value || "Unknown",
                     Headshot: a["Headshot"]?.[0]?.url || null,
                     grades: {
@@ -77,39 +93,37 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             
             setActors(showActors);
 
-            // 2. Process Assignments (Filter for THIS Production)
-            // Safety: Use loose equality (==) in case API returns string IDs
+            // 3. Process Assignments (Filter for THIS Production)
             const currentAssignments = assignmentRows.filter((a: any) => 
                 a.Production?.some((p: any) => p.id == productionId)
             );
             
             setAllAssignments(currentAssignments);
-            console.log(`Debug: Found ${currentAssignments.length} assignments for Prod #${productionId}.`);
 
-            // 3. Create Map: Role ID -> Array of Actors
+            // 4. Create Map: Role ID -> Array of Actors
             const assignmentMap: Record<number, any[]> = {};
             
             currentAssignments.forEach((a: any) => {
                 const roleId = a["Performance Identity"]?.[0]?.id;
-                
-                // Get Person Info from Assignment
                 const assignedPersonId = a["Person"]?.[0]?.id;
                 const assignedPersonName = a["Person"]?.[0]?.value;
 
-                if (roleId && assignedPersonId) {
-                    // ATTEMPT 1: Match by Person ID (Best)
-                    let actorObj = showActors.find(sa => sa.personId == assignedPersonId);
+                if (roleId) {
+                    let actorObj = null;
 
-                    // ATTEMPT 2: Match by Name (Fallback)
-                    // This fixes cases where tables link to different sources but represent the same human
+                    // Strategy A: Match by Person ID (Link to Link)
+                    if (assignedPersonId) {
+                        actorObj = showActors.find(sa => sa.personId == assignedPersonId);
+                    }
+
+                    // Strategy B: Match by Name (Fallback)
                     if (!actorObj && assignedPersonName) {
                         actorObj = showActors.find(sa => sa.performerName === assignedPersonName);
-                        if(actorObj) console.log(`Recovered link for ${assignedPersonName} via Name Match.`);
                     }
 
                     if (actorObj) {
                         if (!assignmentMap[roleId]) assignmentMap[roleId] = [];
-                        // Avoid duplicates
+                        // Dedupe
                         if (!assignmentMap[roleId].find(x => x.id === actorObj.id)) {
                             assignmentMap[roleId].push(actorObj);
                         }
@@ -117,7 +131,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 }
             });
 
-            // 4. Process Roles
+            // 5. Process Roles (Hydrate from Map)
             const showRoles = roleRows.filter((r: any) => {
                 const prodLinks = r["Production"] || [];
                 const isDirectLink = prodLinks.some((link: any) => link.id == productionId);
@@ -126,7 +140,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                 return isDirectLink || isMasterLink;
             });
 
-            // 5. Hydrate Roles
             const processedRoles = showRoles.map((r: any) => {
                 let sceneIds: number[] = [];
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
@@ -155,7 +168,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
             setScenes(showScenes);
 
         } catch (e) {
-            console.error("Load failed:", e);
+            console.error("CRITICAL LOAD ERROR:", e);
         } finally {
             setLoading(false);
         }
