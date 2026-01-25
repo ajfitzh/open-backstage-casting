@@ -1,46 +1,99 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   Users, Calendar, UserSquare2, 
   AlertOctagon, BarChart3, VenetianMask, 
-  Settings
+  Settings, ChevronDown, ChevronRight,
+  Mic2, Megaphone, LayoutGrid, GraduationCap
 } from 'lucide-react';
 
-export default function SideNav() {
+export default function StaffSidebar() {
   const pathname = usePathname();
+  // Auto-expand if we are on a casting page
+  const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
+  const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
+
+  // Keep state in sync if user navigates via other means
+  useEffect(() => {
+    if (isCastingRoute) setCastingOpen(true);
+  }, [pathname, isCastingRoute]);
 
   return (
-    <nav className="w-56 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0 hidden md:flex">
+    <nav className="w-64 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0">
       
-      {/* SECTION 1: PRODUCTION */}
-      <div className="p-4">
-        <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">
-            Production
-        </div>
-        <div className="space-y-0.5">
-            <NavItem href="/schedule" icon={<Calendar size={16}/>} label="Scheduler" active={pathname === '/schedule'} />
-            <NavItem href="/casting" icon={<Users size={16}/>} label="Casting" active={pathname === '/casting'} />
-        </div>
+      {/* BRAND HEADER */}
+      <div className="h-16 flex items-center px-6 border-b border-white/5 mb-4">
+        <h1 className="text-sm font-black tracking-tighter text-blue-500">
+          OPEN<span className="text-white">BACKSTAGE</span>
+        </h1>
       </div>
 
-      {/* SECTION 2: COMPANY */}
-      <div className="px-4 pb-4">
-        <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">
-            Company Manager
+      <div className="flex-1 overflow-y-auto px-4 space-y-6 custom-scrollbar">
+        
+        {/* SECTION 1: PRODUCTION */}
+        <div>
+            <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">
+                Production
+            </div>
+            <div className="space-y-1">
+                <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
+                
+                {/* CASTING SUITE GROUP */}
+                <div>
+                    <button 
+                        onClick={() => setCastingOpen(!isCastingOpen)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all ${isCastingRoute ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <Users size={18} className={isCastingRoute ? "text-purple-400" : "text-zinc-500"}/>
+                            <span>Casting Suite</span>
+                        </div>
+                        {isCastingOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                    </button>
+
+                    {/* SUB-MENU */}
+                    {isCastingOpen && (
+                        <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1 animate-in slide-in-from-left-2 duration-200">
+                            <SubNavItem href="/auditions" icon={<Mic2 size={14}/>} label="Auditions" active={pathname === '/auditions'} />
+                            <SubNavItem href="/callbacks" icon={<Megaphone size={14}/>} label="Callbacks" active={pathname === '/callbacks'} />
+                            <SubNavItem href="/casting" icon={<LayoutGrid size={14}/>} label="Cast Grid" active={pathname === '/casting'} />
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
-        <div className="space-y-0.5">
-            <NavItem href="/roster" icon={<UserSquare2 size={16}/>} label="Roster & Forms" active={pathname === '/roster'} />
-            <NavItem href="/conflicts" icon={<AlertOctagon size={16}/>} label="Conflicts" active={pathname === '/conflicts'} />
-            <NavItem href="/committees" icon={<VenetianMask size={16}/>} label="Committees" active={pathname === '/committees'} />
-            <NavItem href="/reports" icon={<BarChart3 size={16}/>} label="Reports" active={pathname === '/reports'} />
+
+        {/* SECTION 2: COMPANY */}
+        <div>
+            <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">
+                Company Manager
+            </div>
+            <div className="space-y-1">
+                <NavItem href="/roster" icon={<UserSquare2 size={18}/>} label="Roster" active={pathname === '/roster'} />
+                <NavItem href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflicts" active={pathname === '/conflicts'} />
+                <NavItem href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
+                <NavItem href="/reports" icon={<BarChart3 size={18}/>} label="Reports" active={pathname === '/reports'} />
+            </div>
         </div>
+
+        {/* SECTION 3: EDUCATION */}
+        <div>
+            <div className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">
+                Education
+            </div>
+            <div className="space-y-1">
+                <NavItem href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
+            </div>
+        </div>
+
       </div>
 
-      {/* SECTION 3: SYSTEM */}
-      <div className="mt-auto p-4 border-t border-white/5">
-        <NavItem href="/settings" icon={<Settings size={16}/>} label="Settings" active={pathname === '/settings'} />
+      {/* FOOTER */}
+      <div className="p-4 border-t border-white/5">
+        <NavItem href="/settings" icon={<Settings size={18}/>} label="Settings" active={pathname === '/settings'} />
       </div>
 
     </nav>
@@ -54,8 +107,25 @@ function NavItem({ href, icon, label, active }: any) {
             className={`
                 flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition-all
                 ${active 
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                    ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-sm' 
                     : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200 border border-transparent'}
+            `}
+        >
+            {icon}
+            {label}
+        </Link>
+    )
+}
+
+function SubNavItem({ href, icon, label, active }: any) {
+    return (
+        <Link 
+            href={href} 
+            className={`
+                flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all
+                ${active 
+                    ? 'text-white bg-white/5' 
+                    : 'text-zinc-500 hover:text-zinc-300'}
             `}
         >
             {icon}

@@ -138,14 +138,18 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                 {/* 1. NAVIGATION LINKS */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar pt-6">
                     
-                    {/* Workspace */}
-                    <div>
-                        <SectionHeader label="Daily Workspace" />
-                        <div className="space-y-1">
-                            <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
-                            <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<Users size={18}/>} label="Casting" active={pathname === '/casting'} />
-                        </div>
-                    </div>
+{/* Workspace */}
+<div>
+    <SectionHeader label="Daily Workspace" />
+    <div className="space-y-1">
+        <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
+        
+        {/* Added Casting Tools */}
+        <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
+        <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
+        <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
+    </div>
+</div>
 
                     {/* Company Manager */}
                     <div>
