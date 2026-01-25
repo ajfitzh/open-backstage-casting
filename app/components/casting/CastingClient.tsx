@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, Wand2, Check, AlertCircle, RotateCcw, ClipboardList, X } from 'lucide-react';
+import { 
+    Loader2, Wand2, Check, AlertCircle, RotateCcw, 
+    ClipboardList, X, ChevronDown, ChevronUp, Users 
+} from 'lucide-react';
 import { 
     getRoles, 
     getAuditionSlots, 
@@ -24,7 +27,8 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   const [loading, setLoading] = useState(true);
   const [isAutoCasting, setIsAutoCasting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [showAudit, setShowAudit] = useState(false); // <--- NEW: Toggle for Audit Modal
+  const [showAudit, setShowAudit] = useState(false);
+  const [drawerExpanded, setDrawerExpanded] = useState(false); // <--- NEW: Drawer State
   const [viewMode, setViewMode] = useState<'workspace' | 'chemistry'>('workspace');
   
   const [roles, setRoles] = useState<any[]>([]);
@@ -103,14 +107,11 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   }, [productionId, masterShowId]);
 
 
-  // --- 🧮 STATS CALCULATOR (The Brains) ---
+  // --- 🧮 STATS LOGIC ---
   const getActorStats = (actorId: number) => {
-      // 1. Get assignments
       const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
       const mySceneIds = new Set(myRoles.flatMap(r => r.sceneIds));
       
-      // 2. Logic (Split Scenes into Acts)
-      // Note: This assumes scenes are sorted by ID or Order
       const splitIndex = Math.floor(scenes.length / 2);
       const act1Scenes = scenes.slice(0, splitIndex).map(s => s.id);
       const act2Scenes = scenes.slice(splitIndex).map(s => s.id);
@@ -119,18 +120,14 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       const hasAct2 = Array.from(mySceneIds).some(sid => act2Scenes.includes(sid as number));
       const count = mySceneIds.size;
 
-      // 3. THE RULESET
       const isCompliant = count >= 3 && hasAct1 && hasAct2;
 
       return { count, hasAct1, hasAct2, isCompliant, roleCount: myRoles.length };
   };
 
-
   // --- 🪄 AUTO-CAST ---
   const handleAutoCast = async () => {
-    const confirmMsg = `Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles first.\n2. Balance remaining students into ENSEMBLE.\n3. Verify scene counts (Min 3).`;
-    if (!confirm(confirmMsg)) return;
-
+    if (!confirm(`Auto-Assign Roles?\n\nLogic:\n1. Fill Empty LEAD, SUPPORTING, & FEATURED roles.\n2. Balance remaining into ENSEMBLE.\n3. Verify min 3 scenes.`)) return;
     setIsAutoCasting(true);
 
     const splitIndex = Math.floor(scenes.length / 2);
@@ -219,7 +216,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
 
   // --- CLEAR CAST ---
   const handleClearCast = async () => {
-      if(!confirm("⚠️ RESET ENSEMBLE?\n\nThis will remove all actors from Ensemble, Featured, and Supporting roles.\n\nLeads will NOT be affected.")) return;
+      if(!confirm("⚠️ RESET ENSEMBLE?\n\nRemoves all Ensemble/Featured/Supporting actors. Leads preserved.")) return;
       setIsClearing(true);
       const newRoles = JSON.parse(JSON.stringify(roles));
       const updatesToSave: any[] = [];
@@ -245,7 +242,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
       }
   };
 
-  // --- STANDARD HANDLERS ---
+  // --- HANDLERS ---
   const handleDropActor = (e: React.DragEvent, roleId: string) => {
     e.preventDefault();
     const actorId = parseInt(e.dataTransfer.getData("actorId"));
@@ -339,10 +336,10 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   if (loading) return <div className="h-screen bg-zinc-950 flex items-center justify-center text-white"><Loader2 className="animate-spin text-blue-500 mr-2"/> Loading {productionTitle}...</div>;
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden relative">
         
         {/* HEADER */}
-        <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-zinc-900 shrink-0 z-20">
+        <header className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-zinc-900 shrink-0 z-30 relative">
             <div className="flex gap-4 items-center">
                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest border-r border-zinc-700 pr-4 mr-1">
                     {productionTitle}
@@ -353,46 +350,101 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     <button onClick={() => setViewMode('chemistry')} className={`text-[10px] font-black uppercase px-3 py-1 rounded transition-all ${viewMode === 'chemistry' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Chemistry</button>
                  </div>
 
+                 {/* TOOLBAR */}
                  <div className="flex items-center gap-2 border-l border-zinc-700 pl-4 ml-1">
                      <button onClick={() => setShowAudit(true)} className="flex items-center gap-2 bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all">
                         <ClipboardList size={14} /> Audit
                      </button>
-                     
                      <button onClick={handleAutoCast} disabled={isAutoCasting || isClearing} className="flex items-center gap-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50">
                         {isAutoCasting ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14} />} Quick Cast
                      </button>
-
                      <button onClick={handleClearCast} disabled={isAutoCasting || isClearing} className="flex items-center gap-2 bg-red-600/10 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50">
                         {isClearing ? <Loader2 size={14} className="animate-spin"/> : <RotateCcw size={14} />} Reset
                      </button>
                  </div>
             </div>
 
-            {/* TOP DRAWER with RED DOTS */}
-            <div className="flex items-center gap-2 overflow-x-auto max-w-[30vw] no-scrollbar mask-linear-fade-left">
-                 <span className="text-[9px] font-bold text-zinc-600 uppercase mr-2 shrink-0">Cast Drawer:</span>
-                 {actors.map(actor => {
-                     const isAssigned = roles.some(r => r.selectedActorIds.includes(actor.id));
-                     const stats = getActorStats(actor.id);
-                     const hasWarning = isAssigned && !stats.isCompliant;
-
-                     return (
-                        <div 
-                            key={actor.id} 
-                            draggable 
-                            onDragStart={(e) => e.dataTransfer.setData("actorId", actor.id.toString())} 
-                            onClick={() => setInspectingActorId(actor.id)} 
-                            className={`w-8 h-8 rounded-full border shrink-0 overflow-hidden cursor-grab active:cursor-grabbing hover:scale-110 transition-transform relative 
-                                ${hasWarning ? 'border-red-500 ring-2 ring-red-500/20' : isAssigned ? 'border-emerald-500 opacity-50' : 'border-white/10'}`} 
-                            title={`${actor.Performer} ${hasWarning ? '(Non-Compliant)' : ''}`}
-                        >
-                            <img alt="Headshot" src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" />
-                            {isAssigned && !hasWarning && <div className="absolute inset-0 bg-emerald-500/30 flex items-center justify-center"><Check size={12} className="text-white"/></div>}
-                        </div>
-                     )
-                 })}
+            {/* EXPANDABLE DRAWER TRIGGER */}
+            <div className="flex items-center gap-4 h-full">
+                <div className="flex items-center gap-2 h-full cursor-pointer hover:bg-white/5 px-2 rounded transition-colors" onClick={() => setDrawerExpanded(!drawerExpanded)}>
+                    <span className="text-[9px] font-bold text-zinc-600 uppercase">Cast Drawer</span>
+                    {drawerExpanded ? <ChevronUp size={14} className="text-zinc-400"/> : <ChevronDown size={14} className="text-zinc-400"/>}
+                </div>
+                
+                {/* PREVIEW STRIP (Visible only when collapsed) */}
+                {!drawerExpanded && (
+                    <div className="flex items-center gap-2 overflow-x-auto max-w-[20vw] no-scrollbar mask-linear-fade-left">
+                        {actors.map(actor => {
+                            const isAssigned = roles.some(r => r.selectedActorIds.includes(actor.id));
+                            const stats = getActorStats(actor.id);
+                            const hasWarning = isAssigned && !stats.isCompliant;
+                            return (
+                                <div key={actor.id} className={`w-8 h-8 rounded-full border shrink-0 overflow-hidden relative ${hasWarning ? 'border-red-500' : isAssigned ? 'border-emerald-500 opacity-50' : 'border-white/10'}`}>
+                                    <img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" />
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
             </div>
         </header>
+
+        {/* 🌟 EXPANDED DRAWER OVERLAY */}
+        {drawerExpanded && (
+            <div className="absolute top-14 left-0 right-0 bottom-0 bg-zinc-950/95 backdrop-blur-xl z-40 p-8 overflow-y-auto border-t border-white/10" onClick={() => setDrawerExpanded(false)}>
+                <div className="max-w-7xl mx-auto" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-end mb-6 border-b border-white/10 pb-4">
+                        <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white flex items-center gap-3">
+                            <Users size={32} className="text-zinc-600"/> Cast Pool
+                        </h2>
+                        <button onClick={() => setDrawerExpanded(false)} className="text-zinc-500 hover:text-white flex items-center gap-2 text-xs font-bold uppercase"><X size={16}/> Close Drawer</button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+                        {actors.map(actor => {
+                            const isAssigned = roles.some(r => r.selectedActorIds.includes(actor.id));
+                            const stats = getActorStats(actor.id);
+                            const hasWarning = isAssigned && !stats.isCompliant;
+
+                            return (
+                                <div 
+                                    key={actor.id}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData("actorId", actor.id.toString()); setDrawerExpanded(false); }} // Close drawer on drag start
+                                    onClick={() => setInspectingActorId(actor.id)}
+                                    className={`relative bg-zinc-900 border rounded-xl p-3 hover:bg-zinc-800 transition-all cursor-grab active:cursor-grabbing group 
+                                        ${hasWarning ? 'border-red-500/50 hover:border-red-500' : isAssigned ? 'border-emerald-500/30' : 'border-white/5 hover:border-white/20'}
+                                    `}
+                                >
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-zinc-950 border border-white/10">
+                                            <img src={actor.Headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-white truncate">{actor.Performer}</p>
+                                            <p className="text-[10px] text-zinc-500 font-mono">ID: {actor.id}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* STATUS BADGES */}
+                                    <div className="flex gap-1 flex-wrap">
+                                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${isAssigned ? 'bg-zinc-800 text-zinc-300 border-zinc-700' : 'bg-red-900/10 text-red-400 border-red-900/20'}`}>
+                                            {isAssigned ? `${stats.roleCount} Roles` : 'Uncast'}
+                                        </span>
+                                        {hasWarning && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-500 text-white flex items-center gap-1"><AlertCircle size={8}/> Needs Scenes</span>}
+                                    </div>
+
+                                    {/* HOVER HINT */}
+                                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none">
+                                        <p className="text-[10px] font-bold uppercase text-white tracking-widest">Drag to Cast</p>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* WORKSPACE */}
         <div className="flex-1 overflow-hidden relative flex">
@@ -432,8 +484,7 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                             <tbody className="divide-y divide-white/5">
                                 {actors.map(actor => {
                                     const stats = getActorStats(actor.id);
-                                    if(stats.roleCount === 0) return null; // Skip unassigned for clutter reduction? Or show them? Let's hide unassigned to focus on cast.
-                                    
+                                    if(stats.roleCount === 0) return null;
                                     return (
                                         <tr key={actor.id} className="hover:bg-white/5">
                                             <td className="px-6 py-3 font-bold text-white flex items-center gap-3">
