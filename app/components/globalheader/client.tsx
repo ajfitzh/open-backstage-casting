@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation'; // 👈 IMPORT THIS
+import { usePathname } from 'next/navigation'; 
 import { switchProduction } from '@/app/actions'; 
 import { 
   LayoutGrid, LogOut, ChevronRight, ChevronDown, 
@@ -15,10 +15,10 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
-  // 1. Get the current URL path (e.g. "/casting" or "/staff")
+  // 1. Get the current URL path to redirect back after switching shows
   const pathname = usePathname(); 
 
-  // ... (Keep existing useEffect for click outside) ...
+  // Handle click outside to close menu
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -44,7 +44,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   return (
     <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
       
-      {/* ... Left Logo Section ... */}
+      {/* LEFT: Context Switcher */}
       <div className="flex items-center gap-3" ref={menuRef}>
         <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -58,6 +58,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         {isMenuOpen && (
           <div className="absolute top-16 left-4 w-80 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-left">
             
+            {/* Show Selector */}
             <div className="bg-zinc-900/50 p-2 border-b border-zinc-800">
                <div className="px-2 pt-2 pb-1 flex justify-between items-center">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Switch Context</span>
@@ -78,7 +79,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                        {groupedShows[season].map((prod) => (
                          <form key={prod.id} action={switchProduction}>
                            <input type="hidden" name="productionId" value={prod.id} />
-                           {/* 2. 👇 PASS THE CURRENT PATH TO THE SERVER */}
+                           {/* PASS CURRENT PATH FOR REDIRECT */}
                            <input type="hidden" name="redirectPath" value={pathname} />
                            
                            <ContextButton prod={prod} isActive={prod.id === activeId} />
@@ -90,12 +91,28 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                </div>
             </div>
 
-            {/* ... Navigation Links Section (Unchanged) ... */}
+            {/* Navigation Links */}
             <div className="p-2 space-y-1">
+              
+              {/* SECTION: ACTIVE */}
               <div className="px-2 pt-2 pb-1"><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span></div>
               <MenuLink href="/casting" icon={<Users size={16} />} title="Casting" subtitle="Auditions & Callbacks" onClick={() => setIsMenuOpen(false)} />
+              
+              {/* SECTION: PRODUCTION */}
               <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
+              
+              {/* NEW SCHEDULER LINK */}
+              <MenuLink 
+                href="/schedule" 
+                icon={<Calendar size={16} />} 
+                title="Scheduler" 
+                subtitle="Weekly Rehearsal Grid" 
+                onClick={() => setIsMenuOpen(false)} 
+              />
+
               <MenuLink href="/staff" icon={<ClipboardCheck size={16} />} title="Staff Deck" subtitle="Compliance & Reports" onClick={() => setIsMenuOpen(false)} />
+              
+              {/* SECTION: SOON */}
               <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soon</span></div>
               <div className="flex items-start gap-3 p-2 rounded-lg opacity-50 cursor-not-allowed">
                  <div className="mt-1 text-zinc-500"><Music size={16} /></div>
@@ -112,7 +129,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
           </div>
         )}
 
-        {/* ... Breadcrumb (Unchanged) ... */}
+        {/* Breadcrumb */}
         {!isMenuOpen && (
           <>
             <ChevronRight size={14} className="text-zinc-700" />
@@ -126,7 +143,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         )}
       </div>
 
-      {/* ... Right User Section (Unchanged) ... */}
+      {/* RIGHT: User Profile */}
       <div className="flex items-center gap-4">
         <div className="hidden md:flex flex-col items-end leading-tight">
           <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
@@ -142,7 +159,8 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   );
 }
 
-// ... ContextButton and MenuLink components (Unchanged) ...
+// --- SUB-COMPONENTS ---
+
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
   const locationColor = prod.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500';
