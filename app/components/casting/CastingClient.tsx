@@ -10,7 +10,8 @@ import {
     getAuditionSlots, 
     getScenes, 
     updateRole, 
-    createCastAssignment 
+    createCastAssignment,
+    getAssignments 
 } from '@/app/lib/baserow'; 
 
 import CastWorkspace from '@/app/components/casting/CastWorkspace';
@@ -37,27 +38,47 @@ export default function CastingClient({ productionId, productionTitle, masterSho
   
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
 
-  // --- DATA LOADING ---
+// --- DATA LOADING ---
   useEffect(() => {
     async function load() {
         setLoading(true);
         try {
-            const [roleRows, auditionRows, sceneRows] = await Promise.all([
-                getRoles(), getAuditionSlots(), getScenes()
+            // 1. Fetch EVERYTHING (Roles, Actors, Scenes, AND Assignments)
+            const [roleRows, auditionRows, sceneRows, assignmentRows] = await Promise.all([
+                getRoles(), 
+                getAuditionSlots(), 
+                getScenes(),
+                getAssignments() // <--- Fetch the source of truth
             ]);
 
-            const showRoles = roleRows.filter((r: any) => {
-                const prodLinks = r["Production"] || [];
-                const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
-                const masterLinks = r["Master Show Database"] || [];
-                const isMasterLink = masterShowId && masterLinks.some((link: any) => link.id === masterShowId);
-                return isDirectLink || isMasterLink;
+            // 2. Filter Assignments for THIS Production
+            const currentAssignments = assignmentRows.filter((a: any) => 
+                a.Production?.some((p: any) => p.id === productionId)
+            );
+
+            // 3. Create a Map: Role ID -> Array of Actor Objects
+            // This lets us instantly look up "Who is playing Role 123?"
+            const assignmentMap: Record<number, any[]> = {};
+            
+            currentAssignments.forEach((a: any) => {
+                const roleId = a["Performance Identity"]?.[0]?.id;
+                const personId = a["Person"]?.[0]?.id;
+                
+                if (roleId && personId) {
+                    // Find the full actor object from the auditionRows
+                    const actorObj = auditionRows.find((ar: any) => {
+                        const actorPersonId = ar["Performer"]?.[0]?.id;
+                        return actorPersonId === personId;
+                    });
+
+                    if (actorObj) {
+                        if (!assignmentMap[roleId]) assignmentMap[roleId] = [];
+                        assignmentMap[roleId].push(actorObj);
+                    }
+                }
             });
 
-            const showScenes = sceneRows
-                .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
-                .sort((a: any, b: any) => a.id - b.id);
-
+            // 4. Process Actors (Standard Normalization)
             const showActors = auditionRows
                 .filter((a: any) => a["Production"]?.some((link: any) => link.id === productionId))
                 .map((a: any) => ({
@@ -73,25 +94,45 @@ export default function CastingClient({ productionId, productionTitle, masterSho
                     }
                 }));
 
+            // 5. Process Roles & Hydrate from Assignment Map
+            const showRoles = roleRows.filter((r: any) => {
+                const prodLinks = r["Production"] || [];
+                const isDirectLink = prodLinks.some((link: any) => link.id === productionId);
+                const masterLinks = r["Master Show Database"] || [];
+                const isMasterLink = masterShowId && masterLinks.some((link: any) => link.id === masterShowId);
+                return isDirectLink || isMasterLink;
+            });
+
             const processedRoles = showRoles.map((r: any) => {
                 let sceneIds: number[] = [];
                 if (r["Active Scenes"] && Array.isArray(r["Active Scenes"])) {
                     sceneIds = r["Active Scenes"].map((s: any) => s.id);
                 }
 
-                const assignedRaw = r["Assigned Actor"] || [];
-                const assignedActors = assignedRaw.map((link: any) => showActors.find((a: any) => a.personId === link.id)).filter(Boolean);
+                // 🌟 HYDRATION SOURCE: Look at the Assignment Map, NOT the Role Column
+                // This ensures we see the data specific to THIS production
+                const assignedActorsRaw = assignmentMap[r.id] || [];
+                
+                // Convert to the formatted 'showActors' structure
+                const assignedActors = assignedActorsRaw.map(raw => {
+                    return showActors.find(sa => sa.id === raw.id) || null;
+                }).filter(Boolean);
 
                 return {
                     id: r.id,
                     name: r["Role Name"] || r.Name,
                     type: r["Role Type"]?.value || "Ensemble",
-                    actors: assignedActors.length > 0 ? assignedActors : [],
-                    selectedActorIds: assignedActors.map((a: any) => a.id), 
+                    actors: assignedActors, // Populates the card visual
+                    selectedActorIds: assignedActors.map((a: any) => a.id), // Populates the state
                     selectedActorId: assignedActors[0]?.id || null, 
                     sceneIds: sceneIds
                 };
             });
+
+            // 6. Process Scenes
+            const showScenes = sceneRows
+                .filter((s: any) => s["Production"]?.some((link: any) => link.id === productionId))
+                .sort((a: any, b: any) => a.id - b.id);
 
             setRoles(processedRoles);
             setActors(showActors);
@@ -105,8 +146,6 @@ export default function CastingClient({ productionId, productionTitle, masterSho
     }
     if(productionId) load();
   }, [productionId, masterShowId]);
-
-
   // --- 🧮 STATS LOGIC ---
   const getActorStats = (actorId: number) => {
       const myRoles = roles.filter(r => r.selectedActorIds.includes(actorId));
