@@ -3,15 +3,18 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Mail, Phone, Search, 
-  User, MoreHorizontal, Check, AlertCircle
+  User, MoreHorizontal, Check, AlertCircle,
+  CheckCircle2, XCircle
 } from 'lucide-react';
+import { getStudentClassData } from '@/app/lib/mockEducation';
 
 export default function StaffClient({ productionTitle, assignments, people, complianceData }: any) {
   const [filter, setFilter] = useState("");
   const [filterMode, setFilterMode] = useState<'All' | 'Issues'>('All');
 
-  // --- 🧠 DATA MERGE (Same logic as before, just kept purely for data prep) ---
+  // --- 🧠 DATA MERGE ENGINE ---
   const roster = useMemo(() => {
+      // 1. Index Compliance Data
       const complianceMap = new Map();
       if (Array.isArray(complianceData)) {
           complianceData.forEach((c: any) => {
@@ -19,7 +22,9 @@ export default function StaffClient({ productionTitle, assignments, people, comp
           });
       }
 
+      // 2. Build the Master Person Map
       const personMap = new Map();
+      
       if (Array.isArray(assignments)) {
         assignments.forEach((a: any) => {
             const personId = a["Person"]?.[0]?.id;
@@ -31,6 +36,16 @@ export default function StaffClient({ productionTitle, assignments, people, comp
             if (!personMap.has(personId)) {
                 const contact = people.find((p: any) => p.id === personId);
                 const comp = complianceMap.get(personName) || {};
+                
+                // 🎓 EDUCATION INTEGRATION (The Bridge)
+                const eduData = getStudentClassData(personId);
+                const classStatus = {
+                    isEnrolled: !!eduData,
+                    className: eduData?.className || "Not Enrolled",
+                    absences: eduData?.absences || 0,
+                    // "Good Standing" = Fewer than 3 absences
+                    isGoodStanding: (eduData?.absences || 0) < 3 
+                };
 
                 personMap.set(personId, {
                     id: personId,
@@ -39,10 +54,12 @@ export default function StaffClient({ productionTitle, assignments, people, comp
                     email: contact ? contact["Email"] || contact["Signer Email"] || "" : "",
                     phone: contact ? contact["Phone Number"] || "" : "",
                     avatar: contact ? contact["Headshot"]?.[0]?.url : null,
-                    // Flags
+                    // Compliance Flags
                     fees: comp.paidFees || false,
                     forms: comp.signedAgreement || false,
                     bio: comp.measurementsTaken || false, 
+                    // Education Flag
+                    education: classStatus
                 });
             } else {
                 personMap.get(personId).roles.push(roleName);
@@ -55,12 +72,21 @@ export default function StaffClient({ productionTitle, assignments, people, comp
   // --- FILTERING ---
   const filteredRoster = roster.filter((p: any) => {
       const matchesSearch = p.name.toLowerCase().includes(filter.toLowerCase()) || p.roles.join(" ").toLowerCase().includes(filter.toLowerCase());
+      
       if (filterMode === 'All') return matchesSearch;
-      const hasIssue = !p.fees || !p.forms || !p.bio;
-      return matchesSearch && hasIssue;
+      
+      // 'Issues' Mode: Show if ANY dot is Red
+      const complianceIssue = !p.fees || !p.forms || !p.bio;
+      const educationIssue = p.education.isEnrolled && !p.education.isGoodStanding;
+      
+      return matchesSearch && (complianceIssue || educationIssue);
   });
 
-  const totalIssues = roster.filter((p: any) => !p.fees || !p.forms || !p.bio).length;
+  const totalIssues = roster.filter((p: any) => {
+      const complianceIssue = !p.fees || !p.forms || !p.bio;
+      const educationIssue = p.education.isEnrolled && !p.education.isGoodStanding;
+      return complianceIssue || educationIssue;
+  }).length;
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
@@ -144,6 +170,15 @@ export default function StaffClient({ productionTitle, assignments, people, comp
                         <StatusDot active={member.fees} label="Production Fees" />
                         <StatusDot active={member.forms} label="Liability Forms" />
                         <StatusDot active={member.bio} label="Measurements/Bio" />
+                        
+                        {/* 4th DOT: Education Status (Only if Enrolled) */}
+                        {member.education.isEnrolled && (
+                             <EducationDot 
+                                goodStanding={member.education.isGoodStanding} 
+                                absences={member.education.absences}
+                                className={member.education.className}
+                            />
+                        )}
                     </div>
 
                 </div>
@@ -160,7 +195,7 @@ export default function StaffClient({ productionTitle, assignments, people, comp
   );
 }
 
-// --- SUB-COMPONENT: THE DOT ---
+// --- SUB-COMPONENT: STATUS DOT ---
 function StatusDot({ active, label }: { active: boolean, label: string }) {
     return (
         <div className="group/dot relative flex items-center justify-end">
@@ -173,6 +208,27 @@ function StatusDot({ active, label }: { active: boolean, label: string }) {
                     {active ? <Check size={8} className="text-emerald-500"/> : <AlertCircle size={8} className="text-red-500"/>}
                     <span className={`text-[9px] font-bold uppercase tracking-wider ${active ? 'text-zinc-400' : 'text-red-400'}`}>
                         {label} {active ? "OK" : "Missing"}
+                    </span>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// --- SUB-COMPONENT: EDUCATION DOT ---
+function EducationDot({ goodStanding, absences, className }: any) {
+    return (
+        <div className="group/dot relative flex items-center justify-end">
+            {/* The Indicator */}
+            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${goodStanding ? 'bg-blue-900/50 group-hover/dot:bg-blue-500' : 'bg-red-500 animate-pulse'}`} />
+            
+            {/* The Hover Tooltip */}
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-zinc-950 border border-zinc-700 p-2 rounded shadow-xl opacity-0 group-hover/dot:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap">
+                <div className="text-[9px] font-black uppercase text-zinc-500 mb-0.5">{className}</div>
+                <div className="flex items-center gap-1.5">
+                    {goodStanding ? <CheckCircle2 size={10} className="text-blue-500"/> : <XCircle size={10} className="text-red-500"/>}
+                    <span className={`text-[10px] font-bold ${goodStanding ? 'text-zinc-300' : 'text-red-400'}`}>
+                        {absences} Absences {goodStanding ? "(OK)" : "(At Risk)"}
                     </span>
                 </div>
             </div>
