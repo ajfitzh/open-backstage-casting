@@ -8,26 +8,30 @@ import { switchProduction } from '@/app/actions';
 import { 
   LayoutGrid, LogOut, ChevronRight, ChevronDown, 
   Users, ClipboardCheck, Settings, Sparkles, Check,
-  MapPin, Music, Calendar 
+  MapPin, Music, Calendar, Menu, X, ChevronsUpDown
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  // We use a single state to track which menu is open ('context', 'nav', or null)
+  const [openMenu, setOpenMenu] = useState<'context' | 'nav' | null>(null);
   
-  // 1. Get the current URL path to redirect back after switching shows
+  const contextRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname(); 
 
-  // Handle click outside to close menu
+  // Handle click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
+      if (contextRef.current && !contextRef.current.contains(event.target as Node)) {
+        if (openMenu === 'context') setOpenMenu(null);
+      }
+      if (navRef.current && !navRef.current.contains(event.target as Node)) {
+        if (openMenu === 'nav') setOpenMenu(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [openMenu]);
 
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
   const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
@@ -44,116 +48,118 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   return (
     <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
       
-      {/* LEFT: Context Switcher */}
-      <div className="flex items-center gap-3" ref={menuRef}>
+      {/* --- LEFT: CONTEXT SWITCHER (Which Show?) --- */}
+      <div className="flex items-center gap-3 relative" ref={contextRef}>
         <button 
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`group flex items-center gap-2 transition-all p-2 rounded-lg border border-transparent ${isMenuOpen ? 'bg-zinc-900 border-zinc-800 text-white' : 'text-zinc-400 hover:text-emerald-500'}`}
+            onClick={() => setOpenMenu(openMenu === 'context' ? null : 'context')}
+            className={`group flex items-center gap-2 transition-all p-2 rounded-lg border border-transparent ${openMenu === 'context' ? 'bg-zinc-900 border-zinc-800 text-white' : 'text-zinc-400 hover:text-emerald-500'}`}
         >
-            <LayoutGrid size={18} className={isMenuOpen ? "text-emerald-500" : "group-hover:rotate-90 transition-transform duration-300"} />
-            <span className="font-bold text-xs uppercase tracking-widest hidden sm:block">Open Backstage</span>
-            <ChevronDown size={14} className={`transition-transform duration-200 ${isMenuOpen ? 'rotate-180 text-emerald-500' : ''}`} />
+            <div className={`p-1 rounded ${openMenu === 'context' ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 group-hover:text-emerald-500'}`}>
+                <LayoutGrid size={16} />
+            </div>
+            <div className="flex flex-col items-start leading-none">
+                <span className="font-bold text-xs uppercase tracking-widest text-zinc-500 group-hover:text-emerald-500 text-[10px]">Context</span>
+                <div className="flex items-center gap-1">
+                    <span className="font-bold text-sm text-zinc-200 max-w-[120px] sm:max-w-[200px] truncate">{activeShow.title}</span>
+                    <ChevronsUpDown size={12} className="text-zinc-600" />
+                </div>
+            </div>
         </button>
 
-        {isMenuOpen && (
-          <div className="absolute top-16 left-4 w-80 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-left">
+        {/* CONTEXT DROPDOWN */}
+        {openMenu === 'context' && (
+          <div className="absolute top-14 left-0 w-80 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-100 z-50 flex flex-col max-h-[75vh]">
             
-            {/* Show Selector */}
-            <div className="bg-zinc-900/50 p-2 border-b border-zinc-800">
-               <div className="px-2 pt-2 pb-1 flex justify-between items-center">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Switch Context</span>
-                  <span className="text-[10px] font-mono text-zinc-600 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">v1.0.4</span>
-               </div>
-               
-               <div className="space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                 {shows.length === 0 && <div className="p-2 text-xs text-zinc-500 italic">No active shows found.</div>}
-                 
-                 {sortedSeasons.map(season => (
-                   <div key={season} className="mb-3">
-                     <div className="px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                        <Calendar size={10} />
-                        {season}
-                     </div>
-
-                     <div className="space-y-0.5">
-                       {groupedShows[season].map((prod: unknown) => (
-                         <form key={prod.id} action={switchProduction}>
-                           <input type="hidden" name="productionId" value={prod.id} />
-                           {/* PASS CURRENT PATH FOR REDIRECT */}
-                           <input type="hidden" name="redirectPath" value={pathname} />
-                           
-                           <ContextButton prod={prod} isActive={prod.id === activeId} />
-                         </form>
-                       ))}
-                     </div>
-                   </div>
-                 ))}
-               </div>
-            </div>
-
-            {/* Navigation Links */}
-            <div className="p-2 space-y-1">
-              
-              {/* SECTION: ACTIVE */}
-              <div className="px-2 pt-2 pb-1"><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span></div>
-              <MenuLink href="/casting" icon={<Users size={16} />} title="Casting" subtitle="Auditions & Callbacks" onClick={() => setIsMenuOpen(false)} />
-              
-              {/* SECTION: PRODUCTION */}
-              <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
-              
-              {/* NEW SCHEDULER LINK */}
-              <MenuLink 
-                href="/schedule" 
-                icon={<Calendar size={16} />} 
-                title="Scheduler" 
-                subtitle="Weekly Rehearsal Grid" 
-                onClick={() => setIsMenuOpen(false)} 
-              />
-
-              <MenuLink href="/staff" icon={<ClipboardCheck size={16} />} title="Staff Deck" subtitle="Compliance & Reports" onClick={() => setIsMenuOpen(false)} />
-              
-              {/* SECTION: SOON */}
-              <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soon</span></div>
-              <div className="flex items-start gap-3 p-2 rounded-lg opacity-50 cursor-not-allowed">
-                 <div className="mt-1 text-zinc-500"><Music size={16} /></div>
-                 <div>
-                    <div className="text-sm font-medium text-zinc-400">Script & Score</div>
-                    <div className="text-xs text-zinc-600">Digital scripts</div>
-                 </div>
-              </div>
+            <div className="bg-zinc-900/50 p-3 border-b border-zinc-800 sticky top-0 backdrop-blur-md z-10">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Switch Active Production</span>
             </div>
             
-            <div className="p-2 border-t border-zinc-800 bg-zinc-900/30">
-               <MenuLink href="/settings" icon={<Settings size={16} />} title="Settings" subtitle="Manage Context" onClick={() => setIsMenuOpen(false)} />
+            <div className="p-2 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                {shows.length === 0 && <div className="p-2 text-xs text-zinc-500 italic">No active shows found.</div>}
+                
+                {sortedSeasons.map(season => (
+                <div key={season}>
+                    <div className="px-2 py-1 mb-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2 border-b border-zinc-800/50">
+                        <Calendar size={10} /> {season}
+                    </div>
+                    <div className="space-y-1">
+                    {groupedShows[season].map((prod) => (
+                        <form key={prod.id} action={switchProduction}>
+                        <input type="hidden" name="productionId" value={prod.id} />
+                        <input type="hidden" name="redirectPath" value={pathname} />
+                        <ContextButton prod={prod} isActive={prod.id === activeId} />
+                        </form>
+                    ))}
+                    </div>
+                </div>
+                ))}
+            </div>
+            
+            <div className="p-2 bg-zinc-900 border-t border-zinc-800 text-[10px] text-center text-zinc-600">
+                Tip: Switching shows reloads the dashboard.
             </div>
           </div>
         )}
-
-        {/* Breadcrumb */}
-        {!isMenuOpen && (
-          <>
-            <ChevronRight size={14} className="text-zinc-700" />
-            <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900 rounded-md border border-zinc-800">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${activeShow.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-              <span className="text-zinc-300 text-xs font-medium max-w-[150px] truncate">
-                 {activeShow.title}
-              </span>
-            </div>
-          </>
-        )}
       </div>
 
-      {/* RIGHT: User Profile */}
-      <div className="flex items-center gap-4">
-        <div className="hidden md:flex flex-col items-end leading-tight">
+      {/* --- RIGHT: NAVIGATION MENU (Where to go?) --- */}
+      <div className="flex items-center gap-3" ref={navRef}>
+        
+        {/* User Profile (Desktop Only for info, Mobile handled in menu) */}
+        <div className="hidden md:flex flex-col items-end leading-tight mr-2">
           <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
           <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">{user.role}</span>
         </div>
-        <div className="h-8 w-8 rounded-lg bg-emerald-600/10 flex items-center justify-center text-emerald-500 text-xs font-bold border border-emerald-600/20">
-            {user.initials}
-        </div>
-        <div className="h-4 w-px bg-zinc-800" />
-        <button className="text-zinc-500 hover:text-red-400 transition-colors p-1"><LogOut size={18} /></button>
+
+        {/* HAMBURGER BUTTON */}
+        <button 
+            onClick={() => setOpenMenu(openMenu === 'nav' ? null : 'nav')}
+            className={`p-2.5 rounded-full transition-all border ${openMenu === 'nav' ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'}`}
+        >
+            {openMenu === 'nav' ? <X size={20} /> : <Menu size={20} />}
+        </button>
+
+        {/* NAVIGATION DROPDOWN */}
+        {openMenu === 'nav' && (
+            <div className="absolute top-16 right-4 w-64 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-100 z-50 flex flex-col max-h-[80vh]">
+                
+                {/* Mobile User Info Header */}
+                <div className="md:hidden p-4 border-b border-zinc-800 bg-zinc-900/50">
+                    <div className="text-sm font-bold text-white">{user.name}</div>
+                    <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider">{user.role}</div>
+                </div>
+
+                <div className="p-2 overflow-y-auto custom-scrollbar">
+                    
+                    <div className="px-2 pt-2 pb-1"><span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span></div>
+                    <MenuLink href="/casting" icon={<Users size={16} />} title="Casting" subtitle="Auditions & Callbacks" onClick={() => setOpenMenu(null)} />
+                    
+                    <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Production</span></div>
+                    <MenuLink href="/schedule" icon={<Calendar size={16} />} title="Scheduler" subtitle="Weekly Rehearsal Grid" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/staff" icon={<ClipboardCheck size={16} />} title="Staff Deck" subtitle="Compliance & Reports" onClick={() => setOpenMenu(null)} />
+                    <MenuLink href="/conflicts" icon={<Calendar size={16} className="text-amber-500" />} title="Conflicts" subtitle="Availability Matrix" onClick={() => setOpenMenu(null)} />
+
+                    <div className="px-2 pt-3 pb-1"><span className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soon</span></div>
+                    <div className="flex items-start gap-3 p-2 rounded-lg opacity-50 cursor-not-allowed">
+                        <div className="mt-1 text-zinc-500"><Music size={16} /></div>
+                        <div>
+                            <div className="text-sm font-medium text-zinc-400">Script & Score</div>
+                            <div className="text-xs text-zinc-600">Digital scripts</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-2 border-t border-zinc-800 bg-zinc-900/50 mt-auto">
+                    <MenuLink href="/settings" icon={<Settings size={16} />} title="Settings" subtitle="System & Accounts" onClick={() => setOpenMenu(null)} />
+                    <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-red-900/20 group transition-colors mt-1">
+                        <div className="mt-1 text-zinc-500 group-hover:text-red-500"><LogOut size={16} /></div>
+                        <div className="text-left">
+                            <div className="text-sm font-medium text-zinc-400 group-hover:text-red-400">Sign Out</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        )}
       </div>
     </header>
   );
@@ -163,14 +169,16 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
 
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
+  // Location color coding: Stafford=Amber, Others=Emerald
   const locationColor = prod.location?.includes('Stafford') ? 'bg-amber-500' : 'bg-emerald-500';
 
   return (
     <button 
       disabled={pending} 
-      className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left group ${isActive ? 'bg-zinc-800 text-white shadow-sm' : 'hover:bg-zinc-800/50 text-zinc-400'}`}
+      className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group ${isActive ? 'bg-zinc-800 text-white ring-1 ring-zinc-700' : 'hover:bg-zinc-900 text-zinc-400'}`}
     >
-       <div className={`h-8 w-1 rounded-full shrink-0 ${locationColor}`} />
+       {/* Status Indicator */}
+       <div className={`h-8 w-1 rounded-full shrink-0 transition-opacity ${pending ? 'opacity-50' : ''} ${locationColor}`} />
        
        <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate text-zinc-200 group-hover:text-white">
@@ -188,8 +196,8 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
           </div>
        </div>
        
-       {isActive && <Check size={14} className="text-emerald-500" />}
-       {pending && <Sparkles size={14} className="text-zinc-500 animate-spin" />}
+       {isActive && !pending && <Check size={14} className="text-emerald-500" />}
+       {pending && <Sparkles size={14} className="text-emerald-500 animate-spin" />}
     </button>
   );
 }
@@ -197,10 +205,10 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
 function MenuLink({ href, icon, title, subtitle, onClick }: any) {
   return (
     <Link href={href} onClick={onClick} className="flex items-start gap-3 p-2 rounded-lg hover:bg-zinc-800 group transition-colors">
-      <div className="mt-1 text-zinc-500 group-hover:text-emerald-500">{icon}</div>
+      <div className="mt-1 text-zinc-500 group-hover:text-white transition-colors">{icon}</div>
       <div>
-        <div className="text-sm font-medium text-zinc-300 group-hover:text-white">{title}</div>
-        <div className="text-xs text-zinc-500 group-hover:text-zinc-400">{subtitle}</div>
+        <div className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{title}</div>
+        <div className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">{subtitle}</div>
       </div>
     </Link>
   );

@@ -5,43 +5,66 @@ import {
   AlertTriangle, 
   Check, 
   Search, 
-  Calendar
+  Calendar,
+  Filter
 } from "lucide-react";
+import ConflictAnalysisDashboard from './ConflictAnalysisDashboard';
 
 interface Props {
   scenes: any[];      
   roles: any[];       
   assignments: any[]; 
   people: any[];
+  conflictRows: any[]; // Table 623 Data
   productionTitle: string;      
 }
 
-export default function ConflictClient({ scenes, roles, assignments, people, productionTitle }: Props) {
+export default function ConflictClient({ 
+  scenes, 
+  roles, 
+  assignments, 
+  people, 
+  conflictRows = [], 
+  productionTitle 
+}: Props) {
   const [filterText, setFilterText] = useState("");
   const [showClear, setShowClear] = useState(true);
 
   // --- DATA PROCESSING ---
   const processedData = useMemo(() => {
-    // 1. Map People
-    const actorMap = new Map();
-    people.forEach((p: any) => {
-      // Extract Conflict Text from Link Row
-      // Assuming conflict data comes in via lookup or link field
-      const conflictRaw = p["Rehearsal Conflicts"]; 
-      let conflictList: string[] = [];
-      
-      // Handle various Baserow data shapes
-      if (Array.isArray(conflictRaw)) {
-          conflictList = conflictRaw.map((c: any) => c.value || c);
-      } else if (typeof conflictRaw === 'string') {
-          conflictList = [conflictRaw];
-      }
-
-      const name = p["Full Name"] || `Student ${p.id}`;
-      actorMap.set(p.id, { id: p.id, name, conflicts: conflictList });
+    
+    // 1. Build Conflict Map (Person ID -> Array of Conflict Strings)
+    // We use the raw Conflict Table (623) because the People Table only contains IDs.
+    const conflictMap = new Map<number, string[]>();
+    
+    conflictRows.forEach((row: any) => {
+        const personId = row["Person"]?.[0]?.id;
+        if (personId) {
+            const type = row["Conflict Type"]?.value || "Conflict";
+            const notes = row["Notes"] || "";
+            // Format dates if they exist
+            const dateStr = row["Date"] ? row["Date"].map((d: any) => {
+                const date = new Date(d.value);
+                return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+            }).join(", ") : "";
+            
+            const label = `${type}${dateStr ? ` (${dateStr})` : ''}${notes ? `: ${notes}` : ''}`;
+            
+            const current = conflictMap.get(personId) || [];
+            conflictMap.set(personId, [...current, label]);
+        }
     });
 
-    // 2. Map Roles -> Actors (Who plays who?)
+    // 2. Map People & Attach Conflicts
+    const actorMap = new Map();
+    people.forEach((p: any) => {
+      const name = p["Full Name"] || p["Name"] || `Student ${p.id}`;
+      // Grab conflicts from our map, default to empty array
+      const conflicts = conflictMap.get(p.id) || [];
+      actorMap.set(p.id, { id: p.id, name, conflicts });
+    });
+
+    // 3. Map Roles -> Actors (Who plays who?)
     const roleActorMap = new Map<number, number[]>(); 
     assignments.forEach((a: any) => {
       const roleId = a["Performance Identity"]?.[0]?.id;
@@ -52,31 +75,34 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
       }
     });
 
-    // 3. Map Scenes -> Actors (Who is in this scene?)
+    // 4. Map Scenes -> Actors (Who is in this scene?)
     const matrixRows = scenes.map((scene: any) => {
-        // Find Roles in this Scene
+        // Find Roles linked to this scene
         const rolesInScene = roles.filter((r: any) => {
           const activeScenes = r["Active Scenes"] || [];
           return activeScenes.some((s: any) => s.id === scene.id);
         });
 
-        // Find Actors in those Roles
+        // Find Actors assigned to those roles
         const actorsInScene = new Set<number>();
         rolesInScene.forEach((r: any) => {
           const actorIds = roleActorMap.get(r.id) || [];
           actorIds.forEach((id) => actorsInScene.add(id));
         });
 
+        const actorArray = Array.from(actorsInScene);
+
         return {
           id: scene.id,
           name: scene["Scene Name"] || `Scene ${scene.id}`,
           act: scene["Act"]?.value || "1",
-          actors: Array.from(actorsInScene),
+          actors: actorArray,
+          // We pass 'roles' (actually actor objects) for the dashboard to calculate load
+          roles: actorArray // legacy naming for the dashboard logic if needed
         };
-      })
-      .sort((a: any, b: any) => a.id - b.id);
+      }).sort((a: any, b: any) => a.id - b.id);
 
-    // 4. Get Unique Cast List
+    // 5. Get Unique Cast List (Columns)
     const uniqueActorIds = Array.from(new Set(matrixRows.flatMap((r: any) => r.actors)));
     const gridColumns = uniqueActorIds
       .map((id) => actorMap.get(id))
@@ -84,7 +110,7 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
     return { rows: matrixRows, columns: gridColumns };
-  }, [scenes, roles, assignments, people]);
+  }, [scenes, roles, assignments, people, conflictRows]);
 
   const { rows, columns } = processedData;
   const visibleColumns = columns.filter((c: any) => c.name.toLowerCase().includes(filterText.toLowerCase()));
@@ -93,7 +119,7 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
       
       {/* HEADER */}
-      <div className="p-4 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0 h-14">
+      <div className="p-4 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0 h-14 z-40 relative shadow-md">
         <div className="flex items-center gap-4">
             <h2 className="text-lg font-black uppercase italic tracking-wider flex items-center gap-2">
             <Calendar className="text-red-500" /> Conflict Matrix
@@ -125,8 +151,20 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
         </div>
       </div>
 
-      {/* MATRIX */}
-      <div className="flex-1 overflow-auto custom-scrollbar relative bg-zinc-950">
+      {/* SCROLLABLE CONTENT */}
+      <div className="flex-1 overflow-auto custom-scrollbar relative bg-zinc-950 flex flex-col">
+        
+        {/* 📊 ANALYTICS DASHBOARD (New Integration) */}
+        <div className="p-4 bg-zinc-950 border-b border-white/5">
+            <ConflictAnalysisDashboard 
+                scenes={rows}
+                assignments={assignments}
+                people={people}
+                conflictRows={conflictRows}
+            />
+        </div>
+
+        {/* 📉 THE MATRIX */}
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-20 bg-zinc-900 shadow-xl border-b border-white/10">
             <tr>
@@ -135,15 +173,15 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
                 <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block">Col: Actor</span>
               </th>
               {visibleColumns.map((actor: any) => (
-                <th key={actor.id} className="p-2 border-r border-white/10 min-w-[40px] w-[40px] relative group hover:bg-zinc-800 transition-colors">
-                  <div className="h-32 flex items-end justify-center pb-2">
+                <th key={actor.id} className="p-2 border-r border-white/10 min-w-[40px] w-[40px] relative group hover:bg-zinc-800 transition-colors align-bottom pb-4">
+                  <div className="h-32 flex items-end justify-center">
                       <div className="writing-vertical-lr -rotate-180 text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap group-hover:text-white transition-colors">
                         {actor.name}
                       </div>
                   </div>
                   {actor.conflicts.length > 0 && (
-                    <div className="absolute top-1 left-1/2 -translate-x-1/2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500" title="Has Conflicts" />
+                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" title="Has Conflicts" />
                     </div>
                   )}
                 </th>
@@ -160,7 +198,10 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
                     <span className="text-xs font-bold text-white truncate max-w-[180px]" title={scene.name}>
                       {scene.name}
                     </span>
-                    <span className="text-[9px] font-black text-zinc-600 uppercase">Act {scene.act}</span>
+                    <div className="flex justify-between items-center mt-1">
+                        <span className="text-[9px] font-black text-zinc-600 uppercase">Act {scene.act}</span>
+                        <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900 px-1.5 rounded border border-white/5">{scene.actors.length}</span>
+                    </div>
                   </div>
                 </td>
 
@@ -181,11 +222,17 @@ export default function ConflictClient({ scenes, roles, assignments, people, pro
                         </div>
                         
                         {/* HOVER TOOLTIP */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-black border border-red-500/50 p-3 rounded-xl shadow-2xl z-50 hidden group-hover/cell:block pointer-events-none">
-                          <p className="text-[10px] font-black uppercase text-red-500 mb-1 border-b border-red-500/20 pb-1">{actor.name} Conflicts:</p>
-                          <ul className="text-[10px] text-zinc-300 list-disc pl-3 space-y-1">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-zinc-950 border border-red-500/50 p-3 rounded-xl shadow-2xl z-50 hidden group-hover/cell:block pointer-events-none">
+                          <div className="flex justify-between items-center border-b border-red-500/20 pb-2 mb-2">
+                             <span className="text-[10px] font-black uppercase text-red-500">{actor.name}</span>
+                             <span className="text-[9px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">{actor.conflicts.length} Conflicts</span>
+                          </div>
+                          <ul className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
                             {actor.conflicts.map((c: string, i: number) => (
-                              <li key={i}>{c}</li>
+                              <li key={i} className="text-[10px] text-zinc-300 flex items-start gap-2">
+                                <span className="mt-1 w-1 h-1 rounded-full bg-red-500 shrink-0"/>
+                                <span className="leading-tight">{c}</span>
+                              </li>
                             ))}
                           </ul>
                         </div>
