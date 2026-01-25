@@ -1,142 +1,155 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import { Calendar, AlertTriangle, Users, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Calendar, AlertTriangle, Clock } from 'lucide-react';
 
-export default function ConflictAnalysisDashboard({ scenes, assignments, people, conflictRows }: any) {
+export default function ConflictAnalysisDashboard({ scenes, people, conflictRows, events }: any) {
 
-  // --- 🧠 THE BRAIN: ANALYTICS ENGINE ---
+  // --- 🧠 THE BRAIN: EVENT-BASED ANALYTICS ---
   const analytics = useMemo(() => {
-    // 1. Parse Conflicts into a clean Map: Date -> Set(PersonIDs)
-    // This tells us: "Who is missing on Oct 14th?"
-    const absenceMap = new Map<string, Set<number>>();
     
+    // 1. Sort Events Chronologically
+    const sortedEvents = [...events].sort((a: any, b: any) => 
+        new Date(a["Event Date"]).getTime() - new Date(b["Event Date"]).getTime()
+    );
+
+    // 2. Map Conflicts to specific Event IDs
+    // The "Rehearsal Event Conflicts" table links to "Production Event" (Table 625)
+    const eventConflictMap = new Map<number, Set<number>>(); // EventID -> Set of PersonIDs
+
     conflictRows.forEach((row: any) => {
         const personId = row["Person"]?.[0]?.id;
-        const dates = row["Date"] ? row["Date"].map((d: any) => d.value) : []; // Array of ISO dates
+        const linkedEventIds = row["Production Event"]?.map((e: any) => e.id) || [];
         
-        if (personId && dates.length > 0) {
-            dates.forEach((dateStr: string) => {
-                // Normalize date to YYYY-MM-DD
-                const cleanDate = dateStr.split('T')[0];
-                if (!absenceMap.has(cleanDate)) absenceMap.set(cleanDate, new Set());
-                absenceMap.get(cleanDate)?.add(personId);
+        if (personId && linkedEventIds.length > 0) {
+            linkedEventIds.forEach((eventId: number) => {
+                if (!eventConflictMap.has(eventId)) eventConflictMap.set(eventId, new Set());
+                eventConflictMap.get(eventId)?.add(personId);
             });
         }
     });
 
-    // 2. Calculate "Weekend Viability" (Next 10 Saturdays)
-    const weekends = [];
-    const today = new Date();
-    // Find next Saturday
-    const nextSat = new Date(today);
-    nextSat.setDate(today.getDate() + (6 - today.getDay()));
-
-    for (let i = 0; i < 10; i++) {
-        const d = new Date(nextSat);
-        d.setDate(nextSat.getDate() + (i * 7));
-        const dateKey = d.toISOString().split('T')[0];
-        
-        const absentCount = absenceMap.get(dateKey)?.size || 0;
-        const totalCast = people.length || 1; // Prevent div/0
+    // 3. Build the Event Cards
+    const eventCards = sortedEvents.map((evt: any) => {
+        const dateObj = new Date(evt["Event Date"]);
+        const absentCount = eventConflictMap.get(evt.id)?.size || 0;
+        const totalCast = people.length || 1;
         const availability = Math.round(((totalCast - absentCount) / totalCast) * 100);
+        
+        // Is it Friday or Saturday?
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+        
+        // Parse Time (e.g. "18:00" -> "6pm")
+        const startTime = evt["Start Time"] ? new Date(evt["Start Time"]).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : "";
+        const endTime = evt["End Time"] ? new Date(evt["End Time"]).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : "";
 
-        weekends.push({ date: d, dateKey, absentCount, availability });
-    }
+        return {
+            id: evt.id,
+            label: `${dayName} ${dateStr}`,
+            time: `${startTime} - ${endTime}`,
+            type: evt["Event Type"]?.value || "Rehearsal",
+            absentCount,
+            availability,
+            isFriday: dayName === 'Fri',
+            isSaturday: dayName === 'Sat'
+        };
+    });
 
-    // 3. Calculate "Scene Difficulty Score"
-    // Score = Sum of all conflicts for every actor in this scene
+    // 4. Calculate "Hardest Scenes" (Weighted by Event Availability)
+    // We want to know which scenes are missing people on the *best* days.
     const sceneScores = scenes.map((scene: any) => {
-        // Find actors in this scene
-        const rolesInScene = scene.roles || []; // Assuming parent passes hydrated scenes? 
-        // If not, we map from assignments like before:
-        const sceneAssignments = assignments.filter((a: any) => 
-             // This is a rough check, ideally we use the real Scene map from parent
-             true 
-        ); 
-        
-        // Let's use a simpler metric if props are raw:
-        // We need to know WHICH actors are in this scene. 
-        // For this visual report, let's assume we pass in "hydrated" scenes from the parent.
-        
-        const conflictLoad = scene.actors ? scene.actors.reduce((acc: number, actorId: number) => {
-            // Count total conflict dates for this actor
-            let actorConflicts = 0;
-            absenceMap.forEach((absentSet) => {
-                if(absentSet.has(actorId)) actorConflicts++;
+        const actorIds = scene.actors || [];
+        // Simply count how many TOTAL conflicts these actors have across all events
+        const totalConflicts = actorIds.reduce((acc: number, pid: number) => {
+            let c = 0;
+            eventConflictMap.forEach((absentees) => {
+                if(absentees.has(pid)) c++;
             });
-            return acc + actorConflicts;
-        }, 0) : 0;
+            return acc + c;
+        }, 0);
+        return { ...scene, conflictLoad: totalConflicts, size: actorIds.length };
+    }).sort((a: any, b: any) => b.conflictLoad - a.conflictLoad);
 
-        return { ...scene, conflictLoad };
-    }).sort((a: any, b: any) => b.conflictLoad - a.conflictLoad); // Descending
-
-    return { weekends, hardestScenes: sceneScores.slice(0, 5) };
-  }, [scenes, assignments, people, conflictRows]);
+    return { eventCards, hardestScenes: sceneScores.slice(0, 5) };
+  }, [scenes, people, conflictRows, events]);
 
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         
-        {/* 📅 WEEKEND FORECAST */}
-        <div className="col-span-2 bg-zinc-900 border border-white/10 rounded-xl p-4">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <Calendar size={14} className="text-blue-500"/> 10-Week Availability Forecast
-            </h3>
+        {/* 📅 REHEARSAL CALENDAR (The Squares!) */}
+        <div className="col-span-2 bg-zinc-900 border border-white/10 rounded-xl p-4 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                    <Calendar size={14} className="text-blue-500"/> Rehearsal Schedule
+                </h3>
+                <div className="flex gap-2">
+                    <span className="text-[9px] font-bold px-2 py-1 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-500/20">High Avail</span>
+                    <span className="text-[9px] font-bold px-2 py-1 rounded bg-red-900/30 text-red-400 border border-red-500/20">High Conflict</span>
+                </div>
+            </div>
             
-            <div className="grid grid-cols-5 gap-2">
-                {analytics.weekends.map((wk: any) => {
-                    // Color Logic
-                    let color = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400";
-                    if (wk.availability < 85) color = "bg-amber-500/10 border-amber-500/30 text-amber-400";
-                    if (wk.availability < 70) color = "bg-red-500/10 border-red-500/30 text-red-400";
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                {analytics.eventCards.length === 0 && <div className="text-xs text-zinc-600 italic p-4">No events found. Check 'Rehearsal/Production Events' table.</div>}
+                
+                {analytics.eventCards.map((evt: any) => {
+                    // Dynamic Coloring
+                    let color = "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20";
+                    let textColor = "text-emerald-400";
+                    if (evt.availability < 90) { color = "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"; textColor = "text-amber-400"; }
+                    if (evt.availability < 75) { color = "bg-red-500/10 border-red-500/30 hover:bg-red-500/20"; textColor = "text-red-400"; }
 
                     return (
-                        <div key={wk.dateKey} className={`border rounded p-2 text-center ${color}`}>
-                            <div className="text-[10px] font-bold opacity-70 mb-1">
-                                {wk.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
+                        <div key={evt.id} className={`shrink-0 w-28 border rounded-lg p-2 flex flex-col justify-between transition-colors cursor-pointer group ${color}`}>
+                            <div>
+                                <div className="flex justify-between items-start">
+                                    <span className={`text-[10px] font-black uppercase ${textColor}`}>{evt.label.split(' ')[0]}</span>
+                                    <span className="text-[9px] text-zinc-500">{evt.label.split(' ')[1]}</span>
+                                </div>
+                                <div className="text-[9px] text-zinc-500 mt-1 flex items-center gap-1">
+                                    <Clock size={8}/> {evt.time.split('-')[0]}
+                                </div>
                             </div>
-                            <div className="text-xl font-black">{wk.availability}%</div>
-                            <div className="text-[9px] font-mono opacity-60">
-                                {wk.absentCount} Absent
+
+                            <div className="mt-2">
+                                <div className={`text-xl font-black leading-none ${textColor}`}>{evt.availability}%</div>
+                                {evt.absentCount > 0 ? (
+                                    <div className="text-[9px] font-bold text-zinc-400 mt-1 bg-black/20 rounded px-1 w-fit">
+                                        {evt.absentCount} Missing
+                                    </div>
+                                ) : (
+                                    <div className="text-[9px] font-bold text-emerald-600 mt-1">Full Cast</div>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <div className="mt-3 flex gap-4 justify-end text-[10px] text-zinc-500 font-medium">
-                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Great for Full Cast</span>
-                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Avoid Production Numbers</span>
-                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> Leads / Solos Only</span>
-            </div>
         </div>
 
         {/* ⚠️ HARDEST SCENES */}
-        <div className="bg-zinc-900 border border-white/10 rounded-xl p-4">
+        <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 flex flex-col">
             <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <AlertTriangle size={14} className="text-red-500"/> Prioritize These Scenes
+                <AlertTriangle size={14} className="text-red-500"/> Difficult Scenes
             </h3>
-            <p className="text-[10px] text-zinc-500 mb-3 italic">
-                These scenes involve actors with the most conflicts. Schedule them early on "Green" days.
-            </p>
-
-            <div className="space-y-2">
+            
+            <div className="flex-1 space-y-2 overflow-y-auto max-h-[160px] custom-scrollbar">
                 {analytics.hardestScenes.map((scene: any, i: number) => (
-                    <div key={scene.id} className="flex justify-between items-center bg-black/40 p-2 rounded border border-white/5">
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs font-mono font-bold text-zinc-600">#{i+1}</span>
-                            <div>
-                                <div className="text-xs font-bold text-zinc-200">{scene.name}</div>
-                                <div className="text-[9px] text-zinc-500">{scene.actors?.length || 0} Actors</div>
+                    <div key={scene.id} className="flex justify-between items-center bg-black/40 p-2 rounded border border-white/5 group hover:border-red-500/30 transition-colors">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs font-mono font-bold text-zinc-600 w-4">#{i+1}</span>
+                            <div className="min-w-0">
+                                <div className="text-xs font-bold text-zinc-200 truncate pr-2">{scene.name}</div>
+                                <div className="text-[9px] text-zinc-500">{scene.size} Actors</div>
                             </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                             <div className="text-xs font-black text-red-400">{scene.conflictLoad}</div>
-                            <div className="text-[8px] uppercase font-bold text-zinc-600">Conflict Pts</div>
+                            <div className="text-[8px] uppercase font-bold text-zinc-600">Points</div>
                         </div>
                     </div>
                 ))}
-                {analytics.hardestScenes.length === 0 && <div className="text-xs text-zinc-500 italic">No conflict data available.</div>}
             </div>
         </div>
     </div>

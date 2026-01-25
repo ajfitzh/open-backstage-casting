@@ -6,7 +6,8 @@ import {
   Check, 
   Search, 
   Calendar,
-  Filter
+  Filter,
+  X
 } from "lucide-react";
 import ConflictAnalysisDashboard from './ConflictAnalysisDashboard';
 
@@ -16,6 +17,7 @@ interface Props {
   assignments: any[]; 
   people: any[];
   conflictRows: any[]; // Table 623 Data
+  eventRows?: any[];   // Table 625 Data (Rehearsal Events)
   productionTitle: string;      
 }
 
@@ -25,12 +27,13 @@ export default function ConflictClient({
   assignments, 
   people, 
   conflictRows = [], 
+  eventRows = [],
   productionTitle 
 }: Props) {
   const [filterText, setFilterText] = useState("");
   const [showClear, setShowClear] = useState(true);
 
-  // --- DATA PROCESSING ---
+  // --- DATA PROCESSING (For the Matrix View) ---
   const processedData = useMemo(() => {
     
     // 1. Build Conflict Map (Person ID -> Array of Conflict Strings)
@@ -42,12 +45,14 @@ export default function ConflictClient({
         if (personId) {
             const type = row["Conflict Type"]?.value || "Conflict";
             const notes = row["Notes"] || "";
-            // Format dates if they exist
+            // Format dates if they exist (Legacy support for non-event linked conflicts)
             const dateStr = row["Date"] ? row["Date"].map((d: any) => {
                 const date = new Date(d.value);
                 return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
             }).join(", ") : "";
             
+            // If linked to an Event ID, we could look that up too, but for the general
+            // "Actor Tooltip", listing the raw conflict text is usually sufficient.
             const label = `${type}${dateStr ? ` (${dateStr})` : ''}${notes ? `: ${notes}` : ''}`;
             
             const current = conflictMap.get(personId) || [];
@@ -97,8 +102,8 @@ export default function ConflictClient({
           name: scene["Scene Name"] || `Scene ${scene.id}`,
           act: scene["Act"]?.value || "1",
           actors: actorArray,
-          // We pass 'roles' (actually actor objects) for the dashboard to calculate load
-          roles: actorArray // legacy naming for the dashboard logic if needed
+          // We pass 'actors' array (IDs) for the dashboard to calculate load
+          size: actorArray.length
         };
       }).sort((a: any, b: any) => a.id - b.id);
 
@@ -154,104 +159,107 @@ export default function ConflictClient({
       {/* SCROLLABLE CONTENT */}
       <div className="flex-1 overflow-auto custom-scrollbar relative bg-zinc-950 flex flex-col">
         
-        {/* 📊 ANALYTICS DASHBOARD (New Integration) */}
+        {/* 📊 ANALYTICS DASHBOARD (Visual Rehearsal Squares) */}
         <div className="p-4 bg-zinc-950 border-b border-white/5">
             <ConflictAnalysisDashboard 
                 scenes={rows}
                 assignments={assignments}
                 people={people}
                 conflictRows={conflictRows}
+                events={eventRows} // Pass the "Square" data here
             />
         </div>
 
-        {/* 📉 THE MATRIX */}
-        <table className="w-full border-collapse">
-          <thead className="sticky top-0 z-20 bg-zinc-900 shadow-xl border-b border-white/10">
-            <tr>
-              <th className="sticky left-0 z-30 bg-zinc-900 border-r border-white/10 p-4 min-w-[200px] text-left shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
-                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Row: Scene</span>
-                <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block">Col: Actor</span>
-              </th>
-              {visibleColumns.map((actor: any) => (
-                <th key={actor.id} className="p-2 border-r border-white/10 min-w-[40px] w-[40px] relative group hover:bg-zinc-800 transition-colors align-bottom pb-4">
-                  <div className="h-32 flex items-end justify-center">
-                      <div className="writing-vertical-lr -rotate-180 text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap group-hover:text-white transition-colors">
-                        {actor.name}
-                      </div>
-                  </div>
-                  {actor.conflicts.length > 0 && (
-                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" title="Has Conflicts" />
-                    </div>
-                  )}
+        {/* 📉 THE MATRIX (Details) */}
+        <div className="relative">
+            <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-20 bg-zinc-900 shadow-xl border-b border-white/10">
+                <tr>
+                <th className="sticky left-0 z-30 bg-zinc-900 border-r border-white/10 p-4 min-w-[200px] text-left shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Row: Scene</span>
+                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block">Col: Actor</span>
                 </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-white/5">
-            {rows.map((scene: any) => (
-              <tr key={scene.id} className="hover:bg-white/5 transition-colors group/row">
-                {/* SCENE HEADER */}
-                <td className="sticky left-0 z-10 bg-zinc-950 group-hover/row:bg-zinc-900 border-r border-white/10 p-3 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white truncate max-w-[180px]" title={scene.name}>
-                      {scene.name}
-                    </span>
-                    <div className="flex justify-between items-center mt-1">
-                        <span className="text-[9px] font-black text-zinc-600 uppercase">Act {scene.act}</span>
-                        <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900 px-1.5 rounded border border-white/5">{scene.actors.length}</span>
+                {visibleColumns.map((actor: any) => (
+                    <th key={actor.id} className="p-2 border-r border-white/10 min-w-[40px] w-[40px] relative group hover:bg-zinc-800 transition-colors align-bottom pb-4">
+                    <div className="h-32 flex items-end justify-center">
+                        <div className="writing-vertical-lr -rotate-180 text-[10px] font-bold text-zinc-400 uppercase tracking-wider whitespace-nowrap group-hover:text-white transition-colors">
+                            {actor.name}
+                        </div>
                     </div>
-                  </div>
-                </td>
-
-                {/* CELLS */}
-                {visibleColumns.map((actor: any) => {
-                  const isInScene = scene.actors.includes(actor.id);
-                  const hasConflicts = actor.conflicts.length > 0;
-                  
-                  if (!isInScene) {
-                    return <td key={actor.id} className="bg-black/40 border-r border-white/5"></td>;
-                  }
-
-                  if (hasConflicts) {
-                    return (
-                      <td key={actor.id} className="bg-red-900/10 border-r border-white/5 p-0 relative group/cell cursor-help hover:bg-red-900/30 transition-colors h-full">
-                        <div className="w-full h-full flex items-center justify-center py-3">
-                            <AlertTriangle size={14} className="text-red-500 opacity-80" />
+                    {actor.conflicts.length > 0 && (
+                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" title="Has Conflicts" />
                         </div>
-                        
-                        {/* HOVER TOOLTIP */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-zinc-950 border border-red-500/50 p-3 rounded-xl shadow-2xl z-50 hidden group-hover/cell:block pointer-events-none">
-                          <div className="flex justify-between items-center border-b border-red-500/20 pb-2 mb-2">
-                             <span className="text-[10px] font-black uppercase text-red-500">{actor.name}</span>
-                             <span className="text-[9px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">{actor.conflicts.length} Conflicts</span>
-                          </div>
-                          <ul className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
-                            {actor.conflicts.map((c: string, i: number) => (
-                              <li key={i} className="text-[10px] text-zinc-300 flex items-start gap-2">
-                                <span className="mt-1 w-1 h-1 rounded-full bg-red-500 shrink-0"/>
-                                <span className="leading-tight">{c}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </td>
-                    );
-                  }
+                    )}
+                    </th>
+                ))}
+                </tr>
+            </thead>
 
-                  return (
-                    <td key={actor.id} className={`border-r border-white/5 p-0 text-center ${!showClear ? 'opacity-10' : ''}`}>
-                      <div className="w-full h-full flex items-center justify-center py-3">
-                        <Check size={14} className="text-emerald-500/30" />
-                      </div>
+            <tbody className="divide-y divide-white/5">
+                {rows.map((scene: any) => (
+                <tr key={scene.id} className="hover:bg-white/5 transition-colors group/row">
+                    {/* SCENE HEADER */}
+                    <td className="sticky left-0 z-10 bg-zinc-950 group-hover/row:bg-zinc-900 border-r border-white/10 p-3 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-white truncate max-w-[180px]" title={scene.name}>
+                        {scene.name}
+                        </span>
+                        <div className="flex justify-between items-center mt-1">
+                            <span className="text-[9px] font-black text-zinc-600 uppercase">Act {scene.act}</span>
+                            <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900 px-1.5 rounded border border-white/5">{scene.actors.length}</span>
+                        </div>
+                    </div>
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+                    {/* CELLS */}
+                    {visibleColumns.map((actor: any) => {
+                    const isInScene = scene.actors.includes(actor.id);
+                    const hasConflicts = actor.conflicts.length > 0;
+                    
+                    if (!isInScene) {
+                        return <td key={actor.id} className="bg-black/40 border-r border-white/5"></td>;
+                    }
+
+                    if (hasConflicts) {
+                        return (
+                        <td key={actor.id} className="bg-red-900/10 border-r border-white/5 p-0 relative group/cell cursor-help hover:bg-red-900/30 transition-colors h-full">
+                            <div className="w-full h-full flex items-center justify-center py-3">
+                                <AlertTriangle size={14} className="text-red-500 opacity-80" />
+                            </div>
+                            
+                            {/* HOVER TOOLTIP */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-zinc-950 border border-red-500/50 p-3 rounded-xl shadow-2xl z-50 hidden group-hover/cell:block pointer-events-none">
+                            <div className="flex justify-between items-center border-b border-red-500/20 pb-2 mb-2">
+                                <span className="text-[10px] font-black uppercase text-red-500">{actor.name}</span>
+                                <span className="text-[9px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">{actor.conflicts.length} Conflicts</span>
+                            </div>
+                            <ul className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                                {actor.conflicts.map((c: string, i: number) => (
+                                <li key={i} className="text-[10px] text-zinc-300 flex items-start gap-2">
+                                    <span className="mt-1 w-1 h-1 rounded-full bg-red-500 shrink-0"/>
+                                    <span className="leading-tight">{c}</span>
+                                </li>
+                                ))}
+                            </ul>
+                            </div>
+                        </td>
+                        );
+                    }
+
+                    return (
+                        <td key={actor.id} className={`border-r border-white/5 p-0 text-center ${!showClear ? 'opacity-10' : ''}`}>
+                        <div className="w-full h-full flex items-center justify-center py-3">
+                            <Check size={14} className="text-emerald-500/30" />
+                        </div>
+                        </td>
+                    );
+                    })}
+                </tr>
+                ))}
+            </tbody>
+            </table>
+        </div>
       </div>
     </div>
   );

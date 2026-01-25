@@ -13,6 +13,7 @@ export const TABLES: Record<string, string> = {
   ROLES: "605",
   VOLUNTEERS: "619",
   COMMITTEE_PREFS: "620",
+  EVENTS: "625",
   SCENES: "627",
   AUDITIONS: process.env.NEXT_PUBLIC_BASEROW_TABLE_AUDITIONS || "630",
   ASSETS: "631" 
@@ -155,7 +156,13 @@ export async function getComplianceData(productionId?: number) {
 
 
 // --- SMART READ FUNCTIONS (Now with Server-Side Filtering!) ---
-
+export async function getProductionEvents(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.EVENTS}/?size=200`;
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
+  return await fetchBaserow(endpoint);
+}
 // 1. ASSIGNMENTS: Fixes the "Blank Cast" bug by filtering on server
 export async function getAssignments(productionId?: number) {
   let endpoint = `/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`;

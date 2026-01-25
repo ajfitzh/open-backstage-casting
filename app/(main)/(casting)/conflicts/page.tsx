@@ -6,23 +6,19 @@ import {
     getRoles,
     getAssignments,
     getPeople,
-    getConflicts // <--- Make sure this is exported in baserow.ts
+    getConflicts,
+    getProductionEvents // <--- Import this
 } from '@/app/lib/baserow';
 import ConflictClient from '@/app/components/conflicts/ConflictClient';
 
 export default async function ConflictsPage() {
-  // 1. Context Resolution
   const cookieStore = await cookies();
   let activeId = Number(cookieStore.get('active_production_id')?.value);
   let showTitle = "Select a Production";
 
-  // Determine Active Show
   if (activeId) {
     const showData = await getShowById(activeId);
-    // Safety check: getShowById might return an object or null
-    if (showData && !Array.isArray(showData)) {
-        showTitle = showData.Title;
-    }
+    if (showData && !Array.isArray(showData)) showTitle = showData.Title;
   } else {
     const defaultShow = await getActiveProduction();
     if (defaultShow) {
@@ -31,14 +27,14 @@ export default async function ConflictsPage() {
     }
   }
 
-  // 2. Fetch Data (Optimized with Server-Side Filtering)
-  // passing 'activeId' tells the API to only send rows for this specific show.
-  const [scenes, roles, assignments, people, conflicts] = await Promise.all([
-      getScenes(activeId),       // ⚡ Filtered by API
-      getRoles(),                // Generic (Roles are often Master-linked)
-      getAssignments(activeId),  // ⚡ Filtered by API (Fixes 200 row limit)
-      getPeople(),               // Generic contact info
-      getConflicts(activeId)     // ⚡ Filtered by API (Table 623)
+  // Fetch ALL the data
+  const [scenes, roles, assignments, people, conflicts, events] = await Promise.all([
+      getScenes(activeId),
+      getRoles(),
+      getAssignments(activeId),
+      getPeople(),
+      getConflicts(activeId),
+      getProductionEvents(activeId) // <--- Fetch the calendar
   ]);
 
   return (
@@ -48,7 +44,8 @@ export default async function ConflictsPage() {
         roles={roles}
         assignments={assignments}
         people={people}
-        conflictRows={conflicts} // <--- Pass the raw conflict data here
+        conflictRows={conflicts}
+        eventRows={events} // <--- Pass it to client
         productionTitle={showTitle}
       />
     </main>
