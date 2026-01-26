@@ -2,14 +2,17 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  Save, X, AlertTriangle, Clock, 
   Users, ChevronRight, ChevronLeft, Search,
-  PlayCircle, CheckCircle2,
-  Maximize2, Minimize2, Plus, Minus,
-  TrendingUp, Calendar as CalendarIcon, Target,
-  LayoutGrid, Coffee, Umbrella, Wand2, Loader2
+  CheckCircle2, Plus, Minus,
+  TrendingUp, Calendar as CalendarIcon, 
+  LayoutGrid, Coffee, Umbrella, Wand2,
+  FileText, Mic2, Music, Theater
 } from 'lucide-react';
-import AutoSchedulerModal from './AutoSchedulerModal'; // Ensure this file exists in the same folder
+
+// --- IMPORTS ---
+// Make sure these two files exist in the same folder!
+import AutoSchedulerModal from './AutoSchedulerModal'; 
+import CallboardView from './CallboardView'; 
 
 // --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
@@ -31,46 +34,67 @@ const FRI_START = 18;
 const FRI_END = 21;   
 const SAT_START = 10; 
 const SAT_END = 17;   
-
-// MOCK CONSTANTS FOR PACE CALCULATIONS
 const TOTAL_WEEKS = 10;
-const CURRENT_WEEK = 4; // Assume we are in Week 4 for the demo
-const TARGET_WEEK = 8;  // Goal: Finish by Week 8 (Costume Parade)
+const CURRENT_WEEK = 4;
+const TARGET_WEEK = 8; 
 
-export default function SchedulerClient({ scenes, roles, assignments, people, productionTitle }: any) {
-  const [activeTab, setActiveTab] = useState<'calendar' | 'progress'>('calendar');
-  const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
-  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); // Lifted state for auto-scheduler access
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+export default function SchedulerClient({ 
+    scenes = [], 
+    roles = [], 
+    assignments = [], 
+    people = [], 
+    productionTitle = "Untitled Production" 
+}: any) {
   
-  // --- SHARED DATA PREP ---
+  // --- STATE ---
+  const [activeTab, setActiveTab] = useState<'calendar' | 'progress' | 'callboard'>('calendar');
+  const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
+  
+  // --- SHARED DATA PREP (With Safety Checks) ---
   const sceneData = useMemo(() => {
+    // 🛡️ SAFETY: Abort if data isn't loaded yet
+    if (!people || !assignments || !scenes || !roles) return [];
+
     // 1. Map Person ID -> Name
     const personMap = new Map();
-    people.forEach((p: any) => {
-        personMap.set(p.id, { name: p["Full Name"] || `ID ${p.id}` });
-    });
+    if (Array.isArray(people)) {
+        people.forEach((p: any) => {
+            personMap.set(p.id, { name: p["Full Name"] || `ID ${p.id}` });
+        });
+    }
 
     // 2. Map Role -> Cast
     const roleCastMap = new Map<number, number[]>();
-    assignments.forEach((a: any) => {
-        const roleId = a["Performance Identity"]?.[0]?.id;
-        const personId = a["Person"]?.[0]?.id;
-        if(roleId && personId) {
-            const current = roleCastMap.get(roleId) || [];
-            if(!current.includes(personId)) roleCastMap.set(roleId, [...current, personId]);
-        }
-    });
+    if (Array.isArray(assignments)) {
+        assignments.forEach((a: any) => {
+            const roleId = a["Performance Identity"]?.[0]?.id;
+            const personId = a["Person"]?.[0]?.id;
+            if(roleId && personId) {
+                const current = roleCastMap.get(roleId) || [];
+                if(!current.includes(personId)) roleCastMap.set(roleId, [...current, personId]);
+            }
+        });
+    }
 
     // 3. Hydrate Scenes
+    if (!Array.isArray(scenes)) return [];
+    
     return scenes.map((s: any) => {
-        const linkedRoles = roles.filter((r: any) => 
+        const linkedRoles = Array.isArray(roles) ? roles.filter((r: any) => 
             r["Active Scenes"]?.some((link:any) => link.id === s.id)
-        );
+        ) : [];
+
         const castIds = new Set<number>();
         linkedRoles.forEach((r: any) => {
             const pIds = roleCastMap.get(r.id) || [];
             pIds.forEach(id => castIds.add(id));
         });
+
+        const castList = Array.from(castIds).map(id => personMap.get(id)).filter(Boolean).map(p => p.name);
 
         return {
             id: s.id,
@@ -78,11 +102,23 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
             act: s["Act"]?.value || "1",
             type: s["Scene Type"]?.value || "Scene",
             cast: Array.from(castIds).map(id => personMap.get(id)).filter(Boolean),
-            // Default status logic
+            castNames: castList, 
             status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
   }, [scenes, roles, assignments, people]);
+
+  // --- DERIVED DATA FOR CALLBOARD ---
+  const callboardSchedule = useMemo(() => {
+      return schedule.map(slot => {
+          const scene = sceneData.find(s => s.id === slot.sceneId);
+          return {
+              ...slot,
+              sceneName: scene?.name || "Unknown",
+              castList: scene?.castNames || []
+          };
+      });
+  }, [schedule, sceneData]);
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
@@ -107,7 +143,13 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
                         onClick={() => setActiveTab('progress')}
                         className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
                     >
-                        <TrendingUp size={14}/> Burn-Up Chart
+                        <TrendingUp size={14}/> Burn-Up
+                    </button>
+                     <button 
+                        onClick={() => setActiveTab('callboard')}
+                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'callboard' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                        <FileText size={14}/> Callboard
                     </button>
                 </div>
             </div>
@@ -118,34 +160,38 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
                     <div className="text-sm font-black text-emerald-400">Week {CURRENT_WEEK} of {TOTAL_WEEKS}</div>
                  </div>
                  
-                 {/* ✨ THE MAGIC WAND BUTTON ✨ */}
                  <button 
                     onClick={() => setIsAutoSchedulerOpen(true)}
                     className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
                  >
                     <Wand2 size={14} /> Auto
                  </button>
-
-                 <button className="bg-white text-black px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider hover:bg-zinc-200 transition-all">
-                    Publish
-                </button>
             </div>
         </header>
 
         {/* CONTENT AREA */}
         <div className="flex-1 overflow-hidden relative">
-            {activeTab === 'calendar' ? (
+            {activeTab === 'calendar' && (
                 <CalendarView 
                     sceneData={sceneData} 
                     schedule={schedule} 
                     setSchedule={setSchedule} 
                 />
-            ) : (
+            )}
+            
+            {activeTab === 'progress' && (
                 <BurnUpView sceneData={sceneData} />
+            )}
+
+            {activeTab === 'callboard' && (
+                <CallboardView 
+                    schedule={callboardSchedule}
+                    productionTitle={productionTitle}
+                />
             )}
         </div>
 
-        {/* --- AUTO SCHEDULER MODAL --- */}
+        {/* AUTO SCHEDULER MODAL */}
         <AutoSchedulerModal 
             isOpen={isAutoSchedulerOpen} 
             onClose={() => setIsAutoSchedulerOpen(false)}
@@ -161,7 +207,7 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
 }
 
 // ============================================================================
-// 1. CALENDAR VIEW (Scheduling)
+// SUB-COMPONENT: CALENDAR VIEW
 // ============================================================================
 function CalendarView({ sceneData, schedule, setSchedule }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
@@ -192,7 +238,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       return `Week of ${nextFri.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   }, [currentWeekOffset]);
 
-  // Generate slots for column
   const generateSlots = (start: number, end: number) => {
       const s = [];
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
@@ -203,7 +248,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 
   return (
     <div className="flex h-full">
-         {/* SIDEBAR: SCENE BANK */}
          <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
              <div className="p-4 border-b border-white/10">
                 <div className="relative">
@@ -227,7 +271,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              </div>
          </aside>
 
-         {/* MAIN CALENDAR */}
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
                  <button onClick={() => setCurrentWeekOffset(c => c - 1)}><ChevronLeft size={16}/></button>
@@ -243,13 +286,11 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                          <div key={col.day} className="flex-1 flex flex-col bg-zinc-900 border border-white/10 rounded-xl overflow-hidden">
                              <div className="p-2 bg-zinc-800 text-center font-black uppercase text-zinc-400 text-xs">{col.day === 'Fri' ? 'Friday' : 'Saturday'}</div>
                              <div className="flex-1 relative flex">
-                                 {/* TIME LABELS */}
                                  <div className="w-12 bg-zinc-950/50 border-r border-white/5 text-[9px] text-zinc-600 font-mono text-right py-2">
                                      {col.slots.filter((s:any) => s.m === 0).map((s:any) => (
                                          <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
                                      ))}
                                  </div>
-                                 {/* TRACKS */}
                                  <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
                                      {['Acting', 'Music', 'Dance'].map((track) => (
                                          <div key={track} className="relative">
@@ -287,10 +328,9 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 }
 
 // ============================================================================
-// 2. BURN-UP VIEW (The New "Type A" Feature)
+// SUB-COMPONENT: BURN-UP VIEW
 // ============================================================================
 function BurnUpView({ sceneData }: any) {
-    // --- STATE ---
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
         const initial: any = {};
         sceneData.forEach((s: any) => {
@@ -299,7 +339,6 @@ function BurnUpView({ sceneData }: any) {
         return initial;
     });
 
-    // 🆕 REALITY CHECK STATE
     const [blackoutWeeks, setBlackoutWeeks] = useState(0); 
     const [simulatedExtra, setSimulatedExtra] = useState(0); 
 
@@ -318,86 +357,56 @@ function BurnUpView({ sceneData }: any) {
 
     const getStatusLabel = (val: number) => val === 2 ? 'Done' : val === 1 ? 'Work' : 'New';
 
-    // --- 🧮 THE CALCULATOR ---
     const stats = useMemo(() => {
         let totalUnits = 0;
         let completedUnits = 0;
-        let totalPoints = 0; // For summary card
 
         sceneData.forEach((s: any) => {
             const type = (s.type || "").toLowerCase();
             const p = progress[s.id];
-
             const needsMusic = type.includes('song') || type.includes('mixed');
             const needsDance = type.includes('dance') || type.includes('mixed');
             const needsBlock = true; 
 
-            if (needsMusic) { totalUnits++; totalPoints++; if (p.music === 2) completedUnits++; }
-            if (needsDance) { totalUnits++; totalPoints++; if (p.dance === 2) completedUnits++; }
-            if (needsBlock) { totalUnits++; totalPoints++; if (p.block === 2) completedUnits++; }
+            if (needsMusic) { totalUnits++; if (p.music === 2) completedUnits++; }
+            if (needsDance) { totalUnits++; if (p.dance === 2) completedUnits++; }
+            if (needsBlock) { totalUnits++; if (p.block === 2) completedUnits++; }
         });
 
-        // 1. Current Velocity (Real world speed)
         const velocity = CURRENT_WEEK > 0 ? (completedUnits / CURRENT_WEEK) : 0;
-        
-        // 2. Apply Simulation ("If we did X extra today...")
         const simulatedCompleted = completedUnits + simulatedExtra;
-        
-        // 3. Projection Math
         const remaining = totalUnits - simulatedCompleted;
         const weeksLeftNeeded = velocity > 0 ? remaining / velocity : 99;
-        
-        // 4. Apply Blackouts ("...but we lose 1 week to vacation")
         const projectedEndWeek = CURRENT_WEEK + weeksLeftNeeded + blackoutWeeks;
-        
-        // 5. The "Relax Factor"
         const bufferWeeks = TARGET_WEEK - projectedEndWeek;
-        
         const isSafe = bufferWeeks >= 0;
-        const isDanger = bufferWeeks < -1; 
 
         return { 
-            totalUnits, 
-            totalPoints,
-            completedUnits, 
+            totalUnits, completedUnits, 
             percent: totalUnits > 0 ? Math.round((simulatedCompleted / totalUnits) * 100) : 0, 
-            velocity, 
-            projectedEndWeek, 
-            isSafe, 
-            isDanger,
-            bufferWeeks
+            velocity, projectedEndWeek, isSafe, bufferWeeks
         };
     }, [sceneData, progress, blackoutWeeks, simulatedExtra]);
 
     return (
         <div className="h-full overflow-y-auto custom-scrollbar p-8 bg-zinc-950">
             <div className="max-w-6xl mx-auto space-y-8">
-                
-                {/* 1. PACE DASHBOARD */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    {/* MAIN PROJECTION CARD */}
                     <div className={`col-span-2 rounded-3xl p-8 border relative overflow-hidden flex flex-col justify-between transition-colors duration-500 ${stats.isSafe ? 'bg-emerald-950/10 border-emerald-500/20' : 'bg-red-950/10 border-red-500/20'}`}>
-                         
-                         {/* Header */}
                          <div className="relative z-10 flex justify-between items-start">
                              <div>
                                  <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                                     <Target size={18} className={stats.isSafe ? "text-emerald-500" : "text-red-500"}/> 
-                                     Pace Projection
+                                     <Target size={18} className={stats.isSafe ? "text-emerald-500" : "text-red-500"}/> Pace Projection
                                  </h2>
                                  <div className="mt-2 text-5xl font-black text-white">
                                      {stats.percent}% <span className="text-xl text-zinc-600">Show Ready</span>
                                  </div>
                              </div>
-                             
                              <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border flex items-center gap-2 ${stats.isSafe ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
                                 {stats.isSafe ? <Coffee size={14}/> : <AlertTriangle size={14}/>}
                                 {stats.isSafe ? "You can Relax" : "Push Harder"}
                              </div>
                          </div>
-
-                         {/* VISUAL TIMELINE */}
                          <div className="relative z-10 mt-8">
                              <div className="flex justify-between text-[10px] font-black uppercase text-zinc-500 mb-2">
                                  <span>Start</span>
@@ -405,34 +414,22 @@ function BurnUpView({ sceneData }: any) {
                                  <span className={stats.isSafe ? "text-emerald-400" : "text-red-400"}>Est. Finish: Wk {stats.projectedEndWeek.toFixed(1)}</span>
                                  <span>Week {TOTAL_WEEKS}</span>
                              </div>
-                             
                              <div className="h-4 bg-black/40 rounded-full w-full overflow-hidden relative border border-white/5">
                                  <div className="absolute left-0 top-0 bottom-0 bg-emerald-500/10 border-r border-emerald-500/30" style={{ width: `${(TARGET_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
                                  <div className="absolute left-0 top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${(CURRENT_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
-                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} 
-                                      style={{ left: `${Math.min((stats.projectedEndWeek / TOTAL_WEEKS) * 100, 100)}%` }} />
+                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} style={{ left: `${Math.min((stats.projectedEndWeek / TOTAL_WEEKS) * 100, 100)}%` }} />
                              </div>
-
                              <p className="text-xs text-zinc-400 text-center mt-3 bg-black/20 py-2 rounded-lg border border-white/5">
-                                {stats.isSafe 
-                                    ? `✅ You are ${stats.bufferWeeks.toFixed(1)} weeks ahead of schedule. Taking a break won't hurt.`
-                                    : `⚠️ You are ${Math.abs(stats.bufferWeeks).toFixed(1)} weeks behind target. You need to clear ${(Math.abs(stats.bufferWeeks) * stats.velocity).toFixed(0)} extra items to catch up.`
-                                }
+                                {stats.isSafe ? `✅ You are ${stats.bufferWeeks.toFixed(1)} weeks ahead of schedule.` : `⚠️ You are ${Math.abs(stats.bufferWeeks).toFixed(1)} weeks behind target.`}
                              </p>
                          </div>
                     </div>
 
-                    {/* REALITY CHECK SIMULATOR */}
                     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col justify-center gap-6">
-                        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-white/5 pb-2">
-                            Reality Check Simulator
-                        </div>
-                        
+                        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-white/5 pb-2">Reality Check Simulator</div>
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
-                                    <Umbrella size={14} className="text-blue-400"/> Vacations / Breaks
-                                </span>
+                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"><Umbrella size={14} className="text-blue-400"/> Vacations / Breaks</span>
                                 <span className="text-xl font-black text-white">{blackoutWeeks} <span className="text-[10px] text-zinc-600">WKS</span></span>
                             </div>
                             <div className="flex gap-2">
@@ -440,37 +437,23 @@ function BurnUpView({ sceneData }: any) {
                                 <button onClick={() => setBlackoutWeeks(blackoutWeeks + 0.5)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Plus size={14}/></button>
                             </div>
                         </div>
-
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
-                                    <TrendingUp size={14} className="text-emerald-400"/> If we finish...
-                                </span>
+                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-400"/> If we finish...</span>
                                 <span className="text-xl font-black text-emerald-400">+{simulatedExtra} <span className="text-[10px] text-zinc-600">ITEMS</span></span>
                             </div>
                             <div className="flex gap-2">
                                 <button onClick={() => setSimulatedExtra(Math.max(0, simulatedExtra - 1))} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Minus size={14}/></button>
-                                <button onClick={() => setSimulatedExtra(simulatedExtra + 1)} className="flex-1 bg-emerald-900/30 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white py-2 rounded text-emerald-400 transition-all font-bold">
-                                    +1 More Today
-                                </button>
+                                <button onClick={() => setSimulatedExtra(simulatedExtra + 1)} className="flex-1 bg-emerald-900/30 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white py-2 rounded text-emerald-400 transition-all font-bold">+1 More Today</button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* 2. THE CHECKLIST */}
                 <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden shadow-xl">
                     <div className="p-6 border-b border-white/5 bg-zinc-900/80 backdrop-blur-xl flex justify-between items-center sticky top-0 z-20">
-                        <h3 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
-                            <LayoutGrid size={18} className="text-purple-500"/> Scene Breakdown
-                        </h3>
-                        <div className="flex gap-4 text-[10px] font-bold uppercase text-zinc-500">
-                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-zinc-800"/> New</div>
-                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"/> Work</div>
-                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Done</div>
-                        </div>
+                        <h3 className="text-lg font-black uppercase italic text-white flex items-center gap-2"><LayoutGrid size={18} className="text-purple-500"/> Scene Breakdown</h3>
                     </div>
-
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-zinc-950 text-zinc-500 text-[10px] font-black uppercase tracking-widest border-b border-white/5">
@@ -488,43 +471,17 @@ function BurnUpView({ sceneData }: any) {
                                     const type = (s.type || "").toLowerCase();
                                     const needsMusic = type.includes('song') || type.includes('mixed');
                                     const needsDance = type.includes('dance') || type.includes('mixed');
-                                    
                                     const p = progress[s.id] || { music:0, dance:0, block:0 };
                                     const isReady = (!needsMusic || p.music===2) && (!needsDance || p.dance===2) && p.block===2;
 
                                     return (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors group">
                                             <td className="px-6 py-4 text-center font-mono text-zinc-600">{i+1}</td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-zinc-300">{s.name}</div>
-                                                <div className="text-[10px] text-zinc-600 uppercase font-black tracking-wider">{s.type}</div>
-                                            </td>
-                                            
-                                            <td className="px-6 py-4">
-                                                {needsMusic ? (
-                                                    <button onClick={() => toggle(s.id, 'music')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.music)}`}>
-                                                        {getStatusLabel(p.music)}
-                                                    </button>
-                                                ) : <div className="text-center text-zinc-800">-</div>}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                {needsDance ? (
-                                                    <button onClick={() => toggle(s.id, 'dance')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.dance)}`}>
-                                                        {getStatusLabel(p.dance)}
-                                                    </button>
-                                                ) : <div className="text-center text-zinc-800">-</div>}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                <button onClick={() => toggle(s.id, 'block')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.block)}`}>
-                                                    {getStatusLabel(p.block)}
-                                                </button>
-                                            </td>
-
-                                            <td className="px-6 py-4 text-center">
-                                                {isReady ? <CheckCircle2 size={20} className="mx-auto text-emerald-500 animate-in zoom-in"/> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mx-auto"/>}
-                                            </td>
+                                            <td className="px-6 py-4"><div className="font-bold text-zinc-300">{s.name}</div><div className="text-[10px] text-zinc-600 uppercase font-black tracking-wider">{s.type}</div></td>
+                                            <td className="px-6 py-4">{needsMusic ? <button onClick={() => toggle(s.id, 'music')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.music)}`}>{getStatusLabel(p.music)}</button> : <div className="text-center text-zinc-800">-</div>}</td>
+                                            <td className="px-6 py-4">{needsDance ? <button onClick={() => toggle(s.id, 'dance')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.dance)}`}>{getStatusLabel(p.dance)}</button> : <div className="text-center text-zinc-800">-</div>}</td>
+                                            <td className="px-6 py-4"><button onClick={() => toggle(s.id, 'block')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.block)}`}>{getStatusLabel(p.block)}</button></td>
+                                            <td className="px-6 py-4 text-center">{isReady ? <CheckCircle2 size={20} className="mx-auto text-emerald-500 animate-in zoom-in"/> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mx-auto"/>}</td>
                                         </tr>
                                     );
                                 })}
