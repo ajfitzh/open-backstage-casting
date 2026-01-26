@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Printer, Loader2, Crown, Phone, Mail, Baby, 
-  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, AlertCircle 
+  Wand2, RotateCcw, ChevronDown, ChevronUp, AlertCircle 
 } from 'lucide-react';
 import { getCommitteePreferences, getAuditionSlots } from '@/app/lib/baserow'; 
 
@@ -34,7 +34,6 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
   useEffect(() => {
     async function loadData() {
         try {
-            // 1. Pass activeId to fetch only relevant data for the current show
             const [prefData, studentData] = await Promise.all([
                 getCommitteePreferences(activeId), 
                 getAuditionSlots(activeId)
@@ -44,6 +43,11 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
                 const age = parseInt(p["Age"] || "0"); 
                 const chairInterests = p["Chair Interest"]?.map((c: any) => c.value) || [];
                 const pName = p["Parent Name"] || p["Parent/Guardian Name"] || p["Full Name"] || p["Name"] || "Unknown Volunteer";
+
+                // --- 🛠️ FIX START: Safely extract Link Row ID ---
+                const rawLink = p["Student ID"];
+                const linkId = (Array.isArray(rawLink) && rawLink.length > 0) ? rawLink[0].id : null;
+                // --- FIX END ---
 
                 return {
                     ...p,
@@ -55,14 +59,14 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
                     showWeek2: p["Show Week 2nd"]?.value,
                     showWeek3: p["Show Week 3rd"]?.value,
                     chairInterests: chairInterests,
-                    studentIdLink: parseInt(p["Student ID"]) || null,
+                    studentIdLink: linkId, // Use the safely extracted ID
                     parentName: pName, 
                     email: p["Email"] || "",
                     phone: p["Phone"] || "",
                     notes: p["Notes/Constraints"] || "",
                     age: age,
                     isAdult: age >= 18,
-                    isParent: !!p["Student ID"],
+                    isParent: !!linkId, // True if we found a link ID
                     bgStatus: p["Background Check Status"]?.value || "Pending", 
                 };
             });
@@ -84,25 +88,33 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
         }
     }
     loadData();
-  }, [activeId]); // Re-run whenever the show changes!
+  }, [activeId]); 
 
   // --- HELPERS ---
 
-  const getLinkedStudentName = (linkId: number) => {
-      if (!linkId) return null;
-      const match = students.find(s => s.id === linkId || s["Student ID"] === linkId);
+  // --- 🛠️ FIX: Match Committee Person ID -> Audition Performer ID ---
+  const getLinkedStudentName = (personId: number) => {
+      if (!personId) return null;
+
+      // We need to look through the Audition Slots.
+      // In Audition Slots, the "Performer" field is a Link to the People table.
+      // We need to find the Audition Slot where Performer.id === personId.
+      const match = students.find((slot: any) => {
+          const performerLink = slot["Performer"]; // This is an array [ {id: 55, value: "Timmy"} ]
+          const performerId = (Array.isArray(performerLink) && performerLink.length > 0) ? performerLink[0].id : null;
+          return performerId === personId;
+      });
+
       if (!match) return null;
 
-      if (Array.isArray(match["Performer"])) {
-          return match["Performer"][0]?.value;
-      }
-      return match["Performer"]?.value || match["Full Name"] || "Unknown Student";
+      // Return the name from the match
+      return match["Performer"]?.[0]?.value || "Unknown Student";
   };
 
   const handleAutoBalance = () => {
       if(!confirm("Auto-Balance will move volunteers to their 2nd/3rd choices if their 1st choice is overcrowded. Proceed?")) return;
       const newAssignments = { ...assignments };
-      const currentCommittees = COMMITTEES[groupBy];
+      const currentCommittees = COMMITTEES[groupBy as keyof typeof COMMITTEES]; // TS Fix
       let movedCount = 0;
 
       const getCount = (comm: string) => {
@@ -134,6 +146,7 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
 
   const groupedData = useMemo(() => {
       const groups: Record<string, any[]> = {};
+      // @ts-ignore
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
       groups["Unassigned"] = [];
 
@@ -277,6 +290,7 @@ export default function CommitteeDashboard({ activeId }: { activeId: number }) {
                                                             setAssignments(newAssignments);
                                                         }}
                                                     >
+                                                        {/* @ts-ignore */}
                                                         {COMMITTEES[groupBy].map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                 </div>
