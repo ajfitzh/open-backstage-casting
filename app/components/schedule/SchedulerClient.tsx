@@ -363,7 +363,7 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
 function DayColumn({ day, startHour, endHour, schedule, weekOffset, onDrop, onDurationChange, onStatusToggle, draggedSceneId, sceneData }: any) {
     
     // Generate Time Slots (15 min increments)
-    const slots = [];
+    const slots: { h: any; m: number; val: any; }[] = [];
     for (let h = startHour; h < endHour; h++) {
         [0, 15, 30, 45].forEach(m => slots.push({ h, m, val: h + m/60 }));
     }

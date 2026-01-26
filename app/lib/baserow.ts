@@ -215,7 +215,7 @@ export async function getPeople() {
   return await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/?size=200`);
 }
 
-export async function getCommitteePreferences() {
+export async function getCommitteePreferences(activeId: number) {
   return await fetchBaserow(`/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/?size=200`);
 }
 

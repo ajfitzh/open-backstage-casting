@@ -6,7 +6,8 @@ import {
   Printer, Loader2, Crown, Phone, Mail, Baby, 
   Wand2, RotateCcw, X, ExternalLink,
   MessageSquare, Hash, Image as ImageIcon, FileText, Plus,
-  Trash2, UserPlus
+  Trash2, UserPlus,
+  CheckCircle2
 } from 'lucide-react';
 import { getCommitteePreferences, getAuditionSlots } from '@/app/lib/baserow'; 
 

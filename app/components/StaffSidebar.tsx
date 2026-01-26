@@ -18,6 +18,7 @@ export default function StaffSidebar() {
   const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isCastingRoute) setCastingOpen(true);
   }, [pathname, isCastingRoute]);
 
