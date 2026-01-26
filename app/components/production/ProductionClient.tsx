@@ -10,7 +10,7 @@ import {
 export default function ProductionClient({ show, assignments, auditionees, scenes, assets }: any) {
     const [assetFilter, setAssetFilter] = useState("All");
 
-    // --- 📊 1. DEMOGRAPHICS ENGINE (FIXED) ---
+    // --- 📊 1. DEMOGRAPHICS ENGINE (FIXED GENDER LOGIC) ---
     const demographics = useMemo(() => {
         // Source of Truth: The Assignments Table
         const uniqueCastIds = new Set(
@@ -19,22 +19,31 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                 .filter((id: any) => !!id)
         );
         
-        const total = uniqueCastIds.size; // Real count from assignments
+        const total = uniqueCastIds.size;
 
-        // Demographics from Auditions Table (if available)
-        // We match the IDs from Assignments to the Audition profiles
+        // Demographics from Auditions/People Table
         const castProfiles = auditionees.filter((a:any) => uniqueCastIds.has(a.id));
         
-        const males = castProfiles.filter((c:any) => c.Gender?.value === 'Male').length;
-        const females = castProfiles.filter((c:any) => c.Gender?.value === 'Female').length;
+        // HELPER: Safely extract gender string
+        const getGender = (c: any) => {
+            const g = c.Gender;
+            // Case A: It's an object from Single Select API { value: "Male" }
+            if (typeof g === 'object' && g !== null && g.value) return g.value;
+            // Case B: It's a direct string "Male" (from CSV/Flattened data)
+            if (typeof g === 'string') return g;
+            return "Unknown";
+        };
+
+        const males = castProfiles.filter((c:any) => getGender(c) === 'Male').length;
+        const females = castProfiles.filter((c:any) => getGender(c) === 'Female').length;
         
-        // Handle "Unknown" if audition data is missing
+        // Calculate unknown based on what's left
         const unknown = total - (males + females);
 
         return { total, males, females, unknown, castList: castProfiles };
     }, [assignments, auditionees]);
 
-    // --- ⚖️ WORKLOAD ENGINE (FIXED) ---
+    // --- ⚖️ WORKLOAD ENGINE ---
     const workload = useMemo(() => {
         const counts: Record<string, number> = {};
         assignments.forEach((a:any) => {
@@ -44,13 +53,11 @@ export default function ProductionClient({ show, assignments, auditionees, scene
             }
         });
 
-        // Sort by assignment count
         const sorted = Object.entries(counts)
             .sort(([,a], [,b]) => b - a)
             .slice(0, 5);
             
         const totalAssignments = assignments.length;
-        // Avoid division by zero
         const avgRoles = demographics.total > 0 
             ? (totalAssignments / demographics.total).toFixed(1) 
             : "0.0";
@@ -62,17 +69,19 @@ export default function ProductionClient({ show, assignments, auditionees, scene
     const filteredAssets = useMemo(() => {
         if (!assets) return [];
         if (assetFilter === "All") return assets;
-        return assets.filter((a:any) => a.Type?.value === assetFilter);
+        return assets.filter((a:any) => {
+             // Handle Type as object or string
+             const typeVal = typeof a.Type === 'object' ? a.Type?.value : a.Type;
+             return typeVal === assetFilter;
+        });
     }, [assets, assetFilter]);
 
-    // --- 🎬 SCENE ENGINE (FIXED) ---
+    // --- 🎬 SCENE ENGINE ---
     const sceneStats = useMemo(() => {
         if (!scenes) return { count: 0, cues: 0 };
         
-        // Fix: Force Number() to prevent string concatenation ("02" + "08" = "0208")
         const cues = scenes.reduce((acc: number, s: any) => {
             const val = s["Minimum Performers"];
-            // Handle various Baserow number formats (string, number, or null)
             const num = parseFloat(val) || 0; 
             return acc + num;
         }, 0);
@@ -170,7 +179,7 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                             {filteredAssets.map((asset: any) => {
-                                const type = asset.Type?.value || "File";
+                                const type = typeof asset.Type === 'object' ? asset.Type?.value : asset.Type || "File";
                                 const isImage = type === 'Image' || asset.Link.match(/\.(jpeg|jpg|gif|png)$/i);
                                 return (
                                     <a 
@@ -198,7 +207,7 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                     )}
                 </div>
 
-                {/* ROW 3: SCENE BREAKDOWN (FIXED MATH) */}
+                {/* ROW 3: SCENE BREAKDOWN */}
                 <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
@@ -217,10 +226,13 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                                 <span>Type</span>
                             </h4>
                             <div className="space-y-1">
-                                {scenes.filter((s:any) => s.Act?.value === 'Act 1').map((s:any) => (
+                                {scenes.filter((s:any) => {
+                                    const actVal = typeof s.Act === 'object' ? s.Act?.value : s.Act;
+                                    return actVal === 'Act 1';
+                                }).map((s:any) => (
                                     <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 hover:border-white/10 rounded-lg transition-colors">
                                         <span className="font-bold text-zinc-300 truncate pr-4">{s["Scene Name"]}</span>
-                                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-wider whitespace-nowrap">{s["Scene Type"]?.value || "Scene"}</span>
+                                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-wider whitespace-nowrap">{typeof s["Scene Type"] === 'object' ? s["Scene Type"]?.value : s["Scene Type"] || "Scene"}</span>
                                     </div>
                                 ))}
                             </div>
@@ -232,10 +244,13 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                                 <span>Type</span>
                             </h4>
                             <div className="space-y-1">
-                                {scenes.filter((s:any) => s.Act?.value === 'Act 2').map((s:any) => (
+                                {scenes.filter((s:any) => {
+                                    const actVal = typeof s.Act === 'object' ? s.Act?.value : s.Act;
+                                    return actVal === 'Act 2';
+                                }).map((s:any) => (
                                     <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 hover:border-white/10 rounded-lg transition-colors">
                                         <span className="font-bold text-zinc-300 truncate pr-4">{s["Scene Name"]}</span>
-                                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-wider whitespace-nowrap">{s["Scene Type"]?.value || "Scene"}</span>
+                                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-wider whitespace-nowrap">{typeof s["Scene Type"] === 'object' ? s["Scene Type"]?.value : s["Scene Type"] || "Scene"}</span>
                                     </div>
                                 ))}
                             </div>
