@@ -2,11 +2,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  CheckCircle2, XCircle, Clock, 
-  ChevronRight, Search, ArrowLeft, Users, 
+  Users, ChevronRight, Search, ArrowLeft, 
   Building2, Waves, Compass, Anchor, Navigation, 
-  Church, Star, LayoutDashboard, ListChecks,
-  CalendarDays, Archive, Filter, X, AlertTriangle, Map, Maximize2
+  Archive, Filter, X, AlertTriangle, Map, CalendarDays,
+  Church, Layout
 } from 'lucide-react';
 
 // --- MOCK CONFIG ---
@@ -19,56 +18,54 @@ const SESSIONS = [
 const AGE_GROUPS = ["5-8", "8-12", "13-18"];
 const DAYS = ["Monday", "Tuesday", "Thursday"];
 
-// --- 🗺️ VENUE MAP DATA (The "Primitive Map") ---
-// In a real app, this would be stored in a Baserow Table: "Venues" -> "Rooms"
+// --- 🗺️ VENUE MAP DATA ---
+// NOTE: These keys must match your baserow "Location" strings exactly
 const VENUE_LAYOUTS: Record<string, any[]> = {
     "River of Life": [
-        { id: "main", name: "Sanctuary", capacity: 400, type: "large", col: "span 2", row: "span 2" },
-        { id: "lobby", name: "Lobby / Check-In", capacity: 50, type: "common", col: "span 2", row: "span 1" },
-        { id: "101", name: "Room 101", capacity: 20, type: "small", col: "span 1", row: "span 1" },
-        { id: "102", name: "Room 102", capacity: 20, type: "small", col: "span 1", row: "span 1" },
-        { id: "hall", name: "Fellowship Hall", capacity: 100, type: "medium", col: "span 2", row: "span 1" },
+        { id: "main", name: "Sanctuary", capacity: 400, col: "col-span-2", row: "row-span-2" },
+        { id: "lobby", name: "Lobby / Check-In", capacity: 50, col: "col-span-2", row: "row-span-1" },
+        { id: "101", name: "Room 101", capacity: 20, col: "col-span-1", row: "row-span-1" },
+        { id: "102", name: "Room 102", capacity: 20, col: "col-span-1", row: "row-span-1" },
+        { id: "hall", name: "Fellowship Hall", capacity: 100, col: "col-span-2", row: "row-span-1" },
     ],
     "Hope Presbyterian Church": [
-        { id: "gym", name: "Gymnasium", capacity: 200, type: "large", col: "span 2", row: "span 2" },
-        { id: "204", name: "Classroom 204", capacity: 15, type: "small", col: "span 1", row: "span 1" },
-        { id: "205", name: "Classroom 205", capacity: 15, type: "small", col: "span 1", row: "span 1" },
+        { id: "gym", name: "Gymnasium", capacity: 200, col: "col-span-2", row: "row-span-2" },
+        { id: "204", name: "Classroom 204", capacity: 15, col: "col-span-1", row: "row-span-1" },
+        { id: "205", name: "Classroom 205", capacity: 15, col: "col-span-1", row: "row-span-1" },
     ]
 };
 
 export default function ClassManager({ classes, people }: any) {
-  const [viewState, setViewState] = useState<'locations' | 'classes' | 'attendance'>('locations');
+  const [viewState, setViewState] = useState<'locations' | 'classes'>('locations');
   const [selectedLocation, setSelectedLocation] = useState<string>("");
-  const [selectedClass, setSelectedClass] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState("");
   
-  // --- FILTERS ---
+  // Filters
   const [currentSession, setCurrentSession] = useState(SESSIONS[0]); 
   const [filterDay, setFilterDay] = useState<string | null>(null);
   const [filterAge, setFilterAge] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // --- MAP INTERACTION ---
+  // Map Interaction
   const [hoveredClassId, setHoveredClassId] = useState<number | null>(null);
+  const [showMobileMap, setShowMobileMap] = useState(false); // New Mobile Toggle
 
-  // --- ATTENDANCE STATE ---
-  const [selectedWeek, setSelectedWeek] = useState(1);
-  const [showSummary, setShowSummary] = useState(false);
-  const [attendanceRecords, setAttendanceRecords] = useState<Record<number, Record<string, string>>>({});
-
-  // ... (Keep handleStatusChange, getLocationTheme, and locationStats logic from previous code) ...
-  // Re-pasting the Theme Engine for completeness:
+  // --- THEME ENGINE ---
   const getLocationTheme = (name: string) => {
     const n = name?.toLowerCase() || "";
     if (n.includes('river of life')) return { icon: <Waves size={24} />, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' };
     if (n.includes('hope')) return { icon: <Compass size={24} />, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' };
+    if (n.includes('river club')) return { icon: <Anchor size={24} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' };
+    if (n.includes('highway')) return { icon: <Navigation size={24} />, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' };
     return { icon: <Building2 size={24} />, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
   };
 
-  // Mock assignment of classes to rooms (Deterministic based on ID)
+  // Mock assignment of classes to rooms
   const getRoomForClass = (classId: number, location: string) => {
-      const rooms = VENUE_LAYOUTS[location] || [];
-      if (rooms.length === 0) return null;
-      return rooms[classId % rooms.length];
+      const rooms = VENUE_LAYOUTS[location];
+      if (!rooms || rooms.length === 0) return null;
+      // Deterministic pseudo-random assignment based on ID
+      const index = classId % rooms.length;
+      return rooms[index];
   };
 
   const visibleClasses = useMemo(() => {
@@ -84,7 +81,7 @@ export default function ClassManager({ classes, people }: any) {
 
   const locationStats = useMemo(() => {
     if (currentSession.id !== 'winter2026') return [];
-    const stats: Record<string, any> = {};
+    const stats: Record<string, { count: number, students: number }> = {};
     const globalFiltered = classes.filter((c:any) => {
          const matchesDay = filterDay ? c.day === filterDay : true;
          const matchesAge = filterAge ? c.ages.includes(filterAge) : true;
@@ -99,11 +96,10 @@ export default function ClassManager({ classes, people }: any) {
     return Object.entries(stats).map(([name, data]) => ({ name, ...data }));
   }, [classes, currentSession, filterDay, filterAge]);
 
-  // --- RENDER ---
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white font-sans selection:bg-blue-500/30">
         
-        {/* VIEW 1: CAMPUS HUB (Same as before) */}
+        {/* VIEW 1: CAMPUS HUB */}
         {viewState === 'locations' && (
             <div className="p-8 max-w-6xl mx-auto w-full animate-in fade-in duration-500">
                 <header className="mb-8 flex flex-col xl:flex-row xl:items-end justify-between gap-6">
@@ -116,7 +112,36 @@ export default function ClassManager({ classes, people }: any) {
                             {currentSession.current ? 'Live Enrollment & Logistics' : 'Historical Data Viewer'}
                         </p>
                     </div>
-                    {/* ... (Keep Filters & Session Switcher from previous code) ... */}
+
+                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                        {/* SMART FILTERS */}
+                        <div className="flex items-center gap-2 bg-zinc-900 p-1 rounded-xl border border-white/5">
+                            <div className="px-3 text-zinc-500"><Filter size={14}/></div>
+                            <div className="flex gap-1 border-r border-white/10 pr-2">
+                                {DAYS.map(day => (
+                                    <button key={day} onClick={() => setFilterDay(filterDay === day ? null : day)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${filterDay === day ? 'bg-blue-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>{day.substring(0, 3)}</button>
+                                ))}
+                            </div>
+                            <div className="flex gap-1 pl-2">
+                                {AGE_GROUPS.map(age => (
+                                    <button key={age} onClick={() => setFilterAge(filterAge === age ? null : age)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${filterAge === age ? 'bg-emerald-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>{age}</button>
+                                ))}
+                            </div>
+                            {(filterDay || filterAge) && <button onClick={() => {setFilterDay(null); setFilterAge(null)}} className="px-2 text-zinc-500 hover:text-red-400"><X size={14} /></button>}
+                        </div>
+
+                        {/* SESSION SWITCHER */}
+                        <div className="relative group z-20">
+                            <button className="flex items-center gap-2 bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-xl text-sm font-bold text-zinc-300 hover:text-white hover:border-white/20 transition-all min-w-[140px] justify-between">
+                                <span className="flex items-center gap-2"><CalendarDays size={16} className="text-blue-500"/> {currentSession.label}</span>
+                            </button>
+                            <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-white/10 rounded-xl shadow-xl overflow-hidden hidden group-hover:block animate-in fade-in slide-in-from-top-2">
+                                {SESSIONS.map(s => (
+                                    <button key={s.id} onClick={() => setCurrentSession(s)} className={`w-full text-left px-4 py-3 text-xs font-bold uppercase hover:bg-white/5 flex justify-between ${currentSession.id === s.id ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400'}`}>{s.label}{s.current && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>}</button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -125,9 +150,7 @@ export default function ClassManager({ classes, people }: any) {
                         return (
                             <button key={loc.name} onClick={() => { setSelectedLocation(loc.name); setViewState('classes'); }}
                                 className={`bg-zinc-900 border ${theme.border} p-8 rounded-3xl text-left group hover:bg-zinc-800 transition-all shadow-2xl relative overflow-hidden h-48 flex flex-col justify-between`}>
-                                <div className={`absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity ${theme.color} rotate-12`}>
-                                    {React.cloneElement(theme.icon as React.ReactElement<any>, { size: 140 })}
-                                </div>
+                                <div className={`absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity ${theme.color} rotate-12`}>{React.cloneElement(theme.icon as React.ReactElement, { size: 140 })}</div>
                                 <div className="flex items-start justify-between relative z-10">
                                     <div className={`p-3 ${theme.bg} ${theme.color} rounded-2xl group-hover:bg-white group-hover:text-black transition-colors`}>{theme.icon}</div>
                                     <div className="text-right">
@@ -153,7 +176,7 @@ export default function ClassManager({ classes, people }: any) {
         {/* VIEW 2: CLASS LIST & VENUE MAP */}
         {viewState === 'classes' && (
              <div className="flex flex-col h-full animate-in slide-in-from-right duration-500">
-                <div className="p-8 pb-4 shrink-0">
+                <div className="p-8 pb-4 shrink-0 bg-zinc-950 z-20">
                     <button onClick={() => setViewState('locations')} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-6 text-[10px] font-black uppercase tracking-[0.2em]">
                         <ArrowLeft size={14}/> Back to Hub
                     </button>
@@ -165,14 +188,20 @@ export default function ClassManager({ classes, people }: any) {
                                 {filterDay && <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] font-bold uppercase rounded border border-blue-500/20">{filterDay}s Only</span>}
                             </div>
                         </div>
-                        <div className="relative w-full md:w-80">
-                            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/>
-                            <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search classes..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-white/20 outline-none transition-all placeholder:text-zinc-700"/>
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <div className="relative w-full md:w-80">
+                                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/>
+                                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search classes..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-white/20 outline-none transition-all placeholder:text-zinc-700"/>
+                            </div>
+                            {/* MOBILE MAP TOGGLE */}
+                            <button onClick={() => setShowMobileMap(!showMobileMap)} className="lg:hidden bg-zinc-800 p-3 rounded-2xl border border-white/5 text-zinc-400 hover:text-white">
+                                <Layout size={20} />
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex overflow-hidden relative">
                     {/* LEFT: LIST */}
                     <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-4 custom-scrollbar">
                         {visibleClasses.length === 0 && (
@@ -180,15 +209,13 @@ export default function ClassManager({ classes, people }: any) {
                         )}
                         {visibleClasses.map((c: any) => {
                             const room = getRoomForClass(c.id, selectedLocation);
-                            // Safety Check
                             const isOverCapacity = room && c.enrolled > room.capacity;
 
                             return (
-                                <button key={c.id} 
-                                    onClick={() => { setSelectedClass(c); setViewState('attendance'); setShowSummary(false); }}
+                                <div key={c.id} 
                                     onMouseEnter={() => setHoveredClassId(c.id)}
                                     onMouseLeave={() => setHoveredClassId(null)}
-                                    className={`w-full bg-zinc-900 border p-6 rounded-3xl flex justify-between items-center group transition-all text-left relative overflow-hidden
+                                    className={`w-full bg-zinc-900 border p-6 rounded-3xl flex justify-between items-center group transition-all text-left relative overflow-hidden cursor-default
                                         ${hoveredClassId === c.id ? 'border-blue-500/50 bg-zinc-800' : 'border-white/5 hover:bg-zinc-800'}
                                     `}
                                 >
@@ -213,26 +240,33 @@ export default function ClassManager({ classes, people }: any) {
                                         <div className={`text-3xl font-black ${isOverCapacity ? 'text-red-500' : 'text-white'}`}>{c.enrolled}</div>
                                         <div className="text-[9px] uppercase font-black text-zinc-700">Students</div>
                                     </div>
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
 
-                    {/* RIGHT: VENUE MAP */}
-                    <div className="w-[400px] bg-zinc-900 border-l border-white/10 p-6 hidden xl:block overflow-y-auto">
+                    {/* RIGHT: VENUE MAP (Desktop: lg+, Mobile: Overlay) */}
+                    <div className={`
+                        fixed inset-y-0 right-0 w-[400px] bg-zinc-900 border-l border-white/10 p-6 z-30 transform transition-transform duration-300 shadow-2xl
+                        ${showMobileMap ? 'translate-x-0' : 'translate-x-full'} 
+                        lg:static lg:translate-x-0 lg:block lg:shadow-none
+                    `}>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                                 <Building2 size={16} className="text-blue-500"/> Facility Map
                             </h3>
-                            <span className="text-[10px] font-bold text-zinc-600 uppercase bg-zinc-950 px-2 py-1 rounded">
+                            {/* Mobile Close Button */}
+                            <button onClick={() => setShowMobileMap(false)} className="lg:hidden p-2 bg-zinc-800 rounded-full text-zinc-400">
+                                <X size={16}/>
+                            </button>
+                            <span className="hidden lg:inline text-[10px] font-bold text-zinc-600 uppercase bg-zinc-950 px-2 py-1 rounded">
                                 {filterDay || "All Days"} View
                             </span>
                         </div>
 
                         {/* GRID LAYOUT */}
-                        <div className="grid grid-cols-2 gap-3 auto-rows-[100px]">
+                        <div className="grid grid-cols-2 gap-3 auto-rows-[100px] overflow-y-auto h-[calc(100vh-200px)] custom-scrollbar pb-10">
                             {(VENUE_LAYOUTS[selectedLocation] || []).map((room) => {
-                                // Find classes currently in this room based on filter
                                 const classesInRoom = visibleClasses.filter((c:any) => getRoomForClass(c.id, selectedLocation)?.id === room.id);
                                 const totalStudents = classesInRoom.reduce((acc: number, c:any) => acc + c.enrolled, 0);
                                 const isHighlighted = hoveredClassId && getRoomForClass(hoveredClassId, selectedLocation)?.id === room.id;
@@ -263,7 +297,7 @@ export default function ClassManager({ classes, people }: any) {
                                                     {c.name}
                                                 </div>
                                             ))}
-                                            {isEmpty && <div className="text-[9px] text-zinc-600 italic">No classes scheduled</div>}
+                                            {isEmpty && <div className="text-[9px] text-zinc-600 italic">No classes</div>}
                                         </div>
 
                                         <div className="flex items-end justify-between mt-2">
@@ -287,19 +321,6 @@ export default function ClassManager({ classes, people }: any) {
                     </div>
                 </div>
             </div>
-        )}
-
-        {/* VIEW 3: ATTENDANCE (Same logic, reusing previous) */}
-        {viewState === 'attendance' && selectedClass && (
-             <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
-                 {/* ... (Previous Attendance Header & Content) ... */}
-                 {/* Placeholder for brevity since it didn't change */}
-                 <div className="p-8 text-center text-zinc-500">
-                    <h2 className="text-2xl font-black text-white">{selectedClass.name}</h2>
-                    <p className="mt-4">Attendance View Loaded (Same as previous step)</p>
-                    <button onClick={() => setViewState('classes')} className="mt-4 text-blue-400 underline">Back to Map</button>
-                 </div>
-             </div>
         )}
     </div>
   );
