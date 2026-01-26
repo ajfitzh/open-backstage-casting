@@ -222,25 +222,45 @@ function MenuLink({ href, icon, label, active, onClick }: any) {
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
   
-  let dotColor = 'bg-emerald-500'; 
-  if (prod.location?.includes('Stafford')) dotColor = 'bg-amber-500';
-  if (prod.location?.includes('NoVa')) dotColor = 'bg-indigo-500';
-
-  const isCamp = prod.type?.includes('Camp');
+  // Dynamic Dot Color based on Location/Branch
+  let dotColor = 'bg-zinc-500'; 
+  const loc = (prod.location || "").toLowerCase();
+  
+  if (loc.includes('fred')) dotColor = 'bg-emerald-500'; // Fredericksburg = Green
+  if (loc.includes('stafford')) dotColor = 'bg-amber-500'; // Stafford = Amber
+  if (loc.includes('nova')) dotColor = 'bg-indigo-500';    // NoVa = Indigo
+  if (loc.includes('spotsy')) dotColor = 'bg-blue-500';    // Spotsylvania = Blue
 
   return (
-    <button disabled={pending} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left group ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'hover:bg-zinc-800/50'}`}>
-       <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+    <button 
+      disabled={pending} 
+      className={`
+        w-full flex items-start gap-3 p-2 rounded-lg transition-all text-left group 
+        ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'hover:bg-zinc-800/50'}
+      `}
+    >
+       {/* Status Dot (aligned with title) */}
+       <div className={`w-1.5 h-1.5 rounded-full ${dotColor} mt-1.5 shrink-0`} />
        
        <div className="flex-1 min-w-0">
-          <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
+          {/* Show Title */}
+          <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'}`}>
             {prod.title}
+          </div>
+          
+          {/* RESTORED: Metadata Line */}
+          <div className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-600 uppercase tracking-tight mt-0.5 group-hover:text-zinc-500">
+             <span>{prod.location || "Unknown"}</span>
+             <span className="opacity-50">•</span>
+             <span>{prod.type || "Show"}</span>
           </div>
        </div>
 
-       {isCamp && <Home size={10} className="text-purple-400 opacity-50"/>}
-       {isActive && !pending && <Check size={12} className="text-emerald-500" />}
-       {pending && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
+       {/* Active/Loading State Icons */}
+       <div className="mt-0.5">
+         {isActive && !pending && <Check size={12} className="text-emerald-500" />}
+         {pending && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
+       </div>
     </button>
   );
 }

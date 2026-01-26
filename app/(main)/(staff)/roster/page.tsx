@@ -1,11 +1,12 @@
 import { cookies } from 'next/headers';
 import { 
     getActiveProduction, 
+    getShowById, // <--- 1. Import this!
     getAssignments, 
-    getComplianceData, // <--- We fetch this too now
+    getComplianceData, 
     getPeople 
 } from '@/app/lib/baserow';
-import StaffClient from '../../../components/staff/StaffClient';
+import StaffClient from '@/app/components/staff/StaffClient';
 
 export default async function RosterPage() {
   const cookieStore = await cookies();
@@ -14,13 +15,25 @@ export default async function RosterPage() {
   let productionTitle = "Cast Roster";
   let productionId = activeId || 0;
 
+  // 2. LOGIC FIX:
   if (activeId) {
+      // If we have a cookie, fetch THAT specific show
+      const showData = await getShowById(activeId);
+      
+      // Baserow sometimes returns an array [obj] or just obj depending on the endpoint
+      const prod = Array.isArray(showData) ? showData[0] : showData;
+      
+      if (prod) productionTitle = prod.Title;
+  } else {
+      // Fallback: If no cookie, get the default "Active" show
       const prod = await getActiveProduction(); 
-      if(prod) productionTitle = prod.Title;
+      if (prod) {
+          productionTitle = prod.Title;
+          productionId = prod.id;
+      }
   }
 
-  // ⚡ Fetch EVERYTHING we need for a "Super Roster"
-  // We fetch Assignments (Who is here?), People (Contact Info), and Compliance (Paperwork)
+  // 3. Fetch Data using the determined ID
   const [assignments, people, compliance] = await Promise.all([
       getAssignments(productionId),
       getPeople(),
@@ -28,12 +41,12 @@ export default async function RosterPage() {
   ]);
 
   return (
-    <main className="h-screen bg-zinc-950 overflow-hidden">
+    <main className="h-full bg-zinc-950 overflow-hidden">
       <StaffClient 
         productionTitle={productionTitle} 
         assignments={assignments}
         people={people}
-        complianceData={compliance} // <--- Pass the "Traffic Light" data
+        compliance={compliance}
       />
     </main>
   );
