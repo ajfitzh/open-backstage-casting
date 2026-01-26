@@ -13,7 +13,8 @@ export const TABLES: Record<string, string> = {
   PRODUCTIONS: "600",
   ASSIGNMENTS: process.env.NEXT_PUBLIC_BASEROW_TABLE_ASSIGNMENTS || "603",
   ROLES: "605",
-  VOLUNTEERS: "619", // Ensure this matches your Volunteers/Roles table ID
+  VOLUNTEERS: "619", 
+  SHOW_TEAM: process.env.NEXT_PUBLIC_BASEROW_TABLE_SHOW_TEAM || "632", // <--- NEW TABLE (Check ID!)
   COMMITTEE_PREFS: "620",
   EVENTS: "625",
   SCENES: "627",
@@ -21,37 +22,26 @@ export const TABLES: Record<string, string> = {
   ASSETS: "631" 
 };
 
-// --- 🛡️ CENTRAL FETCH HELPER (The Crash Preventer) ---
+// --- 🛡️ CENTRAL FETCH HELPER ---
 export async function fetchBaserow(endpoint: string, options: RequestInit = {}) {
-  // Ensure user_field_names is always true
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${BASE_URL}${endpoint}${separator}user_field_names=true`;
 
   try {
     const res = await fetch(url, {
       ...options,
-      headers: {
-        ...HEADERS,
-        ...options.headers,
-      },
-      cache: options.cache || "no-store", // Default to fresh data
+      headers: { ...HEADERS, ...options.headers },
+      cache: options.cache || "no-store", 
     });
 
     if (!res.ok) {
       console.error(`Baserow API Error [${res.status}]: ${res.statusText} at ${url}`);
-      // Return null or empty array depending on context, or throw
       if (options.method === 'DELETE') return true; 
       return []; 
     }
 
     const data = await res.json();
-
-    // 🌟 MAGIC FIX: Automatically unwrap 'results' if it exists
-    // This stops the "filter is not a function" crashes in your UI
-    if (data && data.results && Array.isArray(data.results)) {
-      return data.results;
-    }
-
+    if (data && data.results && Array.isArray(data.results)) return data.results;
     return data;
   } catch (error) {
     console.error("Network/Fetch Error:", error);
@@ -59,42 +49,64 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}) 
   }
 }
 
-
-// --- SHOW & CONTEXT FUNCTIONS ---
-
-export async function getActiveShows() {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=200`);
+// --- CREATIVE TEAM FETCHING ---
+export async function getCreativeTeam(productionId: number) {
+  // 1. Filter by the "Productions" column (Plural, based on your CSV)
+  const endpoint = `/api/database/rows/table/${TABLES.SHOW_TEAM}/?size=100&filter__Productions__link_row_has=${productionId}`;
   
+  const data = await fetchBaserow(endpoint);
   if (!Array.isArray(data)) return [];
 
-  // Filter for Active
-  const activeRows = data.filter((row: any) => row["Is Active"] === true);
+  return data.map((row: any) => {
+    // 2. Extract Name (Person Link)
+    const personName = row.Person?.[0]?.value || row.Person || "Unknown Staff";
+    const personId = row.Person?.[0]?.id || 0;
 
-  return activeRows.map((row: any) => ({
+    // 3. Extract Role (Position Link or Text)
+    // Supports both "Link to Table" (Array) and "Single Select" (Object) or "Text" (String)
+    let roleName = "Volunteer";
+    if (Array.isArray(row.Position)) roleName = row.Position[0]?.value;
+    else if (typeof row.Position === 'object') roleName = row.Position?.value;
+    else if (row.Position) roleName = row.Position;
+
+    return {
+      id: row.id,
+      name: personName,
+      personId: personId,
+      role: roleName,
+      initials: personName.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
+      color: getRoleColor(roleName)
+    };
+  });
+}
+
+function getRoleColor(role: string) {
+  const r = (role || "").toLowerCase();
+  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600'; // Director
+  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600'; // MD
+  if (r.includes('choreographer')) return 'bg-emerald-600'; // Choreo
+  if (r.includes('stage manager') && !r.includes('assistant')) return 'bg-amber-500'; // SM
+  if (r.includes('assistant')) return 'bg-cyan-600'; // AD/ASM
+  if (r.includes('light') || r.includes('sound') || r.includes('tech')) return 'bg-indigo-600'; // Tech
+  return 'bg-zinc-600';
+}
+
+// --- SHOW & CONTEXT ---
+export async function getActiveShows() {
+  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=200`);
+  if (!Array.isArray(data)) return [];
+  return data.filter((row: any) => row["Is Active"] === true).map((row: any) => ({
     id: row.id,
     title: row.Title || "Untitled Show",
-    location: row.Location?.value || row.Branch?.value || "Unknown Loc",
+    location: row.Location?.value || row.Branch?.value || "Unknown",
     type: row.Type?.value || "Main Stage",
-    status: row.Status?.value,
     season: row.Season?.value || "General", 
-    session: row.Session?.value || "" 
   }));
 }
 
 export async function getShowById(id: number) {
   if (!id) return null;
-  // We fetch specific row, so no unwrapping needed (returns object, not array)
   return await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/${id}/`);
-}
-
-export async function getSeasonsAndShows() {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=200`);
-  if (!Array.isArray(data)) return { seasons: [], productions: [] };
-
-  return {
-    seasons: Array.from(new Set(data.map((r: any) => r.Season?.value).filter(Boolean))).sort().reverse(),
-    productions: data
-  };
 }
 
 export async function getActiveProduction() {
@@ -103,157 +115,27 @@ export async function getActiveProduction() {
   return data.find((r: any) => r["Is Active"] === true) || data[0];
 }
 
-// --- HELPER: NAME MAPPER ---
-async function getPersonNameMap() {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/?size=200`);
-  if (!Array.isArray(data)) return new Map();
-  return new Map(data.map((p: any) => [p.id, p["Full Name"]]));
-}
-
-
-// --- COMPLIANCE & DASHBOARD FUNCTIONS ---
-
-export async function getComplianceData(productionId?: number) {
-  if (!productionId) return [];
-
-  // Use the smart getters below (which now handle filtering)
-  const [auditions, assignments] = await Promise.all([
-    getAuditionSlots(productionId),
-    getAssignments(productionId)
-  ]);
-
-  if (!Array.isArray(auditions) || !Array.isArray(assignments)) return [];
-
-  const nameMap = await getPersonNameMap();
-
-  // Create a "Set" of Person IDs who are Cast
-  const castPersonIds = new Set();
-  assignments.forEach((a: any) => {
-    if (a.Person && a.Person.length > 0) {
-      castPersonIds.add(a.Person[0].id);
-    }
-  });
-
-  const castAuditions = auditions.filter((row: any) => {
-    const personId = row.Performer?.[0]?.id;
-    return personId && castPersonIds.has(personId);
-  });
-
-  return castAuditions.map((row: any) => {
-    const personId = row.Performer?.[0]?.id;
-    const performerName = nameMap.get(personId) || "Unknown Student";
-    const hasFile = row['Headshot'] && row['Headshot'].length > 0;
-    const manualCheck = row['Headshot Received']?.value || false;
-
-    return {
-      id: row.id,
-      performerName: performerName,
-      signedAgreement: row['Commitment to Character']?.value || false,
-      paidFees: row['Paid Fees']?.value || false,
-      measurementsTaken: row['Measurements Taken']?.value || false,
-      headshotSubmitted: hasFile || manualCheck,
-    };
-  });
-}
-
-
-// --- SMART READ FUNCTIONS (Now with Server-Side Filtering!) ---
-
-export async function getCreativeTeam(productionId: number) {
-  // 1. Filter Volunteers by Production ID
-  const endpoint = `/api/database/rows/table/${TABLES.VOLUNTEERS}/?size=50&filter__Production__link_row_has=${productionId}`;
-  
-  const data = await fetchBaserow(endpoint);
-  if (!Array.isArray(data)) return [];
-
-  // 2. Get Name Map to resolve Linked Records (Person)
-  // This ensures we get "Austin Fitzhugh" instead of just ID 142
-  const nameMap = await getPersonNameMap(); 
-
-  return data.map((row: any) => {
-    const personId = row.Person?.[0]?.id;
-    // Fallback: If Person link is empty, maybe the name is typed directly? Check your schema.
-    // For now assuming Person link is source of truth.
-    const name = personId ? nameMap.get(personId) || row.Person[0].value : "Unknown Volunteer";
-    
-    // Check your specific column name in Table 619. 
-    // Based on your data dump, it seems to be 'Position' or 'Role'. 
-    // Adjust key below if your column name is strictly "Position" or something else.
-    const roleValue = row["Position"]?.value || row["Role"]?.value || row["Job Title"] || "Volunteer";
-
-    return {
-      id: row.id,
-      name: name,
-      role: roleValue,
-      initials: name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
-      color: getRoleColor(roleValue) // Helper to assign brand colors
-    };
-  });
-}
-
-// Helper: Consistent Brand Colors for Roles
-function getRoleColor(role: string) {
-  const r = (role || "").toLowerCase();
-  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
-  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600';
-  if (r.includes('choreographer')) return 'bg-emerald-600';
-  if (r.includes('stage manager')) return 'bg-amber-500';
-  if (r.includes('assistant')) return 'bg-cyan-600';
-  return 'bg-zinc-600';
-}
-
-export async function getProductionEvents(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.EVENTS}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
-  return await fetchBaserow(endpoint);
-}
-// 1. ASSIGNMENTS: Fixes the "Blank Cast" bug by filtering on server
+// --- DATA GETTERS ---
 export async function getAssignments(productionId?: number) {
   let endpoint = `/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
-  return await fetchBaserow(endpoint);
-}
-
-// 2. AUDITIONS: Filter by Production ID
-export async function getAuditionSlots(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
   return await fetchBaserow(endpoint);
 }
 
 export async function getAuditionees(productionId?: number) {
-  const data = await getAuditionSlots(productionId);
-  if (!Array.isArray(data)) return [];
-
-  const nameMap = await getPersonNameMap();
-
-  return data.map((row: any) => {
-    if (row.Performer && row.Performer.length > 0) {
-      const personId = row.Performer[0].id;
-      const realName = nameMap.get(personId);
-      if (realName) row.Performer[0].value = realName;
-    }
-    return row;
-  });
+  // We fetch from Auditions table to check Status/Tenure for statistics
+  let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
+  return await fetchBaserow(endpoint);
 }
 
-// 3. SCENES: Filter by Production ID
 export async function getScenes(productionId?: number) {
   let endpoint = `/api/database/rows/table/${TABLES.SCENES}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
   return await fetchBaserow(endpoint);
 }
 
 export async function getRoles() {
-  // Roles are often generic (Master Show), so we fetch more rows but filter client-side
   return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/?size=200`);
 }
 
@@ -265,107 +147,63 @@ export async function getCommitteePreferences(activeId: number) {
   return await fetchBaserow(`/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/?size=200`);
 }
 
-export async function getVolunteers() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.VOLUNTEERS}/?size=200`);
-}
-
-export async function getProductionAssets(productionId: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.ASSETS}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
-  return await fetchBaserow(endpoint);
-}
-
-
-// --- WRITE FUNCTIONS (ACTIONS) ---
-
+// --- ACTIONS (Writes) ---
 export async function updateAuditionSlot(rowId: number, data: any) {
   const cleanData = { ...data };
-  ["Vocal Score", "Acting Score", "Dance Score", "Stage Presence Score"].forEach(key => {
+  ["Vocal Score", "Acting Score", "Dance Score"].forEach(key => {
       if (key in cleanData) cleanData[key] = Number(cleanData[key]) || 0; 
   });
-
   return await fetchBaserow(`/api/database/rows/table/${TABLES.AUDITIONS}/${rowId}/`, {
-    method: "PATCH",
-    body: JSON.stringify(cleanData),
+    method: "PATCH", body: JSON.stringify(cleanData),
   });
 }
 
 export async function submitAudition(personId: number, productionId: number, data: any) {
-  const payload = {
-    ...data,
-    "Performer": [personId], 
-    "Production": [productionId],
-    "Date": new Date().toISOString()
-  };
-
   return await fetchBaserow(`/api/database/rows/table/${TABLES.AUDITIONS}/`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function createRole(name: string) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/`, {
-    method: "POST",
-    body: JSON.stringify({ "Role Name": name, "Scene Data": "{}" }) 
-  });
-}
-
-export async function updateRole(id: number, data: any) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/${id}/`, {
-    method: "PATCH",
-    body: JSON.stringify(data)
-  });
-}
-
-export async function deleteRole(id: number) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/${id}/`, {
-    method: "DELETE"
-  });
-}
-
-export async function deleteRow(tableId: string | number, rowId: number) {
-  return await fetchBaserow(`/api/database/rows/table/${tableId}/${rowId}/`, {
-    method: "DELETE"
-  });
-}
-
-export async function linkVolunteerToPerson(preferenceRowId: number, personRowId: number) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/${preferenceRowId}/`, {
-    method: "PATCH",
-    body: JSON.stringify({ "Linked Person": [personRowId] })
-  });
-}
-
-export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.ASSETS}/`, {
-    method: "POST",
-    body: JSON.stringify({
-      "Name": name,
-      "Link": url,
-      "Type": type, 
-      "Production": [productionId] 
-    })
+    method: "POST", body: JSON.stringify({ ...data, "Performer": [personId], "Production": [productionId] }),
   });
 }
 
 export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
   return await fetchBaserow(`/api/database/rows/table/${TABLES.ASSIGNMENTS}/`, {
-    method: "POST",
-    body: JSON.stringify({
-      "Person": [personId],
-      "Performance Identity": [roleId],
-      "Production": [productionId] 
-    }),
+    method: "POST", body: JSON.stringify({ "Person": [personId], "Performance Identity": [roleId], "Production": [productionId] }),
   });
+}
+
+export async function updateRole(id: number, data: any) {
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.ROLES}/${id}/`, {
+    method: "PATCH", body: JSON.stringify(data)
+  });
+}
+
+export async function deleteRow(tableId: string | number, rowId: number) {
+  return await fetchBaserow(`/api/database/rows/table/${tableId}/${rowId}/`, { method: "DELETE" });
+}
+
+export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.ASSETS}/`, {
+    method: "POST", body: JSON.stringify({ "Name": name, "Link": url, "Type": type, "Production": [productionId] })
+  });
+}
+
+export async function getProductionAssets(productionId: number) {
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.ASSETS}/?size=200&filter__Production__link_row_has=${productionId}`);
+}
+
+export async function getAuditionSlots(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
+  return await fetchBaserow(endpoint);
 }
 
 export async function getConflicts(productionId?: number) {
   let endpoint = `/api/database/rows/table/${TABLES.CONFLICTS || "623"}/?size=200`;
-  if (productionId) {
-    endpoint += `&filter__Production__link_row_has=${productionId}`;
-  }
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
+  return await fetchBaserow(endpoint);
+}
+
+export async function getProductionEvents(productionId?: number) {
+  let endpoint = `/api/database/rows/table/${TABLES.EVENTS}/?size=200`;
+  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
   return await fetchBaserow(endpoint);
 }
