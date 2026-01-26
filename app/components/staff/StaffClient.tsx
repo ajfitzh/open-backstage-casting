@@ -179,13 +179,28 @@ export default function StaffClient({ productionTitle, assignments, people }: an
 }
 
 // --- HELPER COMPONENTS ---
+
 function RichStatusIcon({ type, member }: any) {
+  // Config mapping
   const config = LEGACY_MAP[type as keyof typeof LEGACY_MAP];
-  const icons = { legal: <ShieldCheck size={12}/>, financial: <CircleDollarSign size={12}/>, production: <ClipboardCheck size={12}/>, family: <Users size={12}/> };
   
+  const icons = { 
+    legal: <ShieldCheck size={12}/>, 
+    financial: <CircleDollarSign size={12}/>, 
+    production: <ClipboardCheck size={12}/>, 
+    family: <Users size={12}/> 
+  };
+  
+  // Status Logic
   let status = 'valid';
   const audit = member.audit;
-  if ((type === 'legal' && (!audit.medical || !audit.liability)) || (type === 'financial' && (!audit.fees || !audit.pizza)) || (type === 'production' && !audit.bio)) status = 'emergency';
+  
+  if ((type === 'legal' && (!audit.medical || !audit.liability)) || 
+      (type === 'financial' && (!audit.fees || !audit.pizza)) || 
+      (type === 'production' && !audit.bio) ||
+      (type === 'family' && !audit.committee)) {
+      status = 'emergency';
+  }
 
   const colors = {
     emergency: "text-red-500 bg-red-500/10 border-red-500/40 animate-pulse",
@@ -193,15 +208,29 @@ function RichStatusIcon({ type, member }: any) {
   };
 
   return (
-    <div className={`group relative p-1.5 rounded-md border transition-all cursor-help ${colors[status as keyof typeof colors]}`}>
+    // 1. CHANGED: 'group' -> 'group/icon' (Named Group)
+    // 2. ADDED: 'hover:z-50' (Brings active icon to front so tooltip isn't covered)
+    <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 ${colors[status as keyof typeof colors]}`}>
+      
       {icons[type as keyof typeof icons]}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 p-3">
-        <div className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">{config.title}</div>
+
+      {/* TOOLTIP */}
+      {/* 3. CHANGED: 'group-hover:opacity-100' -> 'group-hover/icon:opacity-100' */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+        <div className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">
+            {config.title}
+        </div>
         <div className="space-y-1">
-            {config.forms.map(f => (
-                <div key={f.label} className="flex justify-between text-[10px] text-zinc-400"><span>{f.label}</span> <div className="w-2 h-2 rounded-full bg-zinc-700"/></div>
+            {config.forms.map((f: any) => (
+                <div key={f.label} className="flex justify-between text-[10px] text-zinc-400">
+                    <span>{f.label}</span> 
+                    {/* Visual fake-check for demo */}
+                    <div className={`w-1.5 h-1.5 rounded-full ${status === 'valid' ? 'bg-emerald-500' : 'bg-zinc-700'}`}/>
+                </div>
             ))}
         </div>
+        {/* Little Arrow */}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-zinc-900"></div>
       </div>
     </div>
   );
