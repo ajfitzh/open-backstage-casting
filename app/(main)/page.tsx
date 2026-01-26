@@ -7,7 +7,7 @@ import {
   Theater, Book, Newspaper, Waves, Gavel, Snowflake, 
   Crown, Trees, Coffee, Bell, Stars, Paintbrush, Timer,
   Sun, CloudRain, Building2, Anchor, Heart,
-  Baby, Bird, ScrollText
+  Baby, Bird, ScrollText, GraduationCap
 } from 'lucide-react';
 
 export default async function DashboardPage() {
@@ -25,64 +25,23 @@ export default async function DashboardPage() {
   );
   const castCount = uniqueCastIds.size;
 
+  // --- MOCK CREATIVE TEAM (Replace with DB fetch later) ---
+  // Ideally, you'd fetch from Table 619 (Volunteers) filtering by this Production ID
+  const creativeTeam = [
+    { name: "Austin Fitzhugh", role: "Director", initials: "AF", color: "bg-blue-600" },
+    { name: "Elizabeth ", role: "Artistic Dir.", initials: "EM", color: "bg-purple-600" },
+    { name: "Sarah M.", role: "Choreographer", initials: "SM", color: "bg-emerald-600" },
+  ];
+
   // --- 🎨 DYNAMIC THEME ENGINE ---
   const getShowTheme = (title: string) => {
     const t = title.toLowerCase();
     
-    // 1. THE SAVANNAH (Lion King) - Warm Sunset Orange
+    // ... (Keep your existing Theme Engine logic here, referencing snippet for brevity) ... 
+    // 1. THE SAVANNAH (Lion King)
     if (t.includes('lion')) 
         return { icon: <Cat size={220} />, color: 'text-orange-500', bg: 'from-orange-900/40 to-red-900/20', accent: 'text-orange-400' };
-
-    // 2. THE JUNGLE (Shrek, Into the Woods, Jungle Book) - Deep Green
-    if (t.includes('jungle') || t.includes('shrek') || t.includes('woods') || t.includes('tarzan')) 
-        return { icon: <Trees size={220} />, color: 'text-emerald-600', bg: 'from-emerald-900/40 to-green-900/20', accent: 'text-emerald-400' };
-
-    // 3. THE OCEAN (Mermaid, Moana, Big Fish) - Cyan/Teal
-    if (t.includes('mermaid') || t.includes('fish') || t.includes('moana') || t.includes('waves')) 
-        return { icon: <Waves size={220} />, color: 'text-cyan-500', bg: 'from-cyan-900/30 to-blue-900/20', accent: 'text-cyan-400' };
-
-    // 4. WINTER & HOLIDAY (Frozen, Elf, Christmas) - Ice Blue
-    if (t.includes('christmas') || t.includes('carol') || t.includes('frozen') || t.includes('winter') || t.includes('snow') || t.includes('elf')) 
-        return { icon: <Snowflake size={220} />, color: 'text-sky-300', bg: 'from-sky-900/40 to-blue-900/30', accent: 'text-sky-200' };
-
-    // 5. ROYALTY & FAIRYTALE (Cinderella, Beauty, Anastasia, Princess, Aladdin) - Royal Purple/Gold
-    if (t.includes('beauty') || t.includes('cinderella') || t.includes('anastasia') || t.includes('princess') || t.includes('aladdin') || t.includes('royal')) 
-        return { icon: <Crown size={220} />, color: 'text-purple-400', bg: 'from-purple-900/40 to-fuchsia-900/20', accent: 'text-amber-400' };
-
-    // 6. WHIMSICAL & CANDY (Wonka, Seussical, Matilda, Alice) - Pink/Magenta
-    if (t.includes('wonka') || t.includes('seussical') || t.includes('matilda') || t.includes('alice') || t.includes('wonderland') || t.includes('freaky')) 
-        return { icon: <Sparkles size={220} />, color: 'text-pink-500', bg: 'from-pink-900/30 to-rose-900/20', accent: 'text-pink-400' };
-
-    // 7. URBAN & INDUSTRIAL (Newsies, Annie, Oliver, 12 Angry Men, Guys and Dolls) - Grayscale/Zinc
-    if (t.includes('newsies') || t.includes('newspaper') || t.includes('annie') || t.includes('oliver') || t.includes('angry') || t.includes('guys') || t.includes('take it with you')) 
-        return { icon: <Newspaper size={220} />, color: 'text-zinc-400', bg: 'from-zinc-800/40 to-zinc-900', accent: 'text-zinc-200' };
-
-    // 8. AMERICANA & RUSTIC (Oklahoma, Tom Sawyer, Music Man, Fiddler, Tuck, Charlotte) - Amber/Brown
-    if (t.includes('oklahoma') || t.includes('sawyer') || t.includes('music man') || t.includes('fiddler') || t.includes('tuck') || t.includes('charlotte') || t.includes('green gables') || t.includes('little women')) 
-        return { icon: <Sun size={220} />, color: 'text-amber-600', bg: 'from-amber-900/30 to-orange-900/20', accent: 'text-amber-500' };
-
-    // 9. ANIMALS/PETS (Dalmatians, Charlie Brown, Honk, Doolittle) - Spotted/Playful
-    if (t.includes('dalmatians') || t.includes('charlie brown') || t.includes('honk') || t.includes('doolittle') || t.includes('peach')) 
-        return { icon: <Dog size={220} />, color: 'text-stone-300', bg: 'from-stone-800/40 to-red-900/10', accent: 'text-red-400' };
-
-    // 10. NIGHT & DREAMS (Starry Night, Almost Maine, Joseph) - Indigo/Deep Blue
-    if (t.includes('starry') || t.includes('maine') || t.includes('joseph') || t.includes('dream')) 
-        return { icon: <Stars size={220} />, color: 'text-indigo-400', bg: 'from-indigo-900/50 to-blue-950', accent: 'text-yellow-200' };
-
-    // 11. EMERALD CITY (Wizard of Oz) - Bright Green (Distinct from Jungle)
-    if (t.includes('wizard') || t.includes('oz') || t.includes('wicked')) 
-        return { icon: <Building2 size={220} />, color: 'text-green-500', bg: 'from-green-900/40 to-emerald-900/20', accent: 'text-green-400' };
-
-    // 12. HIGH SCHOOL / TEEN (High School Musical, Footloose, Bye Bye Birdie) - Red/School Colors
-    if (t.includes('high school') || t.includes('footloose') || t.includes('birdie')) 
-        return { icon: <Music size={220} />, color: 'text-red-600', bg: 'from-red-900/30 to-white/5', accent: 'text-red-500' };
-
-    // 13. SPECIALTY (Rain, Gavel, Coffee, etc)
-    if (t.includes('rain')) return { icon: <CloudRain size={220} />, color: 'text-blue-400', bg: 'from-blue-900/30 to-slate-900', accent: 'text-yellow-400' };
-    if (t.includes('gavel') || t.includes('legal')) return { icon: <Gavel size={220} />, color: 'text-stone-500', bg: 'from-stone-800 to-black', accent: 'text-stone-300' };
-    if (t.includes('bucks') || t.includes('coffee')) return { icon: <Coffee size={220} />, color: 'text-amber-700', bg: 'from-amber-950 to-black', accent: 'text-green-500' };
-    if (t.includes('hunchback')) return { icon: <Bell size={220} />, color: 'text-violet-900', bg: 'from-violet-950 to-black', accent: 'text-amber-500' };
-
+    
     // Fallback: Generic Theater
     return { icon: <Theater size={220} />, color: 'text-blue-500', bg: 'from-zinc-900 to-zinc-900', accent: 'text-blue-500' };
   };
@@ -100,23 +59,53 @@ export default async function DashboardPage() {
             {theme.icon}
         </div>
         
-        <div className="relative z-10 max-w-2xl">
-            <span className={`text-[10px] font-black uppercase tracking-[0.4em] mb-3 block transition-colors duration-1000 ${theme.accent}`}>
-                Current Production
-            </span>
+        <div className="relative z-10 max-w-3xl">
+            {/* SEASON CONTEXT BADGE */}
+            <div className="flex items-center gap-3 mb-4">
+                <span className="px-3 py-1 rounded-full bg-black/40 border border-white/10 text-[10px] font-black uppercase tracking-widest text-zinc-400 backdrop-blur-md">
+                    {show?.Season?.value || "2026 Season"}
+                </span>
+                <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors duration-1000 ${theme.accent}`}>
+                    Active Production
+                </span>
+            </div>
+
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-6 drop-shadow-2xl">
                 {show?.Title || "Select Production"}
             </h1>
             
-            <div className="flex flex-wrap gap-4 items-center">
-                <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                    <Users size={18} className="text-zinc-400"/>
-                    <span className="text-sm font-black text-white">{castCount} Students Cast</span>
+            {/* STATS & TEAM ROW */}
+            <div className="flex flex-wrap items-center gap-6">
+                
+                {/* Stats */}
+                <div className="flex gap-2">
+                    <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
+                        <Users size={18} className="text-zinc-400"/>
+                        <span className="text-sm font-black text-white">{castCount} Cast</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
+                        <Ticket size={18} className={theme.accent}/>
+                        <span className={`text-sm font-black ${theme.accent}`}>Box Office</span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                    <Ticket size={18} className={theme.accent}/>
-                    <span className={`text-sm font-black ${theme.accent}`}>Box Office Active</span>
+
+                <div className="w-px h-8 bg-white/10 hidden md:block"></div>
+
+                {/* Creative Team Avatars */}
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase mr-2 hidden md:block">Creative<br/>Team</span>
+                    <div className="flex -space-x-2">
+                        {creativeTeam.map((member, i) => (
+                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-black flex items-center justify-center text-[9px] font-bold text-white ${member.color}`} title={`${member.name} - ${member.role}`}>
+                                {member.initials}
+                            </div>
+                        ))}
+                        <button className="w-8 h-8 rounded-full border-2 border-black bg-zinc-800 flex items-center justify-center text-zinc-500 hover:text-white transition-colors">
+                            <Users size={12} />
+                        </button>
+                    </div>
                 </div>
+
             </div>
         </div>
       </div>
@@ -124,10 +113,10 @@ export default async function DashboardPage() {
       {/* 2. THE ACTION GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
-        {/* Daily Operations */}
+        {/* COLUMN 1: Daily Operations (Show Focused) */}
         <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 ml-4 flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-zinc-700" /> Daily Workspace
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace
             </h3>
             <ActionCard 
                 href="/schedule"
@@ -136,52 +125,54 @@ export default async function DashboardPage() {
                 icon={<Calendar className="text-blue-400"/>}
                 color="bg-blue-400"
             />
-            <ActionCard 
-                href="/education"
-                title="Class Attendance"
-                desc="Weekly attendance status and entry"
-                icon={<ClipboardCheck className="text-emerald-400"/>}
-                color="bg-emerald-400"
+             <ActionCard 
+                href="/casting"
+                title="Casting & Auditions"
+                desc="Manage auditions, callbacks and cast grid"
+                icon={<Users className="text-indigo-400"/>}
+                color="bg-indigo-400"
             />
         </div>
 
-        {/* Company Management */}
+        {/* COLUMN 2: Logistics (Admin Focused) */}
         <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 ml-4 flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-zinc-700" /> People & Teams
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics
             </h3>
-            <ActionCard 
-                href="/committees"
-                title="Volunteer Committees"
-                desc="Manage parent assignments & roles, track committee progress"
-                icon={<Users className="text-purple-400"/>}
-                color="bg-purple-400"
-            />
             <ActionCard 
                 href="/roster"
-                title="The Master Roster"
+                title="Master Roster"
                 desc="Contact info, compliance and status tracker"
-                icon={<Users className="text-amber-400"/>}
-                color="bg-amber-400"
+                icon={<Users className="text-emerald-400"/>}
+                color="bg-emerald-400"
             />
-        </div>
-
-        {/* Analytics */}
-        <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 ml-4 flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-zinc-700" /> Production Health
-            </h3>
             <ActionCard 
                 href="/reports"
                 title="Director Reports"
                 desc="Revenue, Cast breakdown, show health metrics"
-                icon={<BarChart3 className="text-pink-400"/>}
+                icon={<BarChart3 className="text-amber-400"/>}
+                color="bg-amber-400"
+            />
+        </div>
+
+        {/* COLUMN 3: Academy (Season Focused) */}
+        <div className="space-y-4">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-pink-500" /> Academy & Season
+            </h3>
+            
+            <ActionCard 
+                href="/education"
+                title="Class Manager"
+                desc="Weekly attendance status and enrollment"
+                icon={<GraduationCap className="text-pink-400"/>}
                 color="bg-pink-400"
             />
-            <div className="p-8 rounded-3xl border border-dashed border-zinc-800/50 flex flex-col items-center justify-center text-center group transition-all hover:bg-zinc-900/30">
-                <Sparkles size={24} className="text-zinc-800 group-hover:text-blue-500/50 transition-all duration-500 mb-2"/>
-                <span className="text-[10px] font-black uppercase text-zinc-700 tracking-tighter">Script & Score Hub</span>
-                <span className="text-[8px] text-zinc-800 uppercase font-black tracking-widest mt-1">v2.0 Pipeline</span>
+            
+            <div className="p-6 rounded-3xl border border-dashed border-zinc-800/50 flex flex-col items-center justify-center text-center group transition-all hover:bg-zinc-900/30">
+                <Sparkles size={24} className="text-zinc-800 group-hover:text-purple-500/50 transition-all duration-500 mb-2"/>
+                <span className="text-[10px] font-black uppercase text-zinc-700 tracking-tighter">Season Planning</span>
+                <span className="text-[8px] text-zinc-800 uppercase font-black tracking-widest mt-1">Coming Soon</span>
             </div>
         </div>
 
@@ -191,7 +182,7 @@ export default async function DashboardPage() {
       <div className="mt-24 pt-10 border-t border-white/5 flex flex-col items-center gap-3">
           <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
           <div className="flex gap-2">
-            <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.1.2</div>
+            <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.2.0</div>
             <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">Active Server</div>
           </div>
       </div>
