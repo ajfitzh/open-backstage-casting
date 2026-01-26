@@ -6,11 +6,11 @@ import {
   CheckCircle2, Plus, Minus,
   TrendingUp, Calendar as CalendarIcon, 
   LayoutGrid, Coffee, Umbrella, Wand2,
-  FileText, Mic2, Music, Theater
+  FileText, Mic2, Music, Theater,
+  Target, AlertTriangle, Clock // <--- ADDED THESE BACK
 } from 'lucide-react';
 
 // --- IMPORTS ---
-// Make sure these two files exist in the same folder!
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
 
