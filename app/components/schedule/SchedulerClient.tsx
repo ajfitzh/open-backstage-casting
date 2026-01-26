@@ -4,9 +4,12 @@ import React, { useState, useMemo } from 'react';
 import { 
   Save, X, AlertTriangle, Clock, 
   Users, ChevronRight, ChevronLeft, Search,
-  MoreHorizontal, PlayCircle, CheckCircle2,
-  Maximize2, Minimize2, Plus, Minus
+  PlayCircle, CheckCircle2,
+  Maximize2, Minimize2, Plus, Minus,
+  TrendingUp, Calendar as CalendarIcon, Target,
+  LayoutGrid, Coffee, Umbrella, Wand2, Loader2
 } from 'lucide-react';
+import AutoSchedulerModal from './AutoSchedulerModal'; // Ensure this file exists in the same folder
 
 // --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
@@ -17,35 +20,34 @@ interface ScheduledItem {
   sceneId: number;
   track: TrackType;
   day: 'Fri' | 'Sat';
-  weekOffset: number; // 0 = this week, 1 = next week
-  startTime: number; // e.g. 18.0 = 6pm
-  duration: number; // in minutes (15, 30, 45...)
+  weekOffset: number;
+  startTime: number;
+  duration: number;
   status: SceneStatus;
 }
 
 // --- CONFIG ---
-const FRI_START = 18; // 6 PM
-const FRI_END = 21;   // 9 PM
-const SAT_START = 10; // 10 AM
-const SAT_END = 17;   // 5 PM
+const FRI_START = 18; 
+const FRI_END = 21;   
+const SAT_START = 10; 
+const SAT_END = 17;   
+
+// MOCK CONSTANTS FOR PACE CALCULATIONS
+const TOTAL_WEEKS = 10;
+const CURRENT_WEEK = 4; // Assume we are in Week 4 for the demo
+const TARGET_WEEK = 8;  // Goal: Finish by Week 8 (Costume Parade)
 
 export default function SchedulerClient({ scenes, roles, assignments, people, productionTitle }: any) {
+  const [activeTab, setActiveTab] = useState<'calendar' | 'progress'>('calendar');
+  const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); // Lifted state for auto-scheduler access
   
-  // State
-  const [schedule, setSchedule] = useState<ScheduledItem[]>([]);
-  const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
-  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isCallListExpanded, setIsCallListExpanded] = useState(false);
-
-  // --- 🧠 DATA PREP ---
+  // --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
     // 1. Map Person ID -> Name
     const personMap = new Map();
     people.forEach((p: any) => {
-        personMap.set(p.id, { 
-            name: p["Full Name"] || `ID ${p.id}`, 
-        });
+        personMap.set(p.id, { name: p["Full Name"] || `ID ${p.id}` });
     });
 
     // 2. Map Role -> Cast
@@ -70,377 +72,467 @@ export default function SchedulerClient({ scenes, roles, assignments, people, pr
             pIds.forEach(id => castIds.add(id));
         });
 
-        // Determine Status based on schedule history
-        // (In a real app, this would come from DB, here we infer from local state)
-        const isPolished = schedule.some(i => i.sceneId === s.id && i.status === 'Polished');
-        const isWorked = schedule.some(i => i.sceneId === s.id && i.status === 'Worked');
-
         return {
             id: s.id,
             name: s["Scene Name"],
             act: s["Act"]?.value || "1",
             type: s["Scene Type"]?.value || "Scene",
             cast: Array.from(castIds).map(id => personMap.get(id)).filter(Boolean),
-            status: isPolished ? 'Polished' : isWorked ? 'Worked' : 'New'
+            // Default status logic
+            status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
-  }, [scenes, roles, assignments, people, schedule]); // Re-calc when schedule changes for status updates
+  }, [scenes, roles, assignments, people]);
 
-  // --- ACTIONS ---
+  return (
+    <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
+        
+        {/* HEADER */}
+        <header className="h-16 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-30">
+            <div className="flex items-center gap-6">
+                <div>
+                    <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Production Schedule</div>
+                    <h1 className="text-lg font-bold text-white">{productionTitle}</h1>
+                </div>
+
+                {/* TAB SWITCHER */}
+                <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                    <button 
+                        onClick={() => setActiveTab('calendar')}
+                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                        <CalendarIcon size={14}/> Calendar
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('progress')}
+                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                        <TrendingUp size={14}/> Burn-Up Chart
+                    </button>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+                 <div className="text-right hidden md:block">
+                    <div className="text-[10px] text-zinc-500 font-mono">Current Week</div>
+                    <div className="text-sm font-black text-emerald-400">Week {CURRENT_WEEK} of {TOTAL_WEEKS}</div>
+                 </div>
+                 
+                 {/* ✨ THE MAGIC WAND BUTTON ✨ */}
+                 <button 
+                    onClick={() => setIsAutoSchedulerOpen(true)}
+                    className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
+                 >
+                    <Wand2 size={14} /> Auto
+                 </button>
+
+                 <button className="bg-white text-black px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider hover:bg-zinc-200 transition-all">
+                    Publish
+                </button>
+            </div>
+        </header>
+
+        {/* CONTENT AREA */}
+        <div className="flex-1 overflow-hidden relative">
+            {activeTab === 'calendar' ? (
+                <CalendarView 
+                    sceneData={sceneData} 
+                    schedule={schedule} 
+                    setSchedule={setSchedule} 
+                />
+            ) : (
+                <BurnUpView sceneData={sceneData} />
+            )}
+        </div>
+
+        {/* --- AUTO SCHEDULER MODAL --- */}
+        <AutoSchedulerModal 
+            isOpen={isAutoSchedulerOpen} 
+            onClose={() => setIsAutoSchedulerOpen(false)}
+            scenes={sceneData}
+            people={people}
+            onCommit={(newItems: any[]) => {
+                setSchedule(prev => [...prev, ...newItems]);
+            }}
+        />
+
+    </div>
+  );
+}
+
+// ============================================================================
+// 1. CALENDAR VIEW (Scheduling)
+// ============================================================================
+function CalendarView({ sceneData, schedule, setSchedule }: any) {
+  const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
       if(!sceneId) return;
-
       const startTime = hour + (min / 60);
-      
       const newBlock: ScheduledItem = {
           id: Date.now().toString(),
-          sceneId,
-          track,
-          day,
-          weekOffset: currentWeekOffset,
-          startTime,
-          duration: 30, // Default to 30 mins
-          status: 'New'
+          sceneId, track, day, weekOffset: currentWeekOffset, startTime, duration: 30, status: 'New'
       };
-
-      setSchedule(prev => [...prev, newBlock]);
+      setSchedule((prev: any) => [...prev, newBlock]);
       setDraggedSceneId(null);
   };
 
   const updateDuration = (itemId: string, change: number) => {
-      setSchedule(prev => prev.map(item => {
-          if (item.id !== itemId) return item;
-          const newDur = item.duration + change;
-          return newDur >= 15 ? { ...item, duration: newDur } : item;
-      }));
+      setSchedule((prev: any) => prev.map((item: any) => item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item));
   };
 
-  const toggleStatus = (itemId: string) => {
-      const cycle: Record<SceneStatus, SceneStatus> = { 'New': 'Worked', 'Worked': 'Polished', 'Polished': 'New' };
-      setSchedule(prev => prev.map(item => 
-          item.id === itemId ? { ...item, status: cycle[item.status] } : item
-      ));
-  };
-
-  // --- CALCULATIONS ---
-
-  // 1. Current Week Label
   const weekLabel = useMemo(() => {
       const today = new Date();
-      // Find next Friday
       const nextFri = new Date(today);
-      nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7);
-      // Add Offset
-      nextFri.setDate(nextFri.getDate() + (currentWeekOffset * 7));
+      nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (currentWeekOffset * 7));
       return `Week of ${nextFri.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   }, [currentWeekOffset]);
 
-  // 2. Call List Logic (Start/End Times)
-  const callList = useMemo(() => {
-      const activeItems = schedule.filter(i => i.weekOffset === currentWeekOffset);
-      const actorMap = new Map<string, { name: string, start: number, end: number, day: string }>();
-
-      activeItems.forEach(item => {
-          const scene = sceneData.find((s: any) => s.id === item.sceneId);
-          if (!scene) return;
-          
-          const itemEnd = item.startTime + (item.duration / 60);
-
-          scene.cast.forEach((actor: any) => {
-              const key = `${actor.name}-${item.day}`; // Unique per day
-              const current = actorMap.get(key);
-
-              if (!current) {
-                  actorMap.set(key, { 
-                      name: actor.name, 
-                      start: item.startTime, 
-                      end: itemEnd,
-                      day: item.day 
-                  });
-              } else {
-                  actorMap.set(key, {
-                      ...current,
-                      start: Math.min(current.start, item.startTime),
-                      end: Math.max(current.end, itemEnd)
-                  });
-              }
-          });
-      });
-
-      return Array.from(actorMap.values()).sort((a, b) => {
-          if (a.day !== b.day) return a.day === 'Fri' ? -1 : 1;
-          return a.start - b.start;
-      });
-  }, [schedule, currentWeekOffset, sceneData]);
-
-  // 3. Show Health
-  const showHealth = useMemo(() => {
-      const total = sceneData.length;
-      const worked = sceneData.filter((s:any) => s.status === 'Worked').length;
-      const polished = sceneData.filter((s:any) => s.status === 'Polished').length;
-      return { total, worked, polished };
-  }, [sceneData]);
-
-
-  // --- RENDER HELPERS ---
-  const formatTime = (decimalTime: number) => {
-      const h = Math.floor(decimalTime);
-      const m = Math.round((decimalTime - h) * 60);
-      const suffix = h >= 12 ? 'PM' : 'AM';
-      const h12 = h > 12 ? h - 12 : h;
-      return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`;
+  // Generate slots for column
+  const generateSlots = (start: number, end: number) => {
+      const s = [];
+      for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
+      return s;
   };
+  const friSlots = generateSlots(FRI_START, FRI_END);
+  const satSlots = generateSlots(SAT_START, SAT_END);
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-        
-        {/* --- LEFT SIDEBAR: SCENE BANK --- */}
-        <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
-            {/* Header */}
-            <div className="p-4 border-b border-white/10">
-                <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Show Health</div>
-                <div className="flex h-2 bg-zinc-800 rounded-full overflow-hidden mb-2">
-                    <div className="bg-emerald-500" style={{ width: `${(showHealth.polished / showHealth.total) * 100}%` }} title="Polished"/>
-                    <div className="bg-blue-500" style={{ width: `${(showHealth.worked / showHealth.total) * 100}%` }} title="Worked"/>
-                </div>
-                <div className="flex justify-between text-[9px] text-zinc-500 font-bold uppercase">
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> {showHealth.polished} Polished</span>
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"/> {showHealth.worked} Worked</span>
-                    <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-zinc-700"/> {showHealth.total - showHealth.polished - showHealth.worked} New</span>
-                </div>
-            </div>
-
-            {/* Search */}
-            <div className="p-2">
+    <div className="flex h-full">
+         {/* SIDEBAR: SCENE BANK */}
+         <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
+             <div className="p-4 border-b border-white/10">
                 <div className="relative">
                     <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"/>
-                    <input 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Filter scenes..." 
-                        className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none placeholder:text-zinc-600"
-                    />
+                    <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Filter scenes..." className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none"/>
                 </div>
-            </div>
+             </div>
+             <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar pt-2">
+                 {sceneData.filter((s:any) => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
+                     <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)}
+                         className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all">
+                         <div className="flex justify-between items-center mb-1">
+                             <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
+                         </div>
+                         <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                              <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
+                              <span>{scene.cast.length} Actors</span>
+                         </div>
+                     </div>
+                 ))}
+             </div>
+         </aside>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
-                {sceneData.filter((s:any) => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
-                    <div 
-                        key={scene.id}
-                        draggable
-                        onDragStart={(e) => {
-                            e.dataTransfer.setData("sceneId", scene.id.toString());
-                            setDraggedSceneId(scene.id);
-                        }}
-                        onDragEnd={() => setDraggedSceneId(null)}
-                        className={`
-                            border p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all
-                            ${scene.status === 'Polished' ? 'border-emerald-500/30 bg-emerald-900/10' : 
-                              scene.status === 'Worked' ? 'border-blue-500/30 bg-blue-900/10' : 
-                              'border-white/5 bg-zinc-900'}
-                        `}
-                    >
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
-                            {scene.status === 'Polished' && <CheckCircle2 size={10} className="text-emerald-500"/>}
-                            {scene.status === 'Worked' && <PlayCircle size={10} className="text-blue-500"/>}
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                             <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
-                             <span>{scene.cast.length} Actors</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Call List Preview */}
-            <div className="border-t border-white/10 bg-zinc-950">
-                <button 
-                    onClick={() => setIsCallListExpanded(true)}
-                    className="w-full p-3 flex justify-between items-center hover:bg-zinc-900 transition-colors"
-                >
-                    <span className="text-[10px] font-black uppercase text-emerald-500 flex items-center gap-2">
-                        <Users size={12}/> Call List
-                    </span>
-                    <Maximize2 size={12} className="text-zinc-500"/>
-                </button>
-            </div>
-        </aside>
-
-        {/* --- MAIN: CALENDAR GRID --- */}
-        <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
-            
-            {/* Header: Week Navigator */}
-            <header className="h-14 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 shadow-lg z-30">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-black/40 rounded-lg p-1 border border-white/5">
-                        <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="p-1 hover:text-white text-zinc-500 transition-colors"><ChevronLeft size={16}/></button>
-                        <span className="text-xs font-bold text-zinc-300 w-32 text-center select-none">{weekLabel}</span>
-                        <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="p-1 hover:text-white text-zinc-500 transition-colors"><ChevronRight size={16}/></button>
-                    </div>
-                    <div className="h-6 w-px bg-white/10 mx-2"></div>
-                    <h1 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{productionTitle}</h1>
-                </div>
-                <button className="bg-white text-black px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 transition-all">
-                    Publish Schedule
-                </button>
-            </header>
-
-            {/* The Grid Canvas */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
-                <div className="flex gap-4 h-full min-h-[600px]">
-                    
-                    {/* FRIDAY COLUMN */}
-                    <DayColumn 
-                        day="Fri" 
-                        startHour={FRI_START} 
-                        endHour={FRI_END} 
-                        schedule={schedule}
-                        weekOffset={currentWeekOffset}
-                        onDrop={handleDrop}
-                        onDurationChange={updateDuration}
-                        onStatusToggle={toggleStatus}
-                        draggedSceneId={draggedSceneId}
-                        sceneData={sceneData}
-                    />
-
-                    {/* SATURDAY COLUMN */}
-                    <DayColumn 
-                        day="Sat" 
-                        startHour={SAT_START} 
-                        endHour={SAT_END} 
-                        schedule={schedule}
-                        weekOffset={currentWeekOffset}
-                        onDrop={handleDrop}
-                        onDurationChange={updateDuration}
-                        onStatusToggle={toggleStatus}
-                        draggedSceneId={draggedSceneId}
-                        sceneData={sceneData}
-                    />
-                </div>
-            </div>
-        </main>
-
-        {/* --- MODAL: EXPANDED CALL LIST --- */}
-        {isCallListExpanded && (
-            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8 animate-in fade-in">
-                <div className="bg-zinc-900 w-full max-w-4xl h-[80vh] rounded-2xl border border-white/10 flex flex-col shadow-2xl overflow-hidden">
-                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-800">
-                        <h2 className="text-lg font-black uppercase italic tracking-wider text-emerald-500">Weekly Call List</h2>
-                        <button onClick={() => setIsCallListExpanded(false)} className="text-zinc-500 hover:text-white"><X size={24}/></button>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-8 custom-scrollbar">
-                        {['Fri', 'Sat'].map(day => (
-                            <div key={day}>
-                                <h3 className="text-sm font-bold text-white mb-4 border-b border-white/10 pb-2">{day === 'Fri' ? 'Friday' : 'Saturday'}</h3>
-                                <div className="space-y-2">
-                                    {callList.filter(c => c.day === day).map((actor, i) => (
-                                        <div key={i} className="flex justify-between items-center p-2 bg-black/20 rounded border border-white/5">
-                                            <span className="text-sm text-zinc-300 font-bold">{actor.name}</span>
-                                            <div className="text-xs font-mono text-zinc-500 bg-black/40 px-2 py-1 rounded">
-                                                {formatTime(actor.start)} - {formatTime(actor.end)}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {callList.filter(c => c.day === day).length === 0 && <p className="text-zinc-600 text-xs italic">No calls.</p>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )}
+         {/* MAIN CALENDAR */}
+         <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
+             <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
+                 <button onClick={() => setCurrentWeekOffset(c => c - 1)}><ChevronLeft size={16}/></button>
+                 <span className="text-xs font-bold text-zinc-300 w-32 text-center">{weekLabel}</span>
+                 <button onClick={() => setCurrentWeekOffset(c => c + 1)}><ChevronRight size={16}/></button>
+             </div>
+             <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
+                 <div className="flex gap-4 h-full min-h-[600px]">
+                     {[
+                         { day: 'Fri', slots: friSlots, start: FRI_START }, 
+                         { day: 'Sat', slots: satSlots, start: SAT_START }
+                     ].map((col: any) => (
+                         <div key={col.day} className="flex-1 flex flex-col bg-zinc-900 border border-white/10 rounded-xl overflow-hidden">
+                             <div className="p-2 bg-zinc-800 text-center font-black uppercase text-zinc-400 text-xs">{col.day === 'Fri' ? 'Friday' : 'Saturday'}</div>
+                             <div className="flex-1 relative flex">
+                                 {/* TIME LABELS */}
+                                 <div className="w-12 bg-zinc-950/50 border-r border-white/5 text-[9px] text-zinc-600 font-mono text-right py-2">
+                                     {col.slots.filter((s:any) => s.m === 0).map((s:any) => (
+                                         <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
+                                     ))}
+                                 </div>
+                                 {/* TRACKS */}
+                                 <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
+                                     {['Acting', 'Music', 'Dance'].map((track) => (
+                                         <div key={track} className="relative">
+                                              <div className="absolute top-0 inset-x-0 p-1 text-[8px] font-black uppercase text-center text-zinc-700 bg-zinc-900/80 z-10">{track}</div>
+                                              {col.slots.map((slot:any) => (
+                                                  <div key={slot.val} className={`h-8 border-b border-white/[0.03] ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
+                                                       onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
+                                              ))}
+                                              {schedule.filter((i: any) => i.day === col.day && i.track === track && i.weekOffset === currentWeekOffset).map((item: any) => {
+                                                  const top = (item.startTime - col.start) * 128;
+                                                  const height = (item.duration / 60) * 128;
+                                                  const scene = sceneData.find((s:any) => s.id === item.sceneId);
+                                                  return (
+                                                      <div key={item.id} className="absolute left-1 right-1 rounded border-l-4 p-2 shadow-lg bg-zinc-700 border-zinc-500 text-white text-xs overflow-hidden z-20 group"
+                                                           style={{ top: `${top}px`, height: `${height}px` }}>
+                                                           <div className="font-bold truncate">{scene?.name}</div>
+                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 flex gap-1 bg-black/40 rounded">
+                                                               <button onClick={() => updateDuration(item.id, -15)} className="p-0.5 hover:bg-white/20"><Minus size={10}/></button>
+                                                               <button onClick={() => updateDuration(item.id, 15)} className="p-0.5 hover:bg-white/20"><Plus size={10}/></button>
+                                                           </div>
+                                                      </div>
+                                                  )
+                                              })}
+                                         </div>
+                                     ))}
+                                 </div>
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+             </div>
+         </main>
     </div>
   );
 }
 
-// --- SUB-COMPONENT: DAY COLUMN ---
-function DayColumn({ day, startHour, endHour, schedule, weekOffset, onDrop, onDurationChange, onStatusToggle, draggedSceneId, sceneData }: any) {
-    
-    // Generate Time Slots (15 min increments)
-    const slots: { h: any; m: number; val: any; }[] = [];
-    for (let h = startHour; h < endHour; h++) {
-        [0, 15, 30, 45].forEach(m => slots.push({ h, m, val: h + m/60 }));
-    }
+// ============================================================================
+// 2. BURN-UP VIEW (The New "Type A" Feature)
+// ============================================================================
+function BurnUpView({ sceneData }: any) {
+    // --- STATE ---
+    const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
+        const initial: any = {};
+        sceneData.forEach((s: any) => {
+             initial[s.id] = { music: 0, dance: 0, block: 0 };
+        });
+        return initial;
+    });
+
+    // 🆕 REALITY CHECK STATE
+    const [blackoutWeeks, setBlackoutWeeks] = useState(0); 
+    const [simulatedExtra, setSimulatedExtra] = useState(0); 
+
+    const toggle = (id: string, type: 'music' | 'dance' | 'block') => {
+        setProgress(prev => ({
+            ...prev,
+            [id]: { ...prev[id], [type]: (prev[id][type] + 1) % 3 }
+        }));
+    };
+
+    const getStatusColor = (val: number) => {
+        if (val === 2) return 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]';
+        if (val === 1) return 'bg-amber-500 border-amber-400 text-black';
+        return 'bg-zinc-800 border-zinc-700 text-zinc-600 hover:bg-zinc-700';
+    };
+
+    const getStatusLabel = (val: number) => val === 2 ? 'Done' : val === 1 ? 'Work' : 'New';
+
+    // --- 🧮 THE CALCULATOR ---
+    const stats = useMemo(() => {
+        let totalUnits = 0;
+        let completedUnits = 0;
+        let totalPoints = 0; // For summary card
+
+        sceneData.forEach((s: any) => {
+            const type = (s.type || "").toLowerCase();
+            const p = progress[s.id];
+
+            const needsMusic = type.includes('song') || type.includes('mixed');
+            const needsDance = type.includes('dance') || type.includes('mixed');
+            const needsBlock = true; 
+
+            if (needsMusic) { totalUnits++; totalPoints++; if (p.music === 2) completedUnits++; }
+            if (needsDance) { totalUnits++; totalPoints++; if (p.dance === 2) completedUnits++; }
+            if (needsBlock) { totalUnits++; totalPoints++; if (p.block === 2) completedUnits++; }
+        });
+
+        // 1. Current Velocity (Real world speed)
+        const velocity = CURRENT_WEEK > 0 ? (completedUnits / CURRENT_WEEK) : 0;
+        
+        // 2. Apply Simulation ("If we did X extra today...")
+        const simulatedCompleted = completedUnits + simulatedExtra;
+        
+        // 3. Projection Math
+        const remaining = totalUnits - simulatedCompleted;
+        const weeksLeftNeeded = velocity > 0 ? remaining / velocity : 99;
+        
+        // 4. Apply Blackouts ("...but we lose 1 week to vacation")
+        const projectedEndWeek = CURRENT_WEEK + weeksLeftNeeded + blackoutWeeks;
+        
+        // 5. The "Relax Factor"
+        const bufferWeeks = TARGET_WEEK - projectedEndWeek;
+        
+        const isSafe = bufferWeeks >= 0;
+        const isDanger = bufferWeeks < -1; 
+
+        return { 
+            totalUnits, 
+            totalPoints,
+            completedUnits, 
+            percent: totalUnits > 0 ? Math.round((simulatedCompleted / totalUnits) * 100) : 0, 
+            velocity, 
+            projectedEndWeek, 
+            isSafe, 
+            isDanger,
+            bufferWeeks
+        };
+    }, [sceneData, progress, blackoutWeeks, simulatedExtra]);
 
     return (
-        <div className="flex-1 flex flex-col bg-zinc-900 border border-white/10 rounded-xl overflow-hidden shadow-lg">
-            <div className="p-3 bg-zinc-800 border-b border-white/10 text-center font-black uppercase text-zinc-400">
-                {day === 'Fri' ? 'Friday Rehearsal' : 'Saturday Rehearsal'}
-            </div>
-            
-            <div className="flex-1 relative overflow-y-auto custom-scrollbar flex">
+        <div className="h-full overflow-y-auto custom-scrollbar p-8 bg-zinc-950">
+            <div className="max-w-6xl mx-auto space-y-8">
                 
-                {/* Time Labels */}
-                <div className="w-12 bg-zinc-950/50 border-r border-white/5 flex flex-col text-[10px] text-zinc-600 font-mono text-right py-2">
-                    {slots.filter(s => s.m === 0).map(s => (
-                        <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">
-                            {s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}
+                {/* 1. PACE DASHBOARD */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    {/* MAIN PROJECTION CARD */}
+                    <div className={`col-span-2 rounded-3xl p-8 border relative overflow-hidden flex flex-col justify-between transition-colors duration-500 ${stats.isSafe ? 'bg-emerald-950/10 border-emerald-500/20' : 'bg-red-950/10 border-red-500/20'}`}>
+                         
+                         {/* Header */}
+                         <div className="relative z-10 flex justify-between items-start">
+                             <div>
+                                 <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                     <Target size={18} className={stats.isSafe ? "text-emerald-500" : "text-red-500"}/> 
+                                     Pace Projection
+                                 </h2>
+                                 <div className="mt-2 text-5xl font-black text-white">
+                                     {stats.percent}% <span className="text-xl text-zinc-600">Show Ready</span>
+                                 </div>
+                             </div>
+                             
+                             <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border flex items-center gap-2 ${stats.isSafe ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                {stats.isSafe ? <Coffee size={14}/> : <AlertTriangle size={14}/>}
+                                {stats.isSafe ? "You can Relax" : "Push Harder"}
+                             </div>
+                         </div>
+
+                         {/* VISUAL TIMELINE */}
+                         <div className="relative z-10 mt-8">
+                             <div className="flex justify-between text-[10px] font-black uppercase text-zinc-500 mb-2">
+                                 <span>Start</span>
+                                 <span className="text-white">Week {CURRENT_WEEK} (Now)</span>
+                                 <span className={stats.isSafe ? "text-emerald-400" : "text-red-400"}>Est. Finish: Wk {stats.projectedEndWeek.toFixed(1)}</span>
+                                 <span>Week {TOTAL_WEEKS}</span>
+                             </div>
+                             
+                             <div className="h-4 bg-black/40 rounded-full w-full overflow-hidden relative border border-white/5">
+                                 <div className="absolute left-0 top-0 bottom-0 bg-emerald-500/10 border-r border-emerald-500/30" style={{ width: `${(TARGET_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
+                                 <div className="absolute left-0 top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${(CURRENT_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
+                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} 
+                                      style={{ left: `${Math.min((stats.projectedEndWeek / TOTAL_WEEKS) * 100, 100)}%` }} />
+                             </div>
+
+                             <p className="text-xs text-zinc-400 text-center mt-3 bg-black/20 py-2 rounded-lg border border-white/5">
+                                {stats.isSafe 
+                                    ? `✅ You are ${stats.bufferWeeks.toFixed(1)} weeks ahead of schedule. Taking a break won't hurt.`
+                                    : `⚠️ You are ${Math.abs(stats.bufferWeeks).toFixed(1)} weeks behind target. You need to clear ${(Math.abs(stats.bufferWeeks) * stats.velocity).toFixed(0)} extra items to catch up.`
+                                }
+                             </p>
+                         </div>
+                    </div>
+
+                    {/* REALITY CHECK SIMULATOR */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col justify-center gap-6">
+                        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-white/5 pb-2">
+                            Reality Check Simulator
                         </div>
-                    ))}
+                        
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
+                                    <Umbrella size={14} className="text-blue-400"/> Vacations / Breaks
+                                </span>
+                                <span className="text-xl font-black text-white">{blackoutWeeks} <span className="text-[10px] text-zinc-600">WKS</span></span>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setBlackoutWeeks(Math.max(0, blackoutWeeks - 0.5))} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Minus size={14}/></button>
+                                <button onClick={() => setBlackoutWeeks(blackoutWeeks + 0.5)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Plus size={14}/></button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">
+                                    <TrendingUp size={14} className="text-emerald-400"/> If we finish...
+                                </span>
+                                <span className="text-xl font-black text-emerald-400">+{simulatedExtra} <span className="text-[10px] text-zinc-600">ITEMS</span></span>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setSimulatedExtra(Math.max(0, simulatedExtra - 1))} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Minus size={14}/></button>
+                                <button onClick={() => setSimulatedExtra(simulatedExtra + 1)} className="flex-1 bg-emerald-900/30 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white py-2 rounded text-emerald-400 transition-all font-bold">
+                                    +1 More Today
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Tracks Container */}
-                <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative min-h-[800px]">
-                    {['Acting', 'Music', 'Dance'].map((track, i) => (
-                        <div key={track} className="relative group/track">
-                             <div className="absolute top-0 left-0 right-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/80 z-10">{track}</div>
-                             
-                             {/* Render Slots (Targets) */}
-                             {slots.map((slot) => (
-                                 <div 
-                                    key={slot.val} 
-                                    className={`h-8 border-b border-white/[0.03] transition-colors ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
-                                    onDragOver={(e) => e.preventDefault()}
-                                    onDrop={(e) => onDrop(e, day, slot.h, slot.m, track)}
-                                 />
-                             ))}
+                {/* 2. THE CHECKLIST */}
+                <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden shadow-xl">
+                    <div className="p-6 border-b border-white/5 bg-zinc-900/80 backdrop-blur-xl flex justify-between items-center sticky top-0 z-20">
+                        <h3 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
+                            <LayoutGrid size={18} className="text-purple-500"/> Scene Breakdown
+                        </h3>
+                        <div className="flex gap-4 text-[10px] font-bold uppercase text-zinc-500">
+                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-zinc-800"/> New</div>
+                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"/> Work</div>
+                             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Done</div>
+                        </div>
+                    </div>
 
-                             {/* Render Blocks */}
-                             {schedule
-                                .filter((item: ScheduledItem) => item.day === day && item.track === track && item.weekOffset === weekOffset)
-                                .map((item: ScheduledItem) => {
-                                    // Calculate Position
-                                    const top = (item.startTime - startHour) * 128; // 32px per 15 min * 4 = 128px per hour
-                                    const height = (item.duration / 60) * 128;
-                                    const scene = sceneData.find((s:any) => s.id === item.sceneId);
-
-                                    // Color Logic
-                                    let colorClass = "bg-zinc-700 border-zinc-500"; // Default (New)
-                                    if (item.status === 'Worked') colorClass = "bg-blue-600 border-blue-400 shadow-blue-900/20";
-                                    if (item.status === 'Polished') colorClass = "bg-emerald-600 border-emerald-400 shadow-emerald-900/20";
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-zinc-950 text-zinc-500 text-[10px] font-black uppercase tracking-widest border-b border-white/5">
+                                <tr>
+                                    <th className="px-6 py-4 w-16 text-center">#</th>
+                                    <th className="px-6 py-4">Scene Name</th>
+                                    <th className="px-6 py-4 w-32 text-center">Music</th>
+                                    <th className="px-6 py-4 w-32 text-center">Dance</th>
+                                    <th className="px-6 py-4 w-32 text-center">Blocking</th>
+                                    <th className="px-6 py-4 w-24 text-center">Ready?</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 text-sm">
+                                {sceneData.map((s: any, i: number) => {
+                                    const type = (s.type || "").toLowerCase();
+                                    const needsMusic = type.includes('song') || type.includes('mixed');
+                                    const needsDance = type.includes('dance') || type.includes('mixed');
+                                    
+                                    const p = progress[s.id] || { music:0, dance:0, block:0 };
+                                    const isReady = (!needsMusic || p.music===2) && (!needsDance || p.dance===2) && p.block===2;
 
                                     return (
-                                        <div 
-                                            key={item.id}
-                                            onContextMenu={(e) => { e.preventDefault(); onStatusToggle(item.id); }}
-                                            className={`absolute left-1 right-1 rounded border-l-4 p-2 shadow-lg text-white text-xs overflow-hidden flex flex-col justify-between group/block transition-all z-20 ${colorClass}`}
-                                            style={{ top: `${top}px`, height: `${height}px` }}
-                                        >
-                                            <div className="font-bold leading-tight drop-shadow-md truncate">{scene?.name || 'Unknown'}</div>
+                                        <tr key={s.id} className="hover:bg-white/5 transition-colors group">
+                                            <td className="px-6 py-4 text-center font-mono text-zinc-600">{i+1}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-zinc-300">{s.name}</div>
+                                                <div className="text-[10px] text-zinc-600 uppercase font-black tracking-wider">{s.type}</div>
+                                            </td>
                                             
-                                            {/* HOVER CONTROLS */}
-                                            <div className="opacity-0 group-hover/block:opacity-100 flex justify-between items-end transition-opacity">
-                                                <div className="flex bg-black/30 rounded">
-                                                    <button onClick={() => onDurationChange(item.id, -15)} className="p-0.5 hover:bg-white/20"><Minus size={10}/></button>
-                                                    <button onClick={() => onDurationChange(item.id, 15)} className="p-0.5 hover:bg-white/20"><Plus size={10}/></button>
-                                                </div>
-                                                <div className="text-[9px] font-mono bg-black/30 px-1 rounded">
-                                                    {item.duration}m
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                             })}
-                        </div>
-                    ))}
+                                            <td className="px-6 py-4">
+                                                {needsMusic ? (
+                                                    <button onClick={() => toggle(s.id, 'music')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.music)}`}>
+                                                        {getStatusLabel(p.music)}
+                                                    </button>
+                                                ) : <div className="text-center text-zinc-800">-</div>}
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                {needsDance ? (
+                                                    <button onClick={() => toggle(s.id, 'dance')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.dance)}`}>
+                                                        {getStatusLabel(p.dance)}
+                                                    </button>
+                                                ) : <div className="text-center text-zinc-800">-</div>}
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                <button onClick={() => toggle(s.id, 'block')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.block)}`}>
+                                                    {getStatusLabel(p.block)}
+                                                </button>
+                                            </td>
+
+                                            <td className="px-6 py-4 text-center">
+                                                {isReady ? <CheckCircle2 size={20} className="mx-auto text-emerald-500 animate-in zoom-in"/> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mx-auto"/>}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
-    )
+    );
 }
