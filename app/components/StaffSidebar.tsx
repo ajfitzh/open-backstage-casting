@@ -8,7 +8,8 @@ import {
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
-  Home // <--- Import Home Icon
+  Home, // <--- Import Home Icon
+  Theater
 } from 'lucide-react';
 
 export default function StaffSidebar() {
@@ -50,6 +51,7 @@ export default function StaffSidebar() {
                 Creative Team
             </div>
             <div className="space-y-1">
+              <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
                 <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
                 
                 {/* Collapsible Casting Suite */}
