@@ -7,8 +7,7 @@ import {
   Users, Calendar, UserSquare2, 
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
-  Mic2, Megaphone, LayoutGrid, GraduationCap,
-  ClipboardCheck, DollarSign
+  Mic2, Megaphone, LayoutGrid, GraduationCap
 } from 'lucide-react';
 
 export default function StaffSidebar() {
@@ -34,9 +33,7 @@ export default function StaffSidebar() {
 
       <div className="flex-1 overflow-y-auto px-4 space-y-8 custom-scrollbar">
         
-        {/* --- ZONE 1: CREATIVE & STAGE --- 
-            Target: Directors, Choreographers, MDs, Stage Managers
-        */}
+        {/* --- ZONE 1: CREATIVE TEAM --- */}
         <div>
             <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Creative Team
@@ -68,24 +65,19 @@ export default function StaffSidebar() {
             </div>
         </div>
 
-        {/* --- ZONE 2: LOGISTICS & PEOPLE --- 
-            Target: Jenny (Prod Coord), Stage Manager
-        */}
+        {/* --- ZONE 2: LOGISTICS & OPS --- */}
         <div>
             <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Logistics & Ops
             </div>
             <div className="space-y-1">
-                {/* Roster is the "Source of Truth" for Jenny */}
                 <NavItem href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
                 <NavItem href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
                 <NavItem href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
             </div>
         </div>
 
-        {/* --- ZONE 3: BUSINESS & FINANCE --- 
-            Target: Krista (Finance), Executive Director
-        */}
+        {/* --- ZONE 3: BUSINESS OFFICE --- */}
         <div>
             <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Business Office
@@ -95,9 +87,7 @@ export default function StaffSidebar() {
             </div>
         </div>
 
-        {/* --- ZONE 4: EDUCATION --- 
-            Target: Education Director
-        */}
+        {/* --- ZONE 4: ACADEMY --- */}
         <div>
             <div className="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Academy

@@ -3,9 +3,11 @@ import { getActiveProduction, getShowById, getAssignments } from '@/app/lib/base
 import Link from 'next/link';
 import { 
   Users, Calendar, BarChart3, ClipboardCheck, Ticket, 
-  ChevronRight, Star, Sparkles, Fish, Cat, Dog, Music, 
+  ChevronRight, Sparkles, Fish, Cat, Dog, Music, 
   Theater, Book, Newspaper, Waves, Gavel, Snowflake, 
-  Crown, Trees, Bird, Coffee, Bell, Stars, Utensils, Paintbrush, Timer
+  Crown, Trees, Coffee, Bell, Stars, Paintbrush, Timer,
+  Sun, CloudRain, Building2, Anchor, Heart,
+  Baby, Bird, ScrollText
 } from 'lucide-react';
 
 export default async function DashboardPage() {
@@ -27,41 +29,61 @@ export default async function DashboardPage() {
   const getShowTheme = (title: string) => {
     const t = title.toLowerCase();
     
-    // Theme Definitions
-    if (t.includes('mermaid') || t.includes('fish')) 
-        return { icon: <Fish size={220} />, color: 'text-cyan-500', bg: 'from-cyan-900/30 to-blue-900/20', accent: 'text-cyan-400' };
-    if (t.includes('lion') || t.includes('jungle') || t.includes('shrek') || t.includes('woods')) 
-        return { icon: <Trees size={220} />, color: 'text-emerald-500', bg: 'from-emerald-900/30 to-zinc-900', accent: 'text-emerald-400' };
-    if (t.includes('dalmatians') || t.includes('annie') || t.includes('charlie brown')) 
-        return { icon: <Dog size={220} />, color: 'text-zinc-400', bg: 'from-zinc-800/30 to-zinc-900', accent: 'text-zinc-400' };
-    if (t.includes('newsies') || t.includes('newspaper')) 
-        return { icon: <Newspaper size={220} />, color: 'text-zinc-500', bg: 'from-zinc-800/40 to-zinc-900', accent: 'text-zinc-400' };
-    if (t.includes('angry men') || t.includes('gavel')) 
-        return { icon: <Gavel size={220} />, color: 'text-amber-700', bg: 'from-amber-900/30 to-zinc-900', accent: 'text-amber-600' };
-    if (t.includes('christmas') || t.includes('carol') || t.includes('frozen') || t.includes('winter') || t.includes('snow')) 
-        return { icon: <Snowflake size={220} />, color: 'text-blue-200', bg: 'from-blue-900/40 to-zinc-900', accent: 'text-blue-300' };
-    if (t.includes('beauty') || t.includes('cinderella') || t.includes('anastasia') || t.includes('princess')) 
-        return { icon: <Crown size={220} />, color: 'text-yellow-500', bg: 'from-yellow-900/30 to-zinc-900', accent: 'text-yellow-400' };
-    if (t.includes('aladdin') || t.includes('wonka') || t.includes('magic') || t.includes('seussical')) 
-        return { icon: <Sparkles size={220} />, color: 'text-purple-400', bg: 'from-purple-900/30 to-zinc-900', accent: 'text-purple-300' };
-    if (t.includes('matilda') || t.includes('women') || t.includes('book') || t.includes('story')) 
-        return { icon: <Book size={220} />, color: 'text-red-500', bg: 'from-red-900/30 to-zinc-900', accent: 'text-red-400' };
-    if (t.includes('moana') || t.includes('waves')) 
-        return { icon: <Waves size={220} />, color: 'text-blue-500', bg: 'from-blue-900/30 to-cyan-900/20', accent: 'text-blue-400' };
-    if (t.includes('star bucks') || t.includes('coffee')) 
-        return { icon: <Coffee size={220} />, color: 'text-amber-600', bg: 'from-amber-900/30 to-zinc-900', accent: 'text-amber-500' };
-    if (t.includes('hunchback')) 
-        return { icon: <Bell size={220} />, color: 'text-yellow-600', bg: 'from-amber-900/20 to-zinc-900', accent: 'text-yellow-500' };
-    if (t.includes('maine') || t.includes('starry')) 
-        return { icon: <Stars size={220} />, color: 'text-yellow-200', bg: 'from-indigo-950/50 to-zinc-900', accent: 'text-yellow-100' };
-    if (t.includes('tom sawyer')) 
-        return { icon: <Paintbrush size={220} />, color: 'text-orange-500', bg: 'from-orange-900/20 to-zinc-900', accent: 'text-orange-400' };
-    if (t.includes('music') || t.includes('fiddler') || t.includes('high school')) 
-        return { icon: <Music size={220} />, color: 'text-blue-500', bg: 'from-blue-900/20 to-zinc-900', accent: 'text-blue-400' };
-    if (t.includes('alice') || t.includes('wonderland') || t.includes('tuck') || t.includes('freaky')) 
-        return { icon: <Timer size={220} />, color: 'text-zinc-400', bg: 'from-zinc-800/30 to-zinc-900', accent: 'text-zinc-300' };
+    // 1. THE SAVANNAH (Lion King) - Warm Sunset Orange
+    if (t.includes('lion')) 
+        return { icon: <Cat size={220} />, color: 'text-orange-500', bg: 'from-orange-900/40 to-red-900/20', accent: 'text-orange-400' };
 
-    // Fallback
+    // 2. THE JUNGLE (Shrek, Into the Woods, Jungle Book) - Deep Green
+    if (t.includes('jungle') || t.includes('shrek') || t.includes('woods') || t.includes('tarzan')) 
+        return { icon: <Trees size={220} />, color: 'text-emerald-600', bg: 'from-emerald-900/40 to-green-900/20', accent: 'text-emerald-400' };
+
+    // 3. THE OCEAN (Mermaid, Moana, Big Fish) - Cyan/Teal
+    if (t.includes('mermaid') || t.includes('fish') || t.includes('moana') || t.includes('waves')) 
+        return { icon: <Waves size={220} />, color: 'text-cyan-500', bg: 'from-cyan-900/30 to-blue-900/20', accent: 'text-cyan-400' };
+
+    // 4. WINTER & HOLIDAY (Frozen, Elf, Christmas) - Ice Blue
+    if (t.includes('christmas') || t.includes('carol') || t.includes('frozen') || t.includes('winter') || t.includes('snow') || t.includes('elf')) 
+        return { icon: <Snowflake size={220} />, color: 'text-sky-300', bg: 'from-sky-900/40 to-blue-900/30', accent: 'text-sky-200' };
+
+    // 5. ROYALTY & FAIRYTALE (Cinderella, Beauty, Anastasia, Princess, Aladdin) - Royal Purple/Gold
+    if (t.includes('beauty') || t.includes('cinderella') || t.includes('anastasia') || t.includes('princess') || t.includes('aladdin') || t.includes('royal')) 
+        return { icon: <Crown size={220} />, color: 'text-purple-400', bg: 'from-purple-900/40 to-fuchsia-900/20', accent: 'text-amber-400' };
+
+    // 6. WHIMSICAL & CANDY (Wonka, Seussical, Matilda, Alice) - Pink/Magenta
+    if (t.includes('wonka') || t.includes('seussical') || t.includes('matilda') || t.includes('alice') || t.includes('wonderland') || t.includes('freaky')) 
+        return { icon: <Sparkles size={220} />, color: 'text-pink-500', bg: 'from-pink-900/30 to-rose-900/20', accent: 'text-pink-400' };
+
+    // 7. URBAN & INDUSTRIAL (Newsies, Annie, Oliver, 12 Angry Men, Guys and Dolls) - Grayscale/Zinc
+    if (t.includes('newsies') || t.includes('newspaper') || t.includes('annie') || t.includes('oliver') || t.includes('angry') || t.includes('guys') || t.includes('take it with you')) 
+        return { icon: <Newspaper size={220} />, color: 'text-zinc-400', bg: 'from-zinc-800/40 to-zinc-900', accent: 'text-zinc-200' };
+
+    // 8. AMERICANA & RUSTIC (Oklahoma, Tom Sawyer, Music Man, Fiddler, Tuck, Charlotte) - Amber/Brown
+    if (t.includes('oklahoma') || t.includes('sawyer') || t.includes('music man') || t.includes('fiddler') || t.includes('tuck') || t.includes('charlotte') || t.includes('green gables') || t.includes('little women')) 
+        return { icon: <Sun size={220} />, color: 'text-amber-600', bg: 'from-amber-900/30 to-orange-900/20', accent: 'text-amber-500' };
+
+    // 9. ANIMALS/PETS (Dalmatians, Charlie Brown, Honk, Doolittle) - Spotted/Playful
+    if (t.includes('dalmatians') || t.includes('charlie brown') || t.includes('honk') || t.includes('doolittle') || t.includes('peach')) 
+        return { icon: <Dog size={220} />, color: 'text-stone-300', bg: 'from-stone-800/40 to-red-900/10', accent: 'text-red-400' };
+
+    // 10. NIGHT & DREAMS (Starry Night, Almost Maine, Joseph) - Indigo/Deep Blue
+    if (t.includes('starry') || t.includes('maine') || t.includes('joseph') || t.includes('dream')) 
+        return { icon: <Stars size={220} />, color: 'text-indigo-400', bg: 'from-indigo-900/50 to-blue-950', accent: 'text-yellow-200' };
+
+    // 11. EMERALD CITY (Wizard of Oz) - Bright Green (Distinct from Jungle)
+    if (t.includes('wizard') || t.includes('oz') || t.includes('wicked')) 
+        return { icon: <Building2 size={220} />, color: 'text-green-500', bg: 'from-green-900/40 to-emerald-900/20', accent: 'text-green-400' };
+
+    // 12. HIGH SCHOOL / TEEN (High School Musical, Footloose, Bye Bye Birdie) - Red/School Colors
+    if (t.includes('high school') || t.includes('footloose') || t.includes('birdie')) 
+        return { icon: <Music size={220} />, color: 'text-red-600', bg: 'from-red-900/30 to-white/5', accent: 'text-red-500' };
+
+    // 13. SPECIALTY (Rain, Gavel, Coffee, etc)
+    if (t.includes('rain')) return { icon: <CloudRain size={220} />, color: 'text-blue-400', bg: 'from-blue-900/30 to-slate-900', accent: 'text-yellow-400' };
+    if (t.includes('gavel') || t.includes('legal')) return { icon: <Gavel size={220} />, color: 'text-stone-500', bg: 'from-stone-800 to-black', accent: 'text-stone-300' };
+    if (t.includes('bucks') || t.includes('coffee')) return { icon: <Coffee size={220} />, color: 'text-amber-700', bg: 'from-amber-950 to-black', accent: 'text-green-500' };
+    if (t.includes('hunchback')) return { icon: <Bell size={220} />, color: 'text-violet-900', bg: 'from-violet-950 to-black', accent: 'text-amber-500' };
+
+    // Fallback: Generic Theater
     return { icon: <Theater size={220} />, color: 'text-blue-500', bg: 'from-zinc-900 to-zinc-900', accent: 'text-blue-500' };
   };
 
