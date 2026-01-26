@@ -23,7 +23,7 @@ export default async function ReportsPage() {
       if (defaultShow) productionTitle = defaultShow.Title;
   }
 
-  // 2. Fetch Data
+  // Fetch Data
   const [assignments, people, compliance] = await Promise.all([
       getAssignments(activeId),
       getPeople(),
