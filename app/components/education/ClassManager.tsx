@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  Users, ChevronRight, Search, ArrowLeft, 
+  Users, Search, ArrowLeft, 
   Building2, Waves, Compass, Anchor, Navigation, 
-  Archive, Filter, X, AlertTriangle, Map, CalendarDays,
-  Church, Layout
+  Archive, Filter, X, AlertTriangle, CalendarDays,
+  Map as MapIcon, LayoutGrid
 } from 'lucide-react';
 
 // --- MOCK CONFIG ---
@@ -19,25 +19,26 @@ const AGE_GROUPS = ["5-8", "8-12", "13-18"];
 const DAYS = ["Monday", "Tuesday", "Thursday"];
 
 // --- 🗺️ VENUE MAP DATA ---
-// NOTE: These keys must match your baserow "Location" strings exactly
+// Updated col/row logic for a Horizontal Top-Bar Layout
 const VENUE_LAYOUTS: Record<string, any[]> = {
     "River of Life": [
-        { id: "main", name: "Sanctuary", capacity: 400, col: "col-span-2", row: "row-span-2" },
-        { id: "lobby", name: "Lobby / Check-In", capacity: 50, col: "col-span-2", row: "row-span-1" },
-        { id: "101", name: "Room 101", capacity: 20, col: "col-span-1", row: "row-span-1" },
-        { id: "102", name: "Room 102", capacity: 20, col: "col-span-1", row: "row-span-1" },
-        { id: "hall", name: "Fellowship Hall", capacity: 100, col: "col-span-2", row: "row-span-1" },
+        { id: "main", name: "Sanctuary", capacity: 400, type: "large", col: "col-span-2 md:col-span-1" },
+        { id: "lobby", name: "Lobby / Check-In", capacity: 50, type: "common", col: "col-span-2 md:col-span-1" },
+        { id: "101", name: "Room 101", capacity: 20, type: "small", col: "col-span-1" },
+        { id: "102", name: "Room 102", capacity: 20, type: "small", col: "col-span-1" },
+        { id: "hall", name: "Fellowship Hall", capacity: 100, type: "medium", col: "col-span-2 md:col-span-1" },
     ],
     "Hope Presbyterian Church": [
-        { id: "gym", name: "Gymnasium", capacity: 200, col: "col-span-2", row: "row-span-2" },
-        { id: "204", name: "Classroom 204", capacity: 15, col: "col-span-1", row: "row-span-1" },
-        { id: "205", name: "Classroom 205", capacity: 15, col: "col-span-1", row: "row-span-1" },
+        { id: "gym", name: "Gymnasium", capacity: 200, type: "large", col: "col-span-2 md:col-span-2" },
+        { id: "204", name: "Classroom 204", capacity: 15, type: "small", col: "col-span-1" },
+        { id: "205", name: "Classroom 205", capacity: 15, type: "small", col: "col-span-1" },
     ]
 };
 
-export default function ClassManager({ classes, people }: any) {
+export default function ClassManager({ classes }: any) {
   const [viewState, setViewState] = useState<'locations' | 'classes'>('locations');
   const [selectedLocation, setSelectedLocation] = useState<string>("");
+  const [selectedClass, setSelectedClass] = useState<any>(null); // Kept for future attendance logic
   
   // Filters
   const [currentSession, setCurrentSession] = useState(SESSIONS[0]); 
@@ -47,7 +48,6 @@ export default function ClassManager({ classes, people }: any) {
 
   // Map Interaction
   const [hoveredClassId, setHoveredClassId] = useState<number | null>(null);
-  const [showMobileMap, setShowMobileMap] = useState(false); // New Mobile Toggle
 
   // --- THEME ENGINE ---
   const getLocationTheme = (name: string) => {
@@ -63,7 +63,6 @@ export default function ClassManager({ classes, people }: any) {
   const getRoomForClass = (classId: number, location: string) => {
       const rooms = VENUE_LAYOUTS[location];
       if (!rooms || rooms.length === 0) return null;
-      // Deterministic pseudo-random assignment based on ID
       const index = classId % rooms.length;
       return rooms[index];
   };
@@ -161,7 +160,7 @@ export default function ClassManager({ classes, people }: any) {
                                 <div className="relative z-10">
                                     <h3 className="text-xl font-black text-white mb-1 tracking-tight truncate">{loc.name}</h3>
                                     <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300">
-                                        <span className="flex items-center gap-1.5"><Map size={12}/> View Map</span>
+                                        <span className="flex items-center gap-1.5"><MapIcon size={12}/> View Map</span>
                                         <span className="w-1 h-1 rounded-full bg-zinc-700"/>
                                         <span className="flex items-center gap-1.5"><Users size={12}/> {loc.students} Students</span>
                                     </div>
@@ -173,152 +172,112 @@ export default function ClassManager({ classes, people }: any) {
             </div>
         )}
 
-        {/* VIEW 2: CLASS LIST & VENUE MAP */}
+        {/* VIEW 2: CLASS LIST & HEADS-UP MAP */}
         {viewState === 'classes' && (
              <div className="flex flex-col h-full animate-in slide-in-from-right duration-500">
-                <div className="p-8 pb-4 shrink-0 bg-zinc-950 z-20">
-                    <button onClick={() => setViewState('locations')} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-6 text-[10px] font-black uppercase tracking-[0.2em]">
-                        <ArrowLeft size={14}/> Back to Hub
-                    </button>
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div>
-                            <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">{selectedLocation}</h1>
-                            <div className="flex gap-2 mt-2">
-                                <span className="px-2 py-1 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{currentSession.label}</span>
-                                {filterDay && <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] font-bold uppercase rounded border border-blue-500/20">{filterDay}s Only</span>}
+                <div className="p-6 shrink-0 bg-zinc-900/50 border-b border-white/5 z-20 backdrop-blur-xl">
+                    <div className="flex justify-between items-start mb-4">
+                        <button onClick={() => setViewState('locations')} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-[0.2em]">
+                            <ArrowLeft size={14}/> Back to Hub
+                        </button>
+                        <div className="flex gap-2">
+                            <span className="px-2 py-1 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{currentSession.label}</span>
+                            {filterDay && <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-[10px] font-bold uppercase rounded border border-blue-500/20">{filterDay}s Only</span>}
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col lg:flex-row gap-6">
+                        <div className="lg:w-1/3">
+                            <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white mb-4">{selectedLocation}</h1>
+                            <div className="relative w-full">
+                                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/>
+                                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Filter classes..." className="w-full bg-black/40 border border-white/5 rounded-xl pl-12 pr-4 py-2 text-sm focus:border-white/20 outline-none transition-all placeholder:text-zinc-700"/>
                             </div>
                         </div>
-                        <div className="flex gap-2 w-full md:w-auto">
-                            <div className="relative w-full md:w-80">
-                                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600"/>
-                                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search classes..." className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-white/20 outline-none transition-all placeholder:text-zinc-700"/>
+
+                        {/* --- 🗺️ HEADS-UP VENUE MAP --- */}
+                        <div className="flex-1 bg-black/20 rounded-xl border border-white/5 p-4 overflow-x-auto">
+                            <div className="flex items-center gap-2 mb-3 text-[10px] font-bold uppercase text-zinc-500 tracking-widest">
+                                <LayoutGrid size={12} className="text-blue-500"/> Facility Map
                             </div>
-                            {/* MOBILE MAP TOGGLE */}
-                            <button onClick={() => setShowMobileMap(!showMobileMap)} className="lg:hidden bg-zinc-800 p-3 rounded-2xl border border-white/5 text-zinc-400 hover:text-white">
-                                <Layout size={20} />
-                            </button>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 min-w-[500px]">
+                                {(VENUE_LAYOUTS[selectedLocation] || []).map((room) => {
+                                    const classesInRoom = visibleClasses.filter((c:any) => getRoomForClass(c.id, selectedLocation)?.id === room.id);
+                                    const totalStudents = classesInRoom.reduce((acc: number, c:any) => acc + c.enrolled, 0);
+                                    const isHighlighted = hoveredClassId && getRoomForClass(hoveredClassId, selectedLocation)?.id === room.id;
+                                    const isFull = totalStudents >= room.capacity;
+                                    
+                                    return (
+                                        <div key={room.id} className={`
+                                            p-3 rounded-lg border transition-all duration-300 relative overflow-hidden group
+                                            ${room.col} 
+                                            ${isHighlighted ? 'bg-blue-600 border-blue-400 scale-105 shadow-xl z-10' : 'bg-zinc-800/50 border-white/5 hover:border-white/10'}
+                                            ${isFull && !isHighlighted ? 'border-red-500/30 bg-red-900/10' : ''}
+                                        `}>
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className={`text-[10px] font-black uppercase tracking-tight leading-none ${isHighlighted ? 'text-white' : 'text-zinc-400'}`}>{room.name}</span>
+                                                {isFull && <AlertTriangle size={10} className="text-red-500"/>}
+                                            </div>
+                                            
+                                            <div className="flex items-end justify-between">
+                                                <div className="flex flex-col">
+                                                    <span className={`text-lg font-black leading-none ${isHighlighted ? 'text-white' : 'text-zinc-300'}`}>{totalStudents}</span>
+                                                    <span className={`text-[8px] font-bold uppercase ${isHighlighted ? 'text-blue-200' : 'text-zinc-600'}`}>Capacity {room.capacity}</span>
+                                                </div>
+                                                {/* Mini Bar */}
+                                                <div className="w-1.5 h-6 bg-black/40 rounded-full overflow-hidden flex flex-col justify-end">
+                                                    <div className={`w-full ${isFull ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ height: `${Math.min((totalStudents / room.capacity) * 100, 100)}%` }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                                {(VENUE_LAYOUTS[selectedLocation] || []).length === 0 && <div className="text-xs text-zinc-500 italic col-span-full py-4 text-center">No map data.</div>}
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 flex overflow-hidden relative">
-                    {/* LEFT: LIST */}
-                    <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-4 custom-scrollbar">
-                        {visibleClasses.length === 0 && (
-                            <div className="p-12 text-center text-zinc-500 border border-dashed border-white/10 rounded-3xl">No classes found.</div>
-                        )}
-                        {visibleClasses.map((c: any) => {
-                            const room = getRoomForClass(c.id, selectedLocation);
-                            const isOverCapacity = room && c.enrolled > room.capacity;
+                <div className="flex-1 overflow-y-auto px-6 pb-8 space-y-3 custom-scrollbar pt-4">
+                    {visibleClasses.length === 0 && (
+                        <div className="p-12 text-center text-zinc-500 border border-dashed border-white/10 rounded-3xl">No classes found.</div>
+                    )}
+                    {visibleClasses.map((c: any) => {
+                        const room = getRoomForClass(c.id, selectedLocation);
+                        const isOverCapacity = room && c.enrolled > room.capacity;
 
-                            return (
-                                <div key={c.id} 
-                                    onMouseEnter={() => setHoveredClassId(c.id)}
-                                    onMouseLeave={() => setHoveredClassId(null)}
-                                    className={`w-full bg-zinc-900 border p-6 rounded-3xl flex justify-between items-center group transition-all text-left relative overflow-hidden cursor-default
-                                        ${hoveredClassId === c.id ? 'border-blue-500/50 bg-zinc-800' : 'border-white/5 hover:bg-zinc-800'}
-                                    `}
-                                >
-                                    {/* Room Assignment Indicator */}
-                                    <div className="absolute right-0 top-0 bg-zinc-800 text-[9px] font-mono text-zinc-500 px-2 py-1 rounded-bl-xl border-l border-b border-white/5">
-                                        {room ? room.name : "Unassigned"}
+                        return (
+                            <button key={c.id} 
+                                onClick={() => { setSelectedClass(c); /* Add attendance logic here if needed */ }}
+                                onMouseEnter={() => setHoveredClassId(c.id)}
+                                onMouseLeave={() => setHoveredClassId(null)}
+                                className={`w-full bg-zinc-900 border p-4 rounded-2xl flex justify-between items-center group transition-all text-left relative overflow-hidden cursor-default
+                                    ${hoveredClassId === c.id ? 'border-blue-500/50 bg-zinc-800' : 'border-white/5 hover:bg-zinc-800'}
+                                `}
+                            >
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 bg-black/20 px-2 py-0.5 rounded">{c.day} • {c.time}</span>
+                                        {/* Room Badge */}
+                                        <span className={`text-[10px] font-mono border px-1.5 py-0.5 rounded flex items-center gap-1 ${isOverCapacity ? 'text-red-400 border-red-500/30 bg-red-900/10' : 'text-zinc-400 border-white/10 bg-zinc-950'}`}>
+                                            <MapIcon size={10}/> {room ? room.name : "Unassigned"}
+                                        </span>
                                     </div>
-
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-1">
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 bg-black/20 px-2 py-0.5 rounded">{c.day} • {c.time}</span>
-                                            {isOverCapacity && <span className="text-[9px] font-bold uppercase text-red-500 border border-red-500/20 px-1.5 rounded bg-red-500/10 flex items-center gap-1"><AlertTriangle size={10}/> Room Overflow</span>}
-                                        </div>
-                                        <div className="font-black text-white text-xl group-hover:text-blue-400 transition-colors">{c.name}</div>
-                                        <div className="text-[11px] font-bold text-zinc-500 uppercase mt-1 flex items-center gap-2">
-                                            <span className="text-zinc-400">{c.teacher}</span>
-                                            <span className="w-1 h-1 rounded-full bg-zinc-700"/>
-                                            <span>Ages {c.ages}</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right pl-4">
-                                        <div className={`text-3xl font-black ${isOverCapacity ? 'text-red-500' : 'text-white'}`}>{c.enrolled}</div>
-                                        <div className="text-[9px] uppercase font-black text-zinc-700">Students</div>
+                                    <div className="font-black text-white text-lg group-hover:text-blue-400 transition-colors">{c.name}</div>
+                                    <div className="text-[10px] font-bold text-zinc-500 uppercase mt-0.5 flex items-center gap-2">
+                                        <span className="text-zinc-400">{c.teacher}</span>
+                                        <span className="w-1 h-1 rounded-full bg-zinc-700"/>
+                                        <span>Ages {c.ages}</span>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* RIGHT: VENUE MAP (Desktop: lg+, Mobile: Overlay) */}
-                    <div className={`
-                        fixed inset-y-0 right-0 w-[400px] bg-zinc-900 border-l border-white/10 p-6 z-30 transform transition-transform duration-300 shadow-2xl
-                        ${showMobileMap ? 'translate-x-0' : 'translate-x-full'} 
-                        lg:static lg:translate-x-0 lg:block lg:shadow-none
-                    `}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                                <Building2 size={16} className="text-blue-500"/> Facility Map
-                            </h3>
-                            {/* Mobile Close Button */}
-                            <button onClick={() => setShowMobileMap(false)} className="lg:hidden p-2 bg-zinc-800 rounded-full text-zinc-400">
-                                <X size={16}/>
+                                <div className="text-right pl-4 border-l border-white/5 ml-4">
+                                    <div className={`text-2xl font-black ${isOverCapacity ? 'text-red-500' : 'text-white'}`}>{c.enrolled}</div>
+                                    <div className="text-[8px] uppercase font-black text-zinc-700">Students</div>
+                                </div>
                             </button>
-                            <span className="hidden lg:inline text-[10px] font-bold text-zinc-600 uppercase bg-zinc-950 px-2 py-1 rounded">
-                                {filterDay || "All Days"} View
-                            </span>
-                        </div>
-
-                        {/* GRID LAYOUT */}
-                        <div className="grid grid-cols-2 gap-3 auto-rows-[100px] overflow-y-auto h-[calc(100vh-200px)] custom-scrollbar pb-10">
-                            {(VENUE_LAYOUTS[selectedLocation] || []).map((room) => {
-                                const classesInRoom = visibleClasses.filter((c:any) => getRoomForClass(c.id, selectedLocation)?.id === room.id);
-                                const totalStudents = classesInRoom.reduce((acc: number, c:any) => acc + c.enrolled, 0);
-                                const isHighlighted = hoveredClassId && getRoomForClass(hoveredClassId, selectedLocation)?.id === room.id;
-                                const isFull = totalStudents >= room.capacity;
-                                const isEmpty = classesInRoom.length === 0;
-
-                                return (
-                                    <div key={room.id} 
-                                        className={`rounded-2xl border p-3 flex flex-col justify-between transition-all duration-300
-                                            ${room.col} ${room.row}
-                                            ${isHighlighted 
-                                                ? 'bg-blue-600 border-blue-400 shadow-[0_0_30px_rgba(37,99,235,0.3)] scale-[1.02] z-10' 
-                                                : isEmpty 
-                                                    ? 'bg-zinc-950/50 border-white/5 opacity-60 border-dashed' 
-                                                    : 'bg-zinc-800 border-white/10'
-                                            }
-                                            ${isFull && !isEmpty && !isHighlighted ? 'border-red-500/50 bg-red-900/10' : ''}
-                                        `}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <span className={`text-[10px] font-black uppercase tracking-tighter ${isHighlighted ? 'text-white' : 'text-zinc-500'}`}>{room.name}</span>
-                                            {isFull && <AlertTriangle size={12} className="text-red-500"/>}
-                                        </div>
-
-                                        <div className="space-y-1">
-                                            {classesInRoom.map((c:any) => (
-                                                <div key={c.id} className={`text-[9px] truncate px-1.5 py-0.5 rounded ${isHighlighted ? 'bg-white/20 text-white' : 'bg-black/20 text-zinc-400'}`}>
-                                                    {c.name}
-                                                </div>
-                                            ))}
-                                            {isEmpty && <div className="text-[9px] text-zinc-600 italic">No classes</div>}
-                                        </div>
-
-                                        <div className="flex items-end justify-between mt-2">
-                                            <div className="w-full bg-black/30 h-1.5 rounded-full overflow-hidden flex">
-                                                <div className={`h-full ${isFull ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min((totalStudents / room.capacity) * 100, 100)}%` }} />
-                                            </div>
-                                            <span className={`text-[9px] font-mono ml-2 ${isHighlighted ? 'text-white' : 'text-zinc-500'}`}>
-                                                {totalStudents}/{room.capacity}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            
-                            {(VENUE_LAYOUTS[selectedLocation] || []).length === 0 && (
-                                <div className="col-span-2 text-center py-10 text-zinc-600 text-xs italic">
-                                    No map data available for this venue.
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                        );
+                    })}
                 </div>
             </div>
         )}
