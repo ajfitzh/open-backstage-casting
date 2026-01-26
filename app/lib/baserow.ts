@@ -1,3 +1,5 @@
+// app/lib/baserow.ts
+
 // --- CONFIGURATION ---
 const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
 const HEADERS = {
@@ -11,7 +13,7 @@ export const TABLES: Record<string, string> = {
   PRODUCTIONS: "600",
   ASSIGNMENTS: process.env.NEXT_PUBLIC_BASEROW_TABLE_ASSIGNMENTS || "603",
   ROLES: "605",
-  VOLUNTEERS: "619",
+  VOLUNTEERS: "619", // Ensure this matches your Volunteers/Roles table ID
   COMMITTEE_PREFS: "620",
   EVENTS: "625",
   SCENES: "627",
@@ -156,6 +158,50 @@ export async function getComplianceData(productionId?: number) {
 
 
 // --- SMART READ FUNCTIONS (Now with Server-Side Filtering!) ---
+
+export async function getCreativeTeam(productionId: number) {
+  // 1. Filter Volunteers by Production ID
+  const endpoint = `/api/database/rows/table/${TABLES.VOLUNTEERS}/?size=50&filter__Production__link_row_has=${productionId}`;
+  
+  const data = await fetchBaserow(endpoint);
+  if (!Array.isArray(data)) return [];
+
+  // 2. Get Name Map to resolve Linked Records (Person)
+  // This ensures we get "Austin Fitzhugh" instead of just ID 142
+  const nameMap = await getPersonNameMap(); 
+
+  return data.map((row: any) => {
+    const personId = row.Person?.[0]?.id;
+    // Fallback: If Person link is empty, maybe the name is typed directly? Check your schema.
+    // For now assuming Person link is source of truth.
+    const name = personId ? nameMap.get(personId) || row.Person[0].value : "Unknown Volunteer";
+    
+    // Check your specific column name in Table 619. 
+    // Based on your data dump, it seems to be 'Position' or 'Role'. 
+    // Adjust key below if your column name is strictly "Position" or something else.
+    const roleValue = row["Position"]?.value || row["Role"]?.value || row["Job Title"] || "Volunteer";
+
+    return {
+      id: row.id,
+      name: name,
+      role: roleValue,
+      initials: name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
+      color: getRoleColor(roleValue) // Helper to assign brand colors
+    };
+  });
+}
+
+// Helper: Consistent Brand Colors for Roles
+function getRoleColor(role: string) {
+  const r = (role || "").toLowerCase();
+  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
+  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600';
+  if (r.includes('choreographer')) return 'bg-emerald-600';
+  if (r.includes('stage manager')) return 'bg-amber-500';
+  if (r.includes('assistant')) return 'bg-cyan-600';
+  return 'bg-zinc-600';
+}
+
 export async function getProductionEvents(productionId?: number) {
   let endpoint = `/api/database/rows/table/${TABLES.EVENTS}/?size=200`;
   if (productionId) {
