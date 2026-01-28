@@ -12,6 +12,14 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const router = useRouter();
 
+  // 1. Handle Google Login
+  const handleGoogleLogin = () => {
+      setIsLoading(true);
+      // "google" must match the provider ID in route.ts
+      signIn("google", { callbackUrl: "/" });
+  };
+
+  // 2. Handle Password Login
   const handleCredentialsLogin = async (e: FormEvent) => {
     e.preventDefault(); 
     setIsLoading(true); 
@@ -32,11 +40,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-      setIsLoading(true);
-      signIn("google", { callbackUrl: "/" });
-  };
-
   return (
     <div className="h-screen bg-zinc-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-zinc-900 border border-white/10 p-8 rounded-2xl shadow-2xl text-center space-y-6">
@@ -55,7 +58,8 @@ export default function LoginPage() {
         )}
 
         <div className="space-y-4">
-             {/* GOOGLE SSO BUTTON */}
+            
+            {/* --- NEW: GOOGLE SSO BUTTON --- */}
             <button 
                 onClick={handleGoogleLogin}
                 type="button"
@@ -66,11 +70,13 @@ export default function LoginPage() {
                 Sign in with Google
             </button>
 
-            <div className="relative">
+            {/* Divider */}
+            <div className="relative py-2">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
                 <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-2 text-zinc-500">Or use password</span></div>
             </div>
 
+            {/* Email/Password Form */}
             <form onSubmit={handleCredentialsLogin} className="space-y-3">
                 <input 
                     type="email" 
@@ -79,6 +85,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
+                    required
                 />
                 <input 
                     type="password" 
@@ -87,6 +94,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
+                    required
                 />
                 <button 
                     type="submit" 
