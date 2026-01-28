@@ -87,13 +87,17 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}) 
 // ==============================================================================
 
 export async function getPerformanceAnalytics(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/?size=200&order_by=field_6186`;
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-  
+  const endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/?size=200&order_by=field_6186`;
   const data = await fetchBaserow(endpoint);
-  if (!Array.isArray(data)) return [];
+  
+  if (!Array.isArray(data) || data.length === 0) {
+    console.error("⚠️ No data returned from Baserow or unauthorized.");
+    return [];
+  }
 
   return data.map((row: any) => {
+    // We check for the string name AND the field ID 
+    // Baserow sometimes behaves differently based on the user_field_names toggle
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
     const capacity = parseFloat(row['Total Inventory'] || row.field_6183 || 0);
     const label = row['Performance'] || row.field_6182 || "Show";

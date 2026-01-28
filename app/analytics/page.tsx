@@ -5,7 +5,12 @@ import SalesChart from '@/app/components/charts/SalesChart';
 export default async function AnalyticsPage() {
   // We call this without an ID to get the "Global View" (All shows 2017+)
   const chartData = await getPerformanceAnalytics();
-
+// ADD THIS LINE:
+  if (chartData.length === 0) {
+    console.log("DEBUG: check Table 637 permissions and Vercel Tokens.");
+  } else {
+    console.log("✅ First Row Sample:", JSON.stringify(chartData[0]));
+  }
   // DEBUG: This will show up in your TERMINAL (not browser)
   console.log(`📊 Found ${chartData.length} performances for analytics.`);
 
