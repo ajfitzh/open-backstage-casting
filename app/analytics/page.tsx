@@ -1,6 +1,6 @@
 // app/analytics/page.jsx
-import { getPerformanceAnalytics } from '@/lib/baserow';
-import SalesChart from '@/components/analytics/SalesChart';
+import { getPerformanceAnalytics } from '@/app/lib/baserow';
+import SalesChart from '@/app/components/charts/SalesChart';
 
 export default async function AnalyticsPage() {
   // We call this without an ID to get the "Global View" (All shows 2017+)
