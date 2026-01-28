@@ -1,33 +1,68 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
+import { getServerSession } from "next-auth"; // <--- NEW: Auth Import
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // <--- NEW: Auth Options
 import { 
   Users, Calendar, BarChart3, Ticket, 
-  ChevronRight, Sparkles, Cat, Music, 
-  Theater, Newspaper, Waves, Gavel, Snowflake, 
-  Crown, Trees, Coffee, Bell, Stars, 
-  Sun, CloudRain, Building2, Anchor, 
-  Dog, GraduationCap, Heart, Home,
-  Briefcase, Megaphone, LayoutGrid,
-  TrendingUp, UserPlus
+  ChevronRight, Sparkles, Cat, 
+  Theater, Newspaper, Waves, Snowflake, 
+  Crown, Trees, Megaphone, GraduationCap, Heart, Home,
+  LayoutGrid, TrendingUp, UserPlus, AlertTriangle, Sun
 } from 'lucide-react';
 
 import { getActiveProduction, getShowById, getAssignments, getCreativeTeam, getAuditionees } from '@/app/lib/baserow';
-import { MOCK_CLASSES } from '../lib/educationFillerData';
+// I'm keeping your imports. If these files don't exist yet, simple placeholders will be needed.
+import { MOCK_CLASSES } from '@/app/lib/educationFillerData';
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
+
+// Force dynamic rendering for Vercel
+export const dynamic = 'force-dynamic';
 
 const SEASON_STAFF = [
   { name: "Aimee Mestler", role: "Executive Director", initials: "AM", color: "bg-indigo-600", icon: <Crown size={12}/> },
-  { name: "Krista McKinley", role: "Business Manager", initials: "KM", color: "bg-emerald-600", icon: <Briefcase size={12}/> },
+  { name: "Krista McKinley", role: "Business Manager", initials: "KM", color: "bg-emerald-600", icon: <Users size={12}/> },
   { name: "Jenny Adler", role: "Production Coord", initials: "JA", color: "bg-pink-600", icon: <Megaphone size={12}/> },
   { name: "Elizabeth Davis", role: "Education Coord", initials: "ED", color: "bg-blue-600", icon: <GraduationCap size={12}/> },
 ];
 
 export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value);
+  // 1. GET SESSION (Who is logged in?)
+  const session = await getServerSession(authOptions);
+  const userRole = (session?.user as any)?.role || "Guest";
+  const firstName = session?.user?.name?.split(' ')[0] || "Cast Member";
 
-  const show = activeId ? await getShowById(activeId) : await getActiveProduction();
-  const activeProdId = show?.id || 0;
+  // 2. RESOLVE ACTIVE PRODUCTION (The 404 Fix)
+  const cookieStore = await cookies();
+  const cookieId = Number(cookieStore.get('active_production_id')?.value);
+
+  let show = null;
+  
+  // Try cookie first
+  if (cookieId) {
+    show = await getShowById(cookieId);
+  }
+  
+  // Fallback to "Is Active" checkbox if cookie fails or returns 404
+  if (!show || show.detail === "Not found") { 
+    show = await getActiveProduction();
+  }
+
+  // 3. SAFETY VALVE: If still no show, render Empty State
+  if (!show) {
+    return (
+      <div className="h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-6">
+        <div className="p-6 bg-yellow-500/10 rounded-full border border-yellow-500/20">
+            <AlertTriangle size={64} className="text-yellow-500" />
+        </div>
+        <h1 className="text-3xl font-black uppercase italic">No Active Production</h1>
+        <p className="text-zinc-400 max-w-md">
+          We couldn't find a show marked as "Active" in Baserow. Please ask an administrator to check the Productions table.
+        </p>
+      </div>
+    );
+  }
+
+  const activeProdId = show.id;
 
   // --- PARALLEL FETCH ---
   const [assignments, creativeTeam, auditionees] = await Promise.all([
@@ -43,11 +78,11 @@ export default async function DashboardPage() {
       .map((a: any) => a["Person"][0].id)
   );
   const castCount = uniqueCastIds.size;
-  const academyCount = MOCK_CLASSES.reduce((acc, c) => acc + c.enrolled, 0);
+  const academyCount = MOCK_CLASSES ? MOCK_CLASSES.reduce((acc: number, c: any) => acc + c.enrolled, 0) : 0;
   const totalStudents = castCount + academyCount;
   const familyCount = Math.floor(totalStudents * 0.75); 
 
-  // New Student / Retention Logic (Case Insensitive Check)
+  // New Student / Retention Logic
   const newStudentsCount = auditionees.filter((a: any) => {
       const status = (a["Status"]?.value || a["Tenure"]?.value || "").toLowerCase(); 
       return status.includes("new") || status.includes("first");
@@ -110,8 +145,8 @@ export default async function DashboardPage() {
                 </div>
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
                 
-                {/* DYNAMIC TEAM COMPONENT */}
-                <CreativeTeam team={creativeTeam} />
+                {/* DYNAMIC TEAM COMPONENT - Graceful fallback if component fails or data is empty */}
+                {creativeTeam && <CreativeTeam team={creativeTeam} />}
             </div>
         </div>
       </div>
@@ -127,7 +162,10 @@ export default async function DashboardPage() {
                   <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-1 flex items-center gap-2">
                       <LayoutGrid size={14} className="text-blue-500" /> Season Overview
                   </h2>
-                  <h3 className="text-2xl font-black italic text-white tracking-tight">Ministry & Operations</h3>
+                  <h3 className="text-2xl font-black italic text-white tracking-tight">
+                    {/* PERSONALIZED WELCOME */}
+                    Welcome back, {firstName}
+                  </h3>
               </div>
               
               <div className="flex flex-wrap gap-3">
@@ -217,7 +255,10 @@ export default async function DashboardPage() {
           <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
           <div className="flex gap-2">
             <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.5.0</div>
-            <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">Active Server</div>
+            {/* Show User Role in Footer */}
+            <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">
+                {userRole}
+            </div>
           </div>
       </div>
     </div>
