@@ -8,14 +8,14 @@ import {
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
-  Home, // <--- Import Home Icon
-  Theater
+  Home, 
+  Theater,
+  Banknote // <--- Added for Financials
 } from 'lucide-react';
 
 export default function StaffSidebar() {
   const pathname = usePathname();
   
-  // Auto-expand Casting Suite if we are inside it
   const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
   const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
 
@@ -26,7 +26,6 @@ export default function StaffSidebar() {
   return (
     <nav className="w-64 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0">
       
-      {/* BRAND HEADER - NOW CLICKABLE */}
       <Link href="/" className="h-16 flex items-center px-6 border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group">
         <div className="flex flex-col">
             <h1 className="text-sm font-black tracking-tighter text-blue-500 group-hover:text-blue-400 transition-colors">
@@ -40,12 +39,11 @@ export default function StaffSidebar() {
 
       <div className="flex-1 overflow-y-auto px-4 space-y-8 custom-scrollbar">
         
-        {/* --- ZONE 0: HOME --- */}
         <div className="space-y-1">
              <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={pathname === '/'} />
         </div>
 
-        {/* --- ZONE 1: CREATIVE TEAM --- */}
+        {/* ZONE 1: CREATIVE TEAM */}
         <div>
             <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Creative Team
@@ -54,7 +52,6 @@ export default function StaffSidebar() {
               <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
                 <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
                 
-                {/* Collapsible Casting Suite */}
                 <div>
                     <button 
                         onClick={() => setCastingOpen(!isCastingOpen)}
@@ -78,8 +75,7 @@ export default function StaffSidebar() {
             </div>
         </div>
 
-        {/* ... (Keep Zone 2, 3, 4 exactly as they were) ... */}
-        {/* --- ZONE 2: LOGISTICS & OPS --- */}
+        {/* ZONE 2: LOGISTICS & OPS */}
         <div>
             <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Logistics & Ops
@@ -91,17 +87,19 @@ export default function StaffSidebar() {
             </div>
         </div>
 
-        {/* --- ZONE 3: BUSINESS OFFICE --- */}
+        {/* ZONE 3: BUSINESS OFFICE */}
         <div>
             <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Business Office
             </div>
             <div className="space-y-1">
                 <NavItem href="/reports" icon={<BarChart3 size={18}/>} label="Reports & Fees" active={pathname === '/reports'} />
+                {/* NEW FINANCIALS TAB */}
+                <NavItem href="/analytics" icon={<Banknote size={18}/>} label="Show Analytics" active={pathname === '/analytics'} />
             </div>
         </div>
 
-        {/* --- ZONE 4: ACADEMY --- */}
+        {/* ZONE 4: ACADEMY */}
         <div>
             <div className="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
                 Academy
@@ -113,7 +111,6 @@ export default function StaffSidebar() {
 
       </div>
 
-      {/* FOOTER */}
       <div className="p-4 border-t border-white/5">
         <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={pathname === '/settings'} />
       </div>
@@ -122,7 +119,6 @@ export default function StaffSidebar() {
   );
 }
 
-// ... (Keep SubComponents NavItem and SubNavItem same as before)
 function NavItem({ href, icon, label, active }: any) {
     return (
         <Link 
