@@ -35,47 +35,55 @@ export const TABLES = {
   PERFORMANCES: "637", // The table you just created!
   SALES_HISTORY: "637", //
 };
-// --- 📈 BOX OFFICE & ANALYTICS ---
+// --- 📈 BOX OFFICE & ANALYTICS (Step 1 Refined) ---
 
 /**
- * Fetches performance data and calculates financial/attendance metrics.
- * Designed for use with Recharts on the Analytics page.
+ * Fetches all performance data for the global history view.
+ * If no productionId is passed, it pulls the entire history (2017-Present).
  */
 export async function getPerformanceAnalytics(productionId?: number) {
-  // Fetch up to 100 performances. Order by Date (field_6186)
-  let endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/?size=100&order_by=field_6186`;
+  // Use a large size to ensure we get the full history
+  let endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/?size=200&order_by=field_6186`;
   
-  // Optional: Filter for a specific show if provided
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
+  // Only filter if we specifically want one show. 
+  // For the global dashboard, we leave this undefined.
+  if (productionId) {
+    endpoint += `&filter__Production__link_row_has=${productionId}`;
+  }
   
   const data = await fetchBaserow(endpoint);
-  if (!Array.isArray(data)) return [];
+  
+  if (!Array.isArray(data)) {
+    console.error("❌ Analytics API returned non-array:", data);
+    return [];
+  }
+
+  console.log(`📊 Found ${data.length} historical performances.`);
 
   return data.map((row: any) => {
+    // Mapping Baserow IDs to clean chart keys
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
     const capacity = parseFloat(row['Total Inventory'] || row.field_6183 || 0);
     
-    // We use the "Performance" formula field (field_6182) as the label
+    // Baserow formulas sometimes need a fallback to the raw field ID
     const label = row['Performance'] || row.field_6182 || "Unknown Date";
 
     return {
       name: label,
       sold: sold,
       capacity: capacity,
-      empty: capacity - sold,
-      // Calculate fill rate percentage for the line chart
+      empty: Math.max(0, capacity - sold),
       fillRate: capacity > 0 ? Math.round((sold / capacity) * 100) : 0,
-      // You can add revenue logic here if you store ticket prices!
     };
   });
 }
 
 /**
- * Gets high-level stats (Total sold across all shows, average fill rate, etc.)
+ * High-level financial summary for the top of the page
  */
 export async function getGlobalSalesSummary() {
   const data = await getPerformanceAnalytics();
-  if (data.length === 0) return { totalSold: 0, avgFill: 0 };
+  if (data.length === 0) return { totalSold: 0, avgFill: 0, showCount: 0 };
 
   const totalSold = data.reduce((sum, p) => sum + p.sold, 0);
   const avgFill = Math.round(data.reduce((sum, p) => sum + p.fillRate, 0) / data.length);
@@ -83,7 +91,7 @@ export async function getGlobalSalesSummary() {
   return {
     totalSold,
     avgFill,
-    performanceCount: data.length
+    showCount: data.length
   };
 }
 // --- 🛡️ CENTRAL FETCH HELPER ---

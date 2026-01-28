@@ -1,20 +1,37 @@
 // app/analytics/page.jsx
-import { getPerformanceAnalytics } from '@/app/lib/baserow';
-import SalesChart from '@/app/components/charts/SalesChart';
+import { getPerformanceAnalytics } from '@/lib/baserow';
+import SalesChart from '@/components/analytics/SalesChart';
 
 export default async function AnalyticsPage() {
-  // Next.js fetches this ON THE SERVER. Your API key is safe.
+  // We call this without an ID to get the "Global View" (All shows 2017+)
   const chartData = await getPerformanceAnalytics();
+
+  // DEBUG: This will show up in your TERMINAL (not browser)
+  console.log(`📊 Found ${chartData.length} performances for analytics.`);
 
   return (
     <div className="p-8 bg-zinc-950 min-h-screen text-white">
-      <h1 className="text-4xl font-black text-blue-500 mb-8">FINANCIALS</h1>
-      
-      {/* You would create SalesChart as a Client Component ('use client') 
-         so it can use Recharts, but it receives the data perfectly cleaned 
-         from the server!
-      */}
-      <SalesChart data={chartData} />
+      <header className="mb-10">
+        <h1 className="text-4xl font-black tracking-tight text-blue-500">
+          SHOW <span className="text-white">FINANCIALS</span>
+        </h1>
+        <p className="text-zinc-500 text-sm mt-2">
+          {chartData.length > 0 
+            ? `Analyzing ${chartData.length} performances from 2017 to Present` 
+            : "No performance data found in Table 637."}
+        </p>
+      </header>
+
+      <div className="space-y-8">
+        {chartData.length > 0 ? (
+          <SalesChart data={chartData} />
+        ) : (
+          <div className="p-20 border border-dashed border-zinc-800 rounded-3xl text-center">
+             <p className="text-zinc-500">The performances table is empty or the API connection failed.</p>
+             <p className="text-xs text-zinc-700 mt-2">Check your Vercel Environment Variables for Token/URL.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
