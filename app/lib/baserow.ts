@@ -62,73 +62,67 @@ export interface BaserowUser {
 // 🔐 AUTHENTICATION LOGIC (New Addition)
 // ==============================================================================
 
-/**
- * Verifies a user based on Email and Digital ID.
- * Checks both Personal and National email fields.
- */
+// app/lib/baserow.ts
+
+// ... imports and config remain the same ...
+
+// ==============================================================================
+// 🔐 AUTHENTICATION LOGIC (FIXED)
+// ==============================================================================
+
 export async function verifyUserCredentials(
   email: string,
   digitalId: string
 ): Promise<BaserowUser | null> {
   try {
-    // 1. Construct Filter: Search for email in both fields
-    // We use "filter_type": "OR" to check both email columns
-    const filters = {
-      filter_type: "OR",
-      filters: [
-        {
-          field: AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL,
-          type: "equal",
-          value: email,
-        },
-        {
-          field: AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL,
-          type: "equal",
-          value: email,
-        },
-      ],
+    // 1. Construct Params using Baserow's specific query syntax
+    // Format: filter__field_{ID}__equal = value
+    const params = {
+      user_field_names: false, // Keep false so we get keys like 'field_5735'
+      filter_type: "OR",       // Check BOTH columns
+      size: 10,
+      // Dynamic keys for the filters:
+      [`filter__${AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
+      [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
     };
 
     // 2. Query Baserow
-    // Using axios here directly for granular control over the filter param
     const response = await axios.get(
       `${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/`,
       {
         headers: HEADERS,
-        params: {
-          user_field_names: false, // Use IDs for safety
-          filters: JSON.stringify(filters),
-          size: 10, // Fetch a few just in case of duplicates
-        },
+        params: params,
       }
     );
 
     const results = response.data.results;
 
+    // DEBUGGING: See what Baserow actually found
+    console.log(`Login Attempt for ${email}: Found ${results?.length || 0} matches.`);
+
     if (!results || results.length === 0) {
-      console.log(`Auth Failed: No user found with email ${email}`);
       return null;
     }
 
     // 3. Verify Digital ID (Password)
-    // Find the specific record that matches the provided Digital ID
+    // String() conversion fixes the "41" vs 41 bug
     const userRecord = results.find(
-      (row: any) => row[AUTH_FIELDS.DIGITAL_ID] === digitalId
+      (row: any) => String(row[AUTH_FIELDS.DIGITAL_ID]) === String(digitalId)
     );
 
     if (!userRecord) {
-      console.log(`Auth Failed: Email found, but Digital ID mismatch`);
+      console.log(`Password Mismatch for user ${userRecord.id}`);
       return null;
     }
 
-    // 4. Parse Headshot (Baserow returns an array of files)
+    // 4. Parse Headshot
     const headshotArray = userRecord[AUTH_FIELDS.HEADSHOT];
     const headshotUrl =
       Array.isArray(headshotArray) && headshotArray.length > 0
         ? headshotArray[0].url
         : null;
 
-    // 5. Parse Role/Status (Baserow returns an object for single select)
+    // 5. Parse Role
     const statusObj = userRecord[AUTH_FIELDS.STATUS];
     const role = statusObj?.value || "Guest";
 
@@ -141,12 +135,14 @@ export async function verifyUserCredentials(
       role: role,
       cytId: userRecord[AUTH_FIELDS.CYT_NATIONAL_USER_ID] || "",
     };
-  } catch (error) {
-    console.error("Baserow Auth Error:", error);
+  } catch (error: any) {
+    // Better error logging to see exactly what Baserow didn't like
+    console.error("Baserow Auth Error:", error.response?.data || error.message);
     return null;
   }
 }
 
+// ... rest of the file (analytics, getters) remains the same ...
 
 // ==============================================================================
 // 📈 BOX OFFICE & ANALYTICS (Existing)
