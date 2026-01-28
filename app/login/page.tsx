@@ -1,25 +1,40 @@
 "use client";
+
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, Loader2 } from 'lucide-react';
+import { signIn } from 'next-auth/react';
+import { Lock, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // New: Visual feedback
+  const [email, setEmail] = useState('');
+  const [digitalId, setDigitalId] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
 
-const handleLogin = async (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault(); 
-    if (!password) return; 
+    if (!email || !digitalId) return; 
 
     setIsLoading(true); 
+    setError('');
 
-    // 1. Set the cookie
-    document.cookie = `cyt_auth=${password}; path=/; max-age=86400;`; 
-    
-    // 2. THE NUCLEAR OPTION
-    // Instead of router.push('/'), use this:
-    window.location.href = '/'; 
+    // 1. Call NextAuth
+    const result = await signIn('credentials', {
+      email: email,
+      digitalId: digitalId,
+      redirect: false, // We handle the redirect manually for a smoother UX
+    });
+
+    if (result?.error) {
+      setError("Invalid Email or Digital ID");
+      setIsLoading(false);
+    } else {
+      // 2. Success! 
+      // We refresh the router so Server Components re-fetch the new Session
+      router.refresh(); 
+      router.push('/'); 
+    }
   };
 
   return (
@@ -30,23 +45,43 @@ const handleLogin = async (e: FormEvent) => {
             <Lock size={32} className="text-blue-500" />
         </div>
         
-        <h1 className="text-2xl font-black uppercase italic text-white tracking-tight">Staff Access</h1>
+        <h1 className="text-2xl font-black uppercase italic text-white tracking-tight">Casting Portal</h1>
         
-        {/* NEW: Wrapping in a form makes 'Enter' key work automatically */}
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-4">
+            {/* Email Input */}
             <input 
-                type="passcode" 
-                autoComplete="one-time-code"
-                placeholder="Enter Access Code..." 
+                type="email" 
+                placeholder="Email Address" 
+                className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none text-lg tracking-wide placeholder:text-zinc-600 transition-all"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                required
+            />
+
+            {/* Digital ID (Password) Input */}
+            <input 
+                type="password" 
+                autoComplete="current-password"
+                placeholder="Digital ID" 
                 className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none text-lg tracking-widest placeholder:text-zinc-600 transition-all"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading} // Prevent double-clicks
+                value={digitalId}
+                onChange={(e) => setDigitalId(e.target.value)}
+                disabled={isLoading}
+                required
             />
             
             <button 
                 type="submit" 
-                disabled={isLoading || !password}
+                disabled={isLoading || !email || !digitalId}
                 className="w-full bg-white text-black font-black uppercase py-4 rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
                 {isLoading ? (

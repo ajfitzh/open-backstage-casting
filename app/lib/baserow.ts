@@ -1,9 +1,10 @@
 // app/lib/baserow.ts
+import axios from "axios";
 
 // --- CONFIGURATION ---
 const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
 const HEADERS = {
-  "Authorization": `Token ${process.env.NEXT_PUBLIC_BASEROW_TOKEN}`,
+  "Authorization": `Token ${process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN}`,
   "Content-Type": "application/json",
 };
 
@@ -33,9 +34,123 @@ export const TABLES = {
   AUDITIONS: "630",
   ASSETS: "631",
   PERFORMANCES: "637", // The table you just created!
-  SALES_HISTORY: "637", //
+  SALES_HISTORY: "637", 
 };
-// --- 📈 BOX OFFICE & ANALYTICS ---
+
+// --- AUTHENTICATION TYPES & FIELDS ---
+// These specific IDs are critical for the verifyUserCredentials function
+const AUTH_FIELDS = {
+  FULL_NAME: "field_5735",
+  HEADSHOT: "field_5776",
+  STATUS: "field_5782",
+  DIGITAL_ID: "field_6102",
+  CYT_NATIONAL_USER_ID: "field_6128",
+  CYT_NATIONAL_INDIVIDUAL_EMAIL: "field_6131",
+  CYT_ACCOUNT_PERSONAL_EMAIL: "field_6132",
+};
+
+export interface BaserowUser {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  role: string;
+  cytId: string;
+}
+
+// ==============================================================================
+// 🔐 AUTHENTICATION LOGIC (New Addition)
+// ==============================================================================
+
+/**
+ * Verifies a user based on Email and Digital ID.
+ * Checks both Personal and National email fields.
+ */
+export async function verifyUserCredentials(
+  email: string,
+  digitalId: string
+): Promise<BaserowUser | null> {
+  try {
+    // 1. Construct Filter: Search for email in both fields
+    // We use "filter_type": "OR" to check both email columns
+    const filters = {
+      filter_type: "OR",
+      filters: [
+        {
+          field: AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL,
+          type: "equal",
+          value: email,
+        },
+        {
+          field: AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL,
+          type: "equal",
+          value: email,
+        },
+      ],
+    };
+
+    // 2. Query Baserow
+    // Using axios here directly for granular control over the filter param
+    const response = await axios.get(
+      `${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/`,
+      {
+        headers: HEADERS,
+        params: {
+          user_field_names: false, // Use IDs for safety
+          filters: JSON.stringify(filters),
+          size: 10, // Fetch a few just in case of duplicates
+        },
+      }
+    );
+
+    const results = response.data.results;
+
+    if (!results || results.length === 0) {
+      console.log(`Auth Failed: No user found with email ${email}`);
+      return null;
+    }
+
+    // 3. Verify Digital ID (Password)
+    // Find the specific record that matches the provided Digital ID
+    const userRecord = results.find(
+      (row: any) => row[AUTH_FIELDS.DIGITAL_ID] === digitalId
+    );
+
+    if (!userRecord) {
+      console.log(`Auth Failed: Email found, but Digital ID mismatch`);
+      return null;
+    }
+
+    // 4. Parse Headshot (Baserow returns an array of files)
+    const headshotArray = userRecord[AUTH_FIELDS.HEADSHOT];
+    const headshotUrl =
+      Array.isArray(headshotArray) && headshotArray.length > 0
+        ? headshotArray[0].url
+        : null;
+
+    // 5. Parse Role/Status (Baserow returns an object for single select)
+    const statusObj = userRecord[AUTH_FIELDS.STATUS];
+    const role = statusObj?.value || "Guest";
+
+    // 6. Return formatted user
+    return {
+      id: userRecord.id.toString(),
+      name: userRecord[AUTH_FIELDS.FULL_NAME] || "Unknown Name",
+      email: email,
+      image: headshotUrl,
+      role: role,
+      cytId: userRecord[AUTH_FIELDS.CYT_NATIONAL_USER_ID] || "",
+    };
+  } catch (error) {
+    console.error("Baserow Auth Error:", error);
+    return null;
+  }
+}
+
+
+// ==============================================================================
+// 📈 BOX OFFICE & ANALYTICS (Existing)
+// ==============================================================================
 
 /**
  * Fetches performance data and calculates financial/attendance metrics.
@@ -83,6 +198,7 @@ export async function getGlobalSalesSummary() {
     performanceCount: data.length
   };
 }
+
 // --- 🛡️ CENTRAL FETCH HELPER ---
 export async function fetchBaserow(endpoint: string, options: RequestInit = {}) {
   const separator = endpoint.includes('?') ? '&' : '?';
