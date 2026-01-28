@@ -1,6 +1,6 @@
 // app/analytics/page.jsx
-import { getPerformanceAnalytics } from '@/lib/baserow';
-import SalesChart from '@/components/analytics/SalesChart';
+import { getPerformanceAnalytics } from '@/app/lib/baserow';
+import SalesChart from '@/components/charts/SalesChart';
 
 export default async function AnalyticsPage() {
   // Next.js fetches this ON THE SERVER. Your API key is safe.
