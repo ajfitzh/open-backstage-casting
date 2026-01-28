@@ -1,67 +1,69 @@
-// app/api/auth/[...nextauth]/route.ts
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { verifyUserCredentials } from "@/app/lib/baserow";
+import GoogleProvider from "next-auth/providers/google";
+import { verifyUserCredentials, findUserByEmail } from "@/app/lib/baserow";
 
-// Define authentication configuration
 export const authOptions: NextAuthOptions = {
   providers: [
+    // 1. Google One-Click
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    }),
+    // 2. Custom Password
     CredentialsProvider({
       name: "Casting Portal",
       credentials: {
-        email: { label: "Email", type: "email", placeholder: "actor@example.com" },
-        digitalId: { label: "Digital ID", type: "password" }
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.digitalId) {
-          return null;
-        }
-
-        // Call the logic we added to lib/baserow.ts
-        const user = await verifyUserCredentials(credentials.email, credentials.digitalId);
-
-        if (user) {
-          // Any object returned will be saved in the `user` property of the JWT
-          return user;
-        } else {
-          // Returning null indicates an error
-          return null;
-        }
+        if (!credentials?.email || !credentials?.password) return null;
+        return await verifyUserCredentials(credentials.email, credentials.password);
       }
     })
   ],
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  pages: {
-    signIn: '/login', // We will build this custom page next
-  },
   callbacks: {
-    // 1. JWT Callback: Called whenever a token is created or updated
-    async jwt({ token, user }) {
-      // If user is defined, this is the initial login
+    // SECURITY GATE: Called when Google tries to sign in
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        // Check if this Google Email actually exists in our Baserow Roster
+        const baserowUser = await findUserByEmail(user.email || "");
+        if (baserowUser) {
+            // Attach the Baserow ID to the user object so we can use it later
+            user.id = baserowUser.id;
+            (user as any).role = baserowUser.role;
+            return true; // Allow access
+        }
+        return false; // Deny access (Not in roster)
+      }
+      return true; // Allow credentials login (already verified in authorize)
+    },
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;   // Cast needed because default User type is limited
-        token.cytId = (user as any).cytId;
+        token.role = (user as any).role;
+        // If they logged in via Google, fetch their role fresh from Baserow if needed
+        if (account?.provider === "google" && !token.role) {
+             const baserowUser = await findUserByEmail(user.email || "");
+             if (baserowUser) token.role = baserowUser.role;
+        }
       }
       return token;
     },
-    // 2. Session Callback: Called whenever the client checks user session
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
-        (session.user as any).cytId = token.cytId;
       }
       return session;
     }
   },
-  secret: process.env.NEXTAUTH_SECRET, 
-  debug: process.env.NODE_ENV === 'development',
+  pages: {
+    signIn: '/login',
+  },
+  secret: process.env.NEXTAUTH_SECRET,
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };

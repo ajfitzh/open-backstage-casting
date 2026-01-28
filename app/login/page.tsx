@@ -3,38 +3,38 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { Lock, Loader2, AlertCircle } from 'lucide-react';
+import { Lock, Loader2, AlertCircle, Chrome } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
-  const [digitalId, setDigitalId] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  const handleLogin = async (e: FormEvent) => {
+  const handleCredentialsLogin = async (e: FormEvent) => {
     e.preventDefault(); 
-    if (!email || !digitalId) return; 
-
     setIsLoading(true); 
     setError('');
 
-    // 1. Call NextAuth
     const result = await signIn('credentials', {
-      email: email,
-      digitalId: digitalId,
-      redirect: false, // We handle the redirect manually for a smoother UX
+      email,
+      password,
+      redirect: false,
     });
 
     if (result?.error) {
-      setError("Invalid Email or Digital ID");
+      setError("Invalid credentials.");
       setIsLoading(false);
     } else {
-      // 2. Success! 
-      // We refresh the router so Server Components re-fetch the new Session
       router.refresh(); 
       router.push('/'); 
     }
+  };
+
+  const handleGoogleLogin = () => {
+      setIsLoading(true);
+      signIn("google", { callbackUrl: "/" });
   };
 
   return (
@@ -47,7 +47,6 @@ export default function LoginPage() {
         
         <h1 className="text-2xl font-black uppercase italic text-white tracking-tight">Casting Portal</h1>
         
-        {/* Error Message */}
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
             <AlertCircle size={16} />
@@ -55,46 +54,49 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-            {/* Email Input */}
-            <input 
-                type="email" 
-                placeholder="Email Address" 
-                className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none text-lg tracking-wide placeholder:text-zinc-600 transition-all"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                required
-            />
-
-            {/* Digital ID (Password) Input */}
-            <input 
-                type="password" 
-                autoComplete="current-password"
-                placeholder="Digital ID" 
-                className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none text-lg tracking-widest placeholder:text-zinc-600 transition-all"
-                value={digitalId}
-                onChange={(e) => setDigitalId(e.target.value)}
-                disabled={isLoading}
-                required
-            />
-            
+        <div className="space-y-4">
+             {/* GOOGLE SSO BUTTON */}
             <button 
-                type="submit" 
-                disabled={isLoading || !email || !digitalId}
-                className="w-full bg-white text-black font-black uppercase py-4 rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                onClick={handleGoogleLogin}
+                type="button"
+                disabled={isLoading}
+                className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3"
             >
-                {isLoading ? (
-                    <>
-                        <Loader2 className="animate-spin" size={20} />
-                        Verifying...
-                    </>
-                ) : (
-                    "Enter Deck"
-                )}
+                <Chrome size={20} className="text-blue-600" />
+                Sign in with Google
             </button>
-        </form>
 
+            <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-2 text-zinc-500">Or use password</span></div>
+            </div>
+
+            <form onSubmit={handleCredentialsLogin} className="space-y-3">
+                <input 
+                    type="email" 
+                    placeholder="Email Address" 
+                    className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none transition-all"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                />
+                <input 
+                    type="password" 
+                    placeholder="App Password" 
+                    className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white text-center focus:border-blue-500 outline-none transition-all"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                />
+                <button 
+                    type="submit" 
+                    disabled={isLoading || !email || !password}
+                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : "Enter Deck"}
+                </button>
+            </form>
+        </div>
       </div>
     </div>
   );
