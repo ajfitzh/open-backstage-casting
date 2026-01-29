@@ -8,7 +8,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // 1. Google One-Click
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.AUTH_SECRET,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
     // 2. Custom Password
     Credentials({
