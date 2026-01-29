@@ -1,39 +1,36 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { redirect } from "next/navigation";
-import { getActiveShows, getFamilyMembers } from "@/app/lib/baserow"; // Import the new function
-import SettingsClient from "@/app/components/settings/SettingsClient";
+// app/lib/baserow.ts
 
-export default async function SettingsPage() {
-  const session = await getServerSession(authOptions);
+function safeGet(field: any, fallback: string = "Unknown"): string {
+  if (field === undefined || field === null || field === "") return fallback;
+  if (typeof field === 'string') return field.trim() || fallback;
+  if (Array.isArray(field) && field.length > 0) return field[0].value || field[0].name || fallback;
+  if (typeof field === 'object') return field.value || field.name || fallback;
+  return fallback;
+}
 
-  if (!session) {
-    redirect("/api/auth/signin");
-  }
-
-  // Fetch shows and family data in parallel
-  const [shows, familyData] = await Promise.all([
-    getActiveShows(),
-    getFamilyMembers(session.user?.email)
-  ]);
-
-  // If we found data, use it. Otherwise, fallback to a guest user state.
-  // (The fallback is useful if a user signs up but hasn't been added to Baserow yet)
-  const userPayload = familyData || {
-    name: session.user?.name || "Guest User",
-    email: session.user?.email || "",
-    phone: "",
-    role: "Guest",
-    id: "0",
-    address: "",
-    familyMembers: []
-  };
-
-  return (
-    <SettingsClient 
-      shows={shows} 
-      activeId={142} // In the future, grab this from cookies()
-      initialUser={userPayload} 
-    />
+export async function getAllShows() {
+  const data = await fetchBaserow(
+    `/database/rows/table/${TABLES.PRODUCTIONS}/`, 
+    {}, 
+    { size: "200" } 
   );
+  
+  if (!Array.isArray(data)) return [];
+  
+  // Sort by ID newest first
+  const sortedData = data.sort((a: any, b: any) => b.id - a.id);
+
+  return sortedData.map((row: any) => {
+    // We try THREE different fields for the title to be safe
+    const rawTitle = row.Title || row["Full Title"] || row["Show Title"] || "";
+    
+    return {
+      id: row.id,
+      title: safeGet(rawTitle, "Untitled Show"),
+      location: safeGet(row.Location || row.Venue || row.Branch),
+      type: safeGet(row.Type, "Main Stage"),
+      season: safeGet(row.Season, "Unknown Season"),
+      isActive: row["Is Active"] === true || row["Is Active"]?.value === "true" || row.Status === "Active"
+    };
+  });
 }
