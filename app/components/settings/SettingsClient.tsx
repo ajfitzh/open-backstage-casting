@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
 
-// Types for RBAC
+// --- Types ---
 type PermissionScope = 'global' | 'production_specific';
 type PermissionLevel = 'read' | 'write' | 'admin';
 
@@ -22,25 +22,36 @@ interface Permission {
   granted: boolean;
 }
 
-export default function SettingsClient({ shows, activeId }: { shows: any[], activeId: number }) {
+// Updated to include the image field from Baserow
+export interface FamilyMember {
+  id: number;
+  name: string;
+  role: string;
+  age: number;
+  image: string | null;
+}
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  id: string;
+  address: string;
+  familyMembers: FamilyMember[];
+}
+
+interface SettingsProps {
+  shows: any[];
+  activeId: number;
+  initialUser: UserProfile;
+}
+
+export default function SettingsClient({ shows, activeId, initialUser }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   
-  // Mock User Data based on CYT model
-  const user = {
-    name: "Austin Fitzhugh",
-    email: "austin@cytfred.org",
-    phone: "540-555-0123",
-    role: "Artistic Director",
-    id: "142",
-    address: "123 Stage Left Ln, Fredericksburg, VA",
-    // Family members data (replicating the "Members" tab from CYT)
-    familyMembers: [
-      { id: 1, name: "Austin Fitzhugh", role: "Adult", age: 34 },
-      { id: 2, name: "Sarah Fitzhugh", role: "Student", age: 14 },
-      { id: 3, name: "Mikey Fitzhugh", role: "Student", age: 11 },
-    ]
-  };
-
+  // Use the real data passed from the server
+  const user = initialUser;
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
 
   return (
@@ -74,7 +85,7 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
         </nav>
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 min-h-[500px] bg-zinc-900/50 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar relative">
+        <div className="flex-1 min-h-[600px] bg-zinc-900/50 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar relative">
             
             {/* --- PROFILE TAB --- */}
             {activeTab === 'profile' && (
@@ -85,14 +96,17 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                             <p className="text-zinc-500 text-sm">Manage your personal contact information.</p>
                         </div>
                         <div className="px-3 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded-full uppercase tracking-wide">
-                            Admin Account
+                            {user.role}
                         </div>
                     </div>
 
                     {/* Avatar Header */}
                     <div className="flex items-center gap-6 pb-8 border-b border-white/5">
-                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-zinc-800 to-black border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl">
-                            <span className="bg-clip-text text-transparent bg-gradient-to-tr from-zinc-200 to-zinc-500">AF</span>
+                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-zinc-800 to-black border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl relative overflow-hidden">
+                             {/* Display Initials - Real photo logic happens in Family Tab usually, but could go here too */}
+                            <span className="bg-clip-text text-transparent bg-gradient-to-tr from-zinc-200 to-zinc-500">
+                                {user.name ? user.name.substring(0,2).toUpperCase() : 'AF'}
+                            </span>
                         </div>
                         <div className="space-y-2">
                             <button className="px-4 py-2 bg-white text-black text-xs font-bold rounded-lg hover:bg-zinc-200 transition-colors">
@@ -105,8 +119,7 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InputGroup label="First Name" value="Austin" icon={<User size={16}/>} />
-                        <InputGroup label="Last Name" value="Fitzhugh" icon={<User size={16}/>} />
+                        <InputGroup label="Full Name" value={user.name} icon={<User size={16}/>} />
                         <InputGroup label="Email Address" value={user.email} icon={<Mail size={16}/>} disabled />
                         <InputGroup label="Phone Number" value={user.phone} icon={<Phone size={16}/>} />
                         <div className="md:col-span-2">
@@ -122,7 +135,7 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                 </div>
             )}
 
-            {/* --- FAMILY MEMBERS TAB (CYT REPLICATION) --- */}
+            {/* --- FAMILY MEMBERS TAB (Real Data) --- */}
             {activeTab === 'family' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex justify-between items-end">
@@ -139,8 +152,17 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                         {user.familyMembers.map((member) => (
                             <div key={member.id} className="group p-4 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all flex items-center justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
-                                        {member.name.charAt(0)}
+                                    {/* Avatar Logic: Show Image if exists, else Initials */}
+                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400 overflow-hidden relative border border-white/5">
+                                        {member.image ? (
+                                            <img 
+                                                src={member.image} 
+                                                alt={member.name} 
+                                                className="w-full h-full object-cover" 
+                                            />
+                                        ) : (
+                                            member.name.charAt(0)
+                                        )}
                                     </div>
                                     <div>
                                         <h3 className="text-white font-bold text-sm">{member.name}</h3>
@@ -168,6 +190,26 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                             <p className="text-xs text-zinc-400">Please ensure medical forms are updated for all students before the first rehearsal.</p>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* --- BILLING & DONATIONS TAB --- */}
+            {activeTab === 'billing' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                     <div className="flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Billing & Donations</h2>
+                            <p className="text-zinc-500 text-sm">Manage payment methods and recurring donations.</p>
+                        </div>
+                    </div>
+                     <div className="p-12 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-zinc-700 transition-colors">
+                        <CreditCard size={48} className="text-zinc-700 mb-4 group-hover:text-zinc-600 transition-colors" />
+                        <h3 className="text-zinc-400 font-bold mb-2">No Payment Methods on File</h3>
+                        <p className="text-zinc-500 text-xs max-w-sm mb-6 leading-relaxed">Add a credit card to easily pay for tuition, tickets, and production fees. All data is securely encrypted.</p>
+                        <button className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-colors border border-white/5">
+                            Add Payment Method
+                        </button>
+                     </div>
                 </div>
             )}
 
@@ -224,7 +266,7 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-white">Current Role: {user.role}</h4>
-                                    <p className="text-xs text-zinc-500">ID: {user.id} • Table: Volunteers (619)</p>
+                                    <p className="text-xs text-zinc-500">Family ID: {user.id} • Table: Families (634)</p>
                                 </div>
                             </div>
                             <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider rounded-full">

@@ -1,26 +1,39 @@
-import { cookies } from 'next/headers';
-import { getActiveShows } from '@/app/lib/baserow';
-import SettingsClient from '@/app/components/settings/SettingsClient';
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { redirect } from "next/navigation";
+import { getActiveShows, getFamilyMembers } from "@/app/lib/baserow"; // Import the new function
+import SettingsClient from "@/app/components/settings/SettingsClient";
 
 export default async function SettingsPage() {
-  // 1. Fetch Real Data
-  const shows = await getActiveShows();
-  
-  // 2. Get User Context
-  const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value || 0);
+  const session = await getServerSession(authOptions);
+
+  if (!session) {
+    redirect("/api/auth/signin");
+  }
+
+  // Fetch shows and family data in parallel
+  const [shows, familyData] = await Promise.all([
+    getActiveShows(),
+    getFamilyMembers(session.user?.email)
+  ]);
+
+  // If we found data, use it. Otherwise, fallback to a guest user state.
+  // (The fallback is useful if a user signs up but hasn't been added to Baserow yet)
+  const userPayload = familyData || {
+    name: session.user?.name || "Guest User",
+    email: session.user?.email || "",
+    phone: "",
+    role: "Guest",
+    id: "0",
+    address: "",
+    familyMembers: []
+  };
 
   return (
-    <div className="h-full p-6 md:p-12 overflow-hidden">
-        <header className="mb-8">
-            <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">System Settings</h1>
-            <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs mt-2">Manage your account & preferences</p>
-        </header>
-        
-        {/* Render the Client UI */}
-        <div className="h-[calc(100vh-200px)]">
-            <SettingsClient shows={shows} activeId={activeId} />
-        </div>
-    </div>
+    <SettingsClient 
+      shows={shows} 
+      activeId={142} // In the future, grab this from cookies()
+      initialUser={userPayload} 
+    />
   );
 }

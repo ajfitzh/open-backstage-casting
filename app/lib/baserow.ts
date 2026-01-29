@@ -422,3 +422,135 @@ export async function createProductionAsset(name: string, url: string, type: str
     method: "POST", body: JSON.stringify({ "Name": name, "Link": url, "Type": type, "Production": [productionId] })
   });
 }
+
+import { notFound } from "next/navigation";
+
+
+
+// Table: FAMILIES (634)
+const TABLE_FAMILIES = 634;
+const FIELD_FAMILY_EMAIL = 'field_6126'; // "Email" from your CSV
+const FIELD_CYT_ID = 'field_6127';       // "CYT National ID"
+
+// Table: PEOPLE (599)
+const TABLE_PEOPLE = 599;
+const FIELD_LINK_TO_FAMILY = 'field_6153'; // The "FAMILIES" link column in People table
+const FIELDS_PEOPLE = {
+  FULL_NAME: 'field_5735',
+  ROLE: 'field_5782',    // "STATUS" (Student/Adult)
+  DOB: 'field_5738',     // Date of Birth
+  HEADSHOT: 'field_5776',
+  PHONE: 'field_5783',
+  ADDRESS: 'field_6133',
+  CITY: 'field_6135',
+  STATE: 'field_6136',
+  ZIP: 'field_6137',
+  EMAIL_PERSONAL: 'field_6132' // Personal email if different from family
+};
+
+// --- TYPES ---
+export interface FamilyData {
+  id: string; 
+  cytId: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  role: string; // <--- ADD THIS LINE
+  familyMembers: Person[];
+}
+
+export interface Person {
+  id: number;
+  name: string;
+  role: string;
+  age: number;
+  image: string | null;
+}
+
+// --- MAIN FETCHER ---
+export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
+  if (!userEmail) return null;
+
+  try {
+    // STEP 1: Find the Family Record by Email
+    // We query the FAMILIES table (634) looking for the row where Email == userEmail
+    const familyQuery = new URLSearchParams({
+      user_field_names: 'true',
+      [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail
+    });
+
+    const familyRes = await fetch(`${BASEROW_API_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`, {
+      headers: HEADERS,
+      next: { revalidate: 0 } // Always fetch fresh data for settings
+    });
+
+    if (!familyRes.ok) throw new Error("Failed to fetch family");
+    
+    const familyData = await familyRes.json();
+    const familyRow = familyData.results[0];
+
+    if (!familyRow) return null; // Email not found in database
+
+    // STEP 2: Find all People linked to this Family
+    // We query the PEOPLE table (599) where the "FAMILIES" link field contains our familyRow.id
+    const peopleQuery = new URLSearchParams({
+      user_field_names: 'true',
+      [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id.toString()
+    });
+
+    const peopleRes = await fetch(`${BASEROW_API_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`, {
+      headers: HEADERS,
+      next: { revalidate: 0 }
+    });
+
+    const peopleData = await peopleRes.json();
+    const peopleRows = peopleData.results || [];
+
+    // STEP 3: Identify Head of Household (for address/phone display)
+    // We look for the first "Adult" in the family list, or default to the first record
+    const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
+
+    // STEP 4: Return formatted data
+    return {
+      id: familyRow.id.toString(),
+      cytId: familyRow[FIELD_CYT_ID] || "",
+      name: headOfHouse ? headOfHouse[FIELDS_PEOPLE.FULL_NAME] : "Family Account",
+      email: userEmail,
+      phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "",
+      address: headOfHouse ? `${headOfHouse[FIELDS_PEOPLE.ADDRESS] || ''}, ${headOfHouse[FIELDS_PEOPLE.CITY] || ''}` : "",
+      
+      // We explicitly set the role here to satisfy the UserProfile interface
+      role: "Family Administrator", 
+      
+      familyMembers: peopleRows.map((p: any) => {
+        // Calculate Age
+        const dob = p[FIELDS_PEOPLE.DOB] ? new Date(p[FIELDS_PEOPLE.DOB]) : null;
+        let age = 0;
+        if (dob) {
+           const ageDifMs = Date.now() - dob.getTime();
+           const ageDate = new Date(ageDifMs);
+           age = Math.abs(ageDate.getUTCFullYear() - 1970);
+        }
+
+        // Get Image URL
+        const headshotArray = p[FIELDS_PEOPLE.HEADSHOT];
+        const imageUrl = (Array.isArray(headshotArray) && headshotArray.length > 0) 
+          ? headshotArray[0].url 
+          : null;
+
+        return {
+          id: p.id,
+          name: p[FIELDS_PEOPLE.FULL_NAME],
+          role: p[FIELDS_PEOPLE.ROLE]?.value || "Student", // .value handles Single Select fields
+          age: age,
+          image: imageUrl
+        };
+      })
+    };
+
+  } catch (error) {
+    console.error("Baserow Fetch Error:", error);
+    return null;
+  }
+}
