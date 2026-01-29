@@ -113,8 +113,8 @@ export default function PrivacyPolicy() {
             </p>
             <div className="flex items-center gap-3 text-zinc-300 bg-zinc-900 w-fit px-4 py-3 rounded-xl border border-white/5">
               <Mail size={18} className="text-emerald-500" />
-              <a href="mailto:austin@cytfred.org" className="hover:text-white transition-colors">
-                austin@cytfred.org
+              <a href="mailto:database@cytfred.org" className="hover:text-white transition-colors">
+                database@cytfred.org
               </a>
             </div>
           </section>

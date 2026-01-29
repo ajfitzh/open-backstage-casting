@@ -124,8 +124,8 @@ export default function TermsOfService() {
             <h2 className="text-xl font-bold text-white mb-4">8. Contact Us</h2>
             <p className="text-zinc-400">
               If you have any questions about these Terms, please contact us at: 
-              <a href="mailto:austin@cytfred.org" className="text-emerald-500 hover:text-emerald-400 ml-1 font-bold transition-colors">
-                austin@cytfred.org
+              <a href="mailto:database@cytfred.org" className="text-emerald-500 hover:text-emerald-400 ml-1 font-bold transition-colors">
+                database@cytfred.org
               </a>
             </p>
           </section>
