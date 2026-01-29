@@ -303,15 +303,20 @@ export async function getAllShows() {
   
   const sortedData = data.sort((a: any, b: any) => b.id - a.id);
 
-  return sortedData.map((row: any) => ({
-    id: row.id,
-    // Use brackets for names with spaces, and safeGet for objects/arrays
-    title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
-    location: safeGet(row.Location || row.Venue || row.Branch),
-    type: safeGet(row.Type, "Main Stage"),
-    season: safeGet(row.Season, "Unknown Season"),
-    isActive: row["Is Active"] === true || row["Is Active"]?.value === "true"
-  }));
+  return sortedData.map((row: any) => {
+    const rawSeason = safeGet(row.Season, "");
+    const isActive = row["Is Active"] === true || row["Is Active"]?.value === "true" || row.Status === "Active";
+
+    return {
+      id: row.id,
+      title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
+      location: safeGet(row.Location || row.Venue || row.Branch),
+      type: safeGet(row.Type, "Main Stage"),
+      // FORCE A SEASON: If it's active but has no season, group it in 2025-2026
+      season: rawSeason || (isActive ? "2025-2026" : "Archive"),
+      isActive: isActive
+    };
+  });
 }
 
 export async function getActiveShows() {
