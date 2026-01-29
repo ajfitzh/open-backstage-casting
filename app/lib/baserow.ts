@@ -214,7 +214,58 @@ function formatUser(row: any, email: string) {
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
 // app/lib/baserow.ts
+export async function getVenueLogistics() {
+  // 1. Fetch the raw data
+  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, { user_field_names: true });
+  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, { user_field_names: true });
+  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, { user_field_names: true });
+  const classesData = await getClasses(); // Existing fetcher
 
+  if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
+
+  // 2. Map the hierarchy
+  return venuesData.map((venue: any) => {
+    
+    // Find rates linked to this venue (e.g., for Winter 2025)
+    const activeRate = ratesData.find((r: any) => 
+      r.Venue?.some((v: any) => v.id === venue.id) && 
+      r.Session?.some((s: any) => s.value === "Winter 2025") // You can make this dynamic later
+    );
+
+    // Find spaces inside this venue
+    const venueSpaces = spacesData
+      .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
+      .map((space: any) => {
+        // Find classes scheduled in this SPECIFIC space
+        // Note: Ensure your getClasses() fetcher includes the new 'Space' link field!
+        const occupiedBy = classesData.filter((cls: any) => 
+          cls.spaceId === space.id 
+        );
+
+        return {
+          id: space.id,
+          name: space.Name || "Unnamed Room",
+          capacity: parseInt(space.Capacity) || 0,
+          floorType: space['Floor Type']?.value || "Unknown",
+          attributes: [], // Add if you have an attributes column
+          classes: occupiedBy
+        };
+      });
+
+    return {
+      id: venue.id,
+      name: venue['Venue Name'] || "Unknown Venue",
+      type: venue.Type?.value || "General",
+      contact: venue['Contact Name'] || "N/A",
+      spaces: venueSpaces,
+      rates: {
+        hourly: parseFloat(activeRate?.['Hourly Rate'] || 0),
+        weekend: parseFloat(activeRate?.['Weekend Rate'] || 0), // <--- Your new field!
+        flat: parseFloat(activeRate?.['Flat Rate'] || 0),
+      }
+    };
+  });
+}
 export async function getClasses() {
   const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {
     user_field_names: true
@@ -232,10 +283,7 @@ export async function getClasses() {
       session: row.Session?.[0]?.value || row.Session || "Unknown",
       teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
       location: row.Location?.value || row.Location || "Main Campus",
-      
-      // NEW: The "Dumb" Campus Field
-      campus: row['Campus'] || "", 
-      
+      spaceId: row.Space?.[0]?.id || null,
       day: row.Day?.value || row.Day || "TBD",
       students: enrollment,
       ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
