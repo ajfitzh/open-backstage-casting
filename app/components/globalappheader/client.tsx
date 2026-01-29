@@ -5,15 +5,31 @@ import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; 
 import { switchProduction } from '@/app/actions'; 
+// Import signOut from next-auth
+import { signOut } from "next-auth/react"; 
 import { 
   Menu, X, ChevronRight, ChevronsUpDown,
-  Calendar, Users, UserSquare2, 
-  AlertOctagon, BarChart3, Settings, LogOut, Check, Sparkles, MapPin, 
-  Home, Star, GraduationCap, LayoutGrid, VenetianMask, Mic2, Megaphone
+  Calendar, UserSquare2, 
+  AlertOctagon, BarChart3, Settings, LogOut, Check, Sparkles, 
+  LayoutGrid, VenetianMask, Mic2, Megaphone, GraduationCap
 } from 'lucide-react';
 
-export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
-  // Two separate states for two separate menus
+// Define User Interface
+interface UserProp {
+  name: string;
+  role: string;
+  initials: string;
+}
+
+export default function GlobalHeaderClient({ 
+  shows, 
+  activeId, 
+  user // <--- New Prop
+}: { 
+  shows: any[], 
+  activeId: number, 
+  user: UserProp | null 
+}) {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
   
@@ -21,14 +37,18 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   const contextRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname(); 
 
-  // Close menus on click outside
+  // Default Guest User if not logged in
+  const currentUser = user || { 
+    name: "Guest User", 
+    role: "Please Login", 
+    initials: "GU" 
+  };
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      // Close Nav if clicking outside
       if (navRef.current && !navRef.current.contains(event.target as Node)) {
         setIsNavOpen(false);
       }
-      // Close Context if clicking outside the dropdown area (and not on the button itself)
       if (contextRef.current && !contextRef.current.contains(event.target as Node)) {
         setIsContextOpen(false);
       }
@@ -38,9 +58,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   }, [isNavOpen, isContextOpen]);
 
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
-  const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
 
-  // Grouping Logic for Switcher
   const groupedShows = shows.reduce((groups, show) => {
     const season = show.season || 'Other';
     if (!groups[season]) groups[season] = [];
@@ -51,14 +69,10 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
 
   return (
     <>
-      {/* --- THE STRIP (Always Visible) --- */}
       <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
         
-        {/* LEFT AREA: NAV BUTTON + CONTEXT SWITCHER */}
+        {/* LEFT AREA */}
         <div className="flex items-center gap-4">
-            
-            {/* 1. HAMBURGER (Opens Nav Drawer) */}
-            {/* ADDED 'md:hidden' so this vanishes on desktop where the sidebar exists */}
             <button 
                 onClick={(e) => { e.stopPropagation(); setIsNavOpen(!isNavOpen); setIsContextOpen(false); }}
                 className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors md:hidden"
@@ -68,7 +82,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
 
             <div className="h-8 w-px bg-zinc-800 hidden sm:block"></div>
             
-            {/* 2. CONTEXT TITLE (Opens Dropdown) */}
             <div className="relative" ref={contextRef}>
                 <button 
                     onClick={() => { setIsContextOpen(!isContextOpen); setIsNavOpen(false); }}
@@ -85,7 +98,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     </div>
                 </button>
 
-                {/* THE CONTEXT DROPDOWN (Pop-over) */}
                 {isContextOpen && (
                     <div className="absolute top-full left-0 mt-2 w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 flex flex-col max-h-[70vh]">
                         <div className="bg-zinc-950/50 p-3 border-b border-white/5 backdrop-blur-sm">
@@ -114,44 +126,40 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
             </div>
         </div>
 
-        {/* RIGHT: USER AVATAR */}
+        {/* RIGHT: DYNAMIC USER AVATAR */}
         <div className="flex items-center gap-3">
              <div className="hidden md:flex flex-col items-end leading-tight">
-                <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">{user.role}</span>
+                <span className="text-xs font-semibold text-zinc-200">{currentUser.name}</span>
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">{currentUser.role}</span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-900/20 cursor-default">
-                {user.initials}
+            {/* Added Title Prop for tooltip on hover */}
+            <div 
+              title={currentUser.name}
+              className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-900/20 cursor-default"
+            >
+                {currentUser.initials}
             </div>
         </div>
       </header>
 
-      {/* --- THE NAV DRAWER (Mobile Only - Links) --- */}
+      {/* --- MOBILE NAV DRAWER --- */}
       {isNavOpen && (
         <div className="fixed inset-0 z-40 flex md:hidden">
-            {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsNavOpen(false)} />
             
-            {/* Sidebar Content */}
             <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
                 
-                {/* 1. NAVIGATION LINKS */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar pt-6">
-                    
-{/* Workspace */}
-<div>
-    <SectionHeader label="Daily Workspace" />
-    <div className="space-y-1">
-        <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
-        
-        {/* Added Casting Tools */}
-        <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
-        <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
-        <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
-    </div>
-</div>
+                    <div>
+                        <SectionHeader label="Daily Workspace" />
+                        <div className="space-y-1">
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
+                        </div>
+                    </div>
 
-                    {/* Company Manager */}
                     <div>
                         <SectionHeader label="Company Manager" />
                         <div className="space-y-1">
@@ -162,7 +170,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                         </div>
                     </div>
 
-                    {/* Education */}
                     <div>
                         <SectionHeader label="Education" />
                         <div className="space-y-1">
@@ -170,7 +177,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                         </div>
                     </div>
 
-                    {/* System */}
                     <div>
                         <SectionHeader label="System" />
                         <div className="space-y-1">
@@ -179,9 +185,12 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     </div>
                 </div>
 
-                {/* 2. FOOTER */}
+                {/* 2. FOOTER - Now with Working SignOut */}
                 <div className="p-4 border-t border-white/5 bg-zinc-950/50">
-                    <button className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
+                    <button 
+                        onClick={() => signOut()}
+                        className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors"
+                    >
                         <LogOut size={16} />
                         <span className="text-xs font-bold uppercase tracking-wider">Sign Out</span>
                     </button>
@@ -194,8 +203,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   );
 }
 
-// --- SUB-COMPONENTS ---
-
+// ... (Sub-components SectionHeader, MenuLink, ContextButton remain exactly the same)
 function SectionHeader({ label }: { label: string }) {
     return <div className="px-3 mb-2 text-[10px] font-black text-zinc-600 uppercase tracking-widest">{label}</div>
 }
@@ -221,15 +229,13 @@ function MenuLink({ href, icon, label, active, onClick }: any) {
 
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
-  
-  // Dynamic Dot Color based on Location/Branch
   let dotColor = 'bg-zinc-500'; 
   const loc = (prod.location || "").toLowerCase();
   
-  if (loc.includes('fred')) dotColor = 'bg-emerald-500'; // Fredericksburg = Green
-  if (loc.includes('stafford')) dotColor = 'bg-amber-500'; // Stafford = Amber
-  if (loc.includes('nova')) dotColor = 'bg-indigo-500';    // NoVa = Indigo
-  if (loc.includes('spotsy')) dotColor = 'bg-blue-500';    // Spotsylvania = Blue
+  if (loc.includes('fred')) dotColor = 'bg-emerald-500';
+  if (loc.includes('stafford')) dotColor = 'bg-amber-500';
+  if (loc.includes('nova')) dotColor = 'bg-indigo-500';
+  if (loc.includes('spotsy')) dotColor = 'bg-blue-500';
 
   return (
     <button 
@@ -239,24 +245,17 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
         ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'hover:bg-zinc-800/50'}
       `}
     >
-       {/* Status Dot (aligned with title) */}
        <div className={`w-1.5 h-1.5 rounded-full ${dotColor} mt-1.5 shrink-0`} />
-       
        <div className="flex-1 min-w-0">
-          {/* Show Title */}
           <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'}`}>
             {prod.title}
           </div>
-          
-          {/* RESTORED: Metadata Line */}
           <div className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-600 uppercase tracking-tight mt-0.5 group-hover:text-zinc-500">
              <span>{prod.location || "Unknown"}</span>
              <span className="opacity-50">•</span>
              <span>{prod.type || "Show"}</span>
           </div>
        </div>
-
-       {/* Active/Loading State Icons */}
        <div className="mt-0.5">
          {isActive && !pending && <Check size={12} className="text-emerald-500" />}
          {pending && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
