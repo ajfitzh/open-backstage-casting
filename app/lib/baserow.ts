@@ -277,42 +277,47 @@ function getRoleColor(role: string) {
   return 'bg-zinc-600';
 }
 
-export async function getActiveShows() {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
-  if (!Array.isArray(data)) return [];
-  return data
-    .filter((row: any) => row["Is Active"] === true)
-    .map((row: any) => ({
-      id: row.id,
-      title: row.Title || "Untitled Show",
-      location: row.Location?.value || row.Branch?.value || "Unknown",
-      type: row.Type?.value || "Main Stage",
-      season: row.Season?.value || "General", 
-    }));
+/**
+ * Helper to safely extract a string value from Baserow fields.
+ * Handles: 
+ * - Plain Strings: "My Show"
+ * - Select Objects: { value: "Active" }
+ * - Link Arrays: [{ value: "Fredericksburg" }]
+ */
+function safeGet(field: any, fallback: string = "Unknown"): string {
+  if (!field) return fallback;
+  if (typeof field === 'string') return field;
+  if (Array.isArray(field) && field.length > 0) return field[0].value || field[0].name || fallback;
+  if (typeof field === 'object') return field.value || field.name || fallback;
+  return fallback;
 }
-// app/lib/baserow.ts
 
 export async function getAllShows() {
-  // 1. Remove 'order_by' from the API call to stop the 400 Error
   const data = await fetchBaserow(
     `/database/rows/table/${TABLES.PRODUCTIONS}/`, 
     {}, 
-    { size: "200" } // Removed "order_by"
+    { size: "200" } 
   );
   
   if (!Array.isArray(data)) return [];
   
-  // 2. Sort in JavaScript (Newest ID first)
   const sortedData = data.sort((a: any, b: any) => b.id - a.id);
 
   return sortedData.map((row: any) => ({
     id: row.id,
-    title: row.Title || "Untitled Show",
-    location: row.Location?.value || row.Branch?.value || "Unknown",
-    type: row.Type?.value || "Main Stage",
-    season: row.Season?.value || "Unknown Season",
-    isActive: row["Is Active"]
+    // Use brackets for names with spaces, and safeGet for objects/arrays
+    title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
+    location: safeGet(row.Location || row.Venue || row.Branch),
+    type: safeGet(row.Type, "Main Stage"),
+    season: safeGet(row.Season, "Unknown Season"),
+    isActive: row["Is Active"] === true || row["Is Active"]?.value === "true"
   }));
+}
+
+export async function getActiveShows() {
+  // We reuse getAllShows logic but filter it
+  const allShows = await getAllShows();
+  return allShows.filter(show => show.isActive);
 }
 export async function getShowById(id: number) {
   if (!id) return null;
