@@ -1,5 +1,5 @@
 import { getClasses } from "@/app/lib/baserow";
-import AcademyClient from "./academy-client";
+import AcademyClient from "./AcademyClient";
 import { GraduationCap, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
