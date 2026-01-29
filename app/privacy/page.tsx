@@ -37,7 +37,7 @@ export default function PrivacyPolicy() {
               1. Introduction
             </h2>
             <p className="leading-relaxed text-zinc-400">
-              Open Backstage ("we," "our," or "us") is committed to protecting your privacy. 
+              Open Backstage (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) is committed to protecting your privacy. 
               This Privacy Policy explains how we collect, use, and safeguard your information when you use 
               our application tailored for CYT Fredericksburg. By accessing or using our Service, you agree 
               to the collection and use of information in accordance with this policy.

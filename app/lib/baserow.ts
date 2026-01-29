@@ -1,6 +1,6 @@
 // app/lib/baserow.ts
 import axios from "axios";
-
+import { notFound } from "next/navigation";
 // --- CONFIGURATION ---
 const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
 const HEADERS = {
@@ -423,9 +423,6 @@ export async function createProductionAsset(name: string, url: string, type: str
   });
 }
 
-import { notFound } from "next/navigation";
-
-
 
 // Table: FAMILIES (634)
 const TABLE_FAMILIES = 634;
@@ -469,46 +466,75 @@ export interface Person {
 }
 
 // --- MAIN FETCHER ---
+// --- MAIN FETCHER ---
 export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
+  // DEBUG 1: Check what email NextAuth is sending
+  console.log("🔍 [Baserow] Lookup Email:", userEmail);
+
   if (!userEmail) return null;
 
   try {
     // STEP 1: Find the Family Record by Email
-    // We query the FAMILIES table (634) looking for the row where Email == userEmail
     const familyQuery = new URLSearchParams({
       user_field_names: 'true',
       [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail
     });
 
-    const familyRes = await fetch(`${BASE_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`, {
+    const familyUrl = `${BASE_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`;
+    
+    // DEBUG 2: Check the exact URL for Family Table
+    console.log("🔗 [Baserow] Fetching Family URL:", familyUrl);
+
+    const familyRes = await fetch(familyUrl, {
       headers: HEADERS,
       next: { revalidate: 0 } // Always fetch fresh data for settings
     });
 
-    if (!familyRes.ok) throw new Error("Failed to fetch family");
+    if (!familyRes.ok) {
+        // DEBUG 3: Catch API errors (401, 404, etc)
+        console.error("❌ [Baserow] Family API Error:", familyRes.status, familyRes.statusText);
+        throw new Error("Failed to fetch family");
+    }
     
     const familyData = await familyRes.json();
+    
+    // DEBUG 4: Did we find a row?
+    console.log("✅ [Baserow] Family Rows Found:", familyData.results.length);
+
     const familyRow = familyData.results[0];
 
-    if (!familyRow) return null; // Email not found in database
+    if (!familyRow) {
+        console.warn("⚠️ [Baserow] No family found for email:", userEmail);
+        return null; 
+    }
 
     // STEP 2: Find all People linked to this Family
-    // We query the PEOPLE table (599) where the "FAMILIES" link field contains our familyRow.id
     const peopleQuery = new URLSearchParams({
       user_field_names: 'true',
       [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id.toString()
     });
 
-    const peopleRes = await fetch(`${BASE_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`, {
+    const peopleUrl = `${BASE_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`;
+    
+    // DEBUG 5: Check People URL
+    console.log("🔗 [Baserow] Fetching People URL:", peopleUrl);
+
+    const peopleRes = await fetch(peopleUrl, {
       headers: HEADERS,
       next: { revalidate: 0 }
     });
+    
+    if (!peopleRes.ok) {
+         console.error("❌ [Baserow] People API Error:", peopleRes.status, peopleRes.statusText);
+    }
 
     const peopleData = await peopleRes.json();
     const peopleRows = peopleData.results || [];
+    
+    // DEBUG 6: How many people found?
+    console.log(`✅ [Baserow] Found ${peopleRows.length} people for Family ID ${familyRow.id}`);
 
     // STEP 3: Identify Head of Household (for address/phone display)
-    // We look for the first "Adult" in the family list, or default to the first record
     const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
 
     // STEP 4: Return formatted data
@@ -520,7 +546,6 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "",
       address: headOfHouse ? `${headOfHouse[FIELDS_PEOPLE.ADDRESS] || ''}, ${headOfHouse[FIELDS_PEOPLE.CITY] || ''}` : "",
       
-      // We explicitly set the role here to satisfy the UserProfile interface
       role: "Family Administrator", 
       
       familyMembers: peopleRows.map((p: any) => {
@@ -542,7 +567,7 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
         return {
           id: p.id,
           name: p[FIELDS_PEOPLE.FULL_NAME],
-          role: p[FIELDS_PEOPLE.ROLE]?.value || "Student", // .value handles Single Select fields
+          role: p[FIELDS_PEOPLE.ROLE]?.value || "Student",
           age: age,
           image: imageUrl
         };
@@ -550,7 +575,7 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
     };
 
   } catch (error) {
-    console.error("Baserow Fetch Error:", error);
+    console.error("❌ [Baserow] Fetch Critical Error:", error);
     return null;
   }
 }
