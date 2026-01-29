@@ -8,7 +8,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // 1. Google One-Click
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientSecret: process.env.AUTH_SECRET,
     }),
     // 2. Custom Password
     Credentials({
@@ -62,8 +62,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     }
   },
-  pages: {
-    signIn: '/login', // We will build this UI next!
+pages: {
+    signIn: '/login',
+    signOut: '/login',
+    error: '/login', // Error code will be passed as a query param
   },
   secret: process.env.NEXTAUTH_SECRET,
 })

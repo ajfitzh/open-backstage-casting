@@ -1,24 +1,25 @@
 import { auth } from "@/auth"
-import { NextResponse } from "next/navigation"
+import { NextResponse } from "next/server"
 
 export default auth((req) => {
+  const { nextUrl } = req
   const isLoggedIn = !!req.auth
-  const isOnLoginPage = req.nextUrl.pathname.startsWith("/login")
+  const isOnLoginPage = nextUrl.pathname.startsWith("/login")
 
-  // 1. If NOT logged in and NOT on login page -> Send to /login
+  // 1. If trying to access protected routes while logged out
   if (!isLoggedIn && !isOnLoginPage) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl))
+    // Construct the URL manually to be safe
+    return NextResponse.redirect(new URL("/login", nextUrl.origin))
   }
 
-  // 2. If logged in and TRYING to go to /login -> Send to /
+  // 2. If logged in but trying to go to login page
   if (isLoggedIn && isOnLoginPage) {
-    return NextResponse.redirect(new URL("/", req.nextUrl))
+    return NextResponse.redirect(new URL("/", nextUrl.origin))
   }
 
   return NextResponse.next()
 })
 
 export const config = {
-  // Protect everything EXCEPT static files, images, and the favicon
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 }

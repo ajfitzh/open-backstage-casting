@@ -214,11 +214,17 @@ function formatUser(row: any, email: string) {
 // ==============================================================================
 
 export async function getPerformanceAnalytics(productionId?: number) {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.PERFORMANCES}/`, {}, { size: "200", order_by: "field_6186" });
+  // 1. Remove order_by from the params
+  const data = await fetchBaserow(
+    `/database/rows/table/${TABLES.PERFORMANCES}/`, 
+    {}, 
+    { size: "200" } 
+  );
   
   if (!Array.isArray(data) || data.length === 0) return [];
 
-  return data.map((row: any) => {
+  // 2. Map and Sort in JS (Ordering by the 'Performance' label or Date)
+  const mapped = data.map((row: any) => {
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
     const capacity = parseFloat(row['Total Inventory'] || row.field_6183 || 0);
     const label = row['Performance'] || row.field_6182 || "Show";
@@ -231,6 +237,9 @@ export async function getPerformanceAnalytics(productionId?: number) {
       fillRate: capacity > 0 ? Math.round((sold / capacity) * 100) : 0,
     };
   });
+
+  // Optional: Sort by name/date here if needed
+  return mapped;
 }
 
 export async function getGlobalSalesSummary() {
