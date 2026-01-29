@@ -54,7 +54,7 @@ function EmptyState() {
       </div>
       <h3 className="text-xl font-bold text-white mb-2 tracking-tight">No Financial Identity Found</h3>
       <p className="text-zinc-500 text-sm max-w-sm mb-8 leading-relaxed">
-        We couldn't retrieve records from Table 637. Ensure your environment tokens have read access to the Performance Database.
+        We couldn&apos;t retrieve records from Table 637. Ensure your environment tokens have read access to the Performance Database.
       </p>
       <button className="flex items-center gap-2 px-6 py-3 bg-white text-black text-xs font-black uppercase tracking-widest rounded-full hover:bg-blue-500 hover:text-white transition-all active:scale-95">
         <RefreshCcw size={14} />
