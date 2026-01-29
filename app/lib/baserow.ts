@@ -448,18 +448,23 @@ const FIELDS_PEOPLE = {
   EMAIL_PERSONAL: 'CYT Account Personal Email' // Was field_6132
 };
 
+// app/lib/baserow.ts
+
 export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
   if (!userEmail) return null;
 
-  console.log(`\n🔍 [Baserow] STARTING LOOKUP FOR: ${userEmail}`);
+  console.log(`🔍 [Baserow] STARTING LOOKUP FOR: ${userEmail}`);
 
   try {
-    // 1. Fetch Family
-    const familyQuery = `filter__${FIELD_FAMILY_EMAIL}__equal=${encodeURIComponent(userEmail)}`;
-    const familyData = await fetchBaserow(`/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`); 
+    // 1. Fetch Family (Fix: Added /api via fetchBaserow auto-fix, and used queryParams)
+    const familyData = await fetchBaserow(
+      `/database/rows/table/${TABLE_FAMILIES}/`, 
+      { next: { revalidate: 0 } },
+      { [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail }
+    );
 
     if (!Array.isArray(familyData) || familyData.length === 0) {
-        console.warn(`⚠️ [Baserow] No family found for email.`);
+        console.warn(`⚠️ [Baserow] No family found for email: ${userEmail}`);
         return null;
     }
 
@@ -467,25 +472,16 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
     console.log(`✅ [Baserow] Family Found: ID ${familyRow.id}`);
 
     // 2. Fetch Linked People
-    const peopleQuery = `filter__${FIELD_LINK_TO_FAMILY}__link_row_has=${familyRow.id}`;
-    const peopleData = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/?${peopleQuery}`);
+    const peopleData = await fetchBaserow(
+      `/database/rows/table/${TABLES.PEOPLE}/`,
+      { next: { revalidate: 0 } },
+      { [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id }
+    );
 
     const peopleRows = Array.isArray(peopleData) ? peopleData : [];
     console.log(`✅ [Baserow] People Found: ${peopleRows.length}`);
 
-    // --- DEBUGGING: LOG THE FIRST PERSON'S KEYS ---
-    if (peopleRows.length > 0) {
-        console.log("--------------------------------------------------");
-        console.log("🕵️‍♂️ RAW DATA INSPECTION (First Person):");
-        console.log("Keys available:", Object.keys(peopleRows[0]).join(", "));
-        console.log("Phone Value:", peopleRows[0][FIELDS_PEOPLE.PHONE]);
-        console.log("Headshot Value:", JSON.stringify(peopleRows[0][FIELDS_PEOPLE.HEADSHOT]));
-        console.log("Address Value:", peopleRows[0][FIELDS_PEOPLE.ADDRESS]);
-        console.log("--------------------------------------------------");
-    }
-    
     // 3. Identify Head of Household
-    // We try to find someone with Status 'Adult', otherwise grab the first person
     const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
 
     // Map Address safely
@@ -498,7 +494,7 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       cytId: familyRow[FIELD_CYT_ID] || "",
       name: headOfHouse ? headOfHouse[FIELDS_PEOPLE.FULL_NAME] : "Family Account",
       email: userEmail,
-      phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "", // Using the Name mapping now
+      phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "", 
       address: fullAddress, 
       role: "Family Administrator", 
       
