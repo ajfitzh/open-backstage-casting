@@ -36,6 +36,7 @@ export const TABLES = {
   ASSETS: "631",
   PERFORMANCES: "637",
   SALES_HISTORY: "637", 
+  CLASSES: "633",
 };
 
 // --- AUTHENTICATION FIELDS ---
@@ -212,7 +213,35 @@ function formatUser(row: any, email: string) {
 // ==============================================================================
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
+// app/lib/baserow.ts
 
+export async function getClasses() {
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {
+    user_field_names: true
+  }, { size: "200" });
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => {
+    const students = row.Students || []; 
+    const enrollment = Array.isArray(students) ? students.length : 0;
+    
+    return {
+      id: row.id,
+      name: row['Class Name'] || "Unnamed Class",
+      session: row.Session?.[0]?.value || row.Session || "Unknown",
+      teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
+      location: row.Location?.value || row.Location || "Main Campus",
+      
+      // NEW: The "Dumb" Campus Field
+      campus: row['Campus'] || "", 
+      
+      day: row.Day?.value || row.Day || "TBD",
+      students: enrollment,
+      ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
+    };
+  });
+}
 export async function getPerformanceAnalytics(productionId?: number) {
   // 1. Remove order_by from the params
   const data = await fetchBaserow(
