@@ -293,20 +293,19 @@ export async function getActiveShows() {
 // app/lib/baserow.ts
 
 export async function getAllShows() {
-  // CLEANER: Pass params as object. 
-  // This automatically handles 'user_field_names', 'size', and 'order_by'
+  // 1. Remove 'order_by' from the API call to stop the 400 Error
   const data = await fetchBaserow(
     `/database/rows/table/${TABLES.PRODUCTIONS}/`, 
-    {}, // options
-    { 
-      size: "200", 
-      order_by: "-id" // "-id" means descending (newest first)
-    } 
+    {}, 
+    { size: "200" } // Removed "order_by"
   );
   
   if (!Array.isArray(data)) return [];
   
-  return data.map((row: any) => ({
+  // 2. Sort in JavaScript (Newest ID first)
+  const sortedData = data.sort((a: any, b: any) => b.id - a.id);
+
+  return sortedData.map((row: any) => ({
     id: row.id,
     title: row.Title || "Untitled Show",
     location: row.Location?.value || row.Branch?.value || "Unknown",
