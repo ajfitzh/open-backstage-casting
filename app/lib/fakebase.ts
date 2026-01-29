@@ -436,70 +436,58 @@ const FIELD_CYT_ID = 'field_6127';       // "CYT National ID"
 const TABLE_PEOPLE = 599;
 const FIELD_LINK_TO_FAMILY = 'field_6153'; // Link to FAMILIES
 const FIELDS_PEOPLE = {
-  FULL_NAME: 'Full Name',
-  ROLE: 'Status',        // Was field_5782
-  DOB: 'Date of Birth',  // Was field_5738
-  HEADSHOT: 'Headshot',  // Was field_5776
-  PHONE: 'Phone Number', // Was field_5783
-  ADDRESS: 'Address',    // Was field_6133
-  CITY: 'City',          // Was field_6135
-  STATE: 'State',        // Was field_6136
-  ZIP: 'Zipcode',        // Was field_6137
-  EMAIL_PERSONAL: 'CYT Account Personal Email' // Was field_6132
+  FULL_NAME: 'field_5735',
+  ROLE: 'field_5782',    
+  DOB: 'field_5738',     
+  HEADSHOT: 'field_5776',
+  PHONE: 'field_5783',
+  ADDRESS: 'field_6133',
+  CITY: 'field_6135',
+  STATE: 'field_6136',
+  ZIP: 'field_6137',
+  EMAIL_PERSONAL: 'field_6132'
 };
 
 export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
+  console.log("🔍 [Baserow] Lookup Email:", userEmail);
   if (!userEmail) return null;
 
-  console.log(`\n🔍 [Baserow] STARTING LOOKUP FOR: ${userEmail}`);
-
   try {
-    // 1. Fetch Family
-    const familyQuery = `filter__${FIELD_FAMILY_EMAIL}__equal=${encodeURIComponent(userEmail)}`;
-    const familyData = await fetchBaserow(`/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`); 
+    // STEP 1: Find the Family Record by Email
+    const familyData = await fetchBaserow(
+      `/api/database/rows/table/${TABLE_FAMILIES}/`, 
+      { next: { revalidate: 0 } }, 
+      { [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail }
+    );
 
-    if (!Array.isArray(familyData) || familyData.length === 0) {
-        console.warn(`⚠️ [Baserow] No family found for email.`);
-        return null;
+    if (!familyData || familyData.length === 0) {
+        console.warn("⚠️ [Baserow] No family found for email:", userEmail);
+        return null; 
     }
 
     const familyRow = familyData[0];
-    console.log(`✅ [Baserow] Family Found: ID ${familyRow.id}`);
+    console.log("✅ [Baserow] Family Record Found:", familyRow.id);
 
-    // 2. Fetch Linked People
-    const peopleQuery = `filter__${FIELD_LINK_TO_FAMILY}__link_row_has=${familyRow.id}`;
-    const peopleData = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/?${peopleQuery}`);
-
-    const peopleRows = Array.isArray(peopleData) ? peopleData : [];
-    console.log(`✅ [Baserow] People Found: ${peopleRows.length}`);
-
-    // --- DEBUGGING: LOG THE FIRST PERSON'S KEYS ---
-    if (peopleRows.length > 0) {
-        console.log("--------------------------------------------------");
-        console.log("🕵️‍♂️ RAW DATA INSPECTION (First Person):");
-        console.log("Keys available:", Object.keys(peopleRows[0]).join(", "));
-        console.log("Phone Value:", peopleRows[0][FIELDS_PEOPLE.PHONE]);
-        console.log("Headshot Value:", JSON.stringify(peopleRows[0][FIELDS_PEOPLE.HEADSHOT]));
-        console.log("Address Value:", peopleRows[0][FIELDS_PEOPLE.ADDRESS]);
-        console.log("--------------------------------------------------");
-    }
+    // STEP 2: Find all People linked to this Family
+    const peopleRows = await fetchBaserow(
+      `/api/database/rows/table/${TABLE_PEOPLE}/`, 
+      { next: { revalidate: 0 } }, 
+      { [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id }
+    );
     
-    // 3. Identify Head of Household
-    // We try to find someone with Status 'Adult', otherwise grab the first person
+    console.log(`✅ [Baserow] Found ${peopleRows.length} people for Family ID ${familyRow.id}`);
+
+    // STEP 3: Identify Head of Household (Adult)
     const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
 
-    // Map Address safely
-    const addr = headOfHouse?.[FIELDS_PEOPLE.ADDRESS] || '';
-    const city = headOfHouse?.[FIELDS_PEOPLE.CITY] || '';
-    const fullAddress = addr ? `${addr}, ${city}` : '';
-
+    // STEP 4: Return formatted data
     return {
       id: familyRow.id.toString(),
       cytId: familyRow[FIELD_CYT_ID] || "",
       name: headOfHouse ? headOfHouse[FIELDS_PEOPLE.FULL_NAME] : "Family Account",
       email: userEmail,
-      phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "", // Using the Name mapping now
-      address: fullAddress, 
+      phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "",
+      address: headOfHouse ? `${headOfHouse[FIELDS_PEOPLE.ADDRESS] || ''}, ${headOfHouse[FIELDS_PEOPLE.CITY] || ''}` : "",
       role: "Family Administrator", 
       
       familyMembers: peopleRows.map((p: any) => {
@@ -512,9 +500,10 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
            age = Math.abs(ageDate.getUTCFullYear() - 1970);
         }
 
-        // Get Image URL
         const headshotArray = p[FIELDS_PEOPLE.HEADSHOT];
-        const imageUrl = (Array.isArray(headshotArray) && headshotArray.length > 0) ? headshotArray[0].url : null;
+        const imageUrl = (Array.isArray(headshotArray) && headshotArray.length > 0) 
+          ? headshotArray[0].url 
+          : null;
 
         return {
           id: p.id,
@@ -525,8 +514,9 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
         };
       })
     };
+
   } catch (error) {
-    console.error("❌ [Baserow] Critical Error in getFamilyMembers:", error);
+    console.error("❌ [Baserow] Fetch Critical Error:", error);
     return null;
   }
 }

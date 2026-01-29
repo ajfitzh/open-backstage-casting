@@ -2,27 +2,15 @@
 
 import React, { useState } from 'react';
 import { 
-  User, Bell, Shield, Monitor, Lock, 
-  LogOut, Mail, Fingerprint, Building2, 
-  CheckCircle2, XCircle, Users, Calendar,
+  User, Shield, Monitor, Lock, 
+  LogOut, Mail, Fingerprint, 
+  CheckCircle2, Users,
   CreditCard, ChevronRight, History, Phone, MapPin
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
+import { signOut } from "next-auth/react";
 
 // --- Types ---
-type PermissionScope = 'global' | 'production_specific';
-type PermissionLevel = 'read' | 'write' | 'admin';
-
-interface Permission {
-  id: string;
-  label: string;
-  description: string;
-  scope: PermissionScope;
-  level: PermissionLevel;
-  granted: boolean;
-}
-
-// Updated to include the image field from Baserow
 export interface FamilyMember {
   id: number;
   name: string;
@@ -50,8 +38,9 @@ interface SettingsProps {
 export default function SettingsClient({ shows, activeId, initialUser }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   
-  // Use the real data passed from the server
+  // Use the REAL data fetched from server
   const user = initialUser;
+  
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
 
   return (
@@ -78,7 +67,10 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
             </div>
             
             <div className="mt-auto pt-6 px-4">
-                <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 transition-all w-full text-left">
+                <button 
+                    onClick={() => signOut({ callbackUrl: '/' })}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 transition-all w-full text-left"
+                >
                     <LogOut size={16}/> Sign Out
                 </button>
             </div>
@@ -102,10 +94,10 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
 
                     {/* Avatar Header */}
                     <div className="flex items-center gap-6 pb-8 border-b border-white/5">
-                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-zinc-800 to-black border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl relative overflow-hidden">
-                             {/* Display Initials - Real photo logic happens in Family Tab usually, but could go here too */}
+                        <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl relative overflow-hidden">
+                             {/* Initials Generator */}
                             <span className="bg-clip-text text-transparent bg-gradient-to-tr from-zinc-200 to-zinc-500">
-                                {user.name ? user.name.substring(0,2).toUpperCase() : 'AF'}
+                                {user.name ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase() : 'AF'}
                             </span>
                         </div>
                         <div className="space-y-2">
@@ -118,6 +110,7 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                         </div>
                     </div>
 
+                    {/* Input Grid - Mapped to Real Data */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <InputGroup label="Full Name" value={user.name} icon={<User size={16}/>} />
                         <InputGroup label="Email Address" value={user.email} icon={<Mail size={16}/>} disabled />
@@ -190,26 +183,6 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                             <p className="text-xs text-zinc-400">Please ensure medical forms are updated for all students before the first rehearsal.</p>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* --- BILLING & DONATIONS TAB --- */}
-            {activeTab === 'billing' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                     <div className="flex justify-between items-end">
-                        <div>
-                            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Billing & Donations</h2>
-                            <p className="text-zinc-500 text-sm">Manage payment methods and recurring donations.</p>
-                        </div>
-                    </div>
-                     <div className="p-12 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-zinc-700 transition-colors">
-                        <CreditCard size={48} className="text-zinc-700 mb-4 group-hover:text-zinc-600 transition-colors" />
-                        <h3 className="text-zinc-400 font-bold mb-2">No Payment Methods on File</h3>
-                        <p className="text-zinc-500 text-xs max-w-sm mb-6 leading-relaxed">Add a credit card to easily pay for tuition, tickets, and production fees. All data is securely encrypted.</p>
-                        <button className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-colors border border-white/5">
-                            Add Payment Method
-                        </button>
-                     </div>
                 </div>
             )}
 
@@ -291,15 +264,27 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                                 { label: "Tuition Payments", desc: "Process payments and view balances.", granted: false, level: 'read' },
                             ]}
                         />
-
-                        <PermissionSection 
-                            title="Sensitive Data" 
-                            permissions={[
-                                { label: "Medical Forms", desc: "Access student medical emergency info.", granted: true, level: 'read' },
-                                { label: "Background Checks", desc: "View volunteer compliance status.", granted: false, level: 'admin' },
-                            ]}
-                        />
                     </div>
+                </div>
+            )}
+
+            {/* --- BILLING TAB --- */}
+            {activeTab === 'billing' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                     <div className="flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Billing & Donations</h2>
+                            <p className="text-zinc-500 text-sm">Manage payment methods and recurring donations.</p>
+                        </div>
+                    </div>
+                     <div className="p-12 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-zinc-700 transition-colors">
+                        <CreditCard size={48} className="text-zinc-700 mb-4 group-hover:text-zinc-600 transition-colors" />
+                        <h3 className="text-zinc-400 font-bold mb-2">No Payment Methods on File</h3>
+                        <p className="text-zinc-500 text-xs max-w-sm mb-6 leading-relaxed">Add a credit card to easily pay for tuition, tickets, and production fees. All data is securely encrypted.</p>
+                        <button className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-colors border border-white/5">
+                            Add Payment Method
+                        </button>
+                     </div>
                 </div>
             )}
 
