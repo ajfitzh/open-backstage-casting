@@ -146,21 +146,29 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     </div>
                   )}
 
-                  {/* VIEW: ARCHIVE */}
+{/* VIEW: ARCHIVE */}
                   {viewMode === 'archive' && (
-                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-2 animate-in slide-in-from-right-4 duration-300">
                        {archiveSeasons.length > 0 ? (
                           archiveSeasons.map(season => (
-                            <div key={season}>
-                               <div className="px-3 py-1.5 mb-1 text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/50 rounded">
-                                 {season}
-                               </div>
-                               <div className="space-y-1">
+                            <details key={season} className="group">
+                               {/* ACCORDION HEADER */}
+                               <summary className="flex items-center justify-between px-3 py-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/50 rounded-lg cursor-pointer hover:bg-zinc-800 hover:text-zinc-300 transition-colors list-none select-none">
+                                 <div className="flex items-center gap-2">
+                                    <Calendar size={12} />
+                                    <span>{season}</span>
+                                 </div>
+                                 {/* Simple rotating chevron */}
+                                 <ChevronRight size={12} className="group-open:rotate-90 transition-transform duration-200" />
+                               </summary>
+                               
+                               {/* ACCORDION BODY */}
+                               <div className="pt-2 pl-2 space-y-1">
                                  {groupedData.groups[season].map(prod => (
                                    <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={pathname} />
                                  ))}
                                </div>
-                            </div>
+                            </details>
                           ))
                        ) : (
                           <div className="p-8 text-center opacity-50">

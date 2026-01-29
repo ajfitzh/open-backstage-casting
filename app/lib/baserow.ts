@@ -279,7 +279,25 @@ export async function getActiveShows() {
       season: row.Season?.value || "General", 
     }));
 }
+// Add this to app/lib/baserow.ts
 
+export async function getAllShows() {
+  // Fetch all rows. Size=200 covers your ~111 shows comfortably.
+  // We sort by '-id' to ensure the newest shows appear at the top of the list.
+  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?user_field_names=true&size=200&order_by=-id`);
+  
+  if (!Array.isArray(data)) return [];
+  
+  // NO FILTERING! Return everything.
+  return data.map((row: any) => ({
+    id: row.id,
+    title: row.Title || "Untitled Show",
+    location: row.Location?.value || row.Branch?.value || "Unknown",
+    type: row.Type?.value || "Main Stage",
+    season: row.Season?.value || "Unknown Season",
+    isActive: row["Is Active"] // We'll keep this flag for the UI
+  }));
+}
 export async function getShowById(id: number) {
   if (!id) return null;
   return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/${id}/`);

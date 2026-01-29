@@ -2,7 +2,7 @@
 import { cookies } from 'next/headers';
 import { getServerSession } from "next-auth"; // <--- Import NextAuth
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // <--- Import Options
-import { getActiveShows } from '@/app/lib/baserow';
+import { getAllShows } from '@/app/lib/baserow';
 import GlobalHeaderClient from './client'; 
 
 export default async function GlobalHeader() {
@@ -11,7 +11,7 @@ export default async function GlobalHeader() {
   const activeId = Number(cookieStore.get('active_production_id')?.value);
 
   // 2. Fetch data
-  const shows = await getActiveShows();
+  const shows = await getAllShows();
   const session = await getServerSession(authOptions); // <--- Fetch Session
 
   // 3. Extract User Data (with fallbacks)
