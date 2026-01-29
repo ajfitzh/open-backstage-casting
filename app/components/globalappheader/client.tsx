@@ -9,7 +9,8 @@ import {
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, Users, 
   UserSquare2, AlertOctagon, BarChart3, Settings, LogOut, 
   Check, Sparkles, LayoutGrid, Mic2, Megaphone, 
-  Theater, GraduationCap, Home, Archive, Clock
+  Theater, GraduationCap, Home, Archive, Clock,
+  Bug, Wrench, Database
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ 
@@ -23,9 +24,8 @@ export default function GlobalHeaderClient({
 }) {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
-  
-  // Toggle state for the dropdown
   const [viewMode, setViewMode] = useState<'current' | 'archive'>('current');
+  const [showDebug, setShowDebug] = useState(false);
 
   const navRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<HTMLDivElement>(null);
@@ -46,11 +46,10 @@ export default function GlobalHeaderClient({
   }, []);
 
   // --- DATA PREP ---
-  const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
+  const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", location: "Unknown" };
   
-  // Real User Data Parsing
   const userInitials = user?.name 
-    ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0,2) 
+    ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0,2).toUpperCase() 
     : "??";
   const userRole = user?.role || "Guest";
 
@@ -63,14 +62,12 @@ export default function GlobalHeaderClient({
       groups[season].push(show);
     });
     
-    // Sort seasons descending (assuming format "2025-2026", "2024-2025", etc.)
+    // Sort seasons descending (e.g., 2025-2026 comes before 2024-2025)
     const seasons = Object.keys(groups).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     
     return { groups, seasons };
   }, [shows]);
 
-  // 2. Determine "Current" vs "Archive"
-  // Heuristic: The very first season in the sorted list is "Current". Everything else is "Archive".
   const currentSeason = groupedData.seasons[0];
   const archiveSeasons = groupedData.seasons.slice(1);
 
@@ -81,8 +78,6 @@ export default function GlobalHeaderClient({
         
         {/* LEFT: NAV & CONTEXT */}
         <div className="flex items-center gap-4">
-          
-          {/* HAMBURGER (Mobile) */}
           <button 
             onClick={(e) => { e.stopPropagation(); setIsNavOpen(!isNavOpen); setIsContextOpen(false); }}
             className="p-2 -ml-2 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors md:hidden"
@@ -114,7 +109,7 @@ export default function GlobalHeaderClient({
               <div className="absolute top-full left-0 mt-2 w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 flex flex-col max-h-[70vh]">
                 
                 {/* A. TOGGLE HEADER */}
-                <div className="bg-zinc-950/80 p-3 border-b border-white/5 backdrop-blur-sm grid grid-cols-2 gap-2">
+                <div className="bg-zinc-950/80 p-3 border-b border-white/5 backdrop-blur-sm grid grid-cols-2 gap-2 relative">
                    <button 
                       onClick={() => setViewMode('current')}
                       className={`flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all
@@ -131,18 +126,45 @@ export default function GlobalHeaderClient({
                    >
                       <Archive size={12} /> History
                    </button>
+
+                   {/* TINY HIDDEN WRENCH (DEBUG) */}
+                   <button 
+                     onClick={() => setShowDebug(!showDebug)}
+                     className="absolute -top-1 -right-1 p-2 text-zinc-800 hover:text-amber-500 transition-colors"
+                   >
+                     <Wrench size={10} />
+                   </button>
                 </div>
 
                 {/* B. LIST CONTENT */}
                 <div className="p-2 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                   
+                  {/* DEBUG PANEL */}
+                  {showDebug && (
+                    <div className="p-3 bg-black/50 border border-amber-500/30 rounded-lg mb-2 font-mono text-[9px] text-amber-500 animate-in zoom-in-95">
+                      <div className="flex items-center gap-2 mb-2 font-black border-b border-amber-500/20 pb-1">
+                        <Bug size={10} /> RAW PRODUCTION STREAM
+                      </div>
+                      <div className="space-y-1">
+                        <p>Total Records: {shows.length}</p>
+                        <p>Current Season Key: {currentSeason}</p>
+                        <p>Active ID: {activeId}</p>
+                        <div className="pt-2 mt-2 border-t border-amber-500/20">
+                          {shows.filter(s => s.isActive || s.season === currentSeason).map(s => (
+                            <div key={s.id}>• ID:{s.id} | {s.title.substring(0,15)} | {s.season}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* VIEW: CURRENT */}
                   {viewMode === 'current' && (
                     <div className="animate-in slide-in-from-left-4 duration-300">
                         {currentSeason ? (
                            <div key={currentSeason}>
                               <div className="px-3 py-1.5 mb-1 text-[9px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-900/10 border border-emerald-500/20 rounded flex items-center gap-2">
-                                <Clock size={10} /> {currentSeason} (Active)
+                                <Clock size={10} /> {currentSeason} (Active Cycle)
                               </div>
                               <div className="space-y-1">
                                 {groupedData.groups[currentSeason].map(prod => (
@@ -151,7 +173,10 @@ export default function GlobalHeaderClient({
                               </div>
                            </div>
                         ) : (
-                          <div className="p-4 text-center text-zinc-500 text-xs">No active seasons found.</div>
+                          <div className="p-10 text-center opacity-30">
+                            <Theater size={32} className="mx-auto mb-2" />
+                            <p className="text-[10px] font-bold uppercase tracking-widest">No Active Shows</p>
+                          </div>
                         )}
                     </div>
                   )}
@@ -162,7 +187,6 @@ export default function GlobalHeaderClient({
                        {archiveSeasons.length > 0 ? (
                           archiveSeasons.map(season => (
                             <details key={season} className="group">
-                               {/* ACCORDION HEADER */}
                                <summary className="flex items-center justify-between px-3 py-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/50 rounded-lg cursor-pointer hover:bg-zinc-800 hover:text-zinc-300 transition-colors list-none select-none">
                                  <div className="flex items-center gap-2">
                                     <Calendar size={12} />
@@ -170,8 +194,6 @@ export default function GlobalHeaderClient({
                                  </div>
                                  <ChevronRight size={12} className="group-open:rotate-90 transition-transform duration-200" />
                                </summary>
-                               
-                               {/* ACCORDION BODY */}
                                <div className="pt-2 pl-2 space-y-1">
                                  {groupedData.groups[season].map(prod => (
                                    <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={pathname} />
@@ -182,12 +204,11 @@ export default function GlobalHeaderClient({
                        ) : (
                           <div className="p-8 text-center opacity-50">
                              <Archive size={32} className="mx-auto mb-2 text-zinc-600" />
-                             <p className="text-xs font-bold text-zinc-500">No archives yet.</p>
+                             <p className="text-xs font-bold text-zinc-500">History is empty.</p>
                           </div>
                        )}
                     </div>
                   )}
-
                 </div>
               </div>
             )}
@@ -204,11 +225,10 @@ export default function GlobalHeaderClient({
             {user?.image ? (
               <img src={user.image} alt={user.name} className="w-full h-full object-cover" />
             ) : (
-              userInitials
+              <span className="tracking-tighter">{userInitials}</span>
             )}
           </div>
         </div>
-
       </header>
 
       {/* --- THE NAV DRAWER (Mobile) --- */}
@@ -216,8 +236,7 @@ export default function GlobalHeaderClient({
         <div className="fixed inset-0 z-40 flex md:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsNavOpen(false)} />
           <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar pt-6">
-              
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-6">
               <SectionHeader label="Daily Workspace" />
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
@@ -225,25 +244,17 @@ export default function GlobalHeaderClient({
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
               </div>
-
               <SectionHeader label="Company Manager" />
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Roster & Forms" active={pathname === '/roster'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflicts" active={pathname === '/conflicts'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Reports" active={pathname === '/reports'} />
               </div>
-
-              <SectionHeader label="Academy" />
-              <div className="space-y-1">
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
-              </div>
-
               <SectionHeader label="System" />
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/settings" icon={<Settings size={18}/>} label="Settings" active={pathname === '/settings'} />
               </div>
             </div>
-
             <div className="p-4 border-t border-white/5 bg-zinc-950/50">
               <button className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
                 <LogOut size={16} />
@@ -280,7 +291,7 @@ function MenuLink({ href, icon, label, active, onClick }: any) {
       onClick={onClick}
       className={`
         flex items-center gap-4 px-3 py-3 rounded-xl transition-all
-        ${active ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}
+        ${active ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}
       `}
     >
       {icon}
@@ -292,8 +303,6 @@ function MenuLink({ href, icon, label, active, onClick }: any) {
 
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   const { pending } = useFormStatus();
-  
-  // Dynamic Dot Color based on Location/Branch
   let dotColor = 'bg-zinc-500';
   const loc = (prod.location || "").toLowerCase();
   if (loc.includes('fred')) dotColor = 'bg-emerald-500'; 
@@ -309,12 +318,8 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
         ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-600' : 'hover:bg-zinc-800/50'}
       `}
     >
-      {/* Active Indicator Bar */}
       {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />}
-
-      {/* Status Dot */}
       <div className={`w-1.5 h-1.5 rounded-full ${dotColor} mt-1.5 shrink-0 ${isActive ? 'ml-1' : ''}`} />
-      
       <div className="flex-1 min-w-0">
         <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-300 group-hover:text-white'}`}>
           {prod.title}
@@ -325,7 +330,6 @@ function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
           <span>{prod.type || "Show"}</span>
         </div>
       </div>
-      
       <div className="mt-0.5">
         {isActive && !pending && <Check size={12} className="text-emerald-500" />}
         {pending && <Sparkles size={12} className="text-emerald-500 animate-spin" />}
