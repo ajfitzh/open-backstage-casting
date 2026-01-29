@@ -4,163 +4,260 @@ import React, { useState } from 'react';
 import { 
   User, Bell, Shield, Monitor, Lock, 
   LogOut, Mail, Fingerprint, Building2, 
-  CheckCircle2, XCircle, LayoutGrid, Calendar,
-  Users
+  CheckCircle2, XCircle, Users, Calendar,
+  CreditCard, ChevronRight, History, Phone, MapPin
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
 
+// Types for RBAC
+type PermissionScope = 'global' | 'production_specific';
+type PermissionLevel = 'read' | 'write' | 'admin';
+
+interface Permission {
+  id: string;
+  label: string;
+  description: string;
+  scope: PermissionScope;
+  level: PermissionLevel;
+  granted: boolean;
+}
+
 export default function SettingsClient({ shows, activeId }: { shows: any[], activeId: number }) {
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState('profile');
   
-  // Mock User Data (In a real app, this comes from your Auth provider/cookie)
+  // Mock User Data based on CYT model
   const user = {
     name: "Austin Fitzhugh",
     email: "austin@cytfred.org",
+    phone: "540-555-0123",
     role: "Artistic Director",
     id: "142",
-    permissions: ["manage_casting", "view_sensitive_reports", "edit_compliance"]
+    address: "123 Stage Left Ln, Fredericksburg, VA",
+    // Family members data (replicating the "Members" tab from CYT)
+    familyMembers: [
+      { id: 1, name: "Austin Fitzhugh", role: "Adult", age: 34 },
+      { id: 2, name: "Sarah Fitzhugh", role: "Student", age: 14 },
+      { id: 3, name: "Mikey Fitzhugh", role: "Student", age: 11 },
+    ]
   };
 
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 h-full">
+    <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full">
         
         {/* SIDEBAR NAVIGATION */}
-        <nav className="w-full lg:w-64 flex flex-col gap-2 shrink-0">
-            <TabButton id="general" label="General" icon={<User size={18}/>} active={activeTab} onClick={setActiveTab} />
-            <TabButton id="appearance" label="Appearance" icon={<Monitor size={18}/>} active={activeTab} onClick={setActiveTab} />
-            <TabButton id="notifications" label="Notifications" icon={<Bell size={18}/>} active={activeTab} onClick={setActiveTab} />
-            <TabButton id="permissions" label="Permissions" icon={<Shield size={18}/>} active={activeTab} onClick={setActiveTab} />
+        <nav className="w-full lg:w-64 flex flex-col gap-1 shrink-0">
+            <div className="px-4 py-4 mb-2">
+                <h1 className="text-xl font-black italic tracking-tighter text-white">SETTINGS</h1>
+                <p className="text-xs text-zinc-500 font-medium">Manage your backstage identity</p>
+            </div>
+
+            <div className="space-y-1">
+                <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-4 mb-2">Account</p>
+                <TabButton id="profile" label="My Profile" icon={<User size={18}/>} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="family" label="Family Members" icon={<Users size={18}/>} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="billing" label="Billing & Donations" icon={<CreditCard size={18}/>} active={activeTab} onClick={setActiveTab} />
+            </div>
+
+            <div className="space-y-1">
+                <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-6 mb-2">System</p>
+                <TabButton id="context" label="Workspace Context" icon={<Monitor size={18}/>} active={activeTab} onClick={setActiveTab} />
+                <TabButton id="permissions" label="Permissions (RBAC)" icon={<Shield size={18}/>} active={activeTab} onClick={setActiveTab} />
+            </div>
             
-            <div className="mt-auto pt-8 border-t border-white/5">
-                <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-red-400 hover:bg-red-500/10 transition-all w-full text-left">
-                    <LogOut size={18}/> Sign Out
+            <div className="mt-auto pt-6 px-4">
+                <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 transition-all w-full text-left">
+                    <LogOut size={16}/> Sign Out
                 </button>
             </div>
         </nav>
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 bg-zinc-900/50 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 min-h-[500px] bg-zinc-900/50 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar relative">
             
-            {/* --- GENERAL TAB --- */}
-            {activeTab === 'general' && (
+            {/* --- PROFILE TAB --- */}
+            {activeTab === 'profile' && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div>
-                        <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-6">Profile & Identity</h2>
-                        
-                        {/* ID CARD */}
-                        <div className="flex items-center gap-6 p-6 bg-zinc-900 rounded-2xl border border-white/5 shadow-xl">
-                            <div className="w-20 h-20 rounded-full bg-emerald-600 flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-emerald-900/40">
-                                AF
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-white">{user.name}</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="px-2 py-0.5 rounded bg-zinc-800 border border-white/10 text-[10px] font-bold uppercase text-zinc-400">
-                                        {user.role}
-                                    </span>
-                                    <span className="text-xs text-zinc-600 font-mono">ID: {user.id}</span>
-                                </div>
-                            </div>
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Profile & Contact</h2>
+                            <p className="text-zinc-500 text-sm">Manage your personal contact information.</p>
+                        </div>
+                        <div className="px-3 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded-full uppercase tracking-wide">
+                            Admin Account
+                        </div>
+                    </div>
+
+                    {/* Avatar Header */}
+                    <div className="flex items-center gap-6 pb-8 border-b border-white/5">
+                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-zinc-800 to-black border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl">
+                            <span className="bg-clip-text text-transparent bg-gradient-to-tr from-zinc-200 to-zinc-500">AF</span>
+                        </div>
+                        <div className="space-y-2">
+                            <button className="px-4 py-2 bg-white text-black text-xs font-bold rounded-lg hover:bg-zinc-200 transition-colors">
+                                Upload New Photo
+                            </button>
+                            <button className="px-4 py-2 text-zinc-400 text-xs font-bold hover:text-white transition-colors">
+                                Remove
+                            </button>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InputGroup label="Full Name" value={user.name} icon={<User size={16}/>} />
+                        <InputGroup label="First Name" value="Austin" icon={<User size={16}/>} />
+                        <InputGroup label="Last Name" value="Fitzhugh" icon={<User size={16}/>} />
                         <InputGroup label="Email Address" value={user.email} icon={<Mail size={16}/>} disabled />
+                        <InputGroup label="Phone Number" value={user.phone} icon={<Phone size={16}/>} />
+                        <div className="md:col-span-2">
+                             <InputGroup label="Mailing Address" value={user.address} icon={<MapPin size={16}/>} />
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-end pt-4">
+                        <button className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-900/20 transition-all">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* --- FAMILY MEMBERS TAB (CYT REPLICATION) --- */}
+            {activeTab === 'family' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Family Members</h2>
+                            <p className="text-zinc-500 text-sm">Manage dependants, medical forms, and conflicts.</p>
+                        </div>
+                        <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-2">
+                            <Users size={14} /> Add Person
+                        </button>
                     </div>
 
-                    <div className="pt-6 border-t border-white/5">
-                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Workspace Context</h3>
-                        <div className="bg-black/20 p-4 rounded-xl border border-white/5">
-                            <p className="text-xs text-zinc-500 mb-4">This setting controls which production data loads by default when you log in.</p>
-                            
-                            <div className="grid grid-cols-1 gap-2">
-                                {shows.map((show) => (
-                                    <form key={show.id} action={switchProduction}>
-                                        <input type="hidden" name="productionId" value={show.id} />
-                                        <input type="hidden" name="redirectPath" value="/settings" />
-                                        <button 
-                                            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${activeId === show.id ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800 border-transparent hover:border-zinc-700'}`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-2 h-2 rounded-full ${activeId === show.id ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
-                                                <div className="text-left">
-                                                    <div className={`text-sm font-bold ${activeId === show.id ? 'text-white' : 'text-zinc-400'}`}>{show.title}</div>
-                                                    <div className="text-[10px] uppercase font-bold text-zinc-600">{show.location} • {show.season}</div>
-                                                </div>
-                                            </div>
-                                            {activeId === show.id && <CheckCircle2 size={16} className="text-emerald-500"/>}
-                                        </button>
-                                    </form>
-                                ))}
+                    <div className="grid grid-cols-1 gap-4">
+                        {user.familyMembers.map((member) => (
+                            <div key={member.id} className="group p-4 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
+                                        {member.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-white font-bold text-sm">{member.name}</h3>
+                                        <p className="text-xs text-zinc-500">{member.role} • {member.age} yrs old</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                    <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white" title="View History">
+                                        <History size={16} />
+                                    </button>
+                                    <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white">
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex gap-4">
+                        <div className="p-2 bg-amber-500/10 rounded-lg h-fit text-amber-500">
+                            <Fingerprint size={20} />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-amber-500 mb-1">Medical Info & Waivers</h4>
+                            <p className="text-xs text-zinc-400">Please ensure medical forms are updated for all students before the first rehearsal.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- WORKSPACE CONTEXT TAB --- */}
+            {activeTab === 'context' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div>
+                        <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Workspace Context</h2>
+                        <p className="text-zinc-500 text-sm">Select which show data loads by default when you log in.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                        {shows.map((show) => (
+                            <form key={show.id} action={switchProduction}>
+                                <input type="hidden" name="productionId" value={show.id} />
+                                <input type="hidden" name="redirectPath" value="/settings" />
+                                <button 
+                                    className={`w-full group relative overflow-hidden flex items-center justify-between p-4 rounded-xl border transition-all ${activeId === show.id ? 'bg-emerald-900/10 border-emerald-500/50' : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'}`}
+                                >
+                                    <div className="flex items-center gap-4 z-10">
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-lg font-black ${activeId === show.id ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-600'}`}>
+                                            {show.title.charAt(0)}
+                                        </div>
+                                        <div className="text-left">
+                                            <div className={`text-sm font-bold ${activeId === show.id ? 'text-white' : 'text-zinc-300'}`}>{show.title}</div>
+                                            <div className="text-xs font-medium text-zinc-500">{show.location} • {show.season}</div>
+                                        </div>
+                                    </div>
+                                    {activeId === show.id && (
+                                        <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold uppercase tracking-widest z-10">
+                                            <CheckCircle2 size={16}/> Active
+                                        </div>
+                                    )}
+                                </button>
+                            </form>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- PERMISSIONS (RBAC) TAB --- */}
+            {activeTab === 'permissions' && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div>
+                        <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Security Clearance</h2>
+                        <p className="text-zinc-500 text-sm mb-4">
+                            Your access level for <span className="text-white font-bold">{activeShow?.title}</span>.
+                        </p>
+                        
+                        <div className="bg-zinc-900 border border-white/10 p-4 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-600/10 rounded-lg text-blue-400">
+                                    <Shield size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-white">Current Role: {user.role}</h4>
+                                    <p className="text-xs text-zinc-500">ID: {user.id} • Table: Volunteers (619)</p>
+                                </div>
+                            </div>
+                            <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider rounded-full">
+                                Active Status
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
 
-            {/* --- PERMISSIONS TAB --- */}
-            {activeTab === 'permissions' && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                    <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-6">Security Clearance</h2>
-                    
-                    <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mb-8 flex items-start gap-3">
-                        <Lock size={20} className="text-amber-500 shrink-0 mt-0.5"/>
-                        <div>
-                            <h4 className="text-sm font-bold text-amber-400 mb-1">Role-Based Access Control</h4>
-                            <p className="text-xs text-amber-200/70 leading-relaxed">
-                                Your permissions are determined by your role in the <strong>Volunteers Table (619)</strong>. 
-                                To request elevated access, please contact the Production Manager.
-                            </p>
-                        </div>
-                    </div>
+                    <div className="grid grid-cols-1 gap-6">
+                        <PermissionSection 
+                            title="Production Management" 
+                            permissions={[
+                                { label: "Cast Grid Access", desc: "View and edit the master cast list.", granted: true, level: 'write' },
+                                { label: "Audition Data", desc: "Access sensitive audition forms and scores.", granted: true, level: 'read' },
+                            ]}
+                        />
+                        
+                        <PermissionSection 
+                            title="Financials" 
+                            permissions={[
+                                { label: "Budget Reports", desc: "View production budget and expenditure.", granted: false, level: 'read' },
+                                { label: "Tuition Payments", desc: "Process payments and view balances.", granted: false, level: 'read' },
+                            ]}
+                        />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <PermissionCard 
-                            label="Casting Management" 
-                            desc="Access to Auditions, Callbacks, and Cast Grid."
-                            granted={user.permissions.includes('manage_casting')}
-                            icon={<Users size={18}/>}
-                        />
-                        <PermissionCard 
-                            label="Financial Reports" 
-                            desc="View revenue, budgets, and fee collection status."
-                            granted={user.permissions.includes('view_financials')}
-                            icon={<Building2 size={18}/>}
-                        />
-                        <PermissionCard 
-                            label="Sensitive Data" 
-                            desc="Access to medical forms and liability waivers."
-                            granted={user.permissions.includes('view_sensitive_reports')}
-                            icon={<Fingerprint size={18}/>}
-                        />
-                        <PermissionCard 
-                            label="Schedule Editor" 
-                            desc="Ability to modify rehearsal times and calls."
-                            granted={user.permissions.includes('edit_schedule')} // Mock false
-                            icon={<Calendar size={18}/>}
+                        <PermissionSection 
+                            title="Sensitive Data" 
+                            permissions={[
+                                { label: "Medical Forms", desc: "Access student medical emergency info.", granted: true, level: 'read' },
+                                { label: "Background Checks", desc: "View volunteer compliance status.", granted: false, level: 'admin' },
+                            ]}
                         />
                     </div>
-                </div>
-            )}
-
-            {/* --- APPEARANCE TAB (Placeholder) --- */}
-            {activeTab === 'appearance' && (
-                <div className="text-center py-20 text-zinc-500 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <Monitor size={48} className="mx-auto mb-4 opacity-20"/>
-                    <h3 className="text-lg font-bold text-zinc-400">System Theme</h3>
-                    <p className="text-sm mt-2">Open Backstage is locked to <strong>Dark Mode</strong> for theater environments.</p>
-                </div>
-            )}
-
-             {/* --- NOTIFICATIONS TAB (Placeholder) --- */}
-             {activeTab === 'notifications' && (
-                <div className="text-center py-20 text-zinc-500 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <Bell size={48} className="mx-auto mb-4 opacity-20"/>
-                    <h3 className="text-lg font-bold text-zinc-400">Notifications</h3>
-                    <p className="text-sm mt-2">Email and Push notification settings coming in v2.0.</p>
                 </div>
             )}
 
@@ -172,17 +269,17 @@ export default function SettingsClient({ shows, activeId }: { shows: any[], acti
 // --- SUB-COMPONENTS ---
 
 function TabButton({ id, label, icon, active, onClick }: any) {
+    const isActive = active === id;
     return (
         <button 
             onClick={() => onClick(id)}
             className={`
-                flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all w-full text-left
-                ${active === id 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}
+                group flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all w-full text-left relative overflow-hidden
+                ${isActive ? 'text-white bg-zinc-800' : 'text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300'}
             `}
         >
-            {icon}
+            {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r-full" />}
+            <span className={`${isActive ? 'text-blue-400' : 'group-hover:text-zinc-400'}`}>{icon}</span>
             {label}
         </button>
     )
@@ -190,34 +287,50 @@ function TabButton({ id, label, icon, active, onClick }: any) {
 
 function InputGroup({ label, value, icon, disabled }: any) {
     return (
-        <div>
-            <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2 ml-1">{label}</label>
-            <div className={`flex items-center gap-3 p-3 rounded-xl border ${disabled ? 'bg-zinc-900/50 border-white/5 text-zinc-500 cursor-not-allowed' : 'bg-zinc-900 border-white/10 text-white focus-within:border-blue-500'}`}>
-                <div className="text-zinc-500">{icon}</div>
+        <div className="group">
+            <label className="block text-[10px] font-bold uppercase text-zinc-500 tracking-widest mb-2">{label}</label>
+            <div className={`
+                flex items-center gap-3 px-4 py-3 rounded-xl border transition-all
+                ${disabled 
+                    ? 'bg-zinc-900/30 border-white/5 text-zinc-600 cursor-not-allowed' 
+                    : 'bg-black/20 border-white/10 text-white group-hover:border-white/20 focus-within:border-blue-500/50 focus-within:bg-black/40'}
+            `}>
+                <div className={`${disabled ? 'text-zinc-700' : 'text-zinc-500'}`}>{icon}</div>
                 <input 
-                    value={value} 
+                    defaultValue={value} 
                     disabled={disabled}
                     readOnly={disabled}
-                    className="bg-transparent outline-none w-full text-sm font-bold"
+                    className="bg-transparent outline-none w-full text-sm font-medium placeholder-zinc-700"
                 />
+                {disabled && <Lock size={12} className="text-zinc-700"/>}
             </div>
-            {disabled && <p className="text-[10px] text-zinc-600 mt-1 ml-1 flex items-center gap-1"><Lock size={8}/> Managed by Admin</p>}
         </div>
     )
 }
 
-function PermissionCard({ label, desc, granted, icon }: any) {
+function PermissionSection({ title, permissions }: { title: string, permissions: any[] }) {
     return (
-        <div className={`p-4 rounded-xl border flex items-start gap-4 ${granted ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-zinc-900/50 border-white/5 opacity-60'}`}>
-            <div className={`p-2 rounded-lg ${granted ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
-                {icon}
-            </div>
-            <div className="flex-1">
-                <div className="flex justify-between items-center mb-1">
-                    <h4 className={`text-sm font-bold ${granted ? 'text-emerald-400' : 'text-zinc-400'}`}>{label}</h4>
-                    {granted ? <CheckCircle2 size={16} className="text-emerald-500"/> : <XCircle size={16} className="text-zinc-600"/>}
-                </div>
-                <p className="text-xs text-zinc-500 leading-snug">{desc}</p>
+        <div>
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">{title}</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {permissions.map((p: any, i: number) => (
+                    <div key={i} className={`p-4 rounded-xl border flex items-start gap-4 ${p.granted ? 'bg-zinc-900/80 border-white/10' : 'bg-transparent border-white/5 opacity-50'}`}>
+                        <div className={`mt-0.5 ${p.granted ? 'text-emerald-500' : 'text-zinc-600'}`}>
+                            {p.granted ? <CheckCircle2 size={18}/> : <Lock size={18}/>}
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center mb-1">
+                                <h4 className={`text-sm font-bold ${p.granted ? 'text-white' : 'text-zinc-500'}`}>{p.label}</h4>
+                                {p.granted && (
+                                    <span className="text-[10px] uppercase font-bold bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded border border-white/5">
+                                        {p.level}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-zinc-500 leading-snug">{p.desc}</p>
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     )
