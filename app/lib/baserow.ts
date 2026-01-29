@@ -480,7 +480,7 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail
     });
 
-    const familyRes = await fetch(`${BASEROW_API_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`, {
+    const familyRes = await fetch(`${BASE_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`, {
       headers: HEADERS,
       next: { revalidate: 0 } // Always fetch fresh data for settings
     });
@@ -499,7 +499,7 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id.toString()
     });
 
-    const peopleRes = await fetch(`${BASEROW_API_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`, {
+    const peopleRes = await fetch(`${BASE_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`, {
       headers: HEADERS,
       next: { revalidate: 0 }
     });
