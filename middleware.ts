@@ -1,7 +1,7 @@
 // middleware.ts
 import { auth } from "@/auth"
 
-export default auth((req) => {
+export default auth(() => {
   // req.auth contains the user session
   // If you want to protect a route:
   // if (!req.auth && req.nextUrl.pathname !== "/login") {

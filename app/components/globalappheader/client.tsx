@@ -12,11 +12,19 @@ import {
   Theater, GraduationCap, Home, Archive, Clock
 } from 'lucide-react';
 
-export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], activeId: number }) {
+export default function GlobalHeaderClient({ 
+  shows, 
+  activeId, 
+  user 
+}: { 
+  shows: any[], 
+  activeId: number, 
+  user?: any 
+}) {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
   
-  // NEW: Toggle state for the dropdown
+  // Toggle state for the dropdown
   const [viewMode, setViewMode] = useState<'current' | 'archive'>('current');
 
   const navRef = useRef<HTMLDivElement>(null);
@@ -40,8 +48,11 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
   // --- DATA PREP ---
   const activeShow = shows.find(s => s.id === activeId) || shows[0] || { title: "Select Production", branch: "None" };
   
-  // Mock User (Placeholder for now)
-  const user = { initials: "AF", name: "Austin Fitzhugh", role: "Artistic Director" };
+  // Real User Data Parsing
+  const userInitials = user?.name 
+    ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0,2) 
+    : "??";
+  const userRole = user?.role || "Guest";
 
   // 1. Group Shows by Season
   const groupedData = useMemo(() => {
@@ -52,8 +63,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
       groups[season].push(show);
     });
     
-    // Sort seasons descending (assuming format "Season 12", "2025", etc.)
-    // If strings, this roughly works. For better sorting, we might need a "season_order" field later.
+    // Sort seasons descending (assuming format "2025-2026", "2024-2025", etc.)
     const seasons = Object.keys(groups).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     
     return { groups, seasons };
@@ -146,7 +156,7 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                     </div>
                   )}
 
-{/* VIEW: ARCHIVE */}
+                  {/* VIEW: ARCHIVE (ACCORDIONS) */}
                   {viewMode === 'archive' && (
                     <div className="space-y-2 animate-in slide-in-from-right-4 duration-300">
                        {archiveSeasons.length > 0 ? (
@@ -158,7 +168,6 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
                                     <Calendar size={12} />
                                     <span>{season}</span>
                                  </div>
-                                 {/* Simple rotating chevron */}
                                  <ChevronRight size={12} className="group-open:rotate-90 transition-transform duration-200" />
                                </summary>
                                
@@ -188,11 +197,15 @@ export default function GlobalHeaderClient({ shows, activeId }: { shows: any[], 
         {/* RIGHT: USER PROFILE */}
         <div className="flex items-center gap-3">
           <div className="hidden md:flex flex-col items-end leading-tight">
-            <span className="text-xs font-semibold text-zinc-200">{user.name}</span>
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">{user.role}</span>
+            <span className="text-xs font-semibold text-zinc-200">{user?.name || "Not Signed In"}</span>
+            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">{userRole}</span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-900/20 cursor-default ring-2 ring-zinc-900">
-            {user.initials}
+          <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-900/20 cursor-default ring-2 ring-zinc-900 overflow-hidden">
+            {user?.image ? (
+              <img src={user.image} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              userInitials
+            )}
           </div>
         </div>
 

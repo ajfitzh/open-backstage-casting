@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
-import { getServerSession } from "next-auth"; // <--- NEW: Auth Import
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // <--- NEW: Auth Options
+import { auth } from "@/auth";
 import { 
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
@@ -27,7 +26,7 @@ const SEASON_STAFF = [
 
 export default async function DashboardPage() {
   // 1. GET SESSION (Who is logged in?)
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const userRole = (session?.user as any)?.role || "Guest";
   const firstName = session?.user?.name?.split(' ')[0] || "Cast Member";
 
@@ -56,7 +55,7 @@ export default async function DashboardPage() {
         </div>
         <h1 className="text-3xl font-black uppercase italic">No Active Production</h1>
         <p className="text-zinc-400 max-w-md">
-          We couldn't find a show marked as "Active" in Baserow. Please ask an administrator to check the Productions table.
+          We couldn&apos;t find a show marked as &quot;Active&quot; in Baserow. Please ask an administrator to check the Productions table.
         </p>
       </div>
     );
