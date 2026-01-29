@@ -123,8 +123,19 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
         return null; // Return null so we don't crash JSON.parse
     }
 
-    if (!res.ok) {
-      console.error(`❌ [Baserow] API Error [${res.status}]: ${res.statusText} at ${finalUrl}`);
+if (!res.ok) {
+      // ATTEMPT TO READ ERROR BODY
+      let errorBody = "";
+      try {
+        const jsonError = await res.json();
+        errorBody = JSON.stringify(jsonError, null, 2);
+      } catch {
+        errorBody = await res.text();
+      }
+
+      console.error(`❌ [Baserow] API Error [${res.status}] at ${finalUrl}`);
+      console.error(`   Server Response: ${errorBody}`); // <--- THIS IS THE GOLDEN TICKET
+      
       if (options.method === 'DELETE') return true; 
       return []; 
     }
@@ -282,10 +293,15 @@ export async function getActiveShows() {
 // app/lib/baserow.ts
 
 export async function getAllShows() {
-  // FIXED: We removed '?user_field_names=true' because fetchBaserow adds it.
-  // We only keep the stuff unique to this call.
+  // CLEANER: Pass params as object. 
+  // This automatically handles 'user_field_names', 'size', and 'order_by'
   const data = await fetchBaserow(
-    `/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=200&order_by=-id`
+    `/database/rows/table/${TABLES.PRODUCTIONS}/`, 
+    {}, // options
+    { 
+      size: "200", 
+      order_by: "-id" // "-id" means descending (newest first)
+    } 
   );
   
   if (!Array.isArray(data)) return [];
