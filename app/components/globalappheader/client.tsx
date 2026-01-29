@@ -168,12 +168,13 @@ export default function GlobalHeaderClient({
                   <Link href="/settings" className="flex items-center gap-2 w-full p-2 text-xs font-bold text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors">
                     <Settings size={14} /> Settings
                   </Link>
-                  <button 
-                    onClick={() => signOut()}
-                    className="flex items-center gap-2 w-full p-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                  >
-                    <LogOut size={14} /> Sign Out
-                  </button>
+<button 
+  onClick={() => signOut({ callbackUrl: "/login" })}
+  className="flex items-center gap-2 w-full p-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+>
+  <LogOut size={14} /> 
+  Sign Out
+</button>
                 </div>
               </div>
             )}

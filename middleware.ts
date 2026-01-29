@@ -1,16 +1,24 @@
-// middleware.ts
 import { auth } from "@/auth"
+import { NextResponse } from "next/navigation"
 
-export default auth(() => {
-  // req.auth contains the user session
-  // If you want to protect a route:
-  // if (!req.auth && req.nextUrl.pathname !== "/login") {
-  //   const newUrl = new URL("/login", req.nextUrl.origin)
-  //   return Response.redirect(newUrl)
-  // }
+export default auth((req) => {
+  const isLoggedIn = !!req.auth
+  const isOnLoginPage = req.nextUrl.pathname.startsWith("/login")
+
+  // 1. If NOT logged in and NOT on login page -> Send to /login
+  if (!isLoggedIn && !isOnLoginPage) {
+    return NextResponse.redirect(new URL("/login", req.nextUrl))
+  }
+
+  // 2. If logged in and TRYING to go to /login -> Send to /
+  if (isLoggedIn && isOnLoginPage) {
+    return NextResponse.redirect(new URL("/", req.nextUrl))
+  }
+
+  return NextResponse.next()
 })
 
 export const config = {
-  // The matcher prevents middleware from running on static assets and API routes
+  // Protect everything EXCEPT static files, images, and the favicon
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 }
