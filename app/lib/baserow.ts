@@ -1,10 +1,13 @@
 // app/lib/baserow.ts
-import axios from "axios";
 import { notFound } from "next/navigation";
+
 // --- CONFIGURATION ---
-const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
+// We remove any trailing slash from BASE_URL to ensure clean concatenation later.
+const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
+const API_TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN;
+
 const HEADERS = {
-  "Authorization": `Token ${process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN}`,
+  "Authorization": `Token ${API_TOKEN}`,
   "Content-Type": "application/json",
 };
 
@@ -37,17 +40,17 @@ export const TABLES = {
 };
 
 // --- AUTHENTICATION FIELDS ---
-// We use IDs for stability, but the Password field is looked up by name
 const AUTH_FIELDS = {
   FULL_NAME: "field_5735",
   HEADSHOT: "field_5776",
   STATUS: "field_5782",
-  APP_PASSWORD_NAME: "App Password", // The new text field you created
+  APP_PASSWORD_NAME: "App Password",
   CYT_NATIONAL_USER_ID: "field_6128",
   CYT_NATIONAL_INDIVIDUAL_EMAIL: "field_6131",
   CYT_ACCOUNT_PERSONAL_EMAIL: "field_6132",
 };
 
+// --- TYPES ---
 export interface BaserowUser {
   id: string;
   name: string;
@@ -57,78 +60,122 @@ export interface BaserowUser {
   cytId: string;
 }
 
+export interface FamilyData {
+  id: string; 
+  cytId: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  role: string;
+  familyMembers: Person[];
+}
+
+export interface Person {
+  id: number;
+  name: string;
+  role: string;
+  age: number;
+  image: string | null;
+}
+
+// ==============================================================================
+// 🛡️ CENTRAL FETCH HELPER
+// ==============================================================================
+
+/**
+ * Universal fetch wrapper for Baserow.
+ * Automatically prepends BASE_URL, adds auth headers, and handles user_field_names.
+ */
+export async function fetchBaserow(endpoint: string, options: RequestInit = {}, queryParams: Record<string, any> = {}) {
+  try {
+    // 1. Construct Query String
+    const params = new URLSearchParams({
+      user_field_names: "true", // Always use readable names
+      ...queryParams
+    });
+    
+    // 2. Handle '?' in endpoint correctly
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const finalUrl = `${BASE_URL}${endpoint}${separator}${params.toString()}`;
+
+    // 3. Fetch
+    const res = await fetch(finalUrl, {
+      ...options,
+      headers: { ...HEADERS, ...options.headers },
+      cache: options.cache || "no-store", 
+    });
+
+    if (!res.ok) {
+      console.error(`Baserow API Error [${res.status}]: ${res.statusText} at ${finalUrl}`);
+      if (options.method === 'DELETE') return true; 
+      return []; 
+    }
+
+    const data = await res.json();
+    
+    // 4. Normalize Return
+    // If it's a list response, return the results array. Otherwise return the object.
+    if (data && data.results && Array.isArray(data.results)) return data.results;
+    return data;
+
+  } catch (error) {
+    console.error("Network/Fetch Error:", error);
+    return [];
+  }
+}
+
+
 // ==============================================================================
 // 🔐 AUTHENTICATION LOGIC (HYBRID)
 // ==============================================================================
 
 /**
- * 1. GOOGLE SSO: Finds a user by email only.
- * Returns null if email exists in Google but NOT in your Roster (Security Check).
+ * 1. GOOGLE SSO: Finds a user by email.
  */
 export async function findUserByEmail(email: string): Promise<BaserowUser | null> {
-  try {
-     const params = {
-      user_field_names: false,
-      filter_type: "OR",
-      size: 1,
-      [`filter__${AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
-      [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
-    };
+  const params = {
+    filter_type: "OR",
+    size: "1",
+    [`filter__${AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
+    [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
+  };
 
-    const response = await axios.get(`${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/`, {
-      headers: HEADERS, params
-    });
+  const results = await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/`, {}, params);
 
-    const results = response.data.results;
-    if (!results || results.length === 0) return null;
-
-    return formatUser(results[0], email);
-  } catch (error) {
-    console.error("SSO Lookup Error:", error);
-    return null;
-  }
+  if (!results || results.length === 0) return null;
+  return formatUser(results[0], email);
 }
 
 /**
  * 2. CREDENTIALS: Verifies Email + Custom Password
  */
 export async function verifyUserCredentials(email: string, passwordInput: string): Promise<BaserowUser | null> {
-  try {
-    // We request user_field_names: true so we can find "App Password" by readable name
-    const params = {
-      user_field_names: true, 
-      filter_type: "OR",
-      size: 5,
-      [`filter__${AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
-      [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
-    };
+  const params = {
+    filter_type: "OR",
+    size: "5",
+    [`filter__${AUTH_FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
+    [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
+  };
 
-    const response = await axios.get(`${BASE_URL}/api/database/rows/table/${TABLES.PEOPLE}/`, {
-      headers: HEADERS, params
-    });
+  const results = await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/`, {}, params);
 
-    const results = response.data.results;
-    if (!results || results.length === 0) return null;
+  if (!results || results.length === 0) return null;
 
-    // Find the specific user where the password matches
-    const userRecord = results.find((row: any) => {
-        // Check the new "App Password" field
-        const storedPass = String(row[AUTH_FIELDS.APP_PASSWORD_NAME] || "").trim();
-        return storedPass === passwordInput.trim();
-    });
+  // Find the specific user where the password matches
+  const userRecord = results.find((row: any) => {
+      const storedPass = String(row[AUTH_FIELDS.APP_PASSWORD_NAME] || "").trim();
+      return storedPass === passwordInput.trim();
+  });
 
-    if (!userRecord) return null;
+  if (!userRecord) return null;
 
-    return formatUser(userRecord, email);
-  } catch (error) {
-    console.error("Credentials Auth Error:", error);
-    return null;
-  }
+  return formatUser(userRecord, email);
 }
 
 // Helper to format raw Baserow data into a User Session
 function formatUser(row: any, email: string) {
-    // Handle both ID-based keys (from SSO) and Name-based keys (from Credentials)
+    // Handle both ID-based keys (legacy) and Name-based keys (from user_field_names=true)
     const headshotArray = row[AUTH_FIELDS.HEADSHOT] || row["Headshot"];
     const headshotUrl = Array.isArray(headshotArray) && headshotArray.length > 0 ? headshotArray[0].url : null;
     const statusObj = row[AUTH_FIELDS.STATUS] || row["Status"];
@@ -145,17 +192,14 @@ function formatUser(row: any, email: string) {
 
 
 // ==============================================================================
-// 📈 BOX OFFICE & ANALYTICS (Existing)
+// 📈 BOX OFFICE & ANALYTICS
 // ==============================================================================
 
 export async function getPerformanceAnalytics(productionId?: number) {
-  const endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/?size=200&order_by=field_6186`;
-  const data = await fetchBaserow(endpoint);
+  const endpoint = `/api/database/rows/table/${TABLES.PERFORMANCES}/`;
+  const data = await fetchBaserow(endpoint, {}, { size: "200", order_by: "field_6186" });
   
-  if (!Array.isArray(data) || data.length === 0) {
-    console.error("⚠️ No data returned from Baserow or unauthorized.");
-    return [];
-  }
+  if (!Array.isArray(data) || data.length === 0) return [];
 
   return data.map((row: any) => {
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
@@ -179,54 +223,27 @@ export async function getGlobalSalesSummary() {
   const totalSold = data.reduce((sum, p) => sum + p.sold, 0);
   const avgFill = Math.round(data.reduce((sum, p) => sum + p.fillRate, 0) / data.length);
 
-  return {
-    totalSold,
-    avgFill,
-    performanceCount: data.length
-  };
+  return { totalSold, avgFill, performanceCount: data.length };
 }
 
-// --- 🛡️ CENTRAL FETCH HELPER ---
-export async function fetchBaserow(endpoint: string, options: RequestInit = {}) {
-  const separator = endpoint.includes('?') ? '&' : '?';
-  const url = `${BASE_URL}${endpoint}${separator}user_field_names=true`;
-
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: { ...HEADERS, ...options.headers },
-      cache: options.cache || "no-store", 
-    });
-
-    if (!res.ok) {
-      console.error(`Baserow API Error [${res.status}]: ${res.statusText} at ${url}`);
-      if (options.method === 'DELETE') return true; 
-      return []; 
-    }
-
-    const data = await res.json();
-    if (data && data.results && Array.isArray(data.results)) return data.results;
-    return data;
-  } catch (error) {
-    console.error("Network/Fetch Error:", error);
-    return [];
-  }
-}
+// ==============================================================================
+// 🎭 GETTERS
+// ==============================================================================
 
 export async function getTableRows(tableId: string, productionId?: number) {
-    let endpoint = `/api/database/rows/table/${tableId}/?size=200`;
-    if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-    return await fetchBaserow(endpoint);
+    let endpoint = `/api/database/rows/table/${tableId}/`;
+    const params: any = { size: "200" };
+    if (productionId) params[`filter__Production__link_row_has`] = productionId;
+    return await fetchBaserow(endpoint, {}, params);
 }
 
-// ==============================================================================
-// 🎭 COMPLEX / SPECIFIC GETTERS
-// ==============================================================================
-
 export async function getCreativeTeam(productionId: number) {
-  const endpoint = `/api/database/rows/table/${TABLES.SHOW_TEAM}/?size=100&filter__Productions__link_row_has=${productionId}`;
+  const params = {
+    size: "100",
+    filter__Productions__link_row_has: productionId
+  };
   
-  const data = await fetchBaserow(endpoint);
+  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.SHOW_TEAM}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
@@ -257,15 +274,20 @@ function getRoleColor(role: string) {
 }
 
 export async function getActiveShows() {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=200`);
+  // Added /api prefix
+  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
+  
   if (!Array.isArray(data)) return [];
-  return data.filter((row: any) => row["Is Active"] === true).map((row: any) => ({
-    id: row.id,
-    title: row.Title || "Untitled Show",
-    location: row.Location?.value || row.Branch?.value || "Unknown",
-    type: row.Type?.value || "Main Stage",
-    season: row.Season?.value || "General", 
-  }));
+  
+  return data
+    .filter((row: any) => row["Is Active"] === true)
+    .map((row: any) => ({
+      id: row.id,
+      title: row.Title || "Untitled Show",
+      location: row.Location?.value || row.Branch?.value || "Unknown",
+      type: row.Type?.value || "Main Stage",
+      season: row.Season?.value || "General", 
+    }));
 }
 
 export async function getShowById(id: number) {
@@ -274,7 +296,7 @@ export async function getShowById(id: number) {
 }
 
 export async function getActiveProduction() {
-  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/?size=50`);
+  const data = await fetchBaserow(`/api/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "50" });
   if (!Array.isArray(data)) return null;
   return data.find((r: any) => r["Is Active"] === true) || data[0];
 }
@@ -282,24 +304,11 @@ export async function getActiveProduction() {
 // --- COMPLIANCE & CASTING ---
 
 export async function getAuditionees(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-  
-  const data = await fetchBaserow(endpoint);
-  if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => {
-      if (row.Performer && row.Performer.length > 0) {
-          row.performerName = row.Performer[0].value;
-      }
-      return row;
-  });
+  return await getTableRows(TABLES.AUDITIONS, productionId);
 }
 
 export async function getAssignments(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.ASSIGNMENTS}/?size=200`;
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-  return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.ASSIGNMENTS, productionId);
 }
 
 export async function getComplianceData(productionId?: number) {
@@ -340,45 +349,35 @@ export async function getComplianceData(productionId?: number) {
 // --- STANDARD GETTERS ---
 
 export async function getScenes(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.SCENES}/?size=200`;
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-  return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.SCENES, productionId);
 }
 
 export async function getRoles() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.BLUEPRINT_ROLES}/?size=200`);
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.BLUEPRINT_ROLES}/`, {}, { size: "200" });
 }
 
 export async function getPeople() {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/?size=200`);
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.PEOPLE}/`, {}, { size: "200" });
 }
 
 export async function getCommitteePreferences(activeId: number) {
-  return await fetchBaserow(`/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/?size=200`);
+  return await fetchBaserow(`/api/database/rows/table/${TABLES.COMMITTEE_PREFS}/`, {}, { size: "200" });
 }
 
 export async function getProductionEvents(productionId?: number) {
-  let endpoint = `/api/database/rows/table/${TABLES.EVENTS}/?size=200`;
-  if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-  return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.EVENTS, productionId);
 }
 
 export async function getAuditionSlots(productionId?: number) {
-    let endpoint = `/api/database/rows/table/${TABLES.AUDITIONS}/?size=200`;
-    if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-    return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.AUDITIONS, productionId);
 }
 
 export async function getConflicts(productionId?: number) {
-    let endpoint = `/api/database/rows/table/${TABLES.CONFLICTS}/?size=200`;
-    if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-    return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.CONFLICTS, productionId);
 }
 
 export async function getProductionAssets(productionId: number) {
-    let endpoint = `/api/database/rows/table/${TABLES.ASSETS}/?size=200`;
-    if (productionId) endpoint += `&filter__Production__link_row_has=${productionId}`;
-    return await fetchBaserow(endpoint);
+  return await getTableRows(TABLES.ASSETS, productionId);
 }
 
 // ==============================================================================
@@ -424,117 +423,61 @@ export async function createProductionAsset(name: string, url: string, type: str
 }
 
 
+// ==============================================================================
+// 👨‍👩‍👧‍👦 FAMILY & HOUSEHOLD LOGIC
+// ==============================================================================
+
 // Table: FAMILIES (634)
 const TABLE_FAMILIES = 634;
-const FIELD_FAMILY_EMAIL = 'field_6126'; // "Email" from your CSV
+const FIELD_FAMILY_EMAIL = 'field_6126'; // "Email"
 const FIELD_CYT_ID = 'field_6127';       // "CYT National ID"
 
 // Table: PEOPLE (599)
 const TABLE_PEOPLE = 599;
-const FIELD_LINK_TO_FAMILY = 'field_6153'; // The "FAMILIES" link column in People table
+const FIELD_LINK_TO_FAMILY = 'field_6153'; // Link to FAMILIES
 const FIELDS_PEOPLE = {
   FULL_NAME: 'field_5735',
-  ROLE: 'field_5782',    // "STATUS" (Student/Adult)
-  DOB: 'field_5738',     // Date of Birth
+  ROLE: 'field_5782',    
+  DOB: 'field_5738',     
   HEADSHOT: 'field_5776',
   PHONE: 'field_5783',
   ADDRESS: 'field_6133',
   CITY: 'field_6135',
   STATE: 'field_6136',
   ZIP: 'field_6137',
-  EMAIL_PERSONAL: 'field_6132' // Personal email if different from family
+  EMAIL_PERSONAL: 'field_6132'
 };
 
-// --- TYPES ---
-export interface FamilyData {
-  id: string; 
-  cytId: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  role: string; // <--- ADD THIS LINE
-  familyMembers: Person[];
-}
-
-export interface Person {
-  id: number;
-  name: string;
-  role: string;
-  age: number;
-  image: string | null;
-}
-
-// --- MAIN FETCHER ---
-// --- MAIN FETCHER ---
 export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
-  // DEBUG 1: Check what email NextAuth is sending
   console.log("🔍 [Baserow] Lookup Email:", userEmail);
-
   if (!userEmail) return null;
 
   try {
     // STEP 1: Find the Family Record by Email
-    const familyQuery = new URLSearchParams({
-      user_field_names: 'true',
-      [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail
-    });
+    const familyData = await fetchBaserow(
+      `/api/database/rows/table/${TABLE_FAMILIES}/`, 
+      { next: { revalidate: 0 } }, 
+      { [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail }
+    );
 
-    const familyUrl = `${BASE_URL}/database/rows/table/${TABLE_FAMILIES}/?${familyQuery}`;
-    
-    // DEBUG 2: Check the exact URL for Family Table
-    console.log("🔗 [Baserow] Fetching Family URL:", familyUrl);
-
-    const familyRes = await fetch(familyUrl, {
-      headers: HEADERS,
-      next: { revalidate: 0 } // Always fetch fresh data for settings
-    });
-
-    if (!familyRes.ok) {
-        // DEBUG 3: Catch API errors (401, 404, etc)
-        console.error("❌ [Baserow] Family API Error:", familyRes.status, familyRes.statusText);
-        throw new Error("Failed to fetch family");
-    }
-    
-    const familyData = await familyRes.json();
-    
-    // DEBUG 4: Did we find a row?
-    console.log("✅ [Baserow] Family Rows Found:", familyData.results.length);
-
-    const familyRow = familyData.results[0];
-
-    if (!familyRow) {
+    if (!familyData || familyData.length === 0) {
         console.warn("⚠️ [Baserow] No family found for email:", userEmail);
         return null; 
     }
 
+    const familyRow = familyData[0];
+    console.log("✅ [Baserow] Family Record Found:", familyRow.id);
+
     // STEP 2: Find all People linked to this Family
-    const peopleQuery = new URLSearchParams({
-      user_field_names: 'true',
-      [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id.toString()
-    });
-
-    const peopleUrl = `${BASE_URL}/database/rows/table/${TABLE_PEOPLE}/?${peopleQuery}`;
+    const peopleRows = await fetchBaserow(
+      `/api/database/rows/table/${TABLE_PEOPLE}/`, 
+      { next: { revalidate: 0 } }, 
+      { [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id }
+    );
     
-    // DEBUG 5: Check People URL
-    console.log("🔗 [Baserow] Fetching People URL:", peopleUrl);
-
-    const peopleRes = await fetch(peopleUrl, {
-      headers: HEADERS,
-      next: { revalidate: 0 }
-    });
-    
-    if (!peopleRes.ok) {
-         console.error("❌ [Baserow] People API Error:", peopleRes.status, peopleRes.statusText);
-    }
-
-    const peopleData = await peopleRes.json();
-    const peopleRows = peopleData.results || [];
-    
-    // DEBUG 6: How many people found?
     console.log(`✅ [Baserow] Found ${peopleRows.length} people for Family ID ${familyRow.id}`);
 
-    // STEP 3: Identify Head of Household (for address/phone display)
+    // STEP 3: Identify Head of Household (Adult)
     const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
 
     // STEP 4: Return formatted data
@@ -545,7 +488,6 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       email: userEmail,
       phone: headOfHouse?.[FIELDS_PEOPLE.PHONE] || "",
       address: headOfHouse ? `${headOfHouse[FIELDS_PEOPLE.ADDRESS] || ''}, ${headOfHouse[FIELDS_PEOPLE.CITY] || ''}` : "",
-      
       role: "Family Administrator", 
       
       familyMembers: peopleRows.map((p: any) => {
@@ -558,7 +500,6 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
            age = Math.abs(ageDate.getUTCFullYear() - 1970);
         }
 
-        // Get Image URL
         const headshotArray = p[FIELDS_PEOPLE.HEADSHOT];
         const imageUrl = (Array.isArray(headshotArray) && headshotArray.length > 0) 
           ? headshotArray[0].url 
