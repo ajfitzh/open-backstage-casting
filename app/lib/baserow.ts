@@ -87,22 +87,6 @@ export interface Person {
 // ==============================================================================
 
 /**
- * Safely extracts a string from any Baserow field type (Array, Object, String, null).
- * Prevents "toLowerCase is not a function" errors.
- */
-function safeString(field: any, fallback: string = ""): string {
-  if (!field) return fallback;
-  if (typeof field === 'string') return field;
-  if (Array.isArray(field)) {
-    return field.length > 0 ? (field[0].value || field[0].name || fallback) : fallback;
-  }
-  if (typeof field === 'object') {
-    return field.value || field.name || fallback;
-  }
-  return String(field); 
-}
-
-/**
  * Universal fetch wrapper for Baserow.
  * Automatically handles Auth headers and Query Params.
  */
@@ -190,19 +174,35 @@ function formatUser(row: any, email: string) {
     };
 }
 
-
 // ==============================================================================
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
 
+/**
+ * Helper to safely extract a string from any Baserow field type (Array, Object, String, null).
+ * Prevents "toLowerCase is not a function" errors.
+ */
+function safeString(field: any, fallback: string = ""): string {
+  if (!field) return fallback;
+  if (typeof field === 'string') return field;
+  if (Array.isArray(field)) {
+    return field.length > 0 ? (field[0].value || field[0].name || fallback) : fallback;
+  }
+  if (typeof field === 'object') {
+    return field.value || field.name || fallback;
+  }
+  return String(field); 
+}
+
 export async function getClasses() {
-  // FIX: Increased size from 200 to 2000 to catch all historical data
+  // 🚨 CRITICAL FIX: Increased size to 2000 to capture all historical and future classes
   const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "2000" });
 
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    // ... (rest of mapping logic is fine) ...
+    // 1. ROBUST ENROLLMENT COUNT
+    // Handles CSV Strings ("Name1, Name2") AND Baserow Link Arrays
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -210,6 +210,8 @@ export async function getClasses() {
       enrollment = row.Students.split(',').length;
     }
 
+    // 2. SPACE LINKAGE
+    // Check all casing variations to be safe
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
@@ -217,6 +219,8 @@ export async function getClasses() {
     return {
       id: row.id,
       name: safeString(row['Class Name'], "Unnamed Class"),
+      
+      // Force Strings to prevent .toLowerCase() crashes
       session: safeString(row.Session, "Unknown"),
       teacher: safeString(row.Teacher, "TBA"),
       location: safeString(row.Location, "Main Campus"),
@@ -232,29 +236,35 @@ export async function getClasses() {
 }
 
 export async function getVenueLogistics() {
-  // FIX: Increased sizes here too, just in case
-  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "200" });
-  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" }); 
-  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "200" });
-  const classesData = await getClasses(); // This now fetches 2000!
+  // Fetch everything in parallel with INCREASED LIMITS
+  const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
+    fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "100" }),
+    fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "2000" }), // Increased
+    fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "500" }),
+    getClasses() // Uses the 2000 limit defined above
+  ]);
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    // ... (rest of logic remains exactly the same) ...
+    // 1. DYNAMIC RATE FINDER
+    // Find rates linked to this venue, sort by Year (descending) to get the newest
     const venueRates = Array.isArray(ratesData) ? ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id)) : [];
     
     const activeRate = venueRates.sort((a: any, b: any) => {
       const sessionA = safeString(a.Session);
       const sessionB = safeString(b.Session);
+      // Extract year (e.g. "Winter 2026" -> 2026)
       const yearA = parseInt(sessionA.match(/\d{4}/)?.[0] || "0");
       const yearB = parseInt(sessionB.match(/\d{4}/)?.[0] || "0");
       return yearB - yearA; 
     })[0];
 
+    // 2. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
+        // Link Classes to this Space using the Space ID
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
         
         return {
@@ -281,9 +291,6 @@ export async function getVenueLogistics() {
     };
   }).filter((venue: any) => venue.spaces.length > 0);
 }
-// ==============================================================================
-// 🎭 SHOW & PRODUCTION ANALYTICS
-// ==============================================================================
 
 export async function getPerformanceAnalytics(productionId?: number) {
   const data = await fetchBaserow(`/database/rows/table/${TABLES.PERFORMANCES}/`, {}, { size: "200" });
@@ -309,41 +316,6 @@ export async function getGlobalSalesSummary() {
   const avgFill = Math.round(data.reduce((sum, p) => sum + p.fillRate, 0) / data.length);
   return { totalSold, avgFill, performanceCount: data.length };
 }
-
-export async function getAllShows() {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
-  if (!Array.isArray(data)) return [];
-  
-  return data.sort((a: any, b: any) => b.id - a.id).map((row: any) => {
-    const rawStatus = safeString(row.Status, "Archived");
-    return {
-      id: row.id,
-      title: safeString(row.Title || row["Full Title"], "Untitled Show"),
-      location: safeString(row.Location || row.Venue || row.Branch),
-      type: safeString(row.Type, "Main Stage"),
-      season: safeString(row.Season, "Unknown Season"),
-      status: rawStatus,
-      isActive: row["Is Active"] === true || row["Is Active"]?.value === "true" || rawStatus === "Active"
-    };
-  });
-}
-
-export async function getActiveShows() {
-  const allShows = await getAllShows();
-  return allShows.filter(show => show.isActive);
-}
-
-export async function getShowById(id: number) {
-  if (!id) return null;
-  return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/${id}/`);
-}
-
-export async function getActiveProduction() {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "50" });
-  if (!Array.isArray(data)) return null;
-  return data.find((r: any) => r["Is Active"] === true) || data[0];
-}
-
 // ==============================================================================
 // 📋 COMPLIANCE & CASTING
 // ==============================================================================
