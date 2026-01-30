@@ -37,6 +37,9 @@ export const TABLES = {
   PERFORMANCES: "637",
   SALES_HISTORY: "637", 
   CLASSES: "633",
+  SPACES: "638",
+  RENTAL_RATES: "639",
+  VENUES: "635",
 };
 
 // --- AUTHENTICATION FIELDS ---
