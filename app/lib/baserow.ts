@@ -267,18 +267,34 @@ export async function getShowById(showId: string) {
   return row && !row.error ? row : null;
 }
 
+// app/lib/baserow.ts
+
 export async function getAllShows() {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
-  return data.map((row: any) => ({
+  return data.map((row: any) => {
+    // 1. Get Status (Safe Fallback)
+    const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
+    
+    // 2. Get Location (Try "Location" field first, then linked "Venue")
+    const locationName = safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || 
+                         safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || 
+                         "TBD Location";
+
+    return {
       id: row.id,
-      title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE]),
-      season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON]),
-      status: safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS]),
-      isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true,
+      title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled Show"),
+      // 🚨 RESTORED: Location & Type (This fixes "UNKNOWN")
+      location: locationName,
+      type: safeGet(row[DB.PRODUCTIONS.FIELDS.TYPE], "Main Stage"),
+      
+      season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON], "Unknown Season"),
+      status: rawStatus,
+      isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
       image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
-  })).sort((a: any, b: any) => b.id - a.id);
+    };
+  }).sort((a: any, b: any) => b.id - a.id);
 }
 
 // --- Casting ---
@@ -349,27 +365,31 @@ export async function getPeople() {
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
 }
 
+// app/lib/baserow.ts
+
 export async function getCreativeTeam(productionId?: number) {
   // 1. Fetch from the SHOW_TEAM table
   const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`);
 
   if (!Array.isArray(data)) return [];
 
-  // 2. Map raw IDs to clean component data
-  return data.map((row: any) => {
-    // Use safeGet with the schema IDs to get the values
-    const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], "Unknown Staff");
-    const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
+  // 2. Map & Filter
+  return data
+    .map((row: any) => {
+      const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], null); // Return null if empty
+      const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
 
-    return {
-      id: row.id,
-      name: name,
-      role: role,
-      // Restore the color/initials logic needed for the UI
-      initials: name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
-      color: getRoleColor(role)
-    };
-  });
+      if (!name) return null; // Skip empty assignments
+
+      return {
+        id: row.id,
+        name: name,
+        role: role,
+        initials: name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
+        color: getRoleColor(role)
+      };
+    })
+    .filter(Boolean); // Remove the nulls
 }
 
 // Helper for the UI colors (Restored)
