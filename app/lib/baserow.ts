@@ -184,20 +184,41 @@ function safeString(field: any, fallback: string = ""): string {
   return String(field); 
 }
 
-// 🚨 DEBUGGED CLASS FETCHER
+// 🚨 UPGRADED CLASS FETCHER (HANDLES PAGINATION)
 export async function getClasses() {
-  // Fetch raw rows without filters to see what we actually have
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "200" });
+  let allRows: any[] = [];
+  let page = 1;
+  let hasMore = true;
 
-  if (!Array.isArray(data)) {
-    console.error("❌ getClasses: Returned non-array data", data);
-    return [];
+  // 1. Loop until we get all pages
+  while (hasMore) {
+    console.log(`📡 Fetching Classes Page ${page}...`);
+    
+    // We pass 'page' in the params
+    const rawData = await fetchBaserow(
+      `/database/rows/table/${TABLES.CLASSES}/`, 
+      { page: page.toString() }, 
+      { size: "200" } 
+    );
+
+    if (!Array.isArray(rawData) || rawData.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = [...allRows, ...rawData];
+      // If we got fewer than 200 rows, we reached the end
+      if (rawData.length < 200) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
   }
 
-  console.log(`✅ getClasses: Fetched ${data.length} rows from Table ${TABLES.CLASSES}`);
+  console.log(`✅ Total Classes Fetched: ${allRows.length}`);
 
-  return data.map((row: any) => {
-    // 1. Enrollment Logic
+  // 2. Process all rows
+  return allRows.map((row: any) => {
+    // Enrollment Logic
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -205,30 +226,29 @@ export async function getClasses() {
       enrollment = row.Students.split(',').length;
     }
 
-    // 2. Space Logic
+    // Space Logic
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
 
-    // 3. Name Fallback (Check 'Class Name', 'Name', 'Title')
-    const className = safeString(row['Class Name']) || safeString(row['Name']) || safeString(row['Title']) || "Unnamed Class";
+    // Helper to safely get string values
+    const safeStr = (val: any, def: string) => val ? (typeof val === 'object' ? val.value : val) : def;
 
     return {
       id: row.id,
-      name: className,
-      session: safeString(row.Session, "Unknown"),
-      teacher: safeString(row.Teacher, "TBA"),
-      location: safeString(row.Location, "Main Campus"),
-      day: safeString(row.Day, "TBD"),
-      ageRange: safeString(row['Age Range'], "All Ages"),
-      campus: safeString(row['Campus'], ""), 
+      name: safeStr(row['Class Name'] || row['Name'] || row['Title'], "Unnamed Class"),
+      session: safeStr(row.Session, "Unknown"),
+      teacher: safeStr(row.Teacher, "TBA"),
+      location: safeStr(row.Location, "Main Campus"),
+      day: safeStr(row.Day, "TBD"),
+      ageRange: safeStr(row['Age Range'], "All Ages"),
+      campus: safeStr(row['Campus'], ""), 
       spaceId: spaceId,            
       spaceName: spaceName,
       students: enrollment,
     };
   });
 }
-
 export async function getVenueLogistics() {
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
     fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "100" }),
