@@ -3,7 +3,9 @@ import { DB } from "@/app/lib/schema"; // 👈 Your new Source of Truth
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
-const API_TOKEN = process.env.BASEROW_API_KEY || process.env.BASEROW_API_TOKEN;
+
+// 🚨 FIX: Added NEXT_PUBLIC_BASEROW_TOKEN to the list so it finds your .env value
+const API_TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN || process.env.BASEROW_API_KEY;
 
 const HEADERS = {
   "Authorization": `Token ${API_TOKEN}`,
