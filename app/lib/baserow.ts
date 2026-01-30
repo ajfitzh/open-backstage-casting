@@ -217,58 +217,7 @@ function formatUser(row: any, email: string) {
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
 // app/lib/baserow.ts
-export async function getVenueLogistics() {
-  // 1. Fetch the raw data
-  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, { user_field_names: true });
-  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, { user_field_names: true });
-  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, { user_field_names: true });
-  const classesData = await getClasses(); // Existing fetcher
 
-  if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
-
-  // 2. Map the hierarchy
-  return venuesData.map((venue: any) => {
-    
-    // Find rates linked to this venue (e.g., for Winter 2025)
-    const activeRate = ratesData.find((r: any) => 
-      r.Venue?.some((v: any) => v.id === venue.id) && 
-      r.Session?.some((s: any) => s.value === "Winter 2025") // You can make this dynamic later
-    );
-
-    // Find spaces inside this venue
-    const venueSpaces = spacesData
-      .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
-      .map((space: any) => {
-        // Find classes scheduled in this SPECIFIC space
-        // Note: Ensure your getClasses() fetcher includes the new 'Space' link field!
-        const occupiedBy = classesData.filter((cls: any) => 
-          cls.spaceId === space.id 
-        );
-
-        return {
-          id: space.id,
-          name: space.Name || "Unnamed Room",
-          capacity: parseInt(space.Capacity) || 0,
-          floorType: space['Floor Type']?.value || "Unknown",
-          attributes: [], // Add if you have an attributes column
-          classes: occupiedBy
-        };
-      });
-
-    return {
-      id: venue.id,
-      name: venue['Venue Name'] || "Unknown Venue",
-      type: venue.Type?.value || "General",
-      contact: venue['Contact Name'] || "N/A",
-      spaces: venueSpaces,
-      rates: {
-        hourly: parseFloat(activeRate?.['Hourly Rate'] || 0),
-        weekend: parseFloat(activeRate?.['Weekend Rate'] || 0), // <--- Your new field!
-        flat: parseFloat(activeRate?.['Flat Rate'] || 0),
-      }
-    };
-  });
-}
 export async function getClasses() {
   const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {
     user_field_names: true
@@ -277,21 +226,92 @@ export async function getClasses() {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    const students = row.Students || []; 
-    const enrollment = Array.isArray(students) ? students.length : 0;
-    
+    // 1. ROBUST ENROLLMENT COUNT
+    // Handle cases where Students might be a list of objects (Link Row) or a raw string from CSV import
+    let enrollment = 0;
+    if (Array.isArray(row.Students)) {
+      enrollment = row.Students.length;
+    } else if (typeof row.Students === 'string' && row.Students.trim().length > 0) {
+      // Fallback for CSV text data like "John, Jane, Bob"
+      enrollment = row.Students.split(',').length;
+    }
+
+    // 2. SPACE LINKAGE
+    // We grab the ID of the linked Space. 
+    // If this is null, the class won't show up in the Logistics tab.
+    const spaceLink = row['Space'] || row['SPACE']; // Handle capitalization variance
+    const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
+    const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
+
     return {
       id: row.id,
       name: row['Class Name'] || "Unnamed Class",
       session: row.Session?.[0]?.value || row.Session || "Unknown",
       teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
       location: row.Location?.value || row.Location || "Main Campus",
-      spaceId: row.Space?.[0]?.id || null,
+      
+      // The Critical Links
+      campus: row['Campus'] || "", // Keep for legacy text fallback
+      spaceId: spaceId,            // <--- The key to the Logistics Tab
+      spaceName: spaceName,
+
       day: row.Day?.value || row.Day || "TBD",
       students: enrollment,
       ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
     };
   });
+}
+
+export async function getVenueLogistics() {
+  // 1. Fetch all necessary tables
+  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, { user_field_names: true });
+  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, { user_field_names: true });
+  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, { user_field_names: true });
+  const classesData = await getClasses(); 
+
+  if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
+
+  return venuesData.map((venue: any) => {
+    // A. Find Rates
+    const activeRate = ratesData.find((r: any) => 
+      r.Venue?.some((v: any) => v.id === venue.id)
+    );
+
+    // B. Map Spaces
+    const venueSpaces = spacesData
+      .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
+      .map((space: any) => {
+        
+        // C. STRICT ID MATCHING
+        // We only show classes that explicitly link to this Space ID
+        const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
+
+        return {
+          id: space.id,
+          name: space.Name || "Unnamed Room",
+          capacity: parseInt(space.Capacity) || 0,
+          floorType: space['Floor Type']?.value || "Unknown",
+          classes: occupiedBy
+        };
+      })
+      // D. FILTER EMPTY SPACES (Optional)
+      // If you want to see empty rooms, remove this .filter line.
+      // If you ONLY want to see in-use rooms, keep it.
+      // .filter((space: any) => space.classes.length > 0); 
+
+    return {
+      id: venue.id,
+      name: venue['Venue Name'] || "Unknown Venue",
+      type: venue.Type?.value || "General",
+      contact: venue['Contact Name'] || "N/A",
+      spaces: venueSpaces, // Will contain empty rooms now, which is safer for debugging
+      rates: {
+        hourly: parseFloat(activeRate?.['Hourly Rate'] || 0),
+        weekend: parseFloat(activeRate?.['Weekend Rate'] || 0),
+        flat: parseFloat(activeRate?.['Flat Rate'] || 0),
+      }
+    };
+  }).filter((venue: any) => venue.spaces.length > 0); // Only hide venues with NO spaces configured
 }
 export async function getPerformanceAnalytics(productionId?: number) {
   // 1. Remove order_by from the params
