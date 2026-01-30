@@ -198,7 +198,8 @@ function formatUser(row: any, email: string) {
 // 🎓 EDUCATION & ACADEMY (UPDATED WITH FIXES)
 // ==============================================================================
 
-// 🚨 FIX 1: PAGINATION LOOP (Gets all classes from 2017-2026)
+// app/lib/baserow.ts
+
 export async function getClasses() {
   let allRows: any[] = [];
   let page = 1;
@@ -233,15 +234,16 @@ export async function getClasses() {
 
     return {
       id: row.id,
-      name: row['Class Name'] || "Unnamed Class",
-      session: row.Session?.[0]?.value || row.Session || "Unknown",
-      teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
-      location: row.Location?.value || row.Location || "Main Campus",
+      // 🚨 FIX: Use safeGet here to force these into Strings
+      name: safeGet(row['Class Name'] || row['CLASS_NAME'], "Unnamed Class"),
+      session: safeGet(row.Session, "Unknown"), 
+      teacher: safeGet(row.Teacher, "TBA"),
+      location: safeGet(row.Location, "Main Campus"),
       spaceId: row.Space?.[0]?.id || null,
       spaceName: row.Space?.[0]?.value || null,
-      day: row.Day?.value || row.Day || "TBD",
+      day: safeGet(row.Day, "TBD"),
+      ageRange: safeGet(row['Age Range'], "All Ages"),
       students: enrollment,
-      ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
     };
   });
 }
