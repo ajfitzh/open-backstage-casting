@@ -1,4 +1,4 @@
-import { getClassById } from "@/lib/baserow";
+import { getClassById } from "@/app/lib/baserow";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ClipboardList } from "lucide-react";
