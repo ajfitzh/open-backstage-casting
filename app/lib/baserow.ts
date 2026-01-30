@@ -248,7 +248,72 @@ export async function getClasses() {
 }
 
   let allRows: any[] = [];
+// --- APPEND TO app/lib/baserow.ts ---
 
+// 1. UPDATED SINGLE CLASS FETCHER (Fixes "Unnamed Class" error)
+export async function getClassById(classId: string) {
+  const row = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/${classId}/`);
+
+  if (!row || row.error || row.detail) return null;
+
+  // Use safeGet just like we did for the list
+  const safeGet = (field: any, fallback: string = "") => {
+    if (!field) return fallback;
+    if (typeof field === 'string') return field;
+    if (Array.isArray(field) && field.length > 0) return field[0].value || field[0].name || fallback;
+    if (typeof field === 'object') return field.value || field.name || fallback;
+    return fallback;
+  };
+
+  return {
+    id: row.id,
+    name: safeGet(row['Class Name'] || row['CLASS_NAME'], "Unnamed Class"),
+    session: safeGet(row.Session, "Unknown"),
+    teacher: safeGet(row.Teacher, "TBA"),
+    location: safeGet(row.Location, "Main Campus"),
+    day: safeGet(row.Day, "TBD"),
+    time: safeGet(row['Time Slot'] || row['Time'], "TBD"),
+    description: safeGet(row['Description'], ""),
+    ageRange: safeGet(row['Age Range'], "All Ages"),
+    spaceName: row.Space?.[0]?.value || null,
+    // Just the count for the header
+    studentCount: Array.isArray(row.Students) ? row.Students.length : 0, 
+  };
+}
+
+// 2. NEW ROSTER FETCHER (Gets full student details)
+export async function getClassRoster(classId: string) {
+  // Filter PEOPLE table where the "Classes" column contains this class ID
+  // Note: 6123 is the ID for the 'Classes' field in the PEOPLE table based on your schema
+  const params = {
+    [`filter__field_6123__link_row_has`]: classId, 
+    size: "200"
+  };
+
+  const students = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, {}, params);
+
+  if (!Array.isArray(students)) return [];
+
+  const safeGet = (field: any, fallback: string = "") => {
+    if (!field) return fallback;
+    if (typeof field === 'string') return field;
+    if (Array.isArray(field) && field.length > 0) return field[0].value || field[0].name || fallback;
+    if (typeof field === 'object') return field.value || field.name || fallback;
+    return fallback;
+  };
+
+  return students.map((s: any) => ({
+    id: s.id,
+    name: safeGet(s['Full Name'] || s['First Name']),
+    age: s['Age'] ? parseInt(s['Age']) : 0,
+    email: safeGet(s['CYT Account Personal Email'] || s['CYT National Individual Email']),
+    parentEmail: safeGet(s['CYT National Family Email']),
+    phone: safeGet(s['Phone Number']),
+    photo: s.Headshot?.[0]?.url || null,
+    status: safeGet(s.Status, "Student"),
+    medical: safeGet(s['Medical Notes'], "None"),
+  }));
+}
 export async function getVenueLogistics() {
   const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "200" });
   const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" });
