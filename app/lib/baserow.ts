@@ -1,11 +1,9 @@
 import { notFound } from "next/navigation";
 
 // --- CONFIGURATION ---
-// Removes trailing slash to ensure clean URL construction
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 
 // 1. UNIFIED TOKEN LOGIC
-// Checks all common naming conventions to prevent auth errors
 const API_TOKEN = process.env.BASEROW_API_KEY || process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
 
 // --- TABLE MAP ---
@@ -86,10 +84,6 @@ export interface Person {
 // 🛡️ HELPERS
 // ==============================================================================
 
-/**
- * Universal fetch wrapper for Baserow.
- * Automatically handles Auth headers and Query Params.
- */
 async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}) {
   const { size = "100", ...fetchOptions } = config; 
   
@@ -108,7 +102,7 @@ async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}
       "Content-Type": "application/json",
       ...fetchOptions.headers,
     },
-    next: { revalidate: 60, ...fetchOptions.next }, 
+    next: { revalidate: 0, ...fetchOptions.next }, // 🚨 Force No-Cache to debug missing data
   });
 
   if (!res.ok) {
@@ -178,10 +172,6 @@ function formatUser(row: any, email: string) {
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
 
-/**
- * Helper to safely extract a string from any Baserow field type (Array, Object, String, null).
- * Prevents "toLowerCase is not a function" errors.
- */
 function safeString(field: any, fallback: string = ""): string {
   if (!field) return fallback;
   if (typeof field === 'string') return field;
@@ -194,15 +184,20 @@ function safeString(field: any, fallback: string = ""): string {
   return String(field); 
 }
 
+// 🚨 DEBUGGED CLASS FETCHER
 export async function getClasses() {
-  // 🚨 CRITICAL FIX: Increased size to 2000 to capture all historical and future classes
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "2000" });
+  // Fetch raw rows without filters to see what we actually have
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "200" });
 
-  if (!Array.isArray(data)) return [];
+  if (!Array.isArray(data)) {
+    console.error("❌ getClasses: Returned non-array data", data);
+    return [];
+  }
+
+  console.log(`✅ getClasses: Fetched ${data.length} rows from Table ${TABLES.CLASSES}`);
 
   return data.map((row: any) => {
-    // 1. ROBUST ENROLLMENT COUNT
-    // Handles CSV Strings ("Name1, Name2") AND Baserow Link Arrays
+    // 1. Enrollment Logic
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -210,23 +205,22 @@ export async function getClasses() {
       enrollment = row.Students.split(',').length;
     }
 
-    // 2. SPACE LINKAGE
-    // Check all casing variations to be safe
+    // 2. Space Logic
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
 
+    // 3. Name Fallback (Check 'Class Name', 'Name', 'Title')
+    const className = safeString(row['Class Name']) || safeString(row['Name']) || safeString(row['Title']) || "Unnamed Class";
+
     return {
       id: row.id,
-      name: safeString(row['Class Name'], "Unnamed Class"),
-      
-      // Force Strings to prevent .toLowerCase() crashes
+      name: className,
       session: safeString(row.Session, "Unknown"),
       teacher: safeString(row.Teacher, "TBA"),
       location: safeString(row.Location, "Main Campus"),
       day: safeString(row.Day, "TBD"),
       ageRange: safeString(row['Age Range'], "All Ages"),
-      
       campus: safeString(row['Campus'], ""), 
       spaceId: spaceId,            
       spaceName: spaceName,
@@ -236,35 +230,29 @@ export async function getClasses() {
 }
 
 export async function getVenueLogistics() {
-  // Fetch everything in parallel with INCREASED LIMITS
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
     fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "100" }),
-    fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "2000" }), // Increased
+    fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "2000" }),
     fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "500" }),
-    getClasses() // Uses the 2000 limit defined above
+    getClasses()
   ]);
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    // 1. DYNAMIC RATE FINDER
-    // Find rates linked to this venue, sort by Year (descending) to get the newest
     const venueRates = Array.isArray(ratesData) ? ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id)) : [];
     
     const activeRate = venueRates.sort((a: any, b: any) => {
       const sessionA = safeString(a.Session);
       const sessionB = safeString(b.Session);
-      // Extract year (e.g. "Winter 2026" -> 2026)
       const yearA = parseInt(sessionA.match(/\d{4}/)?.[0] || "0");
       const yearB = parseInt(sessionB.match(/\d{4}/)?.[0] || "0");
       return yearB - yearA; 
     })[0];
 
-    // 2. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
-        // Link Classes to this Space using the Space ID
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
         
         return {
@@ -322,40 +310,29 @@ export async function getGlobalSalesSummary() {
 // ==============================================================================
 
 /**
- * RESTORED: getAllShows
- * Used by Global App Header to list shows.
+ * 🚨 CRITICAL CHANGE FOR HEADER CONTEXT SWITCHER
+ * This now returns PRODUCTIONS (Instances) instead of Master Shows.
+ * This fixes the issue where the header was showing generic titles.
  */
 export async function getAllShows() {
-  return await fetchBaserow(`/database/rows/table/${TABLES.MASTER_SHOWS}/`, {}, { size: "200" });
-}
-
-/**
- * EXTRA: getAllProductions
- * Added just in case your header actually needs the production instances instead.
- */
-export async function getAllProductions() {
+  // Switched from TABLES.MASTER_SHOWS to TABLES.PRODUCTIONS
   return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
 }
 
-/**
- * RESTORED: getActiveProduction
- * Retrieves the currently active production for the site context.
- */
-export async function getActiveProduction() {
-  const productions = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, { size: "20" });
-  if (!Array.isArray(productions)) return null;
+export async function getAllProductions() {
+  return await getAllShows(); // Alias for safety
+}
 
-  // Finds first production where 'Active' is true, or falls back to the most recent one
+export async function getActiveProduction() {
+  const productions = await getAllShows();
+  if (!Array.isArray(productions)) return null;
   return productions.find((p: any) => p.Active?.value === true || p.Active === true) || productions[0];
 }
 
-/**
- * RESTORED: getShowById
- * Retrieves the Master Show data (e.g., script info) for a given show ID.
- */
 export async function getShowById(showId: string | number) {
   if (!showId) return null;
-  return await fetchBaserow(`/database/rows/table/${TABLES.MASTER_SHOWS}/${showId}/`);
+  // This likely needs to fetch from PRODUCTIONS now if your pages are production-based
+  return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/${showId}/`);
 }
 
 export async function getTableRows(tableId: string, productionId?: number) {
