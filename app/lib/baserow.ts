@@ -40,6 +40,7 @@ export const TABLES = {
   SPACES: "638",
   RENTAL_RATES: "639",
   VENUES: "635",
+  SESSIONS:"632"
 };
 
 // --- AUTHENTICATION FIELDS ---
@@ -92,70 +93,29 @@ export interface Person {
  * 2. Checks for HTML responses (404 pages) to prevent crashes.
  * 3. Handles Query Params.
  */
-export async function fetchBaserow(endpoint: string, options: RequestInit = {}, queryParams: Record<string, any> = {}) {
-  try {
-    // 1. Construct Query String
-    const params = new URLSearchParams({
-      user_field_names: "true", 
-      ...queryParams
-    });
+async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}) {
+  const { size = "100", ...rest } = config;
+  const queryString = new URLSearchParams({ 
+    user_field_names: "true", 
+    size, 
+    ...params 
+  }).toString();
 
-    // 2. FORCE /api PREFIX logic
-    // If the endpoint doesn't start with /api, and it's not a full URL, add it.
-    let path = endpoint;
-    if (!path.startsWith("http") && !path.startsWith("/api")) {
-        // Ensure leading slash
-        if (!path.startsWith("/")) path = `/${path}`;
-        path = `/api${path}`;
-    }
+  const res = await fetch(`https://api.baserow.io/api${endpoint}?${queryString}`, {
+    headers: {
+      Authorization: `Token ${process.env.BASEROW_API_KEY}`,
+    },
+    next: { revalidate: 60 }, // Cache for 60 seconds
+  });
 
-    const separator = path.includes('?') ? '&' : '?';
-    const finalUrl = `${BASE_URL}${path}${separator}${params.toString()}`;
-
-    // 3. Fetch
-    const res = await fetch(finalUrl, {
-      ...options,
-      headers: { ...HEADERS, ...options.headers },
-      cache: options.cache || "no-store", 
-    });
-
-    // 4. Safety Check: Detect HTML (Webpage) responses
-    const contentType = res.headers.get("content-type");
-    if (contentType && contentType.includes("text/html")) {
-        console.error(`❌ [Baserow] Critical Error: Received HTML instead of JSON from ${finalUrl}.`);
-        console.error("   This usually means the URL is pointing to the website, not the API.");
-        return null; // Return null so we don't crash JSON.parse
-    }
-
-if (!res.ok) {
-      // ATTEMPT TO READ ERROR BODY
-      let errorBody = "";
-      try {
-        const jsonError = await res.json();
-        errorBody = JSON.stringify(jsonError, null, 2);
-      } catch {
-        errorBody = await res.text();
-      }
-
-      console.error(`❌ [Baserow] API Error [${res.status}] at ${finalUrl}`);
-      console.error(`   Server Response: ${errorBody}`); // <--- THIS IS THE GOLDEN TICKET
-      
-      if (options.method === 'DELETE') return true; 
-      return []; 
-    }
-
-    const data = await res.json();
-    
-    // 5. Normalize Return
-    if (data && data.results && Array.isArray(data.results)) return data.results;
-    return data;
-
-  } catch (error) {
-    console.error("❌ [Baserow] Network/Fetch Error:", error);
+  if (!res.ok) {
+    console.error(`Baserow Error [${endpoint}]:`, res.statusText);
     return [];
   }
-}
 
+  const data = await res.json();
+  return data.results || data;
+}
 
 // ==============================================================================
 // 🔐 AUTHENTICATION LOGIC
@@ -219,27 +179,23 @@ function formatUser(row: any, email: string) {
 // app/lib/baserow.ts
 
 export async function getClasses() {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {
-    user_field_names: true
-  }, { size: "200" });
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "200" });
 
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
     // 1. ROBUST ENROLLMENT COUNT
-    // Handle cases where Students might be a list of objects (Link Row) or a raw string from CSV import
+    // Handle CSV string imports ("Name 1, Name 2") vs Relational Arrays
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
     } else if (typeof row.Students === 'string' && row.Students.trim().length > 0) {
-      // Fallback for CSV text data like "John, Jane, Bob"
       enrollment = row.Students.split(',').length;
     }
 
-    // 2. SPACE LINKAGE
-    // We grab the ID of the linked Space. 
-    // If this is null, the class won't show up in the Logistics tab.
-    const spaceLink = row['Space'] || row['SPACE']; // Handle capitalization variance
+    // 2. SPACE LINKAGE (The key to the Logistics Tab)
+    // We check both casing styles just to be safe
+    const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
 
@@ -250,9 +206,9 @@ export async function getClasses() {
       teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
       location: row.Location?.value || row.Location || "Main Campus",
       
-      // The Critical Links
-      campus: row['Campus'] || "", // Keep for legacy text fallback
-      spaceId: spaceId,            // <--- The key to the Logistics Tab
+      // Critical Logistics Data
+      campus: row['Campus'] || "", 
+      spaceId: spaceId,            
       spaceName: spaceName,
 
       day: row.Day?.value || row.Day || "TBD",
@@ -261,57 +217,62 @@ export async function getClasses() {
     };
   });
 }
-
 export async function getVenueLogistics() {
-  // 1. Fetch all necessary tables
-  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, { user_field_names: true });
-  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, { user_field_names: true });
-  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, { user_field_names: true });
+  // 1. Fetch all raw tables
+  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "50" });
+  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" });
+  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "100" });
   const classesData = await getClasses(); 
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    // A. Find Rates
-    const activeRate = ratesData.find((r: any) => 
-      r.Venue?.some((v: any) => v.id === venue.id)
-    );
+    
+    // 2. DYNAMIC RATE FINDER
+    // Instead of hardcoding "2026", we find all rates for this venue,
+    // sort them by year (descending), and pick the newest one.
+    const venueRates = ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id));
+    
+    const activeRate = venueRates.sort((a: any, b: any) => {
+      const sessionA = a.Session?.[0]?.value || "";
+      const sessionB = b.Session?.[0]?.value || "";
+      // Extract year "Winter 2026" -> 2026
+      const yearA = parseInt(sessionA.match(/\d{4}/)?.[0] || "0");
+      const yearB = parseInt(sessionB.match(/\d{4}/)?.[0] || "0");
+      return yearB - yearA; // Descending
+    })[0]; // Pick the top one
 
-    // B. Map Spaces
+    // 3. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
-        
-        // C. STRICT ID MATCHING
-        // We only show classes that explicitly link to this Space ID
+        // Link Classes to this Space
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
 
         return {
           id: space.id,
-          name: space.Name || "Unnamed Room",
+          // Handle "Room Name" vs "Full Room Name" variance
+          name: space['Room Name'] || space['Full Room Name'] || "Unnamed Room",
           capacity: parseInt(space.Capacity) || 0,
           floorType: space['Floor Type']?.value || "Unknown",
           classes: occupiedBy
         };
-      })
-      // D. FILTER EMPTY SPACES (Optional)
-      // If you want to see empty rooms, remove this .filter line.
-      // If you ONLY want to see in-use rooms, keep it.
-      // .filter((space: any) => space.classes.length > 0); 
+      });
 
     return {
       id: venue.id,
       name: venue['Venue Name'] || "Unknown Venue",
       type: venue.Type?.value || "General",
       contact: venue['Contact Name'] || "N/A",
-      spaces: venueSpaces, // Will contain empty rooms now, which is safer for debugging
+      spaces: venueSpaces, 
       rates: {
         hourly: parseFloat(activeRate?.['Hourly Rate'] || 0),
         weekend: parseFloat(activeRate?.['Weekend Rate'] || 0),
         flat: parseFloat(activeRate?.['Flat Rate'] || 0),
+        session: activeRate?.Session?.[0]?.value || "Default"
       }
     };
-  }).filter((venue: any) => venue.spaces.length > 0); // Only hide venues with NO spaces configured
+  }).filter((venue: any) => venue.spaces.length > 0);
 }
 export async function getPerformanceAnalytics(productionId?: number) {
   // 1. Remove order_by from the params

@@ -12,46 +12,73 @@ import {
 } from 'lucide-react';
 
 export default function AcademyClient({ classes, venues }: { classes: any[], venues: any[] }) {
-  const [activeTab, setActiveTab] = useState<'manager' | 'logistics' | 'overview' | 'teachers'>('manager');
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- 1. AUTO-DETECT LATEST SEASON ---
+  // This logic scans all classes and finds the "Highest Number" year (e.g., 2026 > 2025).
+  // If years are equal, it prioritizes order: Fall > Summer > Spring > Winter.
+  const defaultSeason = useMemo(() => {
+    const uniqueSessions = Array.from(new Set(classes.map(c => c.session).filter(Boolean)));
+    
+    if (uniqueSessions.length === 0) return "";
 
-  // 1. FILTER CLASSES
+    const sortedSessions = uniqueSessions.sort((a, b) => {
+      // Extract the year (e.g., "Winter 2026" -> 2026)
+      const yearA = parseInt(a.match(/\d{4}/)?.[0] || "0");
+      const yearB = parseInt(b.match(/\d{4}/)?.[0] || "0");
+
+      // Primary Sort: Year (Descending)
+      if (yearA !== yearB) return yearB - yearA;
+
+      // Secondary Sort: Season Weight (Fall > Summer > Spring > Winter)
+      const weights: Record<string, number> = { "Fall": 4, "Summer": 3, "Spring": 2, "Winter": 1 };
+      const seasonA = weights[a.split(" ")[0]] || 0;
+      const seasonB = weights[b.split(" ")[0]] || 0;
+      
+      return seasonB - seasonA;
+    });
+
+    return sortedSessions[0]; // Returns the "Future-most" session
+  }, [classes]);
+
+  const [activeTab, setActiveTab] = useState<'manager' | 'logistics' | 'overview' | 'teachers'>('manager');
+  // Initialize search with the auto-detected season
+  const [searchTerm, setSearchTerm] = useState(defaultSeason);
+
+  // --- 2. MASTER FILTER ---
   const filteredClasses = useMemo(() => {
+    const term = searchTerm.toLowerCase();
     return classes.filter(c => 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      c.teacher.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.session.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.day.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.location.toLowerCase().includes(searchTerm.toLowerCase())
+      c.name.toLowerCase().includes(term) || 
+      c.teacher.toLowerCase().includes(term) ||
+      c.session.toLowerCase().includes(term) ||
+      c.day.toLowerCase().includes(term) ||
+      c.location.toLowerCase().includes(term)
     );
   }, [classes, searchTerm]);
 
-  // 2. FILTER VENUES (Show venue if it matches search OR contains filtered classes)
+  // --- 3. SMART VENUE FILTER ---
   const activeVenues = useMemo(() => {
     const activeClassIds = new Set(filteredClasses.map(c => c.id));
     const term = searchTerm.toLowerCase();
 
     return venues.map(venue => {
-      // Check if venue itself matches search
       const venueMatches = venue.name.toLowerCase().includes(term) || venue.type.toLowerCase().includes(term);
 
-      // Filter spaces inside
       const activeSpaces = venue.spaces.map((space: any) => {
         const relevantClasses = space.classes.filter((c: any) => activeClassIds.has(c.id));
         return { ...space, classes: relevantClasses };
       });
 
-      // Show venue if: It matches search OR it has active classes inside
       const hasActiveClasses = activeSpaces.some((s:any) => s.classes.length > 0);
       
       if (venueMatches || hasActiveClasses) {
         return { ...venue, spaces: activeSpaces, hasActiveClasses };
       }
       return null;
-    }).filter(Boolean); // Remove nulls
+    }).filter(Boolean);
   }, [venues, filteredClasses, searchTerm]);
 
-  // 3. ANALYTICS
+  // --- 4. ANALYTICS ---
   const stats = useMemo(() => {
     const teachers: Record<string, number> = {};
     const classTypes: Record<string, number> = {};
@@ -67,6 +94,7 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
 
   return (
     <div className="h-full flex flex-col">
+      {/* TOOLBAR */}
       <div className="px-8 py-4 bg-zinc-950 flex flex-col md:flex-row gap-4 border-b border-white/5 justify-between items-center">
         <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl border border-white/5 overflow-x-auto max-w-full">
           <TabButton active={activeTab === 'manager'} onClick={() => setActiveTab('manager')} icon={<ClipboardList size={14}/>} label="Class Manager" />
@@ -99,7 +127,11 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                     <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950 px-2 py-1 rounded border border-white/5">{cls.session}</span>
                     <div className="text-right">
                        <span className="text-[10px] font-bold text-zinc-400 flex items-center justify-end gap-1"><MapPin size={10} /> {cls.location}</span>
-                       {cls.spaceName && <span className="text-[9px] font-bold text-blue-500/80 block uppercase tracking-wide mt-0.5">@{cls.spaceName}</span>}
+                       {cls.spaceName ? (
+                         <span className="text-[9px] font-bold text-blue-500/80 block uppercase tracking-wide mt-0.5">@{cls.spaceName}</span>
+                       ) : cls.campus && (
+                         <span className="text-[9px] font-bold text-zinc-600 block uppercase tracking-wide mt-0.5">@{cls.campus}</span>
+                       )}
                     </div>
                   </div>
                   <div className="flex-1 mb-4">
@@ -117,7 +149,7 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                 </div>
               ))
             ) : (
-              <div className="col-span-full py-20 text-center text-zinc-500 italic">No classes found matching "{searchTerm}"</div>
+              <div className="col-span-full py-20 text-center text-zinc-500 italic">No classes found matching &quot;{searchTerm}&quot;</div>
             )}
           </div>
         )}
@@ -141,49 +173,46 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                     </div>
                     <div className="text-right">
                       <div className="px-3 py-1 bg-purple-500/10 rounded-lg text-[10px] font-bold text-purple-400 border border-purple-500/20">${venue.rates.hourly}/hr</div>
+                      {venue.rates.weekend > 0 && <p className="text-[9px] text-zinc-600 mt-1 uppercase font-bold">+${venue.rates.weekend} Wknd</p>}
                     </div>
                   </div>
 
                   <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {venue.spaces.length > 0 ? (
-                      venue.spaces.map((space: any) => {
-                        const currentStudents = space.classes.reduce((acc:number, c:any) => acc + c.students, 0);
-                        const utilization = Math.round((currentStudents / (space.capacity * Math.max(1, space.classes.length))) * 100) || 0;
-                        const isOver = utilization > 100;
-                        const hasClasses = space.classes.length > 0;
+                    {venue.spaces.map((space: any) => {
+                      const currentStudents = space.classes.reduce((acc:number, c:any) => acc + c.students, 0);
+                      const utilization = Math.round((currentStudents / (space.capacity * Math.max(1, space.classes.length))) * 100) || 0;
+                      const isOver = utilization > 100;
+                      const hasClasses = space.classes.length > 0;
 
-                        return (
-                          <div key={space.id} className={`p-4 rounded-2xl border transition-all ${hasClasses ? 'bg-zinc-950 border-white/5 hover:border-purple-500/30' : 'bg-zinc-950/30 border-dashed border-zinc-800'}`}>
-                            <div className="flex justify-between items-start mb-4">
-                              <div>
-                                <h4 className={`text-sm font-bold ${hasClasses ? 'text-white' : 'text-zinc-600'}`}>{space.name}</h4>
-                                {hasClasses ? (
-                                  <div className="mt-1 flex flex-col gap-1">
-                                    {space.classes.map((cls:any) => (
-                                      <span key={cls.id} className="text-[9px] text-zinc-400 truncate max-w-[150px] block">• {cls.name}</span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-[9px] text-zinc-700 italic mt-1 block">Empty</span>
-                                )}
-                              </div>
-                              {hasClasses && <div className={`text-xs font-black ${isOver ? 'text-red-500' : 'text-emerald-500'}`}>{utilization}%</div>}
-                            </div>
-                            
-                            {hasClasses && (
-                              <div className="space-y-1.5 mt-2">
-                                <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-white/5">
-                                  <div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-purple-500'}`} style={{ width: `${Math.min(100, utilization)}%` }} />
+                      return (
+                        <div key={space.id} className={`p-4 rounded-2xl border transition-all ${hasClasses ? 'bg-zinc-950 border-white/5 hover:border-purple-500/30' : 'bg-zinc-950/30 border-dashed border-zinc-800'}`}>
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h4 className={`text-sm font-bold ${hasClasses ? 'text-white' : 'text-zinc-600'}`}>{space.name}</h4>
+                              {hasClasses ? (
+                                <div className="mt-1 flex flex-col gap-1">
+                                  {space.classes.map((cls:any) => (
+                                    <span key={cls.id} className="text-[9px] text-zinc-400 truncate max-w-[150px] block">• {cls.name}</span>
+                                  ))}
                                 </div>
-                                {isOver && <div className="flex items-center gap-1 text-[9px] font-bold text-red-500 mt-1 animate-pulse"><AlertTriangle size={10} /> OVERFLOW</div>}
-                              </div>
-                            )}
+                              ) : (
+                                <span className="text-[9px] text-zinc-700 italic mt-1 block">Empty</span>
+                              )}
+                            </div>
+                            {hasClasses && <div className={`text-xs font-black ${isOver ? 'text-red-500' : 'text-emerald-500'}`}>{utilization}%</div>}
                           </div>
-                        );
-                      })
-                    ) : (
-                      <div className="col-span-full py-8 text-center text-zinc-600 italic text-xs">No spaces configured in Baserow.</div>
-                    )}
+                          
+                          {hasClasses && (
+                            <div className="space-y-1.5 mt-2">
+                              <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                <div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-purple-500'}`} style={{ width: `${Math.min(100, utilization)}%` }} />
+                              </div>
+                              {isOver && <div className="flex items-center gap-1 text-[9px] font-bold text-red-500 mt-1 animate-pulse"><AlertTriangle size={10} /> OVERFLOW</div>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))
@@ -192,18 +221,50 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                  <Info size={32} className="mx-auto text-zinc-700 mb-3" />
                  <p className="text-sm font-bold text-zinc-500">Logistics Data Unavailable</p>
                  <p className="text-xs text-zinc-600 mt-1 max-w-md mx-auto">
-                   No venues match your search, OR your classes haven't been linked to Spaces in Baserow yet. 
-                   Go to the <strong>CLASSES</strong> table and populate the <strong>Space</strong> column.
+                   No venues match &ldquo;{searchTerm}&ldquo;. Try clearing the search or checking your Class-Space links.
                  </p>
                </div>
              )}
           </div>
         )}
-        
-        {/* OTHER TABS (Overview/Teachers) Unchanged */}
-        {activeTab === 'overview' && (/* ...Same as before... */ <div className="text-zinc-500">Stats View</div>)}
-        {activeTab === 'teachers' && (/* ...Same as before... */ <div className="text-zinc-500">Teachers View</div>)}
 
+        {/* TAB 3: TRENDS */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
+            <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem]">
+              <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><LayoutGrid size={16} className="text-blue-500" /> Top Classes</h3>
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.classData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#18181b" horizontal={false} />
+                    <XAxis type="number" stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
+                    <YAxis dataKey="name" type="category" width={140} stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10, fontWeight: 'bold'}} />
+                    <Tooltip cursor={{fill: '#27272a'}} contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '16px' }} />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={24}>{stats.classData.map((e, i) => <Cell key={i} fill={i < 3 ? '#3b82f6' : '#27272a'} />)}</Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: FACULTY */}
+        {activeTab === 'teachers' && (
+          <div className="bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
+            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><UserSquare2 size={16} className="text-purple-500" /> Instructor Load</h3>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.teacherData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
+                  <XAxis dataKey="name" stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
+                  <YAxis stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
+                  <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '16px' }} />
+                  <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
