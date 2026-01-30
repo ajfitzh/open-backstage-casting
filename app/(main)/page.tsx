@@ -103,7 +103,7 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-950 p-6 pb-20 overflow-y-auto custom-scrollbar space-y-8">
       
-      {/* 1. HERO (Your Main Show) */}
+      {/* 1. HERO (Main Show) */}
       <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
         <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
             {theme.icon}
@@ -137,13 +137,13 @@ export default async function DashboardPage() {
                 </div>
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
                 
-                {/* Cast 'any' to satisfy strict TS check for now */}
+                {/* Cast to 'any' for strict TS safety */}
                 {creativeTeam && <CreativeTeam team={creativeTeam as any} />}
             </div>
         </div>
       </div>
 
-      {/* 2. ACTION GRID (Your Daily Tools - MOVED UP) */}
+      {/* 2. ACTION GRID (Daily Workspace - MOVED UP) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2">

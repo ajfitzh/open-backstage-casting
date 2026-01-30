@@ -178,9 +178,11 @@ export async function getClassById(classId: string) {
   };
 }
 
+// app/lib/baserow.ts
+
 export async function getClassRoster(classId: string) {
-  // 🚨 REFACTOR: Using ID-based filter. Bulletproof.
   const params = {
+    // API Filter (Primary)
     [`filter__${DB.PEOPLE.FIELDS.CLASSES}__link_row_has`]: classId, 
     size: "200"
   };
@@ -189,7 +191,15 @@ export async function getClassRoster(classId: string) {
 
   if (!Array.isArray(students)) return [];
 
-  return students.map((s: any) => ({
+  // 🚨 CRITICAL FIX: Manual JS Filter (Secondary)
+  // Ensures we ONLY return students actually linked to this class ID.
+  const verifiedStudents = students.filter((s: any) => {
+    const linkedClasses = s[DB.PEOPLE.FIELDS.CLASSES] || [];
+    // Check if any linked class matches our current ID
+    return linkedClasses.some((c: any) => c.id.toString() === classId.toString());
+  });
+
+  return verifiedStudents.map((s: any) => ({
     id: s.id,
     name: safeGet(s[DB.PEOPLE.FIELDS.FULL_NAME] || s[DB.PEOPLE.FIELDS.FIRST_NAME]),
     age: parseInt(safeGet(s[DB.PEOPLE.FIELDS.AGE], 0)),

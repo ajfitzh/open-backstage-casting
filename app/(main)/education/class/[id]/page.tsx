@@ -2,13 +2,22 @@ import { getClassById, getClassRoster } from "@/app/lib/baserow";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Mail, Phone, Calendar, Clock, MapPin, Users, Info } from "lucide-react";
+import AttendanceModal from "@/app/components/education/AttendanceModal";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClassDetailsPage({ params }: { params: { id: string } }) {
+// 🚨 FIX: Type definition for Next.js 15 Params
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function ClassDetailsPage({ params }: PageProps) {
+  // 🚨 FIX: Await the params before using them
+  const { id } = await params;
+
   const [cls, roster] = await Promise.all([
-    getClassById(params.id),
-    getClassRoster(params.id)
+    getClassById(id),
+    getClassRoster(id)
   ]);
 
   if (!cls) notFound();
@@ -41,9 +50,11 @@ export default async function ClassDetailsPage({ params }: { params: { id: strin
             </div>
 
             <div className="flex gap-3">
-                <Link href={`/education/class/${params.id}/attendance`} className="bg-zinc-100 hover:bg-white text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-xl shadow-white/5">
-                    Take Attendance
-                </Link>
+                {/* 🚨 MODAL INTEGRATION */}
+                <AttendanceModal 
+                    students={roster} 
+                    className="bg-zinc-100 hover:bg-white text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-wide transition-all shadow-xl shadow-white/5 flex items-center gap-2"
+                />
             </div>
         </div>
 
@@ -102,7 +113,7 @@ export default async function ClassDetailsPage({ params }: { params: { id: strin
             )) : (
                 <div className="col-span-full py-20 text-center border-2 border-dashed border-zinc-800 rounded-3xl">
                     <p className="text-zinc-500 font-bold">No students found in this roster.</p>
-                    <p className="text-zinc-600 text-xs mt-1">Check that students are linked in the Baserow "Classes" table.</p>
+                    <p className="text-zinc-600 text-xs mt-1">Check that students are linked in the Baserow &ldquo;Classes&ldquo; table.</p>
                 </div>
             )}
         </div>
