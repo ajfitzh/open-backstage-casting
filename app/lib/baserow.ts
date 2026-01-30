@@ -525,3 +525,27 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
     return null;
   }
 }
+
+export async function getClassById(classId: string) {
+  // Fetch from Table 633 (CLASSES) using the ID
+  const row = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/${classId}/`);
+
+  // Error handling: If row is null or has an error field
+  if (!row || row.error || row.detail) return null;
+
+  // Formatting Logic (Matches your schema)
+  const safeVal = (val: any) => val?.value || val || "";
+  
+  return {
+    id: row.id,
+    name: row['Class Name'] || "Unnamed Class",
+    session: safeVal(row['Session']) || "Unknown",
+    teacher: safeVal(row['Teacher']) || "TBA",
+    location: safeVal(row['Location']) || "Main Campus",
+    day: safeVal(row['Day']) || "TBD",
+    time: safeVal(row['Time Slot']) || "TBD", // Mapped from 'Time Slot' in your schema
+    ageRange: safeVal(row['Age Range']) || "All Ages",
+    // Count the linked students
+    students: Array.isArray(row['Students']) ? row['Students'].length : 0,
+  };
+}
