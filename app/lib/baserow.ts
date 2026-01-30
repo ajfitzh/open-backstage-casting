@@ -254,49 +254,47 @@ export async function getVenueLogistics() {
 // ==============================================================================
 // 🎭 PRODUCTION & CASTING - REFACTORED
 // ==============================================================================
+// --- Helper to clean up Show Data ---
+function mapShow(row: any) {
+  const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
+  return {
+    id: row.id,
+    title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled Show"),
+    season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON], "Unknown Season"),
+    status: rawStatus,
+    isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
+    image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
+    // Add location mapping if needed for the dashboard
+    location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || "TBD",
+  };
+}
 
 export async function getActiveProduction() {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "50" });
   if (!Array.isArray(data)) return null;
-  // Look for field "IS_ACTIVE" or a Status of "Active"
-  return data.find((r: any) => safeGet(r[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || safeGet(r[DB.PRODUCTIONS.FIELDS.STATUS]) === 'Active') || data[0];
+  
+  // Find the active row
+  const activeRow = data.find((r: any) => 
+    safeGet(r[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || 
+    safeGet(r[DB.PRODUCTIONS.FIELDS.STATUS]) === 'Active'
+  ) || data[0];
+
+  // 🚨 FIX: Clean it before returning!
+  return activeRow ? mapShow(activeRow) : null;
 }
 
-export async function getShowById(showId: string) {
+export async function getShowById(showId: string | number) {
   const row = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${showId}/`);
-  return row && !row.error ? row : null;
+  // 🚨 FIX: Clean it here too!
+  return row && !row.error ? mapShow(row) : null;
 }
-
-// app/lib/baserow.ts
 
 export async function getAllShows() {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => {
-    // 1. Get Status (Safe Fallback)
-    const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
-    
-    // 2. Get Location (Try "Location" field first, then linked "Venue")
-    const locationName = safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || 
-                         safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || 
-                         "TBD Location";
-
-    return {
-      id: row.id,
-      title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled Show"),
-      // 🚨 RESTORED: Location & Type (This fixes "UNKNOWN")
-      location: locationName,
-      type: safeGet(row[DB.PRODUCTIONS.FIELDS.TYPE], "Main Stage"),
-      
-      season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON], "Unknown Season"),
-      status: rawStatus,
-      isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
-      image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
-    };
-  }).sort((a: any, b: any) => b.id - a.id);
+  // Reuse the helper
+  return data.map(mapShow).sort((a: any, b: any) => b.id - a.id);
 }
-
 // --- Casting ---
 
 export async function getRoles() {
@@ -368,18 +366,22 @@ export async function getPeople() {
 // app/lib/baserow.ts
 
 export async function getCreativeTeam(productionId?: number) {
-  // 1. Fetch from the SHOW_TEAM table
-  const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`);
+  // 🚨 FIX: Add Filter! Only get staff linked to THIS production
+  const params: any = { size: "100" };
+  if (productionId) {
+    params[`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`] = productionId;
+  }
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
 
   if (!Array.isArray(data)) return [];
 
-  // 2. Map & Filter
   return data
     .map((row: any) => {
-      const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], null); // Return null if empty
+      const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], null);
       const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
 
-      if (!name) return null; // Skip empty assignments
+      if (!name) return null; // Skip empty rows
 
       return {
         id: row.id,
@@ -389,7 +391,7 @@ export async function getCreativeTeam(productionId?: number) {
         color: getRoleColor(role)
       };
     })
-    .filter(Boolean); // Remove the nulls
+    .filter(Boolean); // Remove nulls
 }
 
 // Helper for the UI colors (Restored)
