@@ -201,7 +201,6 @@ function formatUser(row: any, email: string) {
 // app/lib/baserow.ts
 
 export async function getClasses() {
-  let allRows: any[] = [];
   let page = 1;
   let hasMore = true;
 
@@ -248,29 +247,7 @@ export async function getClasses() {
   });
 }
 
-// 🚨 FIX 2: SINGLE CLASS FETCHER (For the Class Details Page)
-export async function getClassById(classId: string) {
-  const row = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/${classId}/`);
-
-  if (!row || row.error || row.detail) return null;
-
-  const students = row.Students || []; 
-  const enrollment = Array.isArray(students) ? students.length : 0;
-
-  return {
-    id: row.id,
-    name: row['Class Name'] || "Unnamed Class",
-    session: row.Session?.[0]?.value || row.Session || "Unknown",
-    teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
-    location: row.Location?.value || row.Location || "Main Campus",
-    day: row.Day?.value || row.Day || "TBD",
-    time: row['Time Slot']?.value || row['Time Slot'] || "TBD",
-    description: row['Description'] || "",
-    ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
-    spaceName: row.Space?.[0]?.value || null,
-    students: enrollment,
-  };
-}
+  let allRows: any[] = [];
 
 export async function getVenueLogistics() {
   const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "200" });
