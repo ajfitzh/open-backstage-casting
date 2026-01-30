@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -35,6 +35,16 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
   const [activeTab, setActiveTab] = useState<'manager' | 'logistics' | 'overview' | 'teachers'>('manager');
   const [selectedSession, setSelectedSession] = useState(sessions[0] || ""); // Default to newest
   const [searchQuery, setSearchQuery] = useState(""); // Free text search
+
+  // 🚨 FIX 1: SYNC STATE WHEN DATA LOADS
+  // This ensures that if the 'sessions' array updates (from the pagination fetch),
+  // the dropdown automatically selects the newest one instead of staying empty.
+  useEffect(() => {
+    if (sessions.length > 0 && !sessions.includes(selectedSession)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedSession(sessions[0]);
+    }
+  }, [sessions, selectedSession]);
 
   // --- 3. MASTER FILTER (Session + Text) ---
   const filteredClasses = useMemo(() => {
@@ -111,7 +121,7 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
         {/* Right: Filters */}
         <div className="flex gap-3 items-center">
           
-          {/* SEASON SELECTOR (The Toggle You Requested) */}
+          {/* SEASON SELECTOR */}
           <div className="relative group">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none">
               <Calendar size={14} />
@@ -258,7 +268,8 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
         {/* TAB 3: TRENDS */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-            <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem]">
+            {/* 🚨 FIX 2: Added min-w-0 to prevent chart width crash */}
+            <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] min-w-0">
               <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><LayoutGrid size={16} className="text-blue-500" /> Top Classes ({selectedSession})</h3>
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -286,7 +297,8 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
 
         {/* TAB 4: FACULTY */}
         {activeTab === 'teachers' && (
-          <div className="bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
+          // 🚨 FIX 3: Added min-w-0 here too
+          <div className="bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4 min-w-0">
             <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><UserSquare2 size={16} className="text-purple-500" /> Instructor Load ({selectedSession})</h3>
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
