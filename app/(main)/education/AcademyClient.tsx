@@ -175,7 +175,7 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
               ))
             ) : (
               <div className="col-span-full py-20 text-center text-zinc-500 italic">
-                No classes found for <strong>{selectedSession}</strong> matching "{searchQuery}"
+                No classes found for <strong>{selectedSession}</strong> matching &ldquo;{searchQuery}&ldquo;
               </div>
             )}
           </div>
