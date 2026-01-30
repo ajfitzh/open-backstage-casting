@@ -350,7 +350,38 @@ export async function getPeople() {
 }
 
 export async function getCreativeTeam(productionId?: number) {
-  return fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`);
+  // 1. Fetch from the SHOW_TEAM table
+  const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`);
+
+  if (!Array.isArray(data)) return [];
+
+  // 2. Map raw IDs to clean component data
+  return data.map((row: any) => {
+    // Use safeGet with the schema IDs to get the values
+    const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], "Unknown Staff");
+    const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
+
+    return {
+      id: row.id,
+      name: name,
+      role: role,
+      // Restore the color/initials logic needed for the UI
+      initials: name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
+      color: getRoleColor(role)
+    };
+  });
+}
+
+// Helper for the UI colors (Restored)
+function getRoleColor(role: string) {
+  const r = (role || "").toLowerCase();
+  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
+  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600';
+  if (r.includes('choreographer')) return 'bg-emerald-600';
+  if (r.includes('stage manager')) return 'bg-amber-500';
+  if (r.includes('assistant')) return 'bg-cyan-600';
+  if (r.includes('tech') || r.includes('light') || r.includes('sound')) return 'bg-indigo-600';
+  return 'bg-zinc-600';
 }
 
 export async function getCommitteePreferences() {
@@ -362,10 +393,8 @@ export async function getConflicts() {
 }
 
 export async function getComplianceData() {
-  // Using People table as fallback since Volunteers table is missing
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
 }
-
 // ==============================================================================
 // 🔐 AUTHENTICATION - REFACTORED
 // ==============================================================================
