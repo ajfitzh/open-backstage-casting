@@ -190,18 +190,19 @@ function formatUser(row: any, email: string) {
     };
 }
 
+
 // ==============================================================================
-// 📈 ANALYTICS & GETTERS (CLASSES & LOGISTICS)
+// 📈 ANALYTICS & GETTERS
 // ==============================================================================
 
 export async function getClasses() {
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "200" });
+  // FIX: Increased size from 200 to 2000 to catch all historical data
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "2000" });
 
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    // 1. ROBUST ENROLLMENT COUNT
-    // Handles CSV Strings ("Name1, Name2") AND Baserow Link Arrays
+    // ... (rest of mapping logic is fine) ...
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -209,8 +210,6 @@ export async function getClasses() {
       enrollment = row.Students.split(',').length;
     }
 
-    // 2. SPACE LINKAGE
-    // Check all casing variations to be safe
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
@@ -218,8 +217,6 @@ export async function getClasses() {
     return {
       id: row.id,
       name: safeString(row['Class Name'], "Unnamed Class"),
-      
-      // Force Strings to prevent .toLowerCase() crashes
       session: safeString(row.Session, "Unknown"),
       teacher: safeString(row.Teacher, "TBA"),
       location: safeString(row.Location, "Main Campus"),
@@ -235,19 +232,16 @@ export async function getClasses() {
 }
 
 export async function getVenueLogistics() {
-  // Fetch everything in parallel
-  const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
-    fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "50" }),
-    fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" }),
-    fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "100" }),
-    getClasses()
-  ]);
+  // FIX: Increased sizes here too, just in case
+  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "200" });
+  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" }); 
+  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "200" });
+  const classesData = await getClasses(); // This now fetches 2000!
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    // 1. DYNAMIC RATE FINDER
-    // Find rates linked to this venue, sort by Year (descending) to get the newest
+    // ... (rest of logic remains exactly the same) ...
     const venueRates = Array.isArray(ratesData) ? ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id)) : [];
     
     const activeRate = venueRates.sort((a: any, b: any) => {
@@ -258,11 +252,9 @@ export async function getVenueLogistics() {
       return yearB - yearA; 
     })[0];
 
-    // 2. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
-        // Link Classes to this Space using the Space ID
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
         
         return {
@@ -289,7 +281,6 @@ export async function getVenueLogistics() {
     };
   }).filter((venue: any) => venue.spaces.length > 0);
 }
-
 // ==============================================================================
 // 🎭 SHOW & PRODUCTION ANALYTICS
 // ==============================================================================
