@@ -322,7 +322,23 @@ export async function getGlobalSalesSummary() {
 // ==============================================================================
 
 /**
- * RESTORED FUNCTION: getActiveProduction
+ * RESTORED: getAllShows
+ * Used by Global App Header to list shows.
+ */
+export async function getAllShows() {
+  return await fetchBaserow(`/database/rows/table/${TABLES.MASTER_SHOWS}/`, {}, { size: "200" });
+}
+
+/**
+ * EXTRA: getAllProductions
+ * Added just in case your header actually needs the production instances instead.
+ */
+export async function getAllProductions() {
+  return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
+}
+
+/**
+ * RESTORED: getActiveProduction
  * Retrieves the currently active production for the site context.
  */
 export async function getActiveProduction() {
@@ -334,7 +350,7 @@ export async function getActiveProduction() {
 }
 
 /**
- * RESTORED FUNCTION: getShowById
+ * RESTORED: getShowById
  * Retrieves the Master Show data (e.g., script info) for a given show ID.
  */
 export async function getShowById(showId: string | number) {
