@@ -19,7 +19,7 @@ export default function LoginPage() {
       signIn("google", { callbackUrl: "/" });
   };
 
-  // 2. Handle Password Login
+// 2. Handle Password Login
   const handleCredentialsLogin = async (e: FormEvent) => {
     e.preventDefault(); 
     setIsLoading(true); 
@@ -28,15 +28,16 @@ export default function LoginPage() {
     const result = await signIn('credentials', {
       email,
       password,
-      redirect: true,
+      redirect: false, // 🚨 FIX: Must be false to get the 'result' object back!
     });
 
     if (result?.error) {
-      setError("Invalid credentials.");
+      // Now TypeScript knows 'result' exists and has an 'error' property
+      setError("Invalid credentials. Please check your email and app password.");
       setIsLoading(false);
     } else {
       router.refresh(); 
-      router.push('/'); 
+      router.push('/'); // We handle the redirect manually here on success
     }
   };
 
