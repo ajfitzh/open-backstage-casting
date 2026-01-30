@@ -4,15 +4,12 @@ import { notFound } from "next/navigation";
 // Removes trailing slash to ensure clean URL construction
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 
-// 1. FIX: Unify the Token Logic. Check all possible naming conventions.
+// 1. UNIFIED TOKEN LOGIC
+// Checks all common naming conventions to prevent auth errors
 const API_TOKEN = process.env.BASEROW_API_KEY || process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
 
-const HEADERS = {
-  "Authorization": `Token ${API_TOKEN}`,
-  "Content-Type": "application/json",
-};
-
 // --- TABLE MAP ---
+// 🚨 Ensure these IDs match your Baserow URL exactly
 export const TABLES = {
   PEOPLE: "599",
   PRODUCTIONS: "600",
@@ -45,7 +42,7 @@ export const TABLES = {
   SESSIONS:"632"
 };
 
-// --- AUTHENTICATION FIELDS ---
+// --- AUTH FIELDS ---
 const AUTH_FIELDS = {
   FULL_NAME: "field_5735",
   HEADSHOT: "field_5776",
@@ -86,14 +83,31 @@ export interface Person {
 }
 
 // ==============================================================================
-// 🛡️ CENTRAL FETCH HELPER (FIXED)
+// 🛡️ HELPERS
 // ==============================================================================
 
 /**
+ * Safely extracts a string from any Baserow field type (Array, Object, String, null).
+ * Prevents "toLowerCase is not a function" errors.
+ */
+function safeString(field: any, fallback: string = ""): string {
+  if (!field) return fallback;
+  if (typeof field === 'string') return field;
+  if (Array.isArray(field)) {
+    return field.length > 0 ? (field[0].value || field[0].name || fallback) : fallback;
+  }
+  if (typeof field === 'object') {
+    return field.value || field.name || fallback;
+  }
+  return String(field); 
+}
+
+/**
  * Universal fetch wrapper for Baserow.
+ * Automatically handles Auth headers and Query Params.
  */
 async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}) {
-  const { size = "100", ...fetchOptions } = config; // Extract fetch options (method, body) from config
+  const { size = "100", ...fetchOptions } = config; 
   
   const queryString = new URLSearchParams({ 
     user_field_names: "true", 
@@ -101,11 +115,10 @@ async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}
     ...params 
   }).toString();
 
-  // 2. FIX: Use the unified API_TOKEN and BASE_URL constant
   const url = `${BASE_URL}/api${endpoint}?${queryString}`;
 
   const res = await fetch(url, {
-    ...fetchOptions, // Spread methods (POST/PATCH) here
+    ...fetchOptions, 
     headers: {
       "Authorization": `Token ${API_TOKEN}`,
       "Content-Type": "application/json",
@@ -119,7 +132,6 @@ async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}
     return [];
   }
 
-  // Handle DELETE (204 No Content)
   if (res.status === 204) return [];
 
   const data = await res.json();
@@ -127,7 +139,7 @@ async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}
 }
 
 // ==============================================================================
-// 🔐 AUTHENTICATION LOGIC
+// 🔐 AUTHENTICATION
 // ==============================================================================
 
 export async function findUserByEmail(email: string): Promise<BaserowUser | null> {
@@ -139,7 +151,6 @@ export async function findUserByEmail(email: string): Promise<BaserowUser | null
   };
 
   const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, params);
-
   if (!results || results.length === 0) return null;
   return formatUser(results[0], email);
 }
@@ -153,7 +164,6 @@ export async function verifyUserCredentials(email: string, passwordInput: string
   };
 
   const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, params);
-
   if (!results || results.length === 0) return null;
 
   const userRecord = results.find((row: any) => {
@@ -162,7 +172,6 @@ export async function verifyUserCredentials(email: string, passwordInput: string
   });
 
   if (!userRecord) return null;
-
   return formatUser(userRecord, email);
 }
 
@@ -181,9 +190,8 @@ function formatUser(row: any, email: string) {
     };
 }
 
-
 // ==============================================================================
-// 📈 ANALYTICS & GETTERS
+// 📈 ANALYTICS & GETTERS (CLASSES & LOGISTICS)
 // ==============================================================================
 
 export async function getClasses() {
@@ -193,6 +201,7 @@ export async function getClasses() {
 
   return data.map((row: any) => {
     // 1. ROBUST ENROLLMENT COUNT
+    // Handles CSV Strings ("Name1, Name2") AND Baserow Link Arrays
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -201,95 +210,99 @@ export async function getClasses() {
     }
 
     // 2. SPACE LINKAGE
+    // Check all casing variations to be safe
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
 
     return {
       id: row.id,
-      name: row['Class Name'] || "Unnamed Class",
-      session: row.Session?.[0]?.value || row.Session || "Unknown",
-      teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
-      location: row.Location?.value || row.Location || "Main Campus",
+      name: safeString(row['Class Name'], "Unnamed Class"),
       
-      campus: row['Campus'] || "", 
+      // Force Strings to prevent .toLowerCase() crashes
+      session: safeString(row.Session, "Unknown"),
+      teacher: safeString(row.Teacher, "TBA"),
+      location: safeString(row.Location, "Main Campus"),
+      day: safeString(row.Day, "TBD"),
+      ageRange: safeString(row['Age Range'], "All Ages"),
+      
+      campus: safeString(row['Campus'], ""), 
       spaceId: spaceId,            
       spaceName: spaceName,
-
-      day: row.Day?.value || row.Day || "TBD",
       students: enrollment,
-      ageRange: row['Age Range']?.value || row['Age Range'] || "All Ages",
     };
   });
 }
 
 export async function getVenueLogistics() {
-  const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "50" });
-  const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" });
-  const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "100" });
-  const classesData = await getClasses(); 
+  // Fetch everything in parallel
+  const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
+    fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "50" }),
+    fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" }),
+    fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "100" }),
+    getClasses()
+  ]);
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    
-    // DYNAMIC RATE FINDER
-    const venueRates = ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id));
+    // 1. DYNAMIC RATE FINDER
+    // Find rates linked to this venue, sort by Year (descending) to get the newest
+    const venueRates = Array.isArray(ratesData) ? ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id)) : [];
     
     const activeRate = venueRates.sort((a: any, b: any) => {
-      const sessionA = a.Session?.[0]?.value || "";
-      const sessionB = b.Session?.[0]?.value || "";
+      const sessionA = safeString(a.Session);
+      const sessionB = safeString(b.Session);
       const yearA = parseInt(sessionA.match(/\d{4}/)?.[0] || "0");
       const yearB = parseInt(sessionB.match(/\d{4}/)?.[0] || "0");
       return yearB - yearA; 
     })[0];
 
+    // 2. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
+        // Link Classes to this Space using the Space ID
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
-
+        
         return {
           id: space.id,
-          name: space['Room Name'] || space['Full Room Name'] || "Unnamed Room",
+          name: safeString(space['Room Name'] || space['Full Room Name'], "Unnamed Room"),
           capacity: parseInt(space.Capacity) || 0,
-          floorType: space['Floor Type']?.value || "Unknown",
+          floorType: safeString(space['Floor Type'], "Unknown"),
           classes: occupiedBy
         };
       });
 
     return {
       id: venue.id,
-      name: venue['Venue Name'] || "Unknown Venue",
-      type: venue.Type?.value || "General",
-      contact: venue['Contact Name'] || "N/A",
+      name: safeString(venue['Venue Name'], "Unknown Venue"),
+      type: safeString(venue.Type, "General"),
+      contact: safeString(venue['Contact Name'], "N/A"),
       spaces: venueSpaces, 
       rates: {
         hourly: parseFloat(activeRate?.['Hourly Rate'] || 0),
         weekend: parseFloat(activeRate?.['Weekend Rate'] || 0),
         flat: parseFloat(activeRate?.['Flat Rate'] || 0),
-        session: activeRate?.Session?.[0]?.value || "Default"
+        session: safeString(activeRate?.Session, "Default")
       }
     };
   }).filter((venue: any) => venue.spaces.length > 0);
 }
 
-export async function getPerformanceAnalytics(productionId?: number) {
-  const data = await fetchBaserow(
-    `/database/rows/table/${TABLES.PERFORMANCES}/`, 
-    {}, 
-    { size: "200" } 
-  );
-  
-  if (!Array.isArray(data) || data.length === 0) return [];
+// ==============================================================================
+// 🎭 SHOW & PRODUCTION ANALYTICS
+// ==============================================================================
 
+export async function getPerformanceAnalytics(productionId?: number) {
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.PERFORMANCES}/`, {}, { size: "200" });
+  if (!Array.isArray(data)) return [];
+  
   return data.map((row: any) => {
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
     const capacity = parseFloat(row['Total Inventory'] || row.field_6183 || 0);
-    const label = row['Performance'] || row.field_6182 || "Show";
-
     return {
-      name: label,
+      name: row['Performance'] || row.field_6182 || "Show",
       sold: sold,
       capacity: capacity,
       empty: Math.max(0, capacity - sold),
@@ -306,71 +319,19 @@ export async function getGlobalSalesSummary() {
   return { totalSold, avgFill, performanceCount: data.length };
 }
 
-export async function getTableRows(tableId: string, productionId?: number) {
-    const params: any = { size: "200" };
-    if (productionId) params[`filter__Production__link_row_has`] = productionId;
-    return await fetchBaserow(`/database/rows/table/${tableId}/`, params);
-}
-
-export async function getCreativeTeam(productionId: number) {
-  const params = { size: "100", filter__Productions__link_row_has: productionId };
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.SHOW_TEAM}/`, params);
-  
-  if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => {
-    const personName = row.Person?.[0]?.value || "Unknown Staff";
-    return {
-      id: row.id,
-      name: personName,
-      personId: row.Person?.[0]?.id || 0,
-      role: row.Position?.[0]?.value || "Volunteer",
-      initials: personName.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
-      color: getRoleColor(row.Position?.[0]?.value)
-    };
-  });
-}
-
-function getRoleColor(role: string) {
-  const r = (role || "").toLowerCase();
-  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
-  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600';
-  if (r.includes('choreographer')) return 'bg-emerald-600';
-  if (r.includes('stage manager')) return 'bg-amber-500';
-  if (r.includes('assistant')) return 'bg-cyan-600';
-  if (r.includes('tech') || r.includes('light') || r.includes('sound')) return 'bg-indigo-600';
-  return 'bg-zinc-600';
-}
-
-function safeGet(field: any, fallback: string = "Unknown"): string {
-  if (!field) return fallback;
-  if (typeof field === 'string') return field;
-  if (Array.isArray(field) && field.length > 0) return field[0].value || field[0].name || fallback;
-  if (typeof field === 'object') return field.value || field.name || fallback;
-  return fallback;
-}
-
 export async function getAllShows() {
-  const data = await fetchBaserow(
-    `/database/rows/table/${TABLES.PRODUCTIONS}/`, 
-    {}, 
-    { size: "200" } 
-  );
-  
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
   
-  const sortedData = data.sort((a: any, b: any) => b.id - a.id);
-
-  return sortedData.map((row: any) => {
-    const rawStatus = safeGet(row.Status, "Archived"); 
-    
+  return data.sort((a: any, b: any) => b.id - a.id).map((row: any) => {
+    const rawStatus = safeString(row.Status, "Archived");
     return {
       id: row.id,
-      title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
-      location: safeGet(row.Location || row.Venue || row.Branch),
-      type: safeGet(row.Type, "Main Stage"),
-      season: safeGet(row.Season, "Unknown Season"),
-      status: rawStatus, 
+      title: safeString(row.Title || row["Full Title"], "Untitled Show"),
+      location: safeString(row.Location || row.Venue || row.Branch),
+      type: safeString(row.Type, "Main Stage"),
+      season: safeString(row.Season, "Unknown Season"),
+      status: rawStatus,
       isActive: row["Is Active"] === true || row["Is Active"]?.value === "true" || rawStatus === "Active"
     };
   });
@@ -380,6 +341,7 @@ export async function getActiveShows() {
   const allShows = await getAllShows();
   return allShows.filter(show => show.isActive);
 }
+
 export async function getShowById(id: number) {
   if (!id) return null;
   return await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/${id}/`);
@@ -391,7 +353,15 @@ export async function getActiveProduction() {
   return data.find((r: any) => r["Is Active"] === true) || data[0];
 }
 
-// --- COMPLIANCE & CASTING ---
+// ==============================================================================
+// 📋 COMPLIANCE & CASTING
+// ==============================================================================
+
+export async function getTableRows(tableId: string, productionId?: number) {
+    const params: any = { size: "200" };
+    if (productionId) params[`filter__Production__link_row_has`] = productionId;
+    return await fetchBaserow(`/database/rows/table/${tableId}/`, params);
+}
 
 export async function getAuditionees(productionId?: number) { return await getTableRows(TABLES.AUDITIONS, productionId); }
 export async function getAssignments(productionId?: number) { return await getTableRows(TABLES.ASSIGNMENTS, productionId); }
@@ -428,8 +398,38 @@ export async function getAuditionSlots(productionId?: number) { return await get
 export async function getConflicts(productionId?: number) { return await getTableRows(TABLES.CONFLICTS, productionId); }
 export async function getProductionAssets(productionId: number) { return await getTableRows(TABLES.ASSETS, productionId); }
 
+export async function getCreativeTeam(productionId: number) {
+  const params = { size: "100", filter__Productions__link_row_has: productionId };
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.SHOW_TEAM}/`, params);
+  
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => {
+    const personName = row.Person?.[0]?.value || "Unknown Staff";
+    return {
+      id: row.id,
+      name: personName,
+      personId: row.Person?.[0]?.id || 0,
+      role: row.Position?.[0]?.value || "Volunteer",
+      initials: personName.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase(),
+      color: getRoleColor(row.Position?.[0]?.value)
+    };
+  });
+}
+
+function getRoleColor(role: string) {
+  const r = (role || "").toLowerCase();
+  if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
+  if (r.includes('music') || r.includes('vocal')) return 'bg-pink-600';
+  if (r.includes('choreographer')) return 'bg-emerald-600';
+  if (r.includes('stage manager')) return 'bg-amber-500';
+  if (r.includes('assistant')) return 'bg-cyan-600';
+  if (r.includes('tech') || r.includes('light') || r.includes('sound')) return 'bg-indigo-600';
+  return 'bg-zinc-600';
+}
+
 // ==============================================================================
-// ✍️ WRITE FUNCTIONS (ACTIONS) - 3. FIX: PASS CONFIG AS 3RD ARGUMENT!
+// ✍️ WRITE FUNCTIONS (ACTIONS)
 // ==============================================================================
 
 export async function updateAuditionSlot(rowId: number, data: any) {
@@ -437,7 +437,6 @@ export async function updateAuditionSlot(rowId: number, data: any) {
   ["Vocal Score", "Acting Score", "Dance Score"].forEach(key => {
       if (key in cleanData) cleanData[key] = Number(cleanData[key]) || 0; 
   });
-  // FIX: pass {} as 2nd arg (params), and config as 3rd arg
   return await fetchBaserow(`/database/rows/table/${TABLES.AUDITIONS}/${rowId}/`, {}, { method: "PATCH", body: JSON.stringify(cleanData) });
 }
 
