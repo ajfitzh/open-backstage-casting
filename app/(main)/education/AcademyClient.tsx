@@ -8,77 +8,80 @@ import {
 } from 'recharts';
 import { 
   LayoutGrid, UserSquare2, MapPin, Search, 
-  ClipboardList, Users, School, Building2, Map, AlertTriangle, Info 
+  ClipboardList, Users, School, Building2, Calendar, AlertTriangle, Info, ChevronDown 
 } from 'lucide-react';
 
 export default function AcademyClient({ classes, venues }: { classes: any[], venues: any[] }) {
   
-  // --- 1. AUTO-DETECT LATEST SEASON ---
-  // This logic scans all classes and finds the "Highest Number" year (e.g., 2026 > 2025).
-  // If years are equal, it prioritizes order: Fall > Summer > Spring > Winter.
-  const defaultSeason = useMemo(() => {
-    const uniqueSessions = Array.from(new Set(classes.map(c => c.session).filter(Boolean)));
+  // --- 1. GET AVAILABLE SESSIONS ---
+  const sessions = useMemo(() => {
+    // Get unique session names
+    const unique = Array.from(new Set(classes.map(c => c.session).filter(Boolean)));
     
-    if (uniqueSessions.length === 0) return "";
-
-    const sortedSessions = uniqueSessions.sort((a, b) => {
-      // Extract the year (e.g., "Winter 2026" -> 2026)
+    // Sort them intelligently (Newest Year + Season Weight)
+    return unique.sort((a, b) => {
       const yearA = parseInt(a.match(/\d{4}/)?.[0] || "0");
       const yearB = parseInt(b.match(/\d{4}/)?.[0] || "0");
-
-      // Primary Sort: Year (Descending)
-      if (yearA !== yearB) return yearB - yearA;
-
-      // Secondary Sort: Season Weight (Fall > Summer > Spring > Winter)
+      if (yearA !== yearB) return yearB - yearA; // Descending Year
+      
       const weights: Record<string, number> = { "Fall": 4, "Summer": 3, "Spring": 2, "Winter": 1 };
       const seasonA = weights[a.split(" ")[0]] || 0;
       const seasonB = weights[b.split(" ")[0]] || 0;
-      
       return seasonB - seasonA;
     });
-
-    return sortedSessions[0]; // Returns the "Future-most" session
   }, [classes]);
 
+  // --- 2. STATE ---
   const [activeTab, setActiveTab] = useState<'manager' | 'logistics' | 'overview' | 'teachers'>('manager');
-  // Initialize search with the auto-detected season
-  const [searchTerm, setSearchTerm] = useState(defaultSeason);
+  const [selectedSession, setSelectedSession] = useState(sessions[0] || ""); // Default to newest
+  const [searchQuery, setSearchQuery] = useState(""); // Free text search
 
-  // --- 2. MASTER FILTER ---
+  // --- 3. MASTER FILTER (Session + Text) ---
   const filteredClasses = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return classes.filter(c => 
-      c.name.toLowerCase().includes(term) || 
-      c.teacher.toLowerCase().includes(term) ||
-      c.session.toLowerCase().includes(term) ||
-      c.day.toLowerCase().includes(term) ||
-      c.location.toLowerCase().includes(term)
-    );
-  }, [classes, searchTerm]);
+    const term = searchQuery.toLowerCase();
+    
+    return classes.filter(c => {
+      // 1. Strict Session Match
+      if (c.session !== selectedSession) return false;
 
-  // --- 3. SMART VENUE FILTER ---
+      // 2. Loose Text Match (Teacher, Name, Day, etc.)
+      if (!term) return true;
+      return (
+        c.name.toLowerCase().includes(term) || 
+        c.teacher.toLowerCase().includes(term) ||
+        c.day.toLowerCase().includes(term) ||
+        c.location.toLowerCase().includes(term) ||
+        (c.spaceName && c.spaceName.toLowerCase().includes(term))
+      );
+    });
+  }, [classes, selectedSession, searchQuery]);
+
+  // --- 4. SMART VENUE FILTER ---
   const activeVenues = useMemo(() => {
     const activeClassIds = new Set(filteredClasses.map(c => c.id));
-    const term = searchTerm.toLowerCase();
+    const term = searchQuery.toLowerCase();
 
     return venues.map(venue => {
-      const venueMatches = venue.name.toLowerCase().includes(term) || venue.type.toLowerCase().includes(term);
+      // If user searches for a venue name specifically, show it even if empty
+      const venueMatchesSearch = term && (venue.name.toLowerCase().includes(term) || venue.type.toLowerCase().includes(term));
 
       const activeSpaces = venue.spaces.map((space: any) => {
+        // Only show classes relevant to the CURRENT filter
         const relevantClasses = space.classes.filter((c: any) => activeClassIds.has(c.id));
         return { ...space, classes: relevantClasses };
       });
 
-      const hasActiveClasses = activeSpaces.some((s:any) => s.classes.length > 0);
+      // Show venue if it has active classes OR if the user specifically searched for it
+      const hasClasses = activeSpaces.some((s:any) => s.classes.length > 0);
       
-      if (venueMatches || hasActiveClasses) {
-        return { ...venue, spaces: activeSpaces, hasActiveClasses };
+      if (hasClasses || venueMatchesSearch) {
+        return { ...venue, spaces: activeSpaces, hasClasses };
       }
       return null;
     }).filter(Boolean);
-  }, [venues, filteredClasses, searchTerm]);
+  }, [venues, filteredClasses, searchQuery]);
 
-  // --- 4. ANALYTICS ---
+  // --- 5. ANALYTICS ---
   const stats = useMemo(() => {
     const teachers: Record<string, number> = {};
     const classTypes: Record<string, number> = {};
@@ -95,23 +98,45 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
   return (
     <div className="h-full flex flex-col">
       {/* TOOLBAR */}
-      <div className="px-8 py-4 bg-zinc-950 flex flex-col md:flex-row gap-4 border-b border-white/5 justify-between items-center">
-        <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl border border-white/5 overflow-x-auto max-w-full">
+      <div className="px-8 py-4 bg-zinc-950 border-b border-white/5 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between gap-4">
+        
+        {/* Left: Tab Switcher */}
+        <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl border border-white/5 overflow-x-auto">
           <TabButton active={activeTab === 'manager'} onClick={() => setActiveTab('manager')} icon={<ClipboardList size={14}/>} label="Class Manager" />
           <TabButton active={activeTab === 'logistics'} onClick={() => setActiveTab('logistics')} icon={<Map size={14}/>} label="Logistics" />
           <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<LayoutGrid size={14}/>} label="Trends" />
           <TabButton active={activeTab === 'teachers'} onClick={() => setActiveTab('teachers')} icon={<UserSquare2 size={14}/>} label="Faculty" />
         </div>
         
-        <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-blue-500 transition-colors" size={14} />
-          <input 
-            type="text" 
-            placeholder="Search classes, days, or venues..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 w-64 transition-all"
-          />
+        {/* Right: Filters */}
+        <div className="flex gap-3 items-center">
+          
+          {/* SEASON SELECTOR (The Toggle You Requested) */}
+          <div className="relative group">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none">
+              <Calendar size={14} />
+            </div>
+            <select 
+              value={selectedSession} 
+              onChange={(e) => setSelectedSession(e.target.value)}
+              className="appearance-none bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-10 text-xs text-white font-bold uppercase tracking-wide focus:outline-none focus:border-blue-500/50 hover:bg-zinc-800 transition-all cursor-pointer min-w-[160px]"
+            >
+              {sessions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          </div>
+
+          {/* SEARCH BOX */}
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-blue-500 transition-colors" size={14} />
+            <input 
+              type="text" 
+              placeholder="Filter by teacher, day..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 w-48 transition-all"
+            />
+          </div>
         </div>
       </div>
 
@@ -149,7 +174,9 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                 </div>
               ))
             ) : (
-              <div className="col-span-full py-20 text-center text-zinc-500 italic">No classes found matching &quot;{searchTerm}&quot;</div>
+              <div className="col-span-full py-20 text-center text-zinc-500 italic">
+                No classes found for <strong>{selectedSession}</strong> matching "{searchQuery}"
+              </div>
             )}
           </div>
         )}
@@ -173,7 +200,6 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                     </div>
                     <div className="text-right">
                       <div className="px-3 py-1 bg-purple-500/10 rounded-lg text-[10px] font-bold text-purple-400 border border-purple-500/20">${venue.rates.hourly}/hr</div>
-                      {venue.rates.weekend > 0 && <p className="text-[9px] text-zinc-600 mt-1 uppercase font-bold">+${venue.rates.weekend} Wknd</p>}
                     </div>
                   </div>
 
@@ -221,7 +247,8 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                  <Info size={32} className="mx-auto text-zinc-700 mb-3" />
                  <p className="text-sm font-bold text-zinc-500">Logistics Data Unavailable</p>
                  <p className="text-xs text-zinc-600 mt-1 max-w-md mx-auto">
-                   No venues match &ldquo;{searchTerm}&ldquo;. Try clearing the search or checking your Class-Space links.
+                   No venues found for <strong>{selectedSession}</strong>. <br/>
+                   Try searching for a specific venue name or switching seasons.
                  </p>
                </div>
              )}
@@ -232,7 +259,7 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
             <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem]">
-              <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><LayoutGrid size={16} className="text-blue-500" /> Top Classes</h3>
+              <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><LayoutGrid size={16} className="text-blue-500" /> Top Classes ({selectedSession})</h3>
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={stats.classData} layout="vertical">
@@ -245,13 +272,22 @@ export default function AcademyClient({ classes, venues }: { classes: any[], ven
                 </ResponsiveContainer>
               </div>
             </div>
+            {/* Highlights */}
+             <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-[2rem] flex flex-col">
+               <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6">Highlights</h3>
+               <div className="p-4 bg-zinc-950 rounded-xl border border-white/5 mb-4">
+                 <p className="text-[10px] font-bold text-zinc-500 uppercase">Top Performer</p>
+                 <p className="text-lg font-black text-white truncate">{stats.classData[0]?.name || "N/A"}</p>
+                 <p className="text-xs text-blue-500 font-bold">{stats.classData[0]?.count || 0} Students</p>
+               </div>
+            </div>
           </div>
         )}
 
         {/* TAB 4: FACULTY */}
         {activeTab === 'teachers' && (
           <div className="bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
-            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><UserSquare2 size={16} className="text-purple-500" /> Instructor Load</h3>
+            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-2"><UserSquare2 size={16} className="text-purple-500" /> Instructor Load ({selectedSession})</h3>
             <div className="h-[400px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stats.teacherData}>
