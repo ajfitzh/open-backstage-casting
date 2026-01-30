@@ -6,11 +6,11 @@ import {
   ChevronRight, Sparkles, Cat, 
   Theater, Newspaper, Waves, Snowflake, 
   Crown, Trees, Megaphone, GraduationCap, Heart, Home,
-  LayoutGrid, TrendingUp, UserPlus, AlertTriangle, Sun
+  LayoutGrid, TrendingUp, UserPlus, AlertTriangle, Sun,
+  Building2
 } from 'lucide-react';
 
 import { getActiveProduction, getShowById, getAssignments, getCreativeTeam, getAuditionees } from '@/app/lib/baserow';
-// I'm keeping your imports. If these files don't exist yet, simple placeholders will be needed.
 import { MOCK_CLASSES } from '@/app/lib/educationFillerData';
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
 
@@ -25,28 +25,26 @@ const SEASON_STAFF = [
 ];
 
 export default async function DashboardPage() {
-  // 1. GET SESSION (Who is logged in?)
+  // 1. GET SESSION
   const session = await auth();
   const userRole = (session?.user as any)?.role || "Guest";
   const firstName = session?.user?.name?.split(' ')[0] || "Cast Member";
 
-  // 2. RESOLVE ACTIVE PRODUCTION (The 404 Fix)
+  // 2. RESOLVE ACTIVE PRODUCTION
   const cookieStore = await cookies();
-  const cookieId = Number(cookieStore.get('active_production_id')?.value);
+  const cookieId = cookieStore.get('active_production_id')?.value;
 
   let show = null;
   
-  // Try cookie first
+  // Try cookie first, fallback to DB "Active" flag
   if (cookieId) {
     show = await getShowById(cookieId);
   }
-  
-  // Fallback to "Is Active" checkbox if cookie fails or returns 404
-  if (!show || show.detail === "Not found") { 
+  if (!show) { 
     show = await getActiveProduction();
   }
 
-  // 3. SAFETY VALVE: If still no show, render Empty State
+  // 3. EMPTY STATE
   if (!show) {
     return (
       <div className="h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -55,7 +53,7 @@ export default async function DashboardPage() {
         </div>
         <h1 className="text-3xl font-black uppercase italic">No Active Production</h1>
         <p className="text-zinc-400 max-w-md">
-          We couldn&apos;t find a show marked as &quot;Active&quot; in Baserow. Please ask an administrator to check the Productions table.
+          Ensure a show is marked &quot;Active&quot; in Baserow or select one from the menu.
         </p>
       </div>
     );
@@ -81,17 +79,13 @@ export default async function DashboardPage() {
   const totalStudents = castCount + academyCount;
   const familyCount = Math.floor(totalStudents * 0.75); 
 
-  // New Student / Retention Logic
-  const newStudentsCount = auditionees.filter((a: any) => {
-      const status = (a["Status"]?.value || a["Tenure"]?.value || "").toLowerCase(); 
+  // New Student Logic (Safe Check)
+  const newStudentsCount = Array.isArray(auditionees) ? auditionees.filter((a: any) => {
+      const status = (a?.Status?.value || "").toLowerCase(); 
       return status.includes("new") || status.includes("first");
-  }).length;
+  }).length : 0;
 
-  const retentionRate = castCount > 0 
-    ? Math.round(((castCount - newStudentsCount) / castCount) * 100) 
-    : 100;
-
-  // --- THEME ENGINE ---
+  // Theme Logic
   const getShowTheme = (title: string) => {
     const t = (title || "").toLowerCase();
     if (t.includes('lion')) return { icon: <Cat size={220} />, color: 'text-orange-500', bg: 'from-orange-900/40 to-red-900/20', accent: 'text-orange-400' };
@@ -101,16 +95,15 @@ export default async function DashboardPage() {
     if (t.includes('beauty') || t.includes('cinderella')) return { icon: <Crown size={220} />, color: 'text-purple-400', bg: 'from-purple-900/40 to-fuchsia-900/20', accent: 'text-amber-400' };
     if (t.includes('wonka')) return { icon: <Sparkles size={220} />, color: 'text-pink-500', bg: 'from-pink-900/30 to-rose-900/20', accent: 'text-pink-400' };
     if (t.includes('newsies') || t.includes('annie')) return { icon: <Newspaper size={220} />, color: 'text-zinc-400', bg: 'from-zinc-800/40 to-zinc-900', accent: 'text-zinc-200' };
-    if (t.includes('oklahoma') || t.includes('music man')) return { icon: <Sun size={220} />, color: 'text-amber-600', bg: 'from-amber-900/30 to-orange-900/20', accent: 'text-amber-500' };
     return { icon: <Theater size={220} />, color: 'text-blue-500', bg: 'from-zinc-900 to-zinc-900', accent: 'text-blue-500' };
   };
 
-  const theme = getShowTheme(show?.Title);
+  const theme = getShowTheme(show?.title);
 
   return (
     <div className="min-h-screen bg-zinc-950 p-6 pb-20 overflow-y-auto custom-scrollbar space-y-8">
       
-      {/* 1. HERO */}
+      {/* 1. HERO (Your Main Show) */}
       <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
         <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
             {theme.icon}
@@ -123,12 +116,12 @@ export default async function DashboardPage() {
                 </span>
                 <span className="w-1 h-1 rounded-full bg-white/20"></span>
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                    {show?.Season?.value || "General Season"}
+                    {show?.season || "Season"}
                 </span>
             </div>
 
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">
-                {show?.Title || "Select Production"}
+                {show?.title || "Select Production"}
             </h1>
             
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
@@ -144,83 +137,13 @@ export default async function DashboardPage() {
                 </div>
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
                 
-                {/* DYNAMIC TEAM COMPONENT - Graceful fallback if component fails or data is empty */}
-                {creativeTeam && <CreativeTeam team={creativeTeam} />}
+                {/* Cast 'any' to satisfy strict TS check for now */}
+                {creativeTeam && <CreativeTeam team={creativeTeam as any} />}
             </div>
         </div>
       </div>
 
-      {/* 2. SEASON OVERVIEW (With Real Metrics) */}
-      <div className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6 md:p-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-              <Heart size={300} className="text-pink-500 rotate-12"/>
-          </div>
-
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 relative z-10">
-              <div>
-                  <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-1 flex items-center gap-2">
-                      <LayoutGrid size={14} className="text-blue-500" /> Season Overview
-                  </h2>
-                  <h3 className="text-2xl font-black italic text-white tracking-tight">
-                    {/* PERSONALIZED WELCOME */}
-                    Welcome back, {firstName}
-                  </h3>
-              </div>
-              
-              <div className="flex flex-wrap gap-3">
-                  {SEASON_STAFF.map((staff, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/10 transition-colors cursor-default">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md ${staff.color}`}>
-                              {staff.initials}
-                          </div>
-                          <div className="flex flex-col leading-none">
-                              <span className="text-[10px] font-bold text-zinc-300">{staff.name.split(' ')[0]}</span>
-                              <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-wider">{staff.role.split(' ')[0]}</span>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-              
-              <div className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col justify-between h-32 hover:bg-black/60 transition-colors group">
-                  <div className="p-2 w-fit rounded-lg bg-blue-500/10 text-blue-400 mb-2 group-hover:bg-blue-500/20 transition-colors"><GraduationCap size={20} /></div>
-                  <div>
-                      <div className="text-3xl font-black text-white">{academyCount}</div>
-                      <div className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Class Students</div>
-                  </div>
-              </div>
-
-              <div className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col justify-between h-32 hover:bg-black/60 transition-colors group">
-                  <div className="p-2 w-fit rounded-lg bg-emerald-500/10 text-emerald-400 mb-2 group-hover:bg-emerald-500/20 transition-colors"><Home size={20} /></div>
-                  <div>
-                      <div className="text-3xl font-black text-white">~{familyCount}</div>
-                      <div className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Family Units</div>
-                  </div>
-              </div>
-
-              {/* NEW STUDENT METRIC */}
-              <div className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col justify-between h-32 hover:bg-black/60 transition-colors group">
-                  <div className="p-2 w-fit rounded-lg bg-amber-500/10 text-amber-400 mb-2 group-hover:bg-amber-500/20 transition-colors"><UserPlus size={20} /></div>
-                  <div>
-                      <div className="text-3xl font-black text-white">{newStudentsCount}</div>
-                      <div className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">New Students</div>
-                  </div>
-              </div>
-
-              {/* RETENTION METRIC */}
-              <div className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col justify-between h-32 hover:bg-black/60 transition-colors group">
-                  <div className="p-2 w-fit rounded-lg bg-pink-500/10 text-pink-400 mb-2 group-hover:bg-pink-500/20 transition-colors"><TrendingUp size={20} /></div>
-                  <div>
-                      <div className="text-3xl font-black text-white">{retentionRate}%</div>
-                      <div className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Retention Rate</div>
-                  </div>
-              </div>
-          </div>
-      </div>
-
-      {/* 3. ACTION GRID */}
+      {/* 2. ACTION GRID (Your Daily Tools - MOVED UP) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2">
@@ -249,12 +172,46 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* 3. COMPACT SEASON CONTEXT (Secondary Info - MOVED DOWN) */}
+      <div className="bg-zinc-900/30 border border-white/5 rounded-3xl p-6">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+              
+              {/* Staff Strip */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+                  <div className="flex items-center gap-3">
+                      <div className="p-2 bg-zinc-800 rounded-lg"><Building2 size={16} className="text-zinc-400"/></div>
+                      <div>
+                          <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Organization</div>
+                          <div className="text-sm font-bold text-white">Staff</div>
+                      </div>
+                  </div>
+                  <div className="h-8 w-px bg-white/5 hidden sm:block"></div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                      {SEASON_STAFF.map((staff, i) => (
+                          <div key={i} title={staff.role} className="flex items-center gap-2 bg-zinc-950 border border-white/5 rounded-full pl-1 pr-3 py-1 hover:border-white/10 transition-colors cursor-default">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-black text-white shadow-md ${staff.color}`}>
+                                  {staff.initials}
+                              </div>
+                              <span className="text-[10px] font-bold text-zinc-400">{staff.name.split(' ')[0]}</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+
+              {/* Mini Metrics */}
+              <div className="grid grid-cols-3 gap-2 w-full lg:w-auto">
+                  <MetricPill label="Students" value={academyCount} color="text-blue-400" />
+                  <MetricPill label="Families" value={`~${familyCount}`} color="text-emerald-400" />
+                  <MetricPill label="New" value={newStudentsCount} color="text-amber-400" />
+              </div>
+          </div>
+      </div>
+
       {/* FOOTER */}
-      <div className="mt-12 pt-10 border-t border-white/5 flex flex-col items-center gap-3">
+      <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">
           <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
           <div className="flex gap-2">
             <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.5.0</div>
-            {/* Show User Role in Footer */}
             <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">
                 {userRole}
             </div>
@@ -280,5 +237,14 @@ function ActionCard({ href, title, desc, icon, color }: any) {
                 <ChevronRight size={18} className="text-zinc-800 group-hover:text-white transition-all transform group-hover:translate-x-1" />
             </div>
         </Link>
+    )
+}
+
+function MetricPill({ label, value, color }: any) {
+    return (
+        <div className="bg-zinc-950 border border-white/5 rounded-xl px-4 py-2 flex flex-col items-center min-w-[80px]">
+            <span className={`text-sm font-black ${color}`}>{value}</span>
+            <span className="text-[8px] font-bold uppercase text-zinc-600 tracking-wider">{label}</span>
+        </div>
     )
 }
