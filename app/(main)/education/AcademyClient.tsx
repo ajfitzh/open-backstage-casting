@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { 
   LayoutGrid, UserSquare2, MapPin, Search, 
-  ClipboardList, Users, School, Building2, Calendar, AlertTriangle, Info, ChevronDown 
+  ClipboardList, Users, School, Building2, Calendar, AlertTriangle, Info, ChevronDown, Map 
 } from 'lucide-react';
 
 export default function AcademyClient({ classes, venues }: { classes: any[], venues: any[] }) {
