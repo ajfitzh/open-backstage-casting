@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 // --- CONFIGURATION ---
 // Removes trailing slash to ensure clean URL construction
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
-const API_TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN;
+
+// 1. FIX: Unify the Token Logic. Check all possible naming conventions.
+const API_TOKEN = process.env.BASEROW_API_KEY || process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
 
 const HEADERS = {
   "Authorization": `Token ${API_TOKEN}`,
@@ -84,34 +86,41 @@ export interface Person {
 }
 
 // ==============================================================================
-// 🛡️ CENTRAL FETCH HELPER (CRITICAL FIX)
+// 🛡️ CENTRAL FETCH HELPER (FIXED)
 // ==============================================================================
 
 /**
  * Universal fetch wrapper for Baserow.
- * 1. Automatically prepends '/api' if missing.
- * 2. Checks for HTML responses (404 pages) to prevent crashes.
- * 3. Handles Query Params.
  */
 async function fetchBaserow(endpoint: string, params: any = {}, config: any = {}) {
-  const { size = "100", ...rest } = config;
+  const { size = "100", ...fetchOptions } = config; // Extract fetch options (method, body) from config
+  
   const queryString = new URLSearchParams({ 
     user_field_names: "true", 
     size, 
     ...params 
   }).toString();
 
-  const res = await fetch(`https://api.baserow.io/api${endpoint}?${queryString}`, {
+  // 2. FIX: Use the unified API_TOKEN and BASE_URL constant
+  const url = `${BASE_URL}/api${endpoint}?${queryString}`;
+
+  const res = await fetch(url, {
+    ...fetchOptions, // Spread methods (POST/PATCH) here
     headers: {
-      Authorization: `Token ${process.env.BASEROW_API_KEY}`,
+      "Authorization": `Token ${API_TOKEN}`,
+      "Content-Type": "application/json",
+      ...fetchOptions.headers,
     },
-    next: { revalidate: 60 }, // Cache for 60 seconds
+    next: { revalidate: 60, ...fetchOptions.next }, 
   });
 
   if (!res.ok) {
-    console.error(`Baserow Error [${endpoint}]:`, res.statusText);
+    console.error(`Baserow Error [${endpoint}]: ${res.status} ${res.statusText}`);
     return [];
   }
+
+  // Handle DELETE (204 No Content)
+  if (res.status === 204) return [];
 
   const data = await res.json();
   return data.results || data;
@@ -129,7 +138,7 @@ export async function findUserByEmail(email: string): Promise<BaserowUser | null
     [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
   };
 
-  const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, {}, params);
+  const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, params);
 
   if (!results || results.length === 0) return null;
   return formatUser(results[0], email);
@@ -143,7 +152,7 @@ export async function verifyUserCredentials(email: string, passwordInput: string
     [`filter__${AUTH_FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
   };
 
-  const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, {}, params);
+  const results = await fetchBaserow(`/database/rows/table/${TABLES.PEOPLE}/`, params);
 
   if (!results || results.length === 0) return null;
 
@@ -176,7 +185,6 @@ function formatUser(row: any, email: string) {
 // ==============================================================================
 // 📈 ANALYTICS & GETTERS
 // ==============================================================================
-// app/lib/baserow.ts
 
 export async function getClasses() {
   const data = await fetchBaserow(`/database/rows/table/${TABLES.CLASSES}/`, {}, { size: "200" });
@@ -185,7 +193,6 @@ export async function getClasses() {
 
   return data.map((row: any) => {
     // 1. ROBUST ENROLLMENT COUNT
-    // Handle CSV string imports ("Name 1, Name 2") vs Relational Arrays
     let enrollment = 0;
     if (Array.isArray(row.Students)) {
       enrollment = row.Students.length;
@@ -193,8 +200,7 @@ export async function getClasses() {
       enrollment = row.Students.split(',').length;
     }
 
-    // 2. SPACE LINKAGE (The key to the Logistics Tab)
-    // We check both casing styles just to be safe
+    // 2. SPACE LINKAGE
     const spaceLink = row['Space'] || row['SPACE'] || row['space']; 
     const spaceId = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].id : null;
     const spaceName = Array.isArray(spaceLink) && spaceLink.length > 0 ? spaceLink[0].value : null;
@@ -206,7 +212,6 @@ export async function getClasses() {
       teacher: row.Teacher?.[0]?.value || row.Teacher || "TBA",
       location: row.Location?.value || row.Location || "Main Campus",
       
-      // Critical Logistics Data
       campus: row['Campus'] || "", 
       spaceId: spaceId,            
       spaceName: spaceName,
@@ -217,8 +222,8 @@ export async function getClasses() {
     };
   });
 }
+
 export async function getVenueLogistics() {
-  // 1. Fetch all raw tables
   const venuesData = await fetchBaserow(`/database/rows/table/${TABLES.VENUES}/`, {}, { size: "50" });
   const spacesData = await fetchBaserow(`/database/rows/table/${TABLES.SPACES}/`, {}, { size: "200" });
   const ratesData = await fetchBaserow(`/database/rows/table/${TABLES.RENTAL_RATES}/`, {}, { size: "100" });
@@ -228,30 +233,24 @@ export async function getVenueLogistics() {
 
   return venuesData.map((venue: any) => {
     
-    // 2. DYNAMIC RATE FINDER
-    // Instead of hardcoding "2026", we find all rates for this venue,
-    // sort them by year (descending), and pick the newest one.
+    // DYNAMIC RATE FINDER
     const venueRates = ratesData.filter((r: any) => r.Venue?.some((v: any) => v.id === venue.id));
     
     const activeRate = venueRates.sort((a: any, b: any) => {
       const sessionA = a.Session?.[0]?.value || "";
       const sessionB = b.Session?.[0]?.value || "";
-      // Extract year "Winter 2026" -> 2026
       const yearA = parseInt(sessionA.match(/\d{4}/)?.[0] || "0");
       const yearB = parseInt(sessionB.match(/\d{4}/)?.[0] || "0");
-      return yearB - yearA; // Descending
-    })[0]; // Pick the top one
+      return yearB - yearA; 
+    })[0];
 
-    // 3. MAP SPACES
     const venueSpaces = spacesData
       .filter((space: any) => space.Venue?.some((v: any) => v.id === venue.id))
       .map((space: any) => {
-        // Link Classes to this Space
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
 
         return {
           id: space.id,
-          // Handle "Room Name" vs "Full Room Name" variance
           name: space['Room Name'] || space['Full Room Name'] || "Unnamed Room",
           capacity: parseInt(space.Capacity) || 0,
           floorType: space['Floor Type']?.value || "Unknown",
@@ -274,8 +273,8 @@ export async function getVenueLogistics() {
     };
   }).filter((venue: any) => venue.spaces.length > 0);
 }
+
 export async function getPerformanceAnalytics(productionId?: number) {
-  // 1. Remove order_by from the params
   const data = await fetchBaserow(
     `/database/rows/table/${TABLES.PERFORMANCES}/`, 
     {}, 
@@ -284,8 +283,7 @@ export async function getPerformanceAnalytics(productionId?: number) {
   
   if (!Array.isArray(data) || data.length === 0) return [];
 
-  // 2. Map and Sort in JS (Ordering by the 'Performance' label or Date)
-  const mapped = data.map((row: any) => {
+  return data.map((row: any) => {
     const sold = parseFloat(row['Tickets Sold'] || row.field_6184 || 0);
     const capacity = parseFloat(row['Total Inventory'] || row.field_6183 || 0);
     const label = row['Performance'] || row.field_6182 || "Show";
@@ -298,9 +296,6 @@ export async function getPerformanceAnalytics(productionId?: number) {
       fillRate: capacity > 0 ? Math.round((sold / capacity) * 100) : 0,
     };
   });
-
-  // Optional: Sort by name/date here if needed
-  return mapped;
 }
 
 export async function getGlobalSalesSummary() {
@@ -314,12 +309,12 @@ export async function getGlobalSalesSummary() {
 export async function getTableRows(tableId: string, productionId?: number) {
     const params: any = { size: "200" };
     if (productionId) params[`filter__Production__link_row_has`] = productionId;
-    return await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params);
+    return await fetchBaserow(`/database/rows/table/${tableId}/`, params);
 }
 
 export async function getCreativeTeam(productionId: number) {
   const params = { size: "100", filter__Productions__link_row_has: productionId };
-  const data = await fetchBaserow(`/database/rows/table/${TABLES.SHOW_TEAM}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${TABLES.SHOW_TEAM}/`, params);
   
   if (!Array.isArray(data)) return [];
 
@@ -347,13 +342,6 @@ function getRoleColor(role: string) {
   return 'bg-zinc-600';
 }
 
-/**
- * Helper to safely extract a string value from Baserow fields.
- * Handles: 
- * - Plain Strings: "My Show"
- * - Select Objects: { value: "Active" }
- * - Link Arrays: [{ value: "Fredericksburg" }]
- */
 function safeGet(field: any, fallback: string = "Unknown"): string {
   if (!field) return fallback;
   if (typeof field === 'string') return field;
@@ -373,24 +361,22 @@ export async function getAllShows() {
   
   const sortedData = data.sort((a: any, b: any) => b.id - a.id);
 
-return sortedData.map((row: any) => {
-  const rawStatus = safeGet(row.Status, "Archived"); // Default to Archived if empty
-  
-  return {
-    id: row.id,
-    title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
-    location: safeGet(row.Location || row.Venue || row.Branch),
-    type: safeGet(row.Type, "Main Stage"),
-    season: safeGet(row.Season, "Unknown Season"),
-    // NEW: We must include this for the client logic to work!
-    status: rawStatus, 
-    isActive: row["Is Active"] === true || row["Is Active"]?.value === "true" || rawStatus === "Active"
-  };
-});
+  return sortedData.map((row: any) => {
+    const rawStatus = safeGet(row.Status, "Archived"); 
+    
+    return {
+      id: row.id,
+      title: safeGet(row.Title || row["Full Title"], "Untitled Show"),
+      location: safeGet(row.Location || row.Venue || row.Branch),
+      type: safeGet(row.Type, "Main Stage"),
+      season: safeGet(row.Season, "Unknown Season"),
+      status: rawStatus, 
+      isActive: row["Is Active"] === true || row["Is Active"]?.value === "true" || rawStatus === "Active"
+    };
+  });
 }
 
 export async function getActiveShows() {
-  // We reuse getAllShows logic but filter it
   const allShows = await getAllShows();
   return allShows.filter(show => show.isActive);
 }
@@ -443,7 +429,7 @@ export async function getConflicts(productionId?: number) { return await getTabl
 export async function getProductionAssets(productionId: number) { return await getTableRows(TABLES.ASSETS, productionId); }
 
 // ==============================================================================
-// ✍️ WRITE FUNCTIONS (ACTIONS)
+// ✍️ WRITE FUNCTIONS (ACTIONS) - 3. FIX: PASS CONFIG AS 3RD ARGUMENT!
 // ==============================================================================
 
 export async function updateAuditionSlot(rowId: number, data: any) {
@@ -451,41 +437,40 @@ export async function updateAuditionSlot(rowId: number, data: any) {
   ["Vocal Score", "Acting Score", "Dance Score"].forEach(key => {
       if (key in cleanData) cleanData[key] = Number(cleanData[key]) || 0; 
   });
-  return await fetchBaserow(`/database/rows/table/${TABLES.AUDITIONS}/${rowId}/`, { method: "PATCH", body: JSON.stringify(cleanData) });
+  // FIX: pass {} as 2nd arg (params), and config as 3rd arg
+  return await fetchBaserow(`/database/rows/table/${TABLES.AUDITIONS}/${rowId}/`, {}, { method: "PATCH", body: JSON.stringify(cleanData) });
 }
 
 export async function submitAudition(personId: number, productionId: number, data: any) {
-  return await fetchBaserow(`/database/rows/table/${TABLES.AUDITIONS}/`, { method: "POST", body: JSON.stringify({ ...data, "Performer": [personId], "Production": [productionId] }) });
+  return await fetchBaserow(`/database/rows/table/${TABLES.AUDITIONS}/`, {}, { method: "POST", body: JSON.stringify({ ...data, "Performer": [personId], "Production": [productionId] }) });
 }
 
 export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
-  return await fetchBaserow(`/database/rows/table/${TABLES.ASSIGNMENTS}/`, { method: "POST", body: JSON.stringify({ "Person": [personId], "Performance Identity": [roleId], "Production": [productionId] }) });
+  return await fetchBaserow(`/database/rows/table/${TABLES.ASSIGNMENTS}/`, {}, { method: "POST", body: JSON.stringify({ "Person": [personId], "Performance Identity": [roleId], "Production": [productionId] }) });
 }
 
 export async function updateRole(id: number, data: any) {
-  return await fetchBaserow(`/database/rows/table/${TABLES.BLUEPRINT_ROLES}/${id}/`, { method: "PATCH", body: JSON.stringify(data) });
+  return await fetchBaserow(`/database/rows/table/${TABLES.BLUEPRINT_ROLES}/${id}/`, {}, { method: "PATCH", body: JSON.stringify(data) });
 }
 
 export async function deleteRow(tableId: string | number, rowId: number) {
-  return await fetchBaserow(`/database/rows/table/${tableId}/${rowId}/`, { method: "DELETE" });
+  return await fetchBaserow(`/database/rows/table/${tableId}/${rowId}/`, {}, { method: "DELETE" });
 }
 
 export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
-  return await fetchBaserow(`/database/rows/table/${TABLES.ASSETS}/`, { method: "POST", body: JSON.stringify({ "Name": name, "Link": url, "Type": type, "Production": [productionId] }) });
+  return await fetchBaserow(`/database/rows/table/${TABLES.ASSETS}/`, {}, { method: "POST", body: JSON.stringify({ "Name": name, "Link": url, "Type": type, "Production": [productionId] }) });
 }
 
 // ==============================================================================
 // 👨‍👩‍👧‍👦 FAMILY & HOUSEHOLD LOGIC
 // ==============================================================================
 
-// Table: FAMILIES (634)
 const TABLE_FAMILIES = 634;
-const FIELD_FAMILY_EMAIL = 'field_6126'; // "Email"
-const FIELD_CYT_ID = 'field_6127';       // "CYT National ID"
+const FIELD_FAMILY_EMAIL = 'field_6126'; 
+const FIELD_CYT_ID = 'field_6127';       
 
-// Table: PEOPLE (599)
 const TABLE_PEOPLE = 599;
-const FIELD_LINK_TO_FAMILY = 'field_6153'; // Link to FAMILIES
+const FIELD_LINK_TO_FAMILY = 'field_6153'; 
 const FIELDS_PEOPLE = {
   FULL_NAME: 'Full Name',
   ROLE: 'Status',        
@@ -502,38 +487,28 @@ const FIELDS_PEOPLE = {
 export async function getFamilyMembers(userEmail: string | null | undefined): Promise<FamilyData | null> {
   if (!userEmail) return null;
   
-  console.log(`\n🔍 [Baserow] STARTING LOOKUP FOR: ${userEmail}`);
-
   try {
-    // 1. Fetch Family
     const familyData = await fetchBaserow(
         `/database/rows/table/${TABLE_FAMILIES}/`, 
-        { next: { revalidate: 0 } },
-        { [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail }
+        { [`filter__${FIELD_FAMILY_EMAIL}__equal`]: userEmail },
+        { next: { revalidate: 0 } }
     );
 
     if (!Array.isArray(familyData) || familyData.length === 0) {
-        console.warn(`⚠️ [Baserow] No family found for email: ${userEmail}`);
         return null;
     }
 
     const familyRow = familyData[0];
-    console.log(`✅ [Baserow] Family Found: ID ${familyRow.id}`);
 
-    // 2. Fetch Linked People
     const peopleData = await fetchBaserow(
         `/database/rows/table/${TABLES.PEOPLE}/`,
-        { next: { revalidate: 0 } },
-        { [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id }
+        { [`filter__${FIELD_LINK_TO_FAMILY}__link_row_has`]: familyRow.id },
+        { next: { revalidate: 0 } }
     );
 
     const peopleRows = Array.isArray(peopleData) ? peopleData : [];
-    console.log(`✅ [Baserow] People Found: ${peopleRows.length}`);
-
-    // 3. Identify Head of Household
     const headOfHouse = peopleRows.find((p: any) => p[FIELDS_PEOPLE.ROLE]?.value === 'Adult') || peopleRows[0];
 
-    // Map Address safely
     const addr = headOfHouse?.[FIELDS_PEOPLE.ADDRESS] || '';
     const city = headOfHouse?.[FIELDS_PEOPLE.CITY] || '';
     const fullAddress = addr ? `${addr}, ${city}` : '';
@@ -548,7 +523,6 @@ export async function getFamilyMembers(userEmail: string | null | undefined): Pr
       role: "Family Administrator", 
       
       familyMembers: peopleRows.map((p: any) => {
-        // Calculate Age
         const dob = p[FIELDS_PEOPLE.DOB] ? new Date(p[FIELDS_PEOPLE.DOB]) : null;
         let age = 0;
         if (dob) {
