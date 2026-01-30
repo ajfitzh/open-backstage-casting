@@ -316,9 +316,31 @@ export async function getGlobalSalesSummary() {
   const avgFill = Math.round(data.reduce((sum, p) => sum + p.fillRate, 0) / data.length);
   return { totalSold, avgFill, performanceCount: data.length };
 }
+
 // ==============================================================================
 // 📋 COMPLIANCE & CASTING
 // ==============================================================================
+
+/**
+ * RESTORED FUNCTION: getActiveProduction
+ * Retrieves the currently active production for the site context.
+ */
+export async function getActiveProduction() {
+  const productions = await fetchBaserow(`/database/rows/table/${TABLES.PRODUCTIONS}/`, { size: "20" });
+  if (!Array.isArray(productions)) return null;
+
+  // Finds first production where 'Active' is true, or falls back to the most recent one
+  return productions.find((p: any) => p.Active?.value === true || p.Active === true) || productions[0];
+}
+
+/**
+ * RESTORED FUNCTION: getShowById
+ * Retrieves the Master Show data (e.g., script info) for a given show ID.
+ */
+export async function getShowById(showId: string | number) {
+  if (!showId) return null;
+  return await fetchBaserow(`/database/rows/table/${TABLES.MASTER_SHOWS}/${showId}/`);
+}
 
 export async function getTableRows(tableId: string, productionId?: number) {
     const params: any = { size: "200" };
