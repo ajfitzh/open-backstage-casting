@@ -68,8 +68,14 @@ export default async function DashboardPage() {
   const castCount = uniqueCastIds.size;
 
   // --- WORKFLOW STATUS LOGIC ---
-  const workflowStatus = {
+// --- WORKFLOW STATUS LOGIC ---
+  const status = {
       hasAuditions: auditionees.length > 5, 
+      
+      // ✅ LOGIC: If we have started casting (assignments exist), Callbacks are done.
+      // Or, if we have just started auditioning, they aren't done.
+      hasCallbacks: assignments.length > 0, 
+
       hasCast: assignments.length > 0,
       hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)),
       hasSchedule: events.length > 0
