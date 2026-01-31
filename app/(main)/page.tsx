@@ -14,15 +14,15 @@ import {
   getAssignments, 
   getCreativeTeam, 
   getClasses,
-  getAuditionees,    // For Workflow Status
-  getScenes,         // For Workflow Status
-  getProductionEvents // For Workflow Status
+  getAuditionees,    
+  getScenes,         
+  getProductionEvents 
 } from '@/app/lib/baserow';
 
 // 2. Import Components
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
 import SeasonContext from '@/app/components/dashboard/SeasonContext';
-import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress'; // <--- NEW IMPORT
+import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress'; 
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +42,6 @@ export default async function DashboardPage() {
   }
 
   // --- PARALLEL FETCH ---
-  // Fetching everything needed for the Dashboard + Workflow Status check
   const [
     assignments, 
     creativeTeam, 
@@ -59,7 +58,7 @@ export default async function DashboardPage() {
       getProductionEvents(show.id)
   ]);
   
-  // --- SHOW STATS (Top Zone) ---
+  // --- SHOW STATS ---
   const uniqueCastIds = new Set(
     assignments
       .filter((a: any) => a.personId) 
@@ -67,15 +66,10 @@ export default async function DashboardPage() {
   );
   const castCount = uniqueCastIds.size;
 
-  // --- WORKFLOW STATUS LOGIC ---
-// --- WORKFLOW STATUS LOGIC ---
-  const status = {
+  // --- WORKFLOW STATUS LOGIC (FIXED) ---
+  const workflowStatus = {
       hasAuditions: auditionees.length > 5, 
-      
-      // ✅ LOGIC: If we have started casting (assignments exist), Callbacks are done.
-      // Or, if we have just started auditioning, they aren't done.
       hasCallbacks: assignments.length > 0, 
-
       hasCast: assignments.length > 0,
       hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)),
       hasSchedule: events.length > 0
@@ -94,7 +88,7 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-950 p-6 pb-20 overflow-y-auto custom-scrollbar space-y-8">
       
-      {/* 1. HERO (Active Project) */}
+      {/* 1. HERO */}
       <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
          <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
             {theme.icon}
@@ -123,12 +117,12 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* 🆕 2. WORKFLOW TRACKER (New Addition) */}
+      {/* 2. WORKFLOW TRACKER */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
          <WorkflowProgress status={workflowStatus} />
       </div>
 
-      {/* 3. ACTION GRID (Daily Tools) */}
+      {/* 3. ACTION GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
