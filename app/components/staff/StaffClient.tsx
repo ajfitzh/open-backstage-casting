@@ -351,14 +351,17 @@ function RichStatusIcon({ type, member }: any) {
   };
 
   return (
-    // 🚨 TOOLTIP FIX 3: Increased hover scale and Z-Index handling
     <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 hover:scale-110 ${colors[status as keyof typeof colors]}`}>
       
       {icons[type as keyof typeof icons]}
 
-      {/* TOOLTIP */}
-      {/* Added `backdrop-blur-xl` to ensure legibility over other cards */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,1)] opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+      {/* TOOLTIP: FLIPPED TO BOTTOM */}
+      {/* Changed 'bottom-full mb-2' to 'top-full mt-2' */}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,1)] opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+        
+        {/* Little Arrow pointing UP now */}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-px border-4 border-transparent border-b-zinc-950/95"></div>
+
         <div className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">
             {config.title}
         </div>
@@ -373,8 +376,6 @@ function RichStatusIcon({ type, member }: any) {
                 )
             })}
         </div>
-        {/* Little Arrow */}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-zinc-900"></div>
       </div>
     </div>
   );
