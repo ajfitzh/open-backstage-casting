@@ -9,7 +9,7 @@ import {
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
-  Home, Theater, Banknote 
+  Home, Theater, Banknote, SlidersHorizontal 
 } from 'lucide-react';
 import { hasPermission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -18,7 +18,6 @@ export default function StaffSidebar() {
   const pathname = usePathname();
   
   // 🚀 HOOK: Grab roles from the Simulation Context
-  // If God Mode is active in Settings, these values update INSTANTLY.
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
 
   const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
@@ -33,7 +32,6 @@ export default function StaffSidebar() {
   const canManageCasting = hasPermission(globalRole, productionRole, 'manage_casting');
   const canViewLogistics = hasPermission(globalRole, productionRole, 'view_cast_list');
   const canViewBusiness  = hasPermission(globalRole, productionRole, 'view_financials');
-  // Education is Staff-only usually
   const canViewAcademy   = hasPermission(globalRole, productionRole, 'edit_compliance');
 
   return (
@@ -66,6 +64,16 @@ export default function StaffSidebar() {
                     <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
                     <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
                     
+                    {/* 🆕 NEW: Calibration Link (Hidden for non-directors) */}
+                    {canManageCasting && (
+                       <NavItem 
+                          href="/analysis" 
+                          icon={<SlidersHorizontal size={18}/>} 
+                          label="Show Calibration" 
+                          active={pathname === '/analysis'} 
+                       />
+                    )}
+
                     {/* Casting Suite */}
                     {canViewCasting && (
                         <div>
