@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, Shield, Monitor, Lock, 
   LogOut, Mail, Fingerprint, 
@@ -34,18 +34,22 @@ interface SettingsProps {
   shows: any[];
   activeId: number;
   initialUser: UserProfile;
-  productionRole: string | null; // 👈 New Prop from Server
+  productionRole: string | null;
 }
 
 export default function SettingsClient({ shows, activeId, initialUser, productionRole }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
+  
+  // --- REALITY DISTORTION FIELD (GOD MODE) ---
+  const [simGlobal, setSimGlobal] = useState<string | null>(null);
+  const [simProd, setSimProd] = useState<string | null>(null);
+  
   const user = initialUser;
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
-const [simGlobal, setSimGlobal] = useState<string | null>(null);
-  const [simProd, setSimProd] = useState<string | null>(null);
-  // 2. UPDATE THE CHECKER: Use the simulation if active
+
+  // 1. THE CHECKER: Determines access based on Real OR Simulated roles
   const checkAccess = (perm: Permission) => {
-    // If simGlobal is set, use it. Otherwise, use real data.
+    // If simGlobal/simProd are set, use them. Otherwise, use real data.
     const effectiveGlobal = simGlobal || initialUser.role;
     const effectiveProd = simProd !== null ? simProd : productionRole;
 
@@ -57,8 +61,18 @@ const [simGlobal, setSimGlobal] = useState<string | null>(null);
     };
   };
 
+  // 2. THE EJECTOR SEAT 💺
+  // If you lose permission for the tab you are looking at, go back to Profile.
+  useEffect(() => {
+    const canSeeBilling = checkAccess('view_billing').granted;
+    const canSeeSystem = checkAccess('view_cast_list').granted; // Proxy for Staff/Volunteer access
 
-return (
+    if (activeTab === 'billing' && !canSeeBilling) setActiveTab('profile');
+    if (activeTab === 'permissions' && !canSeeSystem) setActiveTab('profile');
+    if (activeTab === 'context' && !canSeeSystem) setActiveTab('profile');
+  }, [simGlobal, simProd, activeTab]);
+
+  return (
     <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full relative">
         
         {/* SIDEBAR NAVIGATION */}
@@ -72,14 +86,21 @@ return (
                 <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-4 mb-2">Account</p>
                 <TabButton id="profile" label="My Profile" icon={<User size={18}/>} active={activeTab} onClick={setActiveTab} />
                 <TabButton id="family" label="Family Members" icon={<Users size={18}/>} active={activeTab} onClick={setActiveTab} />
-                <TabButton id="billing" label="Billing & Donations" icon={<CreditCard size={18}/>} active={activeTab} onClick={setActiveTab} />
+                
+                {/* 🔒 GATE: Only Admins & Parents see Billing */}
+                {checkAccess('view_billing').granted && (
+                    <TabButton id="billing" label="Billing & Donations" icon={<CreditCard size={18}/>} active={activeTab} onClick={setActiveTab} />
+                )}
             </div>
 
-            <div className="space-y-1">
-                <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-6 mb-2">System</p>
-                <TabButton id="context" label="Workspace Context" icon={<Monitor size={18}/>} active={activeTab} onClick={setActiveTab} />
-                <TabButton id="permissions" label="Permissions (RBAC)" icon={<Shield size={18}/>} active={activeTab} onClick={setActiveTab} />
-            </div>
+            {/* 🔒 GATE: Only Staff/Contractors/Volunteers see System Tools */}
+            {checkAccess('view_cast_list').granted && (
+                <div className="space-y-1 animate-in slide-in-from-left-2 fade-in duration-300">
+                    <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-6 mb-2">System</p>
+                    <TabButton id="context" label="Workspace Context" icon={<Monitor size={18}/>} active={activeTab} onClick={setActiveTab} />
+                    <TabButton id="permissions" label="Permissions (RBAC)" icon={<Shield size={18}/>} active={activeTab} onClick={setActiveTab} />
+                </div>
+            )}
             
             <div className="mt-auto pt-6 px-4">
                 <button 
@@ -214,12 +235,10 @@ return (
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-white">
-                                        {/* Show Simulated Title if active, else Real */}
                                         Global Role: {simGlobal || initialUser.role}
                                         {simGlobal && <span className="text-red-400 ml-2 text-xs uppercase">(Simulated)</span>}
                                     </h4>
                                     <p className="text-xs text-zinc-500">
-                                        {/* Show Simulated Title if active, else Real */}
                                         Show Role: {simProd !== null ? simProd : (productionRole || "None")}
                                         {simProd !== null && <span className="text-red-400 ml-2 uppercase">(Simulated)</span>}
                                     </p>
@@ -272,10 +291,9 @@ return (
         </div>
 
         {/* 3. THE DEV WIDGET (GOD MODE) */}
-        {/* Only visible to actual Admins/Execs to prevent users from hacking it */}
         {['Admin', 'Executive Director'].includes(initialUser.role) && (
             <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-10">
-                <div className="bg-zinc-950 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
+                <div className="bg-zinc-900 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
                     <div className="flex items-center gap-2 mb-3 text-red-400 border-b border-white/5 pb-2">
                         <Shield size={14} />
                         <span className="text-[10px] font-black uppercase tracking-widest">God Mode</span>
@@ -291,7 +309,7 @@ return (
                         <div>
                             <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Global Role</label>
                             <select 
-                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white"
                                 value={simGlobal || ""}
                                 onChange={(e) => setSimGlobal(e.target.value || null)}
                             >
@@ -308,7 +326,7 @@ return (
                         <div>
                             <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Show Role</label>
                             <select 
-                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white"
                                 value={simProd || ""}
                                 onChange={(e) => setSimProd(e.target.value || null)}
                             >
@@ -322,7 +340,6 @@ return (
                         </div>
                     </div>
                     
-                    {/* Visual Indicator of Result */}
                     <div className="mt-3 pt-3 border-t border-white/5 flex gap-2">
                         <div className={`h-2 w-2 rounded-full mt-0.5 ${checkAccess('view_financials').granted ? 'bg-emerald-500' : 'bg-red-500'}`} />
                         <div className="text-[10px] text-zinc-400">
@@ -337,8 +354,7 @@ return (
   );
 }
 
-// --- SUB-COMPONENTS ---
-
+// --- SUB-COMPONENTS (Keep these same as before) ---
 function TabButton({ id, label, icon, active, onClick }: any) {
     const isActive = active === id;
     return (

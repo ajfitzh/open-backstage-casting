@@ -8,12 +8,16 @@ import {
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
-  Home, 
-  Theater,
-  Banknote // <--- Added for Financials
+  Home, Theater, Banknote 
 } from 'lucide-react';
+import { hasPermission } from '@/app/lib/permissions'; 
 
-export default function StaffSidebar() {
+interface SidebarProps {
+    globalRole?: string;
+    productionRole?: string | null;
+}
+
+export default function StaffSidebar({ globalRole = "Student", productionRole = null }: SidebarProps) {
   const pathname = usePathname();
   
   const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
@@ -22,6 +26,15 @@ export default function StaffSidebar() {
   useEffect(() => {
     if (isCastingRoute) setCastingOpen(true);
   }, [pathname, isCastingRoute]);
+
+  // --- PERMISSION CHECKS ---
+  // We calculate these once to keep the JSX clean
+  const canViewCasting   = hasPermission(globalRole, productionRole, 'view_auditions');
+  const canManageCasting = hasPermission(globalRole, productionRole, 'manage_casting');
+  const canViewLogistics = hasPermission(globalRole, productionRole, 'view_cast_list');
+  const canViewBusiness  = hasPermission(globalRole, productionRole, 'view_financials');
+  // Education is usually Staff-only, so we check for compliance/cast list access
+  const canViewAcademy   = hasPermission(globalRole, productionRole, 'edit_compliance') || hasPermission(globalRole, productionRole, 'view_cast_list');
 
   return (
     <nav className="w-64 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0">
@@ -43,71 +56,86 @@ export default function StaffSidebar() {
              <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={pathname === '/'} />
         </div>
 
-        {/* ZONE 1: CREATIVE TEAM */}
-        <div>
-            <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
-                Creative Team
-            </div>
-            <div className="space-y-1">
-              <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
-                <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
-                
-                <div>
-                    <button 
-                        onClick={() => setCastingOpen(!isCastingOpen)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all ${isCastingRoute ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
-                    >
-                        <div className="flex items-center gap-3">
-                            <Users size={18} className={isCastingRoute ? "text-purple-400" : "text-zinc-500"}/>
-                            <span>Casting Suite</span>
-                        </div>
-                        {isCastingOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-                    </button>
+        {/* ZONE 1: CREATIVE TEAM (Visible to mostly everyone involved in the show) */}
+        {canViewLogistics && (
+            <div className="animate-in slide-in-from-left-2 duration-300">
+                <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                    Creative Team
+                </div>
+                <div className="space-y-1">
+                    <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
+                    <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
+                    
+                    {/* Casting Suite: Requires specific 'view_auditions' or 'manage_casting' */}
+                    {canViewCasting && (
+                        <div>
+                            <button 
+                                onClick={() => setCastingOpen(!isCastingOpen)}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all ${isCastingRoute ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Users size={18} className={isCastingRoute ? "text-purple-400" : "text-zinc-500"}/>
+                                    <span>Casting Suite</span>
+                                </div>
+                                {isCastingOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                            </button>
 
-                    {isCastingOpen && (
-                        <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1 animate-in slide-in-from-left-2 duration-200">
-                            <SubNavItem href="/auditions" icon={<Mic2 size={14}/>} label="Auditions" active={pathname === '/auditions'} />
-                            <SubNavItem href="/callbacks" icon={<Megaphone size={14}/>} label="Callbacks" active={pathname === '/callbacks'} />
-                            <SubNavItem href="/casting" icon={<LayoutGrid size={14}/>} label="Cast Grid" active={pathname === '/casting'} />
+                            {isCastingOpen && (
+                                <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1 animate-in slide-in-from-left-2 duration-200">
+                                    <SubNavItem href="/auditions" icon={<Mic2 size={14}/>} label="Auditions" active={pathname === '/auditions'} />
+                                    {/* Callbacks & Grid usually require Manager access */}
+                                    {canManageCasting && (
+                                        <>
+                                            <SubNavItem href="/callbacks" icon={<Megaphone size={14}/>} label="Callbacks" active={pathname === '/callbacks'} />
+                                            <SubNavItem href="/casting" icon={<LayoutGrid size={14}/>} label="Cast Grid" active={pathname === '/casting'} />
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
-        </div>
+        )}
 
-        {/* ZONE 2: LOGISTICS & OPS */}
-        <div>
-            <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
-                Logistics & Ops
+        {/* ZONE 2: LOGISTICS & OPS (Volunteers, Staff, Contractors) */}
+        {canViewLogistics && (
+            <div className="animate-in slide-in-from-left-2 duration-300 delay-75">
+                <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                    Logistics & Ops
+                </div>
+                <div className="space-y-1">
+                    <NavItem href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
+                    <NavItem href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
+                    <NavItem href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
+                </div>
             </div>
-            <div className="space-y-1">
-                <NavItem href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
-                <NavItem href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
-                <NavItem href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
-            </div>
-        </div>
+        )}
 
-        {/* ZONE 3: BUSINESS OFFICE */}
-        <div>
-            <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
-                Business Office
+        {/* ZONE 3: BUSINESS OFFICE (Admins, Execs, Finance Only) */}
+        {canViewBusiness && (
+            <div className="animate-in slide-in-from-left-2 duration-300 delay-100">
+                <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                    Business Office
+                </div>
+                <div className="space-y-1">
+                    <NavItem href="/reports" icon={<BarChart3 size={18}/>} label="Reports & Fees" active={pathname === '/reports'} />
+                    <NavItem href="/analytics" icon={<Banknote size={18}/>} label="Show Analytics" active={pathname === '/analytics'} />
+                </div>
             </div>
-            <div className="space-y-1">
-                <NavItem href="/reports" icon={<BarChart3 size={18}/>} label="Reports & Fees" active={pathname === '/reports'} />
-                {/* NEW FINANCIALS TAB */}
-                <NavItem href="/analytics" icon={<Banknote size={18}/>} label="Show Analytics" active={pathname === '/analytics'} />
-            </div>
-        </div>
+        )}
 
-        {/* ZONE 4: ACADEMY */}
-        <div>
-            <div className="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
-                Academy
+        {/* ZONE 4: ACADEMY (Staff Only) */}
+        {canViewAcademy && (
+            <div className="animate-in slide-in-from-left-2 duration-300 delay-150">
+                <div className="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
+                    Academy
+                </div>
+                <div className="space-y-1">
+                    <NavItem href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
+                </div>
             </div>
-            <div className="space-y-1">
-                <NavItem href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
-            </div>
-        </div>
+        )}
 
       </div>
 
@@ -119,6 +147,7 @@ export default function StaffSidebar() {
   );
 }
 
+// ... NavItem and SubNavItem remain unchanged ...
 function NavItem({ href, icon, label, active }: any) {
     return (
         <Link 
