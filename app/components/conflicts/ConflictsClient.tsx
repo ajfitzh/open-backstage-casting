@@ -4,13 +4,12 @@ import React, { useMemo, useState } from "react";
 import { 
   Calendar, 
   Clock, 
-  AlertCircle, 
   Search, 
   Filter, 
   Plus, 
-  User,
-  XCircle
+  User
 } from "lucide-react";
+import ConflictAnalysisDashboard from "./ConflictAnalysisDashboard";
 
 interface Conflict {
   id: number;
@@ -22,14 +21,21 @@ interface Conflict {
   notes: string;
   date: string;
   dateObj: Date;
+  eventId?: number; // Added to support linkage
 }
 
 interface Props {
   production: any;
   initialConflicts: Conflict[];
+  initialEvents?: any[]; // Added for the Dashboard
 }
 
-export default function ConflictsClient({ production, initialConflicts }: Props) {
+export default function ConflictsClient({ 
+  production, 
+  initialConflicts, 
+  initialEvents = [] 
+}: Props) {
+  
   // --- State ---
   const [filterText, setFilterText] = useState("");
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -48,7 +54,12 @@ export default function ConflictsClient({ production, initialConflicts }: Props)
     return Array.from(map.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [initialConflicts]);
 
-  // 2. Filter Conflicts
+  // 2. Calculate Cast Size (For Dashboard Analytics)
+  const uniquePeopleCount = useMemo(() => {
+    return uniquePeople.length > 0 ? uniquePeople.length : 30; // Fallback to 30 if empty
+  }, [uniquePeople]);
+
+  // 3. Filter Conflicts
   const filteredConflicts = useMemo(() => {
     return initialConflicts.filter(c => {
       const matchesSearch = c.personName.toLowerCase().includes(filterText.toLowerCase()) || 
@@ -60,7 +71,7 @@ export default function ConflictsClient({ production, initialConflicts }: Props)
     });
   }, [initialConflicts, filterText, selectedType, selectedPersonId]);
 
-  // 3. Group by Date
+  // 4. Group by Date
   const groupedConflicts = useMemo(() => {
     const groups: Record<string, Conflict[]> = {};
     
@@ -186,8 +197,17 @@ export default function ConflictsClient({ production, initialConflicts }: Props)
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           
+          {/* 📊 DASHBOARD INSERTION */}
+          <div className="mb-8">
+            <ConflictAnalysisDashboard 
+              conflicts={initialConflicts}
+              events={initialEvents}
+              castSize={uniquePeopleCount} 
+            />
+          </div>
+
           {Object.keys(groupedConflicts).length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+            <div className="h-full flex flex-col items-center justify-center text-zinc-500 py-10">
               <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mb-4 border border-white/10">
                 <Filter size={24} className="opacity-50" />
               </div>
