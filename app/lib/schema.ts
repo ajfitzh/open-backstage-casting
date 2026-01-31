@@ -433,7 +433,8 @@ export const DB = {
       TIME_SLOT: "field_6120", // single_select
       AGE_RANGE: "field_6121", // single_select
       STUDENTS: "field_6150", // link_row
-      SPACE: "field_6196", // link_row
+      SPACE: "field_6196", 
+      TYPE: "field_6217",// link_row
     }
   },
   FAMILIES: {

@@ -100,18 +100,23 @@ export async function deleteRow(tableId: string, rowId: number | string) {
 // 🎓 EDUCATION (CLASSES & VENUES)
 // ==============================================================================
 
+// app/lib/baserow.ts
+
+// ... (Imports and other functions remain the same) ...
+
 export async function getClasses() {
   let allRows: any[] = [];
   let page = 1;
   let hasMore = true;
 
+  // Loop to fetch all pages
   while (hasMore) {
     const data = await fetchBaserow(
       `/database/rows/table/${DB.CLASSES.ID}/`, 
       {}, 
       { 
         page: page.toString(), 
-        size: "200",
+        size: "200", 
       } 
     );
 
@@ -127,6 +132,7 @@ export async function getClasses() {
     }
   }
 
+  // MAP THE DATA
   return allRows.map((row: any) => ({
       id: row.id,
       name: safeGet(row[DB.CLASSES.FIELDS.CLASS_NAME], "Unnamed Class"),
@@ -137,9 +143,17 @@ export async function getClasses() {
       spaceName: safeGet(row[DB.CLASSES.FIELDS.SPACE]),
       day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
       time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
+      
+      // 🚀 NEW: Get the Explicit Type (field_6217)
+      type: safeGet(row[DB.CLASSES.FIELDS.TYPE], "General"),
+
+      // 🚀 Age Range for Filtering
+      ageRange: safeGet(row[DB.CLASSES.FIELDS.AGE_RANGE], "All Ages"),
+      
       students: Array.isArray(row[DB.CLASSES.FIELDS.STUDENTS]) ? row[DB.CLASSES.FIELDS.STUDENTS].length : 0,
   }));
 }
+
 
 export async function getClassById(classId: string) {
   const row = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`);
