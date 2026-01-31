@@ -79,18 +79,17 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
 
     // --- LOGIC: CAST ANALYTICS ---
     const stats = useMemo(() => {
-        // 1. Filter Population to only include people in THIS show
-        // We match assignments.personId to population.id
+        // 1. Filter Population
         const activeIds = new Set(assignments.map((a:any) => a.personId).filter(Boolean));
         const activeCast = population.filter((p:any) => activeIds.has(p.id));
         
         const total = activeCast.length;
 
-        // 2. Gender (Using the clean 'gender' string from baserow.ts)
+        // 2. Gender
         const males = activeCast.filter((p:any) => (p.gender || "").trim() === 'Male').length;
         const females = activeCast.filter((p:any) => (p.gender || "").trim() === 'Female').length;
         
-        // 3. Experience (Based on showCount)
+        // 3. Experience
         const exp = { green: 0, journey: 0, pro: 0 };
         activeCast.forEach((p:any) => {
             const count = p.showCount || 0;
@@ -105,11 +104,18 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
         const minAge = validAges.length ? Math.min(...validAges) : 0;
         const maxAge = validAges.length ? Math.max(...validAges) : 0;
 
-        // 5. Height
+        // 5. Height (Converted to Feet/Inches)
         const validHeights = activeCast.map((p:any) => p.height).filter((h:number) => h > 0);
-        const avgHeight = validHeights.length ? (validHeights.reduce((a:number,b:number)=>a+b,0) / validHeights.length).toFixed(1) : "N/A";
+        let avgHeightStr = "N/A";
+        
+        if (validHeights.length > 0) {
+            const avgInches = validHeights.reduce((a:number,b:number)=>a+b,0) / validHeights.length;
+            const feet = Math.floor(avgInches / 12);
+            const inches = Math.round(avgInches % 12);
+            avgHeightStr = `${feet}' ${inches}"`;
+        }
 
-        return { total, males, females, exp, avgAge, minAge, maxAge, avgHeight };
+        return { total, males, females, exp, avgAge, minAge, maxAge, avgHeightStr };
     }, [assignments, population]);
 
     // --- LOGIC: ASSETS ---
@@ -189,11 +195,14 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
                     </div>
                 </div>
 
-                {/* 4. HEIGHT SPECS */}
+                {/* 4. HEIGHT SPECS (UPDATED) */}
                 <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
                     <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-pink-500"><Ruler size={80}/></div>
                     <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Avg Height</div>
-                    <div className="text-4xl font-black text-white mb-2">{stats.avgHeight}<span className="text-lg text-zinc-600">&ldquo;</span></div>
+                    
+                    {/* 🚨 FIX: Display Feet/Inches String */}
+                    <div className="text-4xl font-black text-white mb-2">{stats.avgHeightStr}</div>
+                    
                     <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
                         Data collected from {stats.total} cast members.
                     </p>
