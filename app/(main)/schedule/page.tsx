@@ -6,9 +6,11 @@ import {
     getRoles,
     getAssignments,
     getPeople,
-    getProductionEvents // Fetch events if we want to show existing schedule
+    getScheduleSlots // 🟢 NEW IMPORT
 } from '@/app/lib/baserow';
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
+
+export const dynamic = 'force-dynamic';
 
 export default async function SchedulerPage() {
   const cookieStore = await cookies();
@@ -26,23 +28,25 @@ export default async function SchedulerPage() {
     }
   }
 
-  // Fetch ALL necessary data to calculate who is in what scene
-  const [scenes, roles, assignments, people] = await Promise.all([
-      getScenes(activeId),      // Filtered for this show
-      getRoles(),               // All roles (blueprint)
-      getAssignments(activeId), // Filtered cast list
-      getPeople()               // Names/Photos
+  // Fetch ALL necessary data
+  const [scenes, roles, assignments, people, existingSlots] = await Promise.all([
+      getScenes(activeId),      
+      getRoles(),               
+      getAssignments(activeId), 
+      getPeople(),
+      getScheduleSlots(activeId) // 🟢 Fetch the saved slots
   ]);
 
   return (
     <main className="h-screen bg-zinc-950 overflow-hidden">
       <SchedulerClient 
-        scenes={scenes}
-        roles={roles}
-        assignments={assignments}
-        people={people}
+        scenes={scenes || []}
+        roles={roles || []}
+        assignments={assignments || []}
+        people={people || []}
         productionTitle={showTitle}
         productionId={activeId}
+        initialSchedule={existingSlots || []} // 🟢 Pass them to Client
       />
     </main>
   );
