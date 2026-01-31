@@ -7,7 +7,7 @@ import {
   getActiveProduction, 
   getUserProductionRole 
 } from "@/app/lib/baserow";
-import SettingsClient from "./SettingsClient";
+import SettingsClient from "@/app/components/settings/SettingsClient";
 
 export default async function SettingsPage() {
   const session = await auth();

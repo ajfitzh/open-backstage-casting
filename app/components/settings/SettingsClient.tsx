@@ -41,19 +41,25 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
   const [activeTab, setActiveTab] = useState('profile');
   const user = initialUser;
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
-
-  // --- 🔐 THE CHECKER ---
-  // Checks both Global Role (e.g. Admin) AND Context Role (e.g. Director)
+const [simGlobal, setSimGlobal] = useState<string | null>(null);
+  const [simProd, setSimProd] = useState<string | null>(null);
+  // 2. UPDATE THE CHECKER: Use the simulation if active
   const checkAccess = (perm: Permission) => {
-    const granted = hasPermission(initialUser.role, productionRole, perm);
+    // If simGlobal is set, use it. Otherwise, use real data.
+    const effectiveGlobal = simGlobal || initialUser.role;
+    const effectiveProd = simProd !== null ? simProd : productionRole;
+
+    const granted = hasPermission(effectiveGlobal, effectiveProd, perm);
+    
     return {
       granted,
       level: granted ? (perm.includes('edit') || perm.includes('manage') ? 'write' : 'read') : 'locked'
     };
   };
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full">
+
+return (
+    <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full relative">
         
         {/* SIDEBAR NAVIGATION */}
         <nav className="w-full lg:w-64 flex flex-col gap-1 shrink-0">
@@ -207,9 +213,15 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                                     <Shield size={20} />
                                 </div>
                                 <div>
-                                    <h4 className="text-sm font-bold text-white">Global Role: {initialUser.role}</h4>
+                                    <h4 className="text-sm font-bold text-white">
+                                        {/* Show Simulated Title if active, else Real */}
+                                        Global Role: {simGlobal || initialUser.role}
+                                        {simGlobal && <span className="text-red-400 ml-2 text-xs uppercase">(Simulated)</span>}
+                                    </h4>
                                     <p className="text-xs text-zinc-500">
-                                        {productionRole ? `Show Role: ${productionRole}` : "No specific show role assigned."}
+                                        {/* Show Simulated Title if active, else Real */}
+                                        Show Role: {simProd !== null ? simProd : (productionRole || "None")}
+                                        {simProd !== null && <span className="text-red-400 ml-2 uppercase">(Simulated)</span>}
                                     </p>
                                 </div>
                             </div>
@@ -258,6 +270,69 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
             )}
 
         </div>
+
+        {/* 3. THE DEV WIDGET (GOD MODE) */}
+        {/* Only visible to actual Admins/Execs to prevent users from hacking it */}
+        {['Admin', 'Executive Director'].includes(initialUser.role) && (
+            <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-10">
+                <div className="bg-zinc-950 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
+                    <div className="flex items-center gap-2 mb-3 text-red-400 border-b border-white/5 pb-2">
+                        <Shield size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">God Mode</span>
+                        <button 
+                            onClick={() => { setSimGlobal(null); setSimProd(null); }}
+                            className="ml-auto text-[9px] underline text-zinc-500 hover:text-white"
+                        >
+                            Reset
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Global Role</label>
+                            <select 
+                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                value={simGlobal || ""}
+                                onChange={(e) => setSimGlobal(e.target.value || null)}
+                            >
+                                <option value="">Real ({initialUser.role})</option>
+                                <option value="Executive Director">Executive Director (You)</option>
+                                <option value="Finance Manager">Finance Manager (Krista)</option>
+                                <option value="Production Coordinator">Prod. Coordinator (Jenny)</option>
+                                <option value="Staff">Generic Staff</option>
+                                <option value="Contractor">Contractor</option>
+                                <option value="Parent/Guardian">Parent</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Show Role</label>
+                            <select 
+                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                value={simProd || ""}
+                                onChange={(e) => setSimProd(e.target.value || null)}
+                            >
+                                <option value="">Real ({productionRole || "None"})</option>
+                                <option value="Director">Director</option>
+                                <option value="Choreographer">Choreographer</option>
+                                <option value="Stage Manager">Stage Manager</option>
+                                <option value="Producer">Producer</option>
+                                <option value="None">None (Standard)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {/* Visual Indicator of Result */}
+                    <div className="mt-3 pt-3 border-t border-white/5 flex gap-2">
+                        <div className={`h-2 w-2 rounded-full mt-0.5 ${checkAccess('view_financials').granted ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <div className="text-[10px] text-zinc-400">
+                            {checkAccess('view_financials').granted ? "Can See Money" : "Cannot See Money"}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
     </div>
   );
 }
