@@ -363,7 +363,7 @@ export async function getAssignments(productionId?: number) {
       personId: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
       
       // 👈 ADD THIS LINE: This grabs the comma-separated string from the "Scenes" column
-      scenes: safeGet(row["Scenes"] || row[DB.ASSIGNMENTS.FIELDS.SCENES], ""),
+      scenes: safeJoin(row["Scenes"] || row[DB.ASSIGNMENTS.FIELDS.SCENES], ""),
 
       actors: row[DB.ASSIGNMENTS.FIELDS.PERSON] ? [{
         id: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
@@ -421,8 +421,43 @@ export async function getScenes(productionId?: number) {
   }));
 }
 
+// app/lib/baserow.ts
+
 export async function getProductionAssets(productionId?: number) {
-  return fetchBaserow(`/database/rows/table/${DB.ASSETS.ID}/`);
+  // 1. Add Filtering to only get assets for this show
+  const params: any = { size: "200" };
+  if (productionId) {
+    params[`filter__${DB.ASSETS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
+  }
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.ASSETS.ID}/`, {}, params);
+
+  if (!Array.isArray(data)) return [];
+
+  // 2. MAP the raw data to clean objects
+  return data.map((row: any) => ({
+    id: row.id,
+    // Safely get the Name, defaulting to "Untitled" to prevent .match() crashes
+    name: safeGet(row[DB.ASSETS.FIELDS.NAME], "Untitled Asset"),
+    link: safeGet(row[DB.ASSETS.FIELDS.LINK], "#"),
+    type: safeGet(row[DB.ASSETS.FIELDS.TYPE], "Prop"),
+    // Add any other fields your UI expects
+  }));
+}
+
+// app/lib/baserow.ts
+
+/** * Returns a comma-separated string for Link Rows with multiple items 
+ * (e.g. "Scene 1, Scene 4, Scene 5")
+ */
+function safeJoin(field: any, fallback = ""): string {
+  if (!field) return fallback;
+  if (Array.isArray(field)) {
+    if (field.length === 0) return fallback;
+    // Map over all items and join them
+    return field.map((item: any) => item.value || item.name).join(", ");
+  }
+  return safeGet(field, fallback); // Fallback to standard safeGet if not an array
 }
 
 export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
