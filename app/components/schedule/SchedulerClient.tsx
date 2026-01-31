@@ -7,12 +7,14 @@ import {
   TrendingUp, Calendar as CalendarIcon, 
   LayoutGrid, Coffee, Umbrella, Wand2,
   FileText, Mic2, Music, Theater,
-  Target, AlertTriangle, Clock
+  Target, AlertTriangle, Clock,
+  Save, Loader2
 } from 'lucide-react';
 
 // --- IMPORTS ---
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
+import { saveScheduleBatch } from '@/app/lib/actions'; // 🟢 The new Action
 
 // --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
@@ -45,22 +47,22 @@ export default function SchedulerClient({
     scenes = [], 
     assignments = [], 
     people = [], 
-    productionTitle = "Untitled Production" 
+    productionTitle = "Untitled Production",
+    productionId // 🟢 Needed for the Save Action
 }: any) {
   
   // --- STATE ---
   const [activeTab, setActiveTab] = useState<'calendar' | 'progress' | 'callboard'>('calendar');
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
+  const [isSaving, setIsSaving] = useState(false); // 🟢 Loading State
   
-  // --- SHARED DATA PREP (ROBUST FIX) ---
+  // --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
     if (!scenes || !assignments) return [];
 
     // 1. Create a Map: SceneID -> Set of Actor Names
     const sceneCastMap = new Map<number, Set<string>>();
-
-    // Helper to normalize strings for matching (remove punctuation, lowercase)
     const normalize = (s: string) => s?.toLowerCase().replace(/[^a-z0-9]/g, "") || "";
 
     assignments.forEach((a: any) => {
@@ -73,17 +75,14 @@ export default function SchedulerClient({
                 if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
                 sceneCastMap.get(sid)?.add(actorName);
             });
-            return; // If we found IDs, skip text matching
+            return;
         }
 
         // STRATEGY B: Text Fuzzy Match (Backup)
-        // If "scenes" is a string like "Under the Sea, Triton's Court"
         if (a.scenes && typeof a.scenes === 'string') {
             const sceneNames = a.scenes.split(',').map(normalize);
-            
             scenes.forEach((s: any) => {
                 const sName = normalize(s.name);
-                // Check if this scene's name exists in the assignment's text list
                 if (sceneNames.some((n:string) => n.includes(sName) || sName.includes(n))) {
                     if (!sceneCastMap.has(s.id)) sceneCastMap.set(s.id, new Set());
                     sceneCastMap.get(s.id)?.add(actorName);
@@ -102,12 +101,8 @@ export default function SchedulerClient({
             name: s.name || "Untitled Scene",
             act: s.act || "1",
             type: s.type || "Scene",
-            
-            // Cast objects for AutoScheduler
             cast: castNames.map(name => ({ name })),
-            // Simple string list for Callboard
             castNames: castNames, 
-            
             status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
@@ -116,7 +111,7 @@ export default function SchedulerClient({
   // --- DERIVED DATA FOR CALLBOARD ---
   const callboardSchedule = useMemo(() => {
       return schedule.map(slot => {
-          const scene = sceneData.find(s => s.id === slot.sceneId);
+          const scene = sceneData.find((s: { id: number; }) => s.id === slot.sceneId);
           return {
               ...slot,
               sceneName: scene?.name || "Unknown",
@@ -124,6 +119,52 @@ export default function SchedulerClient({
           };
       });
   }, [schedule, sceneData]);
+
+
+  // 🟢 SAVE LOGIC 🟢
+  const handleSaveChanges = async () => {
+    setIsSaving(true);
+
+    // 1. Identify Unsaved Items
+    // Client-side items have long Date.now() IDs (string length > 10)
+    // Database items usually have shorter numeric IDs (though in Baserow row IDs are numbers)
+    // We assume anything with a string ID > 10 chars is a "Draft"
+    const newItems = schedule.filter(item => item.id.length > 10);
+
+    if (newItems.length === 0) {
+        setIsSaving(false);
+        return;
+    }
+
+    // 2. Calculate Real Dates based on Week Offset
+    const getRealDate = (day: 'Fri' | 'Sat', weekOffset: number) => {
+        const today = new Date();
+        // Find "Next Friday" from today
+        const nextFri = new Date(today);
+        nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (weekOffset * 7));
+        
+        if (day === 'Fri') return nextFri.toISOString().split('T')[0];
+        
+        // If Saturday, add 1 day
+        const nextSat = new Date(nextFri);
+        nextSat.setDate(nextFri.getDate() + 1);
+        return nextSat.toISOString().split('T')[0];
+    };
+
+    // 3. Prepare Batch
+    const batch = newItems.map(item => ({
+        ...item,
+        date: getRealDate(item.day, item.weekOffset),
+    }));
+
+    // 4. Send to Server
+    await saveScheduleBatch(productionId, batch);
+
+    // 5. Reset / Reload
+    setIsSaving(false);
+    window.location.reload(); // Hard reload to fetch the persisted data
+  };
+
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
@@ -159,7 +200,22 @@ export default function SchedulerClient({
             </div>
             
             <div className="flex items-center gap-4">
-                 <div className="text-right hidden md:block">
+                 
+                 {/* 🟢 SAVE BUTTON (Appears when changes exist) */}
+                 {schedule.some(i => i.id.length > 10) && (
+                     <div className="animate-in fade-in slide-in-from-top-2">
+                        <button 
+                            onClick={handleSaveChanges}
+                            disabled={isSaving}
+                            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            {isSaving ? "Syncing..." : `Save ${schedule.filter(i => i.id.length > 10).length} Changes`}
+                        </button>
+                     </div>
+                 )}
+
+                 <div className="text-right hidden md:block border-l border-white/10 pl-4">
                     <div className="text-[10px] text-zinc-500 font-mono">Current Week</div>
                     <div className="text-sm font-black text-emerald-400">Week {CURRENT_WEEK} of {TOTAL_WEEKS}</div>
                  </div>
@@ -230,6 +286,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       setDraggedSceneId(null);
   };
 
+  // 🟢 Fixed updateDuration to match Pam's 15 min requirement
   const updateDuration = (itemId: string, change: number) => {
       setSchedule((prev: any) => prev.map((item: any) => item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item));
   };
@@ -242,7 +299,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   }, [currentWeekOffset]);
 
   const generateSlots = (start: number, end: number) => {
-      const s = [];
+      const s: { h: number; m: number; val: number; }[] = [];
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
       return s;
   };
@@ -273,7 +330,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                          </div>
                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
                               <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
-                              {/* 🚨 VISUAL CONFIRMATION: Show actor count, turn red if 0 */}
                               <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : ""}>
                                   {scene.cast.length} Actors
                               </span>

@@ -17,12 +17,12 @@ export default async function SchedulerPage() {
 
   if (activeId) {
     const showData = await getShowById(activeId);
-    if (showData && !Array.isArray(showData)) showTitle = showData.Title;
+    if (showData && !Array.isArray(showData)) showTitle = showData.title;
   } else {
     const defaultShow = await getActiveProduction();
     if (defaultShow) {
       activeId = defaultShow.id;
-      showTitle = defaultShow.Title;
+      showTitle = defaultShow.title;
     }
   }
 

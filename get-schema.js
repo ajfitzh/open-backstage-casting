@@ -3,13 +3,38 @@
 
 const https = require('https');
 
-// IDs fetched from your app/lib/baserow.ts
+// IDs updated based on your provided list
 const TABLES = {
   PEOPLE: "599",
-  ASSIGNMENTS: "603",
-  ROLES: "605",
+  PRODUCTIONS: "600",
+  MASTER_SHOW_DB: "601",
+  ASSIGNMENTS: "603",    // Cast/Crew Assignments
+  ROLES: "605",          // Blueprint Roles
+  SIGNATURES: "607",
+  STATS: "608",
+  ROLES_POSITIONS: "609",
+  TEAM_ASSIGNMENTS: "610",
+  MEASUREMENTS: "616",
+  GARMENT_INVENTORY: "617",
+  STUDENT_BIO: "618",
+  COMMITTEE_PREFS: "620",
+  ATTENDANCE: "622",
+  CONFLICTS: "623",      // Rehearsal Event Conflicts
+  REQUIREMENTS: "624",
+  EVENTS: "625",         // Rehearsal/Production Events (The Parent Container)
   SCENES: "627",
+  SCENE_ASSIGNMENTS: "628",
   AUDITIONS: "630",
+  RESOURCES: "631",
+  SESSIONS: "632",
+  CLASSES: "633",
+  FAMILIES: "634",
+  VENUES: "635",
+  SEATS: "636",
+  PERFORMANCES: "637",
+  SPACES: "638",
+  RATES: "639",
+  SLOTS: "640",          // Schedule Slots (The Child/Time Blocks)
 };
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
