@@ -428,26 +428,53 @@ export async function updateCastAssignment(assignmentId: number, personId: numbe
 
 // --- Scenes & Assets ---
 
+// app/lib/baserow.ts
+
 export async function getScenes(productionId?: number) {
   const params: any = { size: "200" };
+  const F = DB.SCENES.FIELDS;
 
   if (productionId) {
-    // 🚨 FIX: Using correct PRODUCTION field ID
-    params[`filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has`] = productionId;
-    params['order_by'] = `field_${DB.SCENES.FIELDS.ACT},field_${DB.SCENES.FIELDS.SCENE_NAME}`; 
+    params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
+    // Sort by your new 'Order' field
+    params['order_by'] = `field_${F.ORDER}`; 
   }
 
   const data = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, params);
 
   if (!Array.isArray(data)) return [];
 
-  return data.map((row: any) => ({
-    id: row.id,
-    name: safeGet(row[DB.SCENES.FIELDS.SCENE_NAME], "Untitled Scene"),
-    type: safeGet(row[DB.SCENES.FIELDS.SCENE_TYPE], "Scene"),
-    act: safeGet(row[DB.SCENES.FIELDS.ACT], "I"),
-    productionId: productionId 
-  }));
+  return data.map((row: any) => {
+    // Helper: Normalize status to lowercase (e.g., "Polished" -> "polished")
+    const getStatus = (fieldKey: string) => {
+        const val = safeGet(row[fieldKey]);
+        return val ? val.value.toLowerCase() : "new";
+    };
+
+    // Helper: Safely get numbers
+    const getLoad = (fieldKey: string) => parseInt(safeGet(row[fieldKey], 0));
+
+    return {
+      id: row.id,
+      order: parseInt(safeGet(row[F.ORDER], row.id)), 
+      name: safeGet(row[F.SCENE_NAME], "Untitled Scene"),
+      type: safeGet(row[F.SCENE_TYPE], "Scene").value || "Scene",
+      
+      // 🟢 The New Status Data
+      status: {
+        music: getStatus(F.MUSIC_STATUS), 
+        dance: getStatus(F.DANCE_STATUS),
+        block: getStatus(F.BLOCKING_STATUS),
+      },
+      
+      // ⚖️ The New Difficulty Weights
+      load: {
+        music: getLoad(F.MUSIC_LOAD),
+        dance: getLoad(F.DANCE_LOAD),
+        block: getLoad(F.BLOCKING_LOAD),
+      }
+    };
+  }).sort((a: any, b: any) => a.order - b.order);
 }
 
 export async function getProductionAssets(productionId?: number) {

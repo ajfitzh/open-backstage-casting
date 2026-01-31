@@ -1,3 +1,5 @@
+// app/lib/schema.ts
+
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 //    Run `python3 get-schema.py` to update.
@@ -353,6 +355,14 @@ export const DB = {
       SCENE_ASSIGNMENTS: "field_6035", // link_row
       CAST_CREW_ASSIGNMENTS: "field_6041", // link_row
       BLUEPRINT_ROLES: "field_6078", // link_row
+      // --- NEW FIELDS BELOW ---
+      ORDER: "field_6218", // number
+      MUSIC_STATUS: "field_6219", // single_select
+      DANCE_STATUS: "field_6220", // single_select
+      BLOCKING_STATUS: "field_6221", // single_select
+      MUSIC_LOAD: "field_6222", // number
+      DANCE_LOAD: "field_6223", // number
+      BLOCKING_LOAD: "field_6224", // number
     }
   },
   SCENE_ASSIGNMENTS: {
