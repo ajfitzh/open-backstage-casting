@@ -1,11 +1,24 @@
 "use client";
 
-import React from 'react';
+import React, { useTransition } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ArrowRight, Mic2, Users, SlidersHorizontal, Calendar, Megaphone } from 'lucide-react';
+import { 
+  CheckCircle2, 
+  ArrowRight, 
+  Mic2, 
+  Users, 
+  SlidersHorizontal, 
+  Calendar, 
+  Megaphone, 
+  CheckSquare, 
+  Loader2 
+} from 'lucide-react';
+// Make sure this action exists in your app/lib/actions.ts!
+import { markStepComplete } from '@/app/lib/actions'; 
 
 export default function WorkflowProgress({ status }: any) {
-  
+  let [isPending, startTransition] = useTransition();
+
   const steps = [
     {
       id: 'auditions',
@@ -21,7 +34,7 @@ export default function WorkflowProgress({ status }: any) {
       desc: 'Review talent',
       link: '/callbacks',
       icon: <Megaphone size={16} />,
-      isComplete: status.hasCallbacks, // New Status Logic
+      isComplete: status.hasCallbacks,
     },
     {
       id: 'casting',
@@ -49,15 +62,19 @@ export default function WorkflowProgress({ status }: any) {
     }
   ];
 
-  // Calculate overall progress
+  // Calculate Progress
   const completedCount = steps.filter(s => s.isComplete).length;
   const progressPercent = (completedCount / steps.length) * 100;
   
-  // Find current phase
-  const currentStep = steps.find(s => !s.isComplete) || { label: "Production Active" };
+  // Find the "Active" step (first incomplete one)
+  // If all are done, default to nothing or the last one
+  const currentStepIndex = steps.findIndex(s => !s.isComplete);
+  const currentStep = steps[currentStepIndex] || { label: "Production Active" };
 
   return (
-    <div className="w-full bg-zinc-900 border border-white/10 rounded-xl p-6 mb-8">
+    <div className="w-full bg-zinc-900 border border-white/10 rounded-xl p-6 mb-8 shadow-xl">
+      
+      {/* Header */}
       <div className="flex justify-between items-end mb-6">
         <div>
             <h2 className="text-lg font-black uppercase text-white tracking-wide">Production Roadmap</h2>
@@ -76,39 +93,60 @@ export default function WorkflowProgress({ status }: any) {
 
       {/* Steps Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 relative">
-         {/* Connector Line (Desktop Only) */}
+         {/* Desktop Connector Line */}
          <div className="hidden md:block absolute top-6 left-10 right-10 h-0.5 bg-zinc-800 -z-10" />
 
          {steps.map((step, i) => {
             const isNext = !step.isComplete && (i === 0 || steps[i-1].isComplete);
             
             return (
-                <Link 
-                    key={step.id} 
-                    href={step.link}
-                    className={`group relative flex flex-col items-center text-center p-3 md:p-4 rounded-xl transition-all border ${
-                        isNext 
-                        ? 'bg-blue-600/10 border-blue-500/50 hover:bg-blue-600/20 shadow-[0_0_20px_rgba(37,99,235,0.2)]' 
-                        : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
-                    }`}
-                >
-                    {/* Icon Bubble */}
-                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
-                        step.isComplete ? 'bg-emerald-500 text-white' : 
-                        isNext ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500'
-                    }`}>
-                        {step.isComplete ? <CheckCircle2 size={20} /> : step.icon}
-                    </div>
+                <div key={step.id} className="relative group h-full">
+                    <Link 
+                        href={step.link}
+                        className={`flex flex-col items-center text-center p-3 md:p-4 rounded-xl transition-all border h-full ${
+                            isNext 
+                            ? 'bg-blue-600/10 border-blue-500/50 shadow-[0_0_20px_rgba(37,99,235,0.2)]' 
+                            : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                    >
+                        {/* Icon Bubble */}
+                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
+                            step.isComplete ? 'bg-emerald-500 text-white' : 
+                            isNext ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500'
+                        }`}>
+                            {step.isComplete ? <CheckCircle2 size={20} /> : step.icon}
+                        </div>
 
-                    <h3 className={`text-xs md:text-sm font-bold ${step.isComplete ? 'text-zinc-400' : 'text-white'}`}>{step.label}</h3>
-                    <p className="hidden md:block text-xs text-zinc-500 mt-1">{step.desc}</p>
+                        <h3 className={`text-xs md:text-sm font-bold ${step.isComplete ? 'text-zinc-400' : 'text-white'}`}>{step.label}</h3>
+                        <p className="hidden md:block text-xs text-zinc-500 mt-1">{step.desc}</p>
+                    </Link>
 
+                    {/* 🆕 THE "MARK DONE" BUTTONS */}
                     {isNext && (
-                        <div className="absolute -bottom-3 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm whitespace-nowrap">
-                            Next <ArrowRight size={10} />
+                        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+                             {/* 1. Open Page Button */}
+                             <Link 
+                                href={step.link} 
+                                className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg shadow-black/50 whitespace-nowrap transition-transform hover:scale-105"
+                             >
+                                Open <ArrowRight size={10} />
+                            </Link>
+                            
+                            {/* 2. Manual Complete Button */}
+                            <button 
+                                onClick={(e) => {
+                                    e.preventDefault(); // Stop link click if nested
+                                    startTransition(() => markStepComplete(step.id));
+                                }}
+                                disabled={isPending}
+                                className="bg-zinc-800 hover:bg-emerald-600 text-zinc-400 hover:text-white border border-zinc-600 hover:border-emerald-500 text-[10px] font-bold px-2 py-1 rounded-full flex items-center justify-center shadow-lg shadow-black/50 transition-all hover:scale-105"
+                                title="Mark this step as done manually (Skip)"
+                            >
+                                {isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckSquare size={12} />}
+                            </button>
                         </div>
                     )}
-                </Link>
+                </div>
             )
          })}
       </div>
