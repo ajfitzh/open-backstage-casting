@@ -4,51 +4,139 @@ import React, { useState, useMemo } from 'react';
 import { 
   Search, User, Users, X,
   ShieldCheck, ClipboardCheck, CircleDollarSign,
-  Check
+  Check, AlertTriangle
 } from 'lucide-react';
 
-// --- 🗺️ DATA CONSTANTS ---
+// --- 🗺️ CONFIGURATION ---
+// This maps specific keywords to look for in the "Signed Doc Types" or other fields
 const LEGACY_MAP = {
-  legal: { title: "Legal & Safety", forms: [{ id: "Form B", label: "Medical Release" }, { id: "Form B", label: "Liability Waiver" }, { id: "Form B", label: "Photo Release" }] },
-  financial: { title: "Financials", forms: [{ id: "Fee", label: "Production Fee" }, { id: "Cash", label: "$5 Pizza Money" }, { id: "Tix", label: "Ticket Quota (20)" }] },
-  production: { title: "Production Ops", forms: [{ id: "Form K", label: "Performer Bio" }, { id: "Form F", label: "Measurements" }, { id: "Form G", label: "Conflict Sheet" }] },
-  family: { title: "Family Commitment", forms: [{ id: "Form H", label: "Committee Selection" }, { id: "Form I", label: "Parent Character Contract" }, { id: "Form A", label: "Student Character Contract" }] }
+  legal: { 
+    title: "Legal & Safety", 
+    forms: [
+      { id: "medical", label: "Medical Release", key: "Medical" }, 
+      { id: "liability", label: "Liability Waiver", key: "Liability" }, 
+      { id: "photo", label: "Photo Release", key: "Photo" }
+    ] 
+  },
+  financial: { 
+    title: "Financials", 
+    forms: [
+      { id: "fee", label: "Production Fee", key: "Fee" }, // Checks "Paid Fees"
+      { id: "tickets", label: "Ticket Quota", key: "Tickets" } // Checks Sales vs Quota
+    ] 
+  },
+  production: { 
+    title: "Production Ops", 
+    forms: [
+      { id: "bio", label: "Performer Bio", key: "Bio" }, 
+      { id: "measurements", label: "Measurements", key: "Measurements" }
+    ] 
+  },
+  family: { 
+    title: "Family Commitment", 
+    forms: [
+      { id: "committee", label: "Committee Prefs", key: "Committee" }, 
+    ] 
+  }
 };
 
-export default function StaffClient({ productionTitle, assignments, people }: any) {
+export default function StaffClient({ productionTitle, assignments, people, compliance }: any) {
   const [filter, setFilter] = useState("");
   const [selectedMember, setSelectedMember] = useState<any>(null);
   
-  // --- 🧠 DYNAMIC DATA ENGINE ---
+  // --- 🧠 REAL DATA ENGINE ---
   const roster = useMemo(() => {
     if (!Array.isArray(assignments)) return [];
-    const personMap = new Map();
+
+    // 1. Create a Lookup Map for Compliance Data (Raw People Rows)
+    // Key: Person ID (as string for safety) -> Value: Raw Row Object
+    const complianceMap = new Map();
+    if (Array.isArray(compliance)) {
+        compliance.forEach((row: any) => {
+            complianceMap.set(row.id.toString(), row);
+        });
+    }
+
+    // 2. Group Assignments by Person
+    // (An actor might have multiple roles, we want one card per actor)
+    const uniqueActors = new Map();
+
     assignments.forEach((a: any) => {
-      const personId = a["Person"]?.[0]?.id;
-      if (!personId || personMap.has(personId)) return;
-      
-      // Deterministic Mock Data logic (Preserved from your original file)
-      const isEven = personId % 2 === 0;
-      const isThird = personId % 3 === 0;
-      const tickets = (personId * 7) % 25;
-      
-      personMap.set(personId, {
-        id: personId,
-        name: a["Person"]?.[0]?.value || "Unknown",
-        roles: [a["Performance Identity"]?.[0]?.value || "Chorus"],
-        avatar: people.find((p: any) => p.id === personId)?.["Headshot"]?.[0]?.url,
-        audit: {
-          medical: isEven, liability: isEven, photo: isEven,
-          fees: personId % 5 !== 0, pizza: personId % 7 !== 0, ticketsMet: tickets >= 20,
-          bio: isThird, measurements: isThird, conflicts: personId % 4 !== 0,
-          committee: isEven, parentContract: isEven, studentContract: isThird
-        },
-        ticketsSold: tickets,
-        committeeName: isEven ? "Costumes" : isThird ? "Props" : "None",
-      });
+      const personId = a.personId?.toString();
+      if (!personId) return;
+
+      // If we haven't seen this actor yet, initialize them
+      if (!uniqueActors.has(personId)) {
+        
+        // --- 🔍 DATA LOOKUP ---
+        const rawPersonData = complianceMap.get(personId) || {};
+        
+        // Helper: Check Lookup Arrays (Baserow returns [{id:1, value:"Text"}] for lookups)
+        const hasSignature = (keyword: string) => {
+           const docs = rawPersonData["Signed Doc Types"] || []; // Field name from Schema
+           if (!Array.isArray(docs)) return false;
+           return docs.some((d: any) => d.value && d.value.includes(keyword));
+        };
+
+        const hasBio = () => {
+           const bio = rawPersonData["Original Bio"]; // Lookup or Text
+           // If lookup
+           if (Array.isArray(bio) && bio.length > 0) return true;
+           // If text
+           if (typeof bio === 'string' && bio.length > 10) return true;
+           return false;
+        };
+
+        // measurements are usually a linked row
+        const hasMeasurements = () => {
+            const m = rawPersonData["Measurements"];
+            return Array.isArray(m) && m.length > 0;
+        };
+        
+        // Helper: Safe Headshot URL
+        const headshot = rawPersonData["Headshot"]?.[0]?.url || 
+                         people.find((p: any) => p.id.toString() === personId)?.["Headshot"]?.[0]?.url;
+
+        uniqueActors.set(personId, {
+          id: personId,
+          name: a.personName || "Unknown Actor",
+          roles: [a.name], // Start list of roles
+          avatar: headshot,
+          
+          // --- 🏗️ AUDIT LOGIC (The Real Check) ---
+          audit: {
+            // Legal
+            medical: hasSignature("Medical"),
+            liability: hasSignature("Liability"),
+            photo: hasSignature("Photo"),
+            
+            // Financial
+            fees: rawPersonData["Paid Fees"] === true, // Assuming checkbox
+            ticketsMet: false, // Need ticket sales logic if available
+            
+            // Production
+            bio: hasBio(),
+            measurements: hasMeasurements(),
+            
+            // Family
+            committee: Array.isArray(rawPersonData["Form Committee Preferences"]) && rawPersonData["Form Committee Preferences"].length > 0
+          },
+          
+          // Meta
+          ticketsSold: 0, // Placeholder if no sales data
+          committeeName: "Unassigned", 
+        });
+      } else {
+        // If actor exists, just add the extra role
+        const existing = uniqueActors.get(personId);
+        if (!existing.roles.includes(a.name)) {
+            existing.roles.push(a.name);
+        }
+      }
     });
-    return Array.from(personMap.values());
-  }, [assignments, people]);
+
+    return Array.from(uniqueActors.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [assignments, people, compliance]);
 
   // Stats for the Dashboard
   const stats = useMemo(() => {
@@ -58,7 +146,7 @@ export default function StaffClient({ productionTitle, assignments, people }: an
       count: roster.length,
       legal: calc(p => p.audit.medical && p.audit.liability),
       prod: calc(p => p.audit.bio && p.audit.measurements),
-      money: calc(p => p.audit.fees && p.audit.pizza),
+      money: calc(p => p.audit.fees),
     };
   }, [roster]);
 
@@ -66,108 +154,173 @@ export default function StaffClient({ productionTitle, assignments, people }: an
     <div className="flex flex-col h-full bg-zinc-950 text-white font-sans">
        
         {/* HEADER */}
-        {/* Sticky top-0 ensures the stats bar stays visible while scrolling the grid */}
         <header className="sticky top-0 z-20 h-20 border-b border-white/10 flex items-center justify-between px-8 bg-zinc-950/80 backdrop-blur-xl shrink-0">
-            <div>
+            <div className="flex flex-col justify-center">
               <h1 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-1">Production Dashboard</h1>
-              <h2 className="text-xl font-bold tracking-tighter truncate max-w-[300px]">{productionTitle}</h2>
+              <h2 className="text-xl font-bold tracking-tighter truncate max-w-[300px] text-zinc-100">{productionTitle}</h2>
             </div>
             
             <div className="hidden xl:flex items-center gap-8">
                <HeaderStat label="Cast Size" value={stats.count} color="text-white" icon={<Users size={14}/>} />
-               <HeaderStat label="Legal" value={`${stats.legal}%`} color="text-emerald-400" icon={<ShieldCheck size={14}/>} />
-               <HeaderStat label="Ops" value={`${stats.prod}%`} color="text-blue-400" icon={<ClipboardCheck size={14}/>} />
-               <HeaderStat label="Money" value={`${stats.money}%`} color="text-amber-400" icon={<CircleDollarSign size={14}/>} />
+               <HeaderStat label="Legal Compliance" value={`${stats.legal}%`} color={stats.legal === 100 ? "text-emerald-400" : "text-zinc-300"} icon={<ShieldCheck size={14}/>} />
+               <HeaderStat label="Ops Readiness" value={`${stats.prod}%`} color="text-blue-400" icon={<ClipboardCheck size={14}/>} />
+               <HeaderStat label="Fees Paid" value={`${stats.money}%`} color="text-amber-400" icon={<CircleDollarSign size={14}/>} />
             </div>
 
             <div className="relative w-64 ml-8">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
-              <input onChange={(e) => setFilter(e.target.value)} placeholder="Search actor..." className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500" />
+              <input 
+                onChange={(e) => setFilter(e.target.value)} 
+                placeholder="Search actor..." 
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-200 outline-none focus:border-blue-500 focus:bg-zinc-900 transition-all placeholder:text-zinc-600" 
+              />
             </div>
         </header>
 
         {/* MAIN ROSTER GRID */}
-        <main className="flex-1 p-8 bg-[radial-gradient(circle_at_20%_20%,rgba(24,24,27,1)_0%,rgba(9,9,11,1)_100%)]">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-            {roster.filter(p => p.name.toLowerCase().includes(filter.toLowerCase())).map((member: any) => (
-              <div 
-                key={member.id} 
-                onClick={() => setSelectedMember(member)}
-                className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-white/20 transition-all cursor-pointer relative"
-              >
-                <div className="absolute top-0 left-0 w-full h-1 bg-white/5 rounded-t-2xl overflow-hidden">
-                  <div className={`h-full transition-all duration-1000 ${member.ticketsSold >= 20 ? 'bg-amber-400' : 'bg-blue-600'}`} style={{ width: `${Math.min((member.ticketsSold / 20) * 100, 100)}%` }} />
-                </div>
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex gap-4 min-w-0">
-                    <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-white/5 overflow-hidden shadow-inner shrink-0">
-                      {member.avatar ? <img src={member.avatar} className="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all" /> : <div className="w-full h-full flex items-center justify-center text-zinc-700"><User size={24}/></div>}
+        <main className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-[radial-gradient(circle_at_20%_20%,rgba(24,24,27,1)_0%,rgba(9,9,11,1)_100%)]">
+          {roster.length === 0 ? (
+             <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+                <Users size={48} className="mb-4 opacity-20" />
+                <p>No cast members found in this production.</p>
+                <p className="text-xs mt-2">Check the &quot;Assignments&ldquo; table in Baserow.</p>
+             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 pb-20">
+              {roster.filter((p: any) => p.name.toLowerCase().includes(filter.toLowerCase())).map((member: any) => (
+                <div 
+                  key={member.id} 
+                  onClick={() => setSelectedMember(member)}
+                  className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-white/20 hover:bg-zinc-900/60 transition-all cursor-pointer relative overflow-hidden"
+                >
+                  {/* Status Bar Top */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
+                    <div 
+                        className={`h-full transition-all duration-1000 ${member.audit.medical && member.audit.liability ? 'bg-emerald-500' : 'bg-red-500'}`} 
+                        style={{ width: member.audit.medical && member.audit.liability ? '100%' : '50%' }} 
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex gap-4 min-w-0">
+                      {/* Avatar */}
+                      <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-white/5 overflow-hidden shadow-inner shrink-0 relative">
+                        {member.avatar ? (
+                            <img src={member.avatar} className="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all duration-500" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-700">
+                                <User size={24}/>
+                            </div>
+                        )}
+                      </div>
+
+                      {/* Name & Role */}
+                      <div className="min-w-0 pt-1">
+                        <h3 className="font-bold text-lg text-zinc-100 truncate pr-2 group-hover:text-white transition-colors">{member.name}</h3>
+                        <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.1em] truncate">
+                            {member.roles[0]} {member.roles.length > 1 && <span className="opacity-50">+{member.roles.length - 1}</span>}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 pt-1">
-                      <h3 className="font-bold text-lg text-zinc-100 truncate">{member.name}</h3>
-                      <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.1em] truncate">{member.roles[0]}</p>
+
+                    {/* Quick Status Icons */}
+                    <div className="flex flex-col gap-1.5 shrink-0 z-10">
+                        <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                          <RichStatusIcon type="legal" member={member} />
+                          <RichStatusIcon type="financial" member={member} />
+                        </div>
+                        <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                          <RichStatusIcon type="production" member={member} />
+                          <RichStatusIcon type="family" member={member} />
+                        </div>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1.5 shrink-0 z-10">
-                      <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                        <RichStatusIcon type="legal" member={member} />
-                        <RichStatusIcon type="financial" member={member} />
+
+                  {/* Footer Info */}
+                  <div className="mt-2 flex justify-between items-end border-t border-white/5 pt-4">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-zinc-600 uppercase mb-1">Status</span>
+                        <div className="flex gap-1">
+                            {member.audit.medical ? (
+                                <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Cleared</span>
+                            ) : (
+                                <span className="text-[10px] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">Missing Docs</span>
+                            )}
+                        </div>
                       </div>
-                      <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                        <RichStatusIcon type="production" member={member} />
-                        <RichStatusIcon type="family" member={member} />
-                      </div>
+                      
+                      {member.audit.committee ? (
+                         <div className="px-3 py-1 rounded-lg text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-white/5">
+                            Committee Set
+                         </div>
+                      ) : (
+                         <div className="px-3 py-1 rounded-lg text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20 animate-pulse">
+                            No Committee
+                         </div>
+                      )}
                   </div>
                 </div>
-                {/* Footer Info */}
-                <div className="mt-2 flex justify-between items-end border-t border-white/5 pt-4">
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-zinc-600 uppercase mb-1">Ticket Sales</span>
-                      <span className={`text-sm font-black ${member.audit.ticketsMet ? 'text-amber-400' : 'text-white'}`}>{member.ticketsSold} <span className="text-zinc-700 font-normal">/ 20</span></span>
-                    </div>
-                    <div className={`px-3 py-1 rounded-lg text-[10px] font-bold ${member.committeeName === 'None' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-zinc-800 text-zinc-400 border border-white/5'}`}>
-                        {member.committeeName}
-                    </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </main>
       
-      {/* DRAWER COMPONENT */}
+      {/* 🟢 DRAWER COMPONENT (Detailed View) */}
       {selectedMember && (
          <div className="fixed inset-0 z-50 flex justify-end">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setSelectedMember(null)} />
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setSelectedMember(null)} />
             <aside className="relative w-full max-w-md bg-zinc-900 border-l border-white/10 shadow-2xl p-8 flex flex-col animate-in slide-in-from-right duration-300">
-               <button onClick={() => setSelectedMember(null)} className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full"><X/></button>
-               <h3 className="text-3xl font-black uppercase tracking-tighter mb-2">{selectedMember.name}</h3>
-               <div className="space-y-6 mt-8 overflow-y-auto">
+               <button onClick={() => setSelectedMember(null)} className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors"><X/></button>
+               
+               {/* Drawer Header */}
+               <div className="flex items-center gap-4 mb-8">
+                   <div className="w-16 h-16 rounded-2xl bg-zinc-800 overflow-hidden shadow-lg border border-white/10">
+                        {selectedMember.avatar ? (
+                            <img src={selectedMember.avatar} className="w-full h-full object-cover"/>
+                        ) : <div className="w-full h-full flex items-center justify-center text-zinc-600"><User size={24}/></div>}
+                   </div>
+                   <div>
+                       <h3 className="text-2xl font-black uppercase tracking-tighter text-white">{selectedMember.name}</h3>
+                       <div className="flex flex-wrap gap-2 mt-2">
+                           {selectedMember.roles.map((r: string) => (
+                               <span key={r} className="text-[10px] font-bold bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                   {r}
+                               </span>
+                           ))}
+                       </div>
+                   </div>
+               </div>
+
+               {/* Drawer Checklist */}
+               <div className="space-y-8 overflow-y-auto custom-scrollbar pr-2">
                   {Object.entries(LEGACY_MAP).map(([key, section]) => (
                     <div key={key}>
-                      <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3 border-b border-white/10 pb-1">{section.title}</h4>
-                      {section.forms.map(form => {
-                         let isDone = false;
-                         const audit = selectedMember.audit;
-                         if (form.label.includes("Medical")) isDone = audit.medical;
-                         else if (form.label.includes("Liability")) isDone = audit.liability;
-                         else if (form.label.includes("Photo")) isDone = audit.photo;
-                         else if (form.label.includes("Fee")) isDone = audit.fees;
-                         else if (form.label.includes("Pizza")) isDone = audit.pizza;
-                         else if (form.label.includes("Ticket")) isDone = audit.ticketsMet;
-                         else if (form.label.includes("Bio")) isDone = audit.bio;
-                         else if (form.label.includes("Measurements")) isDone = audit.measurements;
-                         else if (form.label.includes("Conflict")) isDone = audit.conflicts;
-                         else if (form.label.includes("Committee")) isDone = audit.committee;
-                         else if (form.label.includes("Parent")) isDone = audit.parentContract;
-                         else if (form.label.includes("Student")) isDone = audit.studentContract;
-                         
-                         return (
-                           <div key={form.label} className="flex justify-between py-2 text-sm border-b border-white/5 last:border-0">
-                             <span className="text-zinc-400">{form.label}</span>
-                             {isDone ? <Check size={16} className="text-emerald-500"/> : <X size={16} className="text-red-500"/>}
-                           </div>
-                         )
-                      })}
+                      <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-3 border-b border-white/10 pb-1 flex items-center gap-2">
+                          {section.title}
+                      </h4>
+                      <div className="bg-white/5 rounded-xl overflow-hidden border border-white/5">
+                          {section.forms.map((form) => {
+                             // Dynamic Check based on the ID we mapped in useMemo
+                             const isDone = selectedMember.audit[form.id as keyof typeof selectedMember.audit];
+                             
+                             return (
+                               <div key={form.label} className="flex justify-between items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                                 <span className="text-sm text-zinc-300 font-medium">{form.label}</span>
+                                 {isDone ? (
+                                     <div className="flex items-center gap-2 text-emerald-500">
+                                         <span className="text-[10px] font-bold uppercase tracking-wider">Complete</span>
+                                         <Check size={16}/>
+                                     </div>
+                                 ) : (
+                                     <div className="flex items-center gap-2 text-red-500">
+                                         <span className="text-[10px] font-bold uppercase tracking-wider">Missing</span>
+                                         <AlertTriangle size={16}/>
+                                     </div>
+                                 )}
+                               </div>
+                             )
+                          })}
+                      </div>
                     </div>
                   ))}
                </div>
@@ -196,38 +349,37 @@ function RichStatusIcon({ type, member }: any) {
   const audit = member.audit;
   
   if ((type === 'legal' && (!audit.medical || !audit.liability)) || 
-      (type === 'financial' && (!audit.fees || !audit.pizza)) || 
-      (type === 'production' && !audit.bio) ||
+      (type === 'financial' && !audit.fees) || 
+      (type === 'production' && (!audit.bio || !audit.measurements)) ||
       (type === 'family' && !audit.committee)) {
       status = 'emergency';
   }
 
   const colors = {
-    emergency: "text-red-500 bg-red-500/10 border-red-500/40 animate-pulse",
+    emergency: "text-red-500 bg-red-500/10 border-red-500/40",
     valid: "text-emerald-500 bg-emerald-500/10 border-emerald-500/30",
   };
 
   return (
-    // 1. CHANGED: 'group' -> 'group/icon' (Named Group)
-    // 2. ADDED: 'hover:z-50' (Brings active icon to front so tooltip isn't covered)
-    <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 ${colors[status as keyof typeof colors]}`}>
+    <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 hover:scale-105 ${colors[status as keyof typeof colors]}`}>
       
       {icons[type as keyof typeof icons]}
 
       {/* TOOLTIP */}
-      {/* 3. CHANGED: 'group-hover:opacity-100' -> 'group-hover/icon:opacity-100' */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-950 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
         <div className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">
             {config.title}
         </div>
-        <div className="space-y-1">
-            {config.forms.map((f: any) => (
-                <div key={f.label} className="flex justify-between text-[10px] text-zinc-400">
-                    <span>{f.label}</span> 
-                    {/* Visual fake-check for demo */}
-                    <div className={`w-1.5 h-1.5 rounded-full ${status === 'valid' ? 'bg-emerald-500' : 'bg-zinc-700'}`}/>
-                </div>
-            ))}
+        <div className="space-y-1.5">
+            {config.forms.map((f: any) => {
+                const isDone = member.audit[f.id];
+                return (
+                    <div key={f.label} className="flex justify-between items-center text-[10px] text-zinc-400">
+                        <span>{f.label}</span> 
+                        <div className={`w-1.5 h-1.5 rounded-full ${isDone ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)]' : 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]'}`}/>
+                    </div>
+                )
+            })}
         </div>
         {/* Little Arrow */}
         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-zinc-900"></div>
@@ -242,7 +394,7 @@ function HeaderStat({ label, value, color, icon }: any) {
       <div className="p-2 bg-white/5 rounded-lg text-zinc-500 border border-white/5">{icon}</div>
       <div>
         <div className={`text-xl font-black leading-none ${color}`}>{value}</div>
-        <div className="text-[9px] font-black uppercase text-zinc-600 tracking-wider">{label}</div>
+        <div className="text-[9px] font-black uppercase text-zinc-600 tracking-wider mt-0.5">{label}</div>
       </div>
     </div>
   );

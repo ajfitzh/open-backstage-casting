@@ -617,7 +617,7 @@ export async function getConflicts() {
   return fetchBaserow(`/database/rows/table/${DB.CONFLICTS.ID}/`);
 }
 
-export async function getComplianceData() {
+export async function getComplianceData(productionId?: number) {
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
 }
 

@@ -28,7 +28,7 @@ export default async function RosterPage() {
       // Fallback: If no cookie, get the default "Active" show
       const prod = await getActiveProduction(); 
       if (prod) {
-          productionTitle = prod.Title;
+          productionTitle = prod.title;
           productionId = prod.id;
       }
   }
