@@ -16,6 +16,9 @@ const GOAL_WEEK_8 = 8;  // Super Saturday Target
 export default function ProductionClient({ show, assignments, auditionees, scenes, assets }: any) {
     const [activeTab, setActiveTab] = useState<'overview' | 'progress'>('overview');
     
+    // Safety check in case show is null (e.g. fresh load)
+    if (!show) return <div className="p-8 text-white">Loading Show Data...</div>;
+
     return (
         <div className="flex flex-col h-full bg-zinc-950 text-white font-sans overflow-y-auto custom-scrollbar">
             
@@ -28,7 +31,8 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                         </div>
                         <div>
                             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Creative Control</div>
-                            <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white">{show.Title}</h1>
+                            {/* 🚨 FIX: show.Title -> show.title */}
+                            <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white">{show.title}</h1>
                         </div>
                     </div>
                     
@@ -68,19 +72,22 @@ export default function ProductionClient({ show, assignments, auditionees, scene
 }
 
 // ============================================================================
-// 1. OVERVIEW TAB (Your Existing Dashboard)
+// 1. OVERVIEW TAB
 // ============================================================================
 function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
     const [assetFilter, setAssetFilter] = useState("All");
 
-    // --- LOGIC: DEMOGRAPHICS (Fixed Gender) ---
+    // --- LOGIC: DEMOGRAPHICS ---
     const demographics = useMemo(() => {
-        const uniqueCastIds = new Set(assignments.map((a:any) => a.Person?.[0]?.id).filter(Boolean));
+        // 🚨 FIX: Use 'personId' (from your clean getAssignments) instead of Raw 'Person' array
+        const uniqueCastIds = new Set(assignments.map((a:any) => a.personId).filter(Boolean));
+        
         const total = uniqueCastIds.size;
         const castProfiles = auditionees.filter((a:any) => uniqueCastIds.has(a.id));
         
         const getGender = (c: any) => {
-            const g = c.Gender;
+            // Check both clean 'gender' and raw 'Gender' just in case
+            const g = c.gender || c.Gender; 
             if (typeof g === 'object' && g?.value) return g.value;
             if (typeof g === 'string') return g;
             return "Unknown";
@@ -97,7 +104,8 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
     const workload = useMemo(() => {
         const counts: Record<string, number> = {};
         assignments.forEach((a:any) => {
-            const name = a.Person?.[0]?.value || "Unknown";
+            // 🚨 FIX: Use 'personName' (clean) instead of Raw 'Person'
+            const name = a.personName || "Unknown";
             if (name !== "Unknown") counts[name] = (counts[name] || 0) + 1;
         });
 
@@ -112,15 +120,16 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
         if (!assets) return [];
         if (assetFilter === "All") return assets;
         return assets.filter((a:any) => {
-             const typeVal = typeof a.Type === 'object' ? a.Type?.value : a.Type;
-             return typeVal === assetFilter;
+             // 🚨 FIX: Use clean 'a.type' (no object check needed anymore)
+             return a.type === assetFilter;
         });
     }, [assets, assetFilter]);
 
     // --- LOGIC: SCENES ---
     const sceneStats = useMemo(() => {
         if (!scenes) return { count: 0, cues: 0 };
-        const cues = scenes.reduce((acc: number, s: any) => acc + (parseFloat(s["Minimum Performers"]) || 0), 0);
+        // 🚨 FIX: Not using 'Minimum Performers' yet in getScenes, setting fallback
+        const cues = 0; 
         return { count: scenes.length, cues };
     }, [scenes]);
 
@@ -184,14 +193,14 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {filteredAssets.map((asset: any) => {
-                            const type = typeof asset.Type === 'object' ? asset.Type?.value : asset.Type || "File";
-                            const isImage = type === 'Image' || asset.Link.match(/\.(jpeg|jpg|gif|png)$/i);
+                            // 🚨 FIX: Use clean keys from backend
+                            const isImage = asset.type === 'Image' || (asset.link && asset.link.match(/\.(jpeg|jpg|gif|png)$/i));
                             return (
-                                <a key={asset.id} href={asset.Link} target="_blank" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
-                                    {isImage ? <img src={asset.Link} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
+                                <a key={asset.id} href={asset.link} target="_blank" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
+                                    {isImage ? <img src={asset.link} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
                                     <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
-                                        <p className="text-xs font-bold text-white truncate">{asset.Name}</p>
-                                        <p className="text-[9px] font-black text-zinc-400 uppercase">{type}</p>
+                                        <p className="text-xs font-bold text-white truncate">{asset.name}</p>
+                                        <p className="text-[9px] font-black text-zinc-400 uppercase">{asset.type}</p>
                                     </div>
                                 </a>
                             )
@@ -212,12 +221,13 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
                             <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-3 border-b border-white/10 pb-1">{act}</h4>
                             <div className="space-y-1">
                                 {scenes.filter((s:any) => {
-                                    const a = typeof s.Act === 'object' ? s.Act?.value : s.Act;
-                                    return a === act;
+                                    // 🚨 FIX: Use clean s.act
+                                    return s.act === act || (act === 'Act 1' && s.act === 'I') || (act === 'Act 2' && s.act === 'II');
                                 }).map((s:any) => (
                                     <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 rounded-lg">
-                                        <span className="font-bold text-zinc-300">{s["Scene Name"]}</span>
-                                        <span className="text-[10px] font-black text-zinc-600 uppercase">{typeof s["Scene Type"] === 'object' ? s["Scene Type"]?.value : s["Scene Type"]}</span>
+                                        {/* 🚨 FIX: s.name, s.type */}
+                                        <span className="font-bold text-zinc-300">{s.name}</span>
+                                        <span className="text-[10px] font-black text-zinc-600 uppercase">{s.type}</span>
                                     </div>
                                 ))}
                             </div>
@@ -230,17 +240,14 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
 }
 
 // ============================================================================
-// 2. PROGRESS TAB (The "Killer Feature")
+// 2. PROGRESS TAB
 // ============================================================================
 function ProgressView({ scenes }: any) {
-    // --- MOCK STATE for the "Progress" ---
-    // In a real app, this would be saved in a new table "SceneProgress"
     const [progress, setProgress] = useState<Record<string, Record<string, number>>>(() => {
         const initial: any = {};
         scenes.forEach((s: any) => {
-            // Mock some random progress for the demo
             initial[s.id] = {
-                music: Math.random() > 0.5 ? 2 : 0, // 0=New, 1=Draft, 2=Polished
+                music: Math.random() > 0.5 ? 2 : 0, 
                 dance: Math.random() > 0.7 ? 1 : 0,
                 block: Math.random() > 0.3 ? 2 : 0,
             }
@@ -259,9 +266,9 @@ function ProgressView({ scenes }: any) {
     };
 
     const getStatusColor = (val: number) => {
-        if (val === 2) return 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'; // Polished
-        if (val === 1) return 'bg-amber-500 border-amber-400 text-black'; // Draft/Working
-        return 'bg-zinc-800 border-zinc-700 text-zinc-500 opacity-50'; // New
+        if (val === 2) return 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'; 
+        if (val === 1) return 'bg-amber-500 border-amber-400 text-black'; 
+        return 'bg-zinc-800 border-zinc-700 text-zinc-500 opacity-50'; 
     };
 
     // --- CALCULATE PACE METRICS ---
@@ -270,11 +277,11 @@ function ProgressView({ scenes }: any) {
         let completedUnits = 0;
 
         scenes.forEach((s: any) => {
-            const type = typeof s["Scene Type"] === 'object' ? s["Scene Type"]?.value : s["Scene Type"];
-            // Determine required disciplines based on Scene Type
+            // 🚨 FIX: Clean s.type
+            const type = s.type;
             const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
             const hasDance = type === 'Dance' || type === 'Mixed';
-            const hasBlock = true; // Everything has blocking
+            const hasBlock = true; 
 
             if (hasMusic) totalUnits++;
             if (hasDance) totalUnits++;
@@ -286,10 +293,9 @@ function ProgressView({ scenes }: any) {
             if (hasBlock && p?.block === 2) completedUnits++;
         });
 
-        const percentComplete = Math.round((completedUnits / totalUnits) * 100);
+        const percentComplete = totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0;
         
-        // Velocity: Units completed per week
-        const velocity = completedUnits / CURRENT_WEEK; 
+        const velocity = completedUnits / (CURRENT_WEEK || 1); 
         const remainingUnits = totalUnits - completedUnits;
         const weeksNeeded = velocity > 0 ? remainingUnits / velocity : 99;
         const projectedFinishWeek = CURRENT_WEEK + weeksNeeded;
@@ -301,7 +307,6 @@ function ProgressView({ scenes }: any) {
 
     return (
         <div className="space-y-8 animate-in slide-in-from-right-8 duration-500">
-            
             {/* 1. PACE DASHBOARD */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
@@ -326,18 +331,13 @@ function ProgressView({ scenes }: any) {
 
                     {/* Timeline Bar */}
                     <div className="relative h-12 bg-black/40 rounded-xl border border-white/5 flex items-center px-4 mb-2 z-10">
-                        {/* Progress Fill */}
                         <div className="absolute left-0 top-0 bottom-0 bg-blue-600/20 rounded-l-xl transition-all duration-1000" style={{ width: `${(CURRENT_WEEK / WEEKS_TOTAL) * 100}%` }}></div>
-                        
-                        {/* Markers */}
                         <div className="w-full flex justify-between text-[10px] font-black uppercase text-zinc-500 relative z-20">
                             <span>Start</span>
                             <span className={CURRENT_WEEK >= 4 ? "text-white" : ""}>Wk 4 (Now)</span>
                             <span>Wk 8 (Goal)</span>
                             <span>Wk 10 (Show)</span>
                         </div>
-                        
-                        {/* The Projected Finish Line */}
                         <div 
                             className="absolute top-0 bottom-0 w-1 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] z-30 transition-all duration-1000"
                             style={{ left: `${Math.min((metrics.projectedFinishWeek / WEEKS_TOTAL) * 100, 100)}%` }}
@@ -366,7 +366,7 @@ function ProgressView({ scenes }: any) {
                 </div>
             </div>
 
-            {/* 2. THE MATRIX (Interactive Checklist) */}
+            {/* 2. THE MATRIX */}
             <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
                 <div className="p-6 border-b border-white/5 bg-zinc-900/80 backdrop-blur-xl flex justify-between items-center sticky top-0 z-30">
                     <h3 className="text-lg font-black uppercase italic text-white flex items-center gap-2">
@@ -393,7 +393,8 @@ function ProgressView({ scenes }: any) {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {scenes.map((s: any, i: number) => {
-                                const type = typeof s["Scene Type"] === 'object' ? s["Scene Type"]?.value : s["Scene Type"];
+                                // 🚨 FIX: Clean keys
+                                const type = s.type;
                                 const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
                                 const hasDance = type === 'Dance' || type === 'Mixed';
                                 const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
@@ -403,11 +404,11 @@ function ProgressView({ scenes }: any) {
                                     <tr key={s.id} className="hover:bg-white/5 transition-colors group">
                                         <td className="px-6 py-4 font-mono text-zinc-600">{i + 1}</td>
                                         <td className="px-6 py-4 font-bold text-zinc-300">
-                                            {s["Scene Name"]}
+                                            {/* 🚨 FIX: s.name */}
+                                            {s.name}
                                             <span className="ml-2 text-[9px] font-normal text-zinc-600 border border-zinc-800 px-1.5 py-0.5 rounded uppercase">{type}</span>
                                         </td>
                                         
-                                        {/* MUSIC TOGGLE */}
                                         <td className="px-6 py-4 text-center">
                                             {hasMusic ? (
                                                 <button onClick={() => toggleStatus(s.id, 'music')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase transition-all ${getStatusColor(p.music)}`}>
@@ -416,7 +417,6 @@ function ProgressView({ scenes }: any) {
                                             ) : <span className="text-zinc-800 text-xs">-</span>}
                                         </td>
 
-                                        {/* DANCE TOGGLE */}
                                         <td className="px-6 py-4 text-center">
                                             {hasDance ? (
                                                 <button onClick={() => toggleStatus(s.id, 'dance')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase transition-all ${getStatusColor(p.dance)}`}>
@@ -425,14 +425,12 @@ function ProgressView({ scenes }: any) {
                                             ) : <span className="text-zinc-800 text-xs">-</span>}
                                         </td>
 
-                                        {/* BLOCKING TOGGLE */}
                                         <td className="px-6 py-4 text-center">
                                             <button onClick={() => toggleStatus(s.id, 'block')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase transition-all ${getStatusColor(p.block)}`}>
                                                 {p.block === 2 ? "Done" : p.block === 1 ? "Draft" : "-"}
                                             </button>
                                         </td>
 
-                                        {/* STATUS ICON */}
                                         <td className="px-6 py-4 text-center">
                                             {isReady ? <CheckCircle2 size={18} className="mx-auto text-emerald-500"/> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mx-auto"/>}
                                         </td>
