@@ -65,7 +65,32 @@ export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
 }
 
 // --- 🆕 NEW: WORKFLOW OVERRIDE ACTION ---
+// ... existing imports ...
 
+// 🆕 ADD THIS NEW ACTION
+export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance' | 'block', status: string) {
+  const F = DB.SCENES.FIELDS;
+  
+  // Map our "Traffic Light" names to Baserow Field IDs
+  const fieldMap = {
+    'music': F.MUSIC_STATUS,
+    'dance': F.DANCE_STATUS,
+    'block': F.BLOCKING_STATUS
+  };
+
+  const targetField = fieldMap[field];
+  
+  // Send the update to Baserow (Single Select Field)
+  await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/${sceneId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      [targetField]: status 
+    }),
+  });
+
+  revalidatePath("/production"); // Refresh the hub
+}
 export async function markStepComplete(stepKey: string) {
   // 1. Get the Active Production to find its ID and current tags
   const production = await getActiveProduction();
