@@ -337,9 +337,11 @@ export async function getActiveProduction() {
   return activeRow ? mapShow(activeRow) : null;
 }
 
-export async function getShowById(showId: string | number) {
-  const row = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${showId}/`);
-  return row && !row.error ? mapShow(row) : null;
+export async function getShowById(id: string | number) {
+  // Fetch specific row from Productions table
+  const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${id}/`);
+  if (!data || data.error) return null;
+  return mapShow(data); // Re-uses your existing mapShow function
 }
 
 export async function getAllShows() {
@@ -362,37 +364,36 @@ export async function getAuditionSlots(productionId?: number) {
   return fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {}, params); 
 }
 
+// app/lib/baserow.ts
+
 export async function getAssignments(productionId?: number) {
-  const params: any = { size: "200" };
-  if(productionId) params[`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
-  
+  const F = DB.ASSIGNMENTS.FIELDS;
+  const params: any = { 
+    size: "200",
+    user_field_names: "true" 
+  };
+
+  // 🟢 ADD THIS: Enable filtering by Production ID
+  if (productionId) {
+    params[`filter__field_${F.PRODUCTION}__link_row_has`] = productionId;
+  }
+
   const data = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, params);
 
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    // 🚨 FIX: Fallback logic for Assignment Name
-    const roleName = safeGet(row[DB.ASSIGNMENTS.FIELDS.ASSIGNMENT] || row[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY], "Unnamed Role");
+    // Helper to get linked person's name safely
+    const personObj = row[F.PERSON]?.[0]; 
+    const personName = personObj ? personObj.value : "Unknown Actor";
+    const personId = personObj ? personObj.id : 0;
 
     return {
       id: row.id,
-      name: roleName, 
-      personName: extractName(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
-      personId: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
-      
-      // 🚨 FIX: using SCENE_ASSIGNMENTS
-      scenes: safeJoin(row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS], ""),
-
-      actors: row[DB.ASSIGNMENTS.FIELDS.PERSON] ? [{
-        id: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
-        name: extractName(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
-      }] : [],
-
-      sceneIds: Array.isArray(row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS]) 
-        ? row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS].map((s: any) => s.id) 
-        : [],
-      
-      selectedActorIds: row[DB.ASSIGNMENTS.FIELDS.PERSON] ? [safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON])] : []
+      assignment: safeGet(row[F.ASSIGNMENT]),
+      personId: personId,
+      personName: personName,
+      // Add other fields as needed
     };
   });
 }
@@ -645,7 +646,7 @@ export async function getCommitteePreferences() {
   return fetchBaserow(`/database/rows/table/${DB.COMMITTEE_PREFS.ID}/`);
 }
 
-export async function getConflicts() {
+export async function getConflicts(id?: any) {
   return fetchBaserow(`/database/rows/table/${DB.CONFLICTS.ID}/`);
 }
 
