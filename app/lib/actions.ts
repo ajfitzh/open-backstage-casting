@@ -4,12 +4,12 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getClassRoster, fetchBaserow, DB } from "@/app/lib/baserow";
+// 1. Added getActiveProduction to imports so we can find the current show
+import { getClassRoster, fetchBaserow, DB, getActiveProduction } from "@/app/lib/baserow";
 
 // --- EXISTING ACTIONS ---
 
 export async function fetchRosterAction(classId: string) {
-  // This runs on the server, keeping your API tokens safe
   const roster = await getClassRoster(classId);
   return roster;
 }
@@ -19,7 +19,6 @@ export async function switchProduction(formData: FormData) {
   const redirectPath = formData.get("redirectPath")?.toString() || "/dashboard";
 
   if (productionId) {
-    // Set the cookie for 30 days
     (await cookies()).set("active_production_id", productionId, {
       maxAge: 60 * 60 * 24 * 30, 
       path: "/",
@@ -29,9 +28,8 @@ export async function switchProduction(formData: FormData) {
   redirect(redirectPath);
 }
 
-// --- 🆕 NEW: PRODUCTION ANALYSIS ACTIONS ---
+// --- PRODUCTION ANALYSIS ACTIONS ---
 
-// Define the shape of the update object coming from the UI
 type SceneLoadUpdate = {
   id: number;
   load: {
@@ -44,16 +42,13 @@ type SceneLoadUpdate = {
 export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
   const F = DB.SCENES.FIELDS;
 
-  // Map updates to parallel PATCH requests
   const promises = updates.map(async (update) => {
-    // 1. Map "Friendly" keys to "Baserow Field IDs"
     const body = {
       [F.MUSIC_LOAD]: update.load.music,
       [F.DANCE_LOAD]: update.load.dance,
       [F.BLOCKING_LOAD]: update.load.block,
     };
 
-    // 2. Send PATCH to Baserow
     await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/${update.id}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -61,12 +56,55 @@ export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
     });
   });
 
-  // 3. Wait for all saves to complete
   await Promise.all(promises);
 
-  // 4. Purge the cache for these pages so the UI updates immediately
   revalidatePath("/dashboard");
   revalidatePath("/analysis");
 
   return { success: true };
+}
+
+// --- 🆕 NEW: WORKFLOW OVERRIDE ACTION ---
+
+export async function markStepComplete(stepKey: string) {
+  // 1. Get the Active Production to find its ID and current tags
+  const production = await getActiveProduction();
+  if (!production) return;
+
+  // 2. Map the "stepKey" (e.g. 'auditions') to the Baserow Option Name
+  // These MUST match the options you created in Baserow exactly (Case Sensitive)
+  const keyMap: Record<string, string> = {
+    'auditions': 'Auditions',
+    'callbacks': 'Callbacks',
+    'casting': 'Casting',
+    'points': 'Calibration',
+    'schedule': 'Scheduling'
+  };
+  
+  const targetTag = keyMap[stepKey];
+  if (!targetTag) return;
+
+  // 3. Get current tags. 
+  // Baserow returns Multi-Select as an array of objects: [{id: 1, value: "Auditions", color: "blue"}]
+  // We need to map them to just the IDs or Values to update it. Sending Values is safer if IDs change.
+  const currentTags = production.workflowOverrides || []; 
+  const currentValues = currentTags.map((t: any) => t.value);
+
+  // 4. Add the new tag if it's not there
+  if (!currentValues.includes(targetTag)) {
+    const newValues = [...currentValues, targetTag];
+
+    // 5. PATCH Baserow
+    await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${production.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        // Make sure this ID matches what you added to schema.ts
+        [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
+      }),
+    });
+  }
+
+  // 6. Refresh the dashboard so the checkmark appears immediately
+  revalidatePath("/");
 }

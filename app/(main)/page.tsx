@@ -66,13 +66,27 @@ export default async function DashboardPage() {
   );
   const castCount = uniqueCastIds.size;
 
-  // --- WORKFLOW STATUS LOGIC (FIXED) ---
+  // --- WORKFLOW STATUS LOGIC (Database + Manual Override) ---
+  const hasOverride = (key: string) => {
+     // Check if the production's override list contains this specific key
+     return show.workflowOverrides?.some((tag: any) => tag.value === key);
+  };
+
   const workflowStatus = {
-      hasAuditions: auditionees.length > 5, 
-      hasCallbacks: assignments.length > 0, 
-      hasCast: assignments.length > 0,
-      hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)),
-      hasSchedule: events.length > 0
+      // 1. Auditions: >5 people logged OR manual override
+      hasAuditions: auditionees.length > 5 || hasOverride('Auditions'),
+      
+      // 2. Callbacks: Casting started OR manual override
+      hasCallbacks: assignments.length > 0 || hasOverride('Callbacks'), 
+
+      // 3. Casting: Assignments exist OR manual override
+      hasCast: assignments.length > 0 || hasOverride('Casting'),
+      
+      // 4. Points: Scenes have difficulty scores OR manual override
+      hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)) || hasOverride('Calibration'),
+      
+      // 5. Schedule: Events exist OR manual override
+      hasSchedule: events.length > 0 || hasOverride('Scheduling')
   };
 
   // --- THEME ENGINE ---

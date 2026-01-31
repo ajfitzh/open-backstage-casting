@@ -306,6 +306,8 @@ export async function getVenueLogistics() {
 // 🎭 PRODUCTION & CASTING
 // ==============================================================================
 
+// app/lib/baserow.ts
+
 function mapShow(row: any) {
   const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
   return {
@@ -316,7 +318,10 @@ function mapShow(row: any) {
     isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
     image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
     location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || "TBD",
-    masterShowLink: row[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE] || []
+    
+    // 🆕 NEW: Grab the overrides from the database
+    // Ensure WORKFLOW_OVERRIDES is defined in your DB.PRODUCTIONS.FIELDS schema
+    workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
   };
 }
 
