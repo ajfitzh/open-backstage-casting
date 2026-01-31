@@ -703,9 +703,62 @@ export async function getAuditionees(productionId?: number) {
 
 // app/lib/baserow.ts
 
-// 🚨 REMOVE ANY OTHER "export async function submitAudition" BEFORE PASTING THIS
-// app/lib/baserow.ts
+// ... existing imports ... 
 
+// --- USER PROFILE & FAMILY ---
+
+export async function getUserProfile(email: string) {
+  // 1. Find the Main User
+  const userRows = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
+    filter_type: "OR",
+    size: "1",
+    [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
+    [`filter__${DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
+  });
+
+  if (!userRows || userRows.length === 0) return null;
+
+  const user = userRows[0];
+  const familyLink = user[DB.PEOPLE.FIELDS.FAMILIES]; // The Link to the "Families" table
+  
+  // 2. Prepare the basic profile
+  const profile = {
+    id: user.id.toString(),
+    name: safeGet(user[DB.PEOPLE.FIELDS.FULL_NAME]),
+    email: email,
+    phone: safeGet(user[DB.PEOPLE.FIELDS.PHONE_NUMBER]),
+    address: `${safeGet(user[DB.PEOPLE.FIELDS.ADDRESS])}, ${safeGet(user[DB.PEOPLE.FIELDS.CITY])}`,
+    role: safeGet(user[DB.PEOPLE.FIELDS.STATUS], "User"), // e.g. "Parent/Guardian"
+    image: user[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
+    familyMembers: [] as any[]
+  };
+
+  // 3. Fetch Family Members (if a Family Link exists)
+  if (Array.isArray(familyLink) && familyLink.length > 0) {
+    const familyId = familyLink[0].id;
+    
+    // Fetch ALL people linked to this Family ID
+    const familyData = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
+      [`filter__${DB.PEOPLE.FIELDS.FAMILIES}__link_row_has`]: familyId,
+      size: "20"
+    });
+
+    if (Array.isArray(familyData)) {
+      // Filter out the current user so they don't appear twice
+      profile.familyMembers = familyData
+        .filter((member: any) => member.id !== user.id) 
+        .map((member: any) => ({
+          id: member.id,
+          name: safeGet(member[DB.PEOPLE.FIELDS.FULL_NAME]),
+          role: safeGet(member[DB.PEOPLE.FIELDS.STATUS], "Student"), // e.g. "Student"
+          age: parseInt(safeGet(member[DB.PEOPLE.FIELDS.AGE], 0)),
+          image: member[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
+        }));
+    }
+  }
+
+  return profile;
+}
 // --- CALLBACKS ---
 
 export async function getCallbackSlots(productionId: number) {
