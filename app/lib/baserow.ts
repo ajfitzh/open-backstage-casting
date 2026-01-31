@@ -862,14 +862,27 @@ export async function getCastingData(productionId: number) {
 }
 
 // 🚨 THIS IS THE CRITICAL WRITER: Updates the actual role in Baserow
-export async function updateCastAssignment(assignmentId: number, personId: number | null) {
+// app/lib/baserow.ts
+
+export async function updateCastAssignment(assignmentId: number, personId: number | null, sceneIds?: number[]) {
     const F = DB.ASSIGNMENTS.FIELDS;
+    
+    const body: any = {};
+    
+    // Only update Person if provided (or explicitly null to clear)
+    if (personId !== undefined) {
+        body[F.PERSON] = personId ? [personId] : [];
+    }
+
+    // Only update Scenes if provided
+    if (sceneIds !== undefined) {
+        body[F.SCENES] = sceneIds; // Usually array of IDs for Link Row
+    }
+
     return await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            [F.PERSON]: personId ? [personId] : [] // Links to the People table
-        })
+        body: JSON.stringify(body)
     });
 }
 // Keep updateAuditionSlot as is

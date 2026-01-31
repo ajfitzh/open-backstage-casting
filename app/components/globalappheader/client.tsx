@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from "next-auth/react";
 import { switchProduction } from '@/app/actions';
+import { useSimulation } from '@/app/context/SimulationContext'; // 👈 IMPORT THIS
 import { 
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
   Check, Sparkles, Archive, Clock, Rocket, Bug, Wrench, Settings, LogOut,
@@ -26,6 +27,10 @@ export default function GlobalHeaderClient({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'current' | 'archive'>('current');
   const [showDebug, setShowDebug] = useState(false);
+
+  // 🚀 CONNECT TO THE MATRIX
+  // We rename 'role' to 'effectiveRole' to avoid confusion
+  const { role: effectiveRole, isSimulating } = useSimulation();
 
   const navRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<HTMLDivElement>(null);
@@ -206,9 +211,14 @@ export default function GlobalHeaderClient({
             <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-3 group">
               <div className="hidden md:flex flex-col items-end leading-tight text-right">
                 <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{user?.name || "Sign In"}</span>
-                <span className="text-[10px] text-zinc-500 font-black uppercase tracking-tighter">{user?.role || "Guest"}</span>
+                
+                {/* 🚨 FIX: USE DYNAMIC ROLE FROM CONTEXT */}
+                <span className={`text-[10px] font-black uppercase tracking-tighter ${isSimulating ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`}>
+                    {effectiveRole || "Guest"}
+                </span>
+
               </div>
-              <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:border-emerald-500/50 transition-all">
+              <div className={`w-8 h-8 rounded-full bg-zinc-800 border flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:border-emerald-500/50 transition-all ${isSimulating ? 'border-red-500/50 ring-2 ring-red-500/20' : 'border-zinc-700'}`}>
                 {user?.image ? <img src={user.image} alt="User Avatar" className="w-full h-full rounded-full object-cover" /> : userInitials}
               </div>
             </button>
