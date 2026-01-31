@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
 import { signOut } from "next-auth/react";
+import { hasPermission, Permission } from '@/app/lib/permissions'; 
 
 // --- Types ---
 export interface FamilyMember {
@@ -33,15 +34,23 @@ interface SettingsProps {
   shows: any[];
   activeId: number;
   initialUser: UserProfile;
+  productionRole: string | null; // 👈 New Prop from Server
 }
 
-export default function SettingsClient({ shows, activeId, initialUser }: SettingsProps) {
+export default function SettingsClient({ shows, activeId, initialUser, productionRole }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
-  
-  // Use the REAL data fetched from server
   const user = initialUser;
-  
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
+
+  // --- 🔐 THE CHECKER ---
+  // Checks both Global Role (e.g. Admin) AND Context Role (e.g. Director)
+  const checkAccess = (perm: Permission) => {
+    const granted = hasPermission(initialUser.role, productionRole, perm);
+    return {
+      granted,
+      level: granted ? (perm.includes('edit') || perm.includes('manage') ? 'write' : 'read') : 'locked'
+    };
+  };
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full">
@@ -92,25 +101,19 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                         </div>
                     </div>
 
-                    {/* Avatar Header */}
                     <div className="flex items-center gap-6 pb-8 border-b border-white/5">
                         <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl relative overflow-hidden">
-                             {/* Initials Generator */}
-                            <span className="bg-clip-text text-transparent bg-gradient-to-tr from-zinc-200 to-zinc-500">
-                                {user.name ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase() : 'AF'}
-                            </span>
+                            {user.name ? (
+                                user.name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase()
+                            ) : 'AF'}
                         </div>
                         <div className="space-y-2">
                             <button className="px-4 py-2 bg-white text-black text-xs font-bold rounded-lg hover:bg-zinc-200 transition-colors">
                                 Upload New Photo
                             </button>
-                            <button className="px-4 py-2 text-zinc-400 text-xs font-bold hover:text-white transition-colors">
-                                Remove
-                            </button>
                         </div>
                     </div>
 
-                    {/* Input Grid - Mapped to Real Data */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <InputGroup label="Full Name" value={user.name} icon={<User size={16}/>} />
                         <InputGroup label="Email Address" value={user.email} icon={<Mail size={16}/>} disabled />
@@ -119,69 +122,42 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                              <InputGroup label="Mailing Address" value={user.address} icon={<MapPin size={16}/>} />
                         </div>
                     </div>
-                    
-                    <div className="flex justify-end pt-4">
-                        <button className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-900/20 transition-all">
-                            Save Changes
-                        </button>
-                    </div>
                 </div>
             )}
 
-            {/* --- FAMILY MEMBERS TAB (Real Data) --- */}
+            {/* --- FAMILY MEMBERS TAB --- */}
             {activeTab === 'family' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex justify-between items-end">
                         <div>
                             <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Family Members</h2>
-                            <p className="text-zinc-500 text-sm">Manage dependants, medical forms, and conflicts.</p>
+                            <p className="text-zinc-500 text-sm">Manage dependants and medical forms.</p>
                         </div>
-                        <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-2">
-                            <Users size={14} /> Add Person
-                        </button>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                        {user.familyMembers.map((member) => (
-                            <div key={member.id} className="group p-4 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    {/* Avatar Logic: Show Image if exists, else Initials */}
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400 overflow-hidden relative border border-white/5">
-                                        {member.image ? (
-                                            <img 
-                                                src={member.image} 
-                                                alt={member.name} 
-                                                className="w-full h-full object-cover" 
-                                            />
-                                        ) : (
-                                            member.name.charAt(0)
-                                        )}
+                        {user.familyMembers.length === 0 ? (
+                             <div className="p-8 border border-dashed border-zinc-800 rounded-xl text-center text-zinc-500 text-sm">
+                                No family members linked to your account.
+                             </div>
+                        ) : (
+                            user.familyMembers.map((member) => (
+                                <div key={member.id} className="group p-4 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400 overflow-hidden relative border border-white/5">
+                                            {member.image ? <img src={member.image} alt={member.name} className="w-full h-full object-cover" /> : member.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-white font-bold text-sm">{member.name}</h3>
+                                            <p className="text-xs text-zinc-500">{member.role} • {member.age} yrs old</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-white font-bold text-sm">{member.name}</h3>
-                                        <p className="text-xs text-zinc-500">{member.role} • {member.age} yrs old</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white" title="View History">
-                                        <History size={16} />
-                                    </button>
                                     <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white">
                                         <ChevronRight size={16} />
                                     </button>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex gap-4">
-                        <div className="p-2 bg-amber-500/10 rounded-lg h-fit text-amber-500">
-                            <Fingerprint size={20} />
-                        </div>
-                        <div>
-                            <h4 className="text-sm font-bold text-amber-500 mb-1">Medical Info & Waivers</h4>
-                            <p className="text-xs text-zinc-400">Please ensure medical forms are updated for all students before the first rehearsal.</p>
-                        </div>
+                            ))
+                        )}
                     </div>
                 </div>
             )}
@@ -191,31 +167,24 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Workspace Context</h2>
-                        <p className="text-zinc-500 text-sm">Select which show data loads by default when you log in.</p>
+                        <p className="text-zinc-500 text-sm">Select active production.</p>
                     </div>
-
                     <div className="grid grid-cols-1 gap-3">
                         {shows.map((show) => (
                             <form key={show.id} action={switchProduction}>
                                 <input type="hidden" name="productionId" value={show.id} />
                                 <input type="hidden" name="redirectPath" value="/settings" />
-                                <button 
-                                    className={`w-full group relative overflow-hidden flex items-center justify-between p-4 rounded-xl border transition-all ${activeId === show.id ? 'bg-emerald-900/10 border-emerald-500/50' : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'}`}
-                                >
+                                <button className={`w-full group relative overflow-hidden flex items-center justify-between p-4 rounded-xl border transition-all ${activeId === show.id ? 'bg-emerald-900/10 border-emerald-500/50' : 'bg-black/20 border-white/5 hover:bg-black/40 hover:border-white/10'}`}>
                                     <div className="flex items-center gap-4 z-10">
                                         <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-lg font-black ${activeId === show.id ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-600'}`}>
                                             {show.title.charAt(0)}
                                         </div>
                                         <div className="text-left">
                                             <div className={`text-sm font-bold ${activeId === show.id ? 'text-white' : 'text-zinc-300'}`}>{show.title}</div>
-                                            <div className="text-xs font-medium text-zinc-500">{show.location} • {show.season}</div>
+                                            <div className="text-xs font-medium text-zinc-500">{show.location}</div>
                                         </div>
                                     </div>
-                                    {activeId === show.id && (
-                                        <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold uppercase tracking-widest z-10">
-                                            <CheckCircle2 size={16}/> Active
-                                        </div>
-                                    )}
+                                    {activeId === show.id && <div className="flex items-center gap-2 text-emerald-500 text-xs font-bold uppercase tracking-widest z-10"><CheckCircle2 size={16}/> Active</div>}
                                 </button>
                             </form>
                         ))}
@@ -238,12 +207,11 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                                     <Shield size={20} />
                                 </div>
                                 <div>
-                                    <h4 className="text-sm font-bold text-white">Current Role: {user.role}</h4>
-                                    <p className="text-xs text-zinc-500">Family ID: {user.id} • Table: Families (634)</p>
+                                    <h4 className="text-sm font-bold text-white">Global Role: {initialUser.role}</h4>
+                                    <p className="text-xs text-zinc-500">
+                                        {productionRole ? `Show Role: ${productionRole}` : "No specific show role assigned."}
+                                    </p>
                                 </div>
-                            </div>
-                            <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider rounded-full">
-                                Active Status
                             </div>
                         </div>
                     </div>
@@ -252,16 +220,18 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                         <PermissionSection 
                             title="Production Management" 
                             permissions={[
-                                { label: "Cast Grid Access", desc: "View and edit the master cast list.", granted: true, level: 'write' },
-                                { label: "Audition Data", desc: "Access sensitive audition forms and scores.", granted: true, level: 'read' },
+                                { label: "Cast Grid Access", desc: "View master cast list.", ...checkAccess('view_cast_list') },
+                                { label: "Casting Management", desc: "Modify roles and assignments.", ...checkAccess('manage_casting') },
+                                { label: "Compliance Data", desc: "Access medical forms.", ...checkAccess('edit_compliance') },
                             ]}
                         />
                         
                         <PermissionSection 
-                            title="Financials" 
+                            title="Financials & Sensitive Data" 
                             permissions={[
-                                { label: "Budget Reports", desc: "View production budget and expenditure.", granted: false, level: 'read' },
-                                { label: "Tuition Payments", desc: "Process payments and view balances.", granted: false, level: 'read' },
+                                { label: "Budget Reports", desc: "View production budget.", ...checkAccess('view_financials') },
+                                { label: "Billing & Invoices", desc: "View personal billing history.", ...checkAccess('view_billing') },
+                                { label: "Sensitive Reports", desc: "View incident reports.", ...checkAccess('view_sensitive_reports') },
                             ]}
                         />
                     </div>
@@ -274,14 +244,13 @@ export default function SettingsClient({ shows, activeId, initialUser }: Setting
                      <div className="flex justify-between items-end">
                         <div>
                             <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Billing & Donations</h2>
-                            <p className="text-zinc-500 text-sm">Manage payment methods and recurring donations.</p>
+                            <p className="text-zinc-500 text-sm">Manage payment methods.</p>
                         </div>
                     </div>
-                     <div className="p-12 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center group hover:border-zinc-700 transition-colors">
-                        <CreditCard size={48} className="text-zinc-700 mb-4 group-hover:text-zinc-600 transition-colors" />
-                        <h3 className="text-zinc-400 font-bold mb-2">No Payment Methods on File</h3>
-                        <p className="text-zinc-500 text-xs max-w-sm mb-6 leading-relaxed">Add a credit card to easily pay for tuition, tickets, and production fees. All data is securely encrypted.</p>
-                        <button className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg transition-colors border border-white/5">
+                     <div className="p-12 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center">
+                        <CreditCard size={48} className="text-zinc-700 mb-4" />
+                        <h3 className="text-zinc-400 font-bold mb-2">No Payment Methods</h3>
+                        <button className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-lg border border-white/5">
                             Add Payment Method
                         </button>
                      </div>

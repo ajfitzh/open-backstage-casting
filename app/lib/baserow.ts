@@ -759,6 +759,28 @@ export async function getUserProfile(email: string) {
 
   return profile;
 }
+
+// app/lib/baserow.ts
+
+export async function getUserProductionRole(userId: number, productionId: number) {
+  // We search the 'Show Team Assignments' table (610)
+  // We need a row that matches BOTH the Person AND the Production
+  
+  const params = {
+    filter_type: "AND",
+    [`filter__${DB.SHOW_TEAM.FIELDS.PERSON}__link_row_has`]: userId,
+    [`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`]: productionId,
+  };
+
+  const rows = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
+
+  if (!rows || rows.length === 0) return null;
+
+  // Return the Role Name (e.g. "Director")
+  // Note: This assumes 'Position' is a Link Row to your Roles table, or a Text field.
+  // If it's a Link Row, we grab the value.
+  return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
+}
 // --- CALLBACKS ---
 
 export async function getCallbackSlots(productionId: number) {
