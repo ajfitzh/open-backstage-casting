@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 
 // --- 🗺️ CONFIGURATION ---
-// This maps specific keywords to look for in the "Signed Doc Types" or other fields
 const LEGACY_MAP = {
   legal: { 
     title: "Legal & Safety", 
@@ -21,8 +20,8 @@ const LEGACY_MAP = {
   financial: { 
     title: "Financials", 
     forms: [
-      { id: "fee", label: "Production Fee", key: "Fee" }, // Checks "Paid Fees"
-      { id: "tickets", label: "Ticket Quota", key: "Tickets" } // Checks Sales vs Quota
+      { id: "fee", label: "Production Fee", key: "Fee" }, 
+      { id: "tickets", label: "Ticket Quota", key: "Tickets" } 
     ] 
   },
   production: { 
@@ -48,86 +47,79 @@ export default function StaffClient({ productionTitle, assignments, people, comp
   const roster = useMemo(() => {
     if (!Array.isArray(assignments)) return [];
 
-    // 1. Create a Lookup Map for Compliance Data (Raw People Rows)
-    // Key: Person ID (as string for safety) -> Value: Raw Row Object
+    // 1. Create Lookup Maps
     const complianceMap = new Map();
     if (Array.isArray(compliance)) {
-        compliance.forEach((row: any) => {
-            complianceMap.set(row.id.toString(), row);
-        });
+        compliance.forEach((row: any) => complianceMap.set(row.id.toString(), row));
     }
+    
+    // Helper to find headshot in raw Baserow data
+    const getHeadshot = (row: any) => {
+        if (!row) return null;
+        // Try Common Field Names (Baserow user_field_names=true)
+        const fileArr = row["Headshot"] || row["headshot"] || row["Avatar"] || row["Profile Picture"];
+        // Try Schema ID if known (from your previous schema: field_5776)
+        const fileArrById = row["field_5776"]; 
+        
+        const target = fileArr || fileArrById;
+        if (Array.isArray(target) && target.length > 0) return target[0].url;
+        return null;
+    };
 
-    // 2. Group Assignments by Person
-    // (An actor might have multiple roles, we want one card per actor)
     const uniqueActors = new Map();
 
     assignments.forEach((a: any) => {
       const personId = a.personId?.toString();
       if (!personId) return;
 
-      // If we haven't seen this actor yet, initialize them
       if (!uniqueActors.has(personId)) {
-        
         // --- 🔍 DATA LOOKUP ---
         const rawPersonData = complianceMap.get(personId) || {};
+        const peopleListMatch = people.find((p: any) => p.id.toString() === personId);
         
-        // Helper: Check Lookup Arrays (Baserow returns [{id:1, value:"Text"}] for lookups)
+        // Helper: Check Lookup Arrays
         const hasSignature = (keyword: string) => {
-           const docs = rawPersonData["Signed Doc Types"] || []; // Field name from Schema
+           const docs = rawPersonData["Signed Doc Types"] || []; 
            if (!Array.isArray(docs)) return false;
            return docs.some((d: any) => d.value && d.value.includes(keyword));
         };
 
         const hasBio = () => {
-           const bio = rawPersonData["Original Bio"]; // Lookup or Text
-           // If lookup
+           const bio = rawPersonData["Original Bio"]; 
            if (Array.isArray(bio) && bio.length > 0) return true;
-           // If text
            if (typeof bio === 'string' && bio.length > 10) return true;
            return false;
         };
 
-        // measurements are usually a linked row
         const hasMeasurements = () => {
             const m = rawPersonData["Measurements"];
             return Array.isArray(m) && m.length > 0;
         };
         
-        // Helper: Safe Headshot URL
-        const headshot = rawPersonData["Headshot"]?.[0]?.url || 
-                         people.find((p: any) => p.id.toString() === personId)?.["Headshot"]?.[0]?.url;
+        // 📸 IMAGE FIX: Try finding image in Compliance row OR People list
+        const avatarUrl = getHeadshot(rawPersonData) || getHeadshot(peopleListMatch);
 
         uniqueActors.set(personId, {
           id: personId,
           name: a.personName || "Unknown Actor",
-          roles: [a.name], // Start list of roles
-          avatar: headshot,
+          roles: [a.name],
+          avatar: avatarUrl, // <--- Using the robust helper
           
-          // --- 🏗️ AUDIT LOGIC (The Real Check) ---
+          // --- 🏗️ AUDIT LOGIC ---
           audit: {
-            // Legal
             medical: hasSignature("Medical"),
             liability: hasSignature("Liability"),
             photo: hasSignature("Photo"),
-            
-            // Financial
-            fees: rawPersonData["Paid Fees"] === true, // Assuming checkbox
-            ticketsMet: false, // Need ticket sales logic if available
-            
-            // Production
+            fees: rawPersonData["Paid Fees"] === true,
+            ticketsMet: false, 
             bio: hasBio(),
             measurements: hasMeasurements(),
-            
-            // Family
             committee: Array.isArray(rawPersonData["Form Committee Preferences"]) && rawPersonData["Form Committee Preferences"].length > 0
           },
-          
-          // Meta
-          ticketsSold: 0, // Placeholder if no sales data
+          ticketsSold: 0, 
           committeeName: "Unassigned", 
         });
       } else {
-        // If actor exists, just add the extra role
         const existing = uniqueActors.get(personId);
         if (!existing.roles.includes(a.name)) {
             existing.roles.push(a.name);
@@ -138,7 +130,7 @@ export default function StaffClient({ productionTitle, assignments, people, comp
     return Array.from(uniqueActors.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [assignments, people, compliance]);
 
-  // Stats for the Dashboard
+  // Stats
   const stats = useMemo(() => {
     const total = roster.length || 1;
     const calc = (fn: (p: any) => boolean) => Math.round((roster.filter(fn).length / total) * 100);
@@ -183,20 +175,24 @@ export default function StaffClient({ productionTitle, assignments, people, comp
              <div className="h-full flex flex-col items-center justify-center text-zinc-500">
                 <Users size={48} className="mb-4 opacity-20" />
                 <p>No cast members found in this production.</p>
-                <p className="text-xs mt-2">Check the &quot;Assignments&ldquo; table in Baserow.</p>
+                <p className="text-xs mt-2">Check the &quot;Assignments&quot; table in Baserow.</p>
              </div>
           ) : (
+            // 🚨 REMOVE OVERFLOW-HIDDEN FROM GRID PARENT IF IT EXISTS, 
+            // BUT USUALLY THE ISSUE IS ON THE CARD ITSELF.
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 pb-20">
               {roster.filter((p: any) => p.name.toLowerCase().includes(filter.toLowerCase())).map((member: any) => (
                 <div 
                   key={member.id} 
                   onClick={() => setSelectedMember(member)}
-                  className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-white/20 hover:bg-zinc-900/60 transition-all cursor-pointer relative overflow-hidden"
+                  // 🚨 TOOLTIP FIX 1: Removed 'overflow-hidden'. Added 'hover:z-10' so hovered card is on top.
+                  className="group bg-zinc-900/40 border border-white/5 rounded-2xl p-5 hover:border-white/20 hover:bg-zinc-900/60 transition-all cursor-pointer relative hover:z-10"
                 >
                   {/* Status Bar Top */}
-                  <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
+                  {/* 🚨 TOOLTIP FIX 2: Added rounded-t-2xl manually here since parent doesn't clip anymore */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-white/5 rounded-t-2xl">
                     <div 
-                        className={`h-full transition-all duration-1000 ${member.audit.medical && member.audit.liability ? 'bg-emerald-500' : 'bg-red-500'}`} 
+                        className={`h-full transition-all duration-1000 rounded-tl-2xl ${member.audit.medical && member.audit.liability ? 'bg-emerald-500' : 'bg-red-500'} ${member.audit.medical && member.audit.liability ? 'rounded-tr-2xl' : ''}`} 
                         style={{ width: member.audit.medical && member.audit.liability ? '100%' : '50%' }} 
                     />
                   </div>
@@ -224,7 +220,7 @@ export default function StaffClient({ productionTitle, assignments, people, comp
                     </div>
 
                     {/* Quick Status Icons */}
-                    <div className="flex flex-col gap-1.5 shrink-0 z-10">
+                    <div className="flex flex-col gap-1.5 shrink-0 z-20">
                         <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
                           <RichStatusIcon type="legal" member={member} />
                           <RichStatusIcon type="financial" member={member} />
@@ -265,14 +261,13 @@ export default function StaffClient({ productionTitle, assignments, people, comp
           )}
         </main>
       
-      {/* 🟢 DRAWER COMPONENT (Detailed View) */}
+      {/* 🟢 DRAWER COMPONENT */}
       {selectedMember && (
          <div className="fixed inset-0 z-50 flex justify-end">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setSelectedMember(null)} />
             <aside className="relative w-full max-w-md bg-zinc-900 border-l border-white/10 shadow-2xl p-8 flex flex-col animate-in slide-in-from-right duration-300">
                <button onClick={() => setSelectedMember(null)} className="absolute top-6 right-6 p-2 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors"><X/></button>
                
-               {/* Drawer Header */}
                <div className="flex items-center gap-4 mb-8">
                    <div className="w-16 h-16 rounded-2xl bg-zinc-800 overflow-hidden shadow-lg border border-white/10">
                         {selectedMember.avatar ? (
@@ -291,7 +286,6 @@ export default function StaffClient({ productionTitle, assignments, people, comp
                    </div>
                </div>
 
-               {/* Drawer Checklist */}
                <div className="space-y-8 overflow-y-auto custom-scrollbar pr-2">
                   {Object.entries(LEGACY_MAP).map(([key, section]) => (
                     <div key={key}>
@@ -300,9 +294,7 @@ export default function StaffClient({ productionTitle, assignments, people, comp
                       </h4>
                       <div className="bg-white/5 rounded-xl overflow-hidden border border-white/5">
                           {section.forms.map((form) => {
-                             // Dynamic Check based on the ID we mapped in useMemo
                              const isDone = selectedMember.audit[form.id as keyof typeof selectedMember.audit];
-                             
                              return (
                                <div key={form.label} className="flex justify-between items-center px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
                                  <span className="text-sm text-zinc-300 font-medium">{form.label}</span>
@@ -334,9 +326,7 @@ export default function StaffClient({ productionTitle, assignments, people, comp
 // --- HELPER COMPONENTS ---
 
 function RichStatusIcon({ type, member }: any) {
-  // Config mapping
   const config = LEGACY_MAP[type as keyof typeof LEGACY_MAP];
-  
   const icons = { 
     legal: <ShieldCheck size={12}/>, 
     financial: <CircleDollarSign size={12}/>, 
@@ -361,12 +351,14 @@ function RichStatusIcon({ type, member }: any) {
   };
 
   return (
-    <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 hover:scale-105 ${colors[status as keyof typeof colors]}`}>
+    // 🚨 TOOLTIP FIX 3: Increased hover scale and Z-Index handling
+    <div className={`group/icon relative p-1.5 rounded-md border transition-all cursor-help hover:z-50 hover:scale-110 ${colors[status as keyof typeof colors]}`}>
       
       {icons[type as keyof typeof icons]}
 
       {/* TOOLTIP */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-950 border border-white/10 rounded-xl shadow-2xl opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
+      {/* Added `backdrop-blur-xl` to ensure legibility over other cards */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,1)] opacity-0 group-hover/icon:opacity-100 transition-opacity pointer-events-none z-50 p-3">
         <div className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-2 border-b border-white/10 pb-1">
             {config.title}
         </div>
