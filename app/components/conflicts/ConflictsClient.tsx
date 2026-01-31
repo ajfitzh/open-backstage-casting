@@ -13,7 +13,7 @@ import ConflictAnalysisDashboard from "./ConflictAnalysisDashboard";
 
 interface Conflict {
   id: number;
-  personId: number;
+  personId?: number;
   personName: string;
   type: string;
   minutes: number;
