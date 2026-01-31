@@ -11,15 +11,15 @@ import {
   Home, Theater, Banknote 
 } from 'lucide-react';
 import { hasPermission } from '@/app/lib/permissions'; 
+import { useSimulation } from '@/app/context/SimulationContext'; 
 
-interface SidebarProps {
-    globalRole?: string;
-    productionRole?: string | null;
-}
-
-export default function StaffSidebar({ globalRole = "Student", productionRole = null }: SidebarProps) {
+export default function StaffSidebar() {
   const pathname = usePathname();
   
+  // 🚀 HOOK: Grab roles from the Simulation Context
+  // If God Mode is active in Settings, these values update INSTANTLY.
+  const { role: globalRole, productionRole, isSimulating } = useSimulation();
+
   const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
   const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
 
@@ -28,16 +28,15 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
   }, [pathname, isCastingRoute]);
 
   // --- PERMISSION CHECKS ---
-  // We calculate these once to keep the JSX clean
   const canViewCasting   = hasPermission(globalRole, productionRole, 'view_auditions');
   const canManageCasting = hasPermission(globalRole, productionRole, 'manage_casting');
   const canViewLogistics = hasPermission(globalRole, productionRole, 'view_cast_list');
   const canViewBusiness  = hasPermission(globalRole, productionRole, 'view_financials');
-  // Education is usually Staff-only, so we check for compliance/cast list access
-  const canViewAcademy   = hasPermission(globalRole, productionRole, 'edit_compliance') || hasPermission(globalRole, productionRole, 'view_cast_list');
+  // Education is Staff-only usually
+  const canViewAcademy   = hasPermission(globalRole, productionRole, 'edit_compliance');
 
   return (
-    <nav className="w-64 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0">
+    <nav className={`w-64 bg-zinc-900 border-r border-white/5 flex flex-col h-full shrink-0 transition-colors duration-500 ${isSimulating ? 'border-red-500/30' : ''}`}>
       
       <Link href="/" className="h-16 flex items-center px-6 border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group">
         <div className="flex flex-col">
@@ -45,7 +44,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
             OPEN<span className="text-white">BACKSTAGE</span>
             </h1>
             <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest group-hover:text-zinc-500">
-                Staff Portal
+                {isSimulating ? <span className="text-red-500 animate-pulse">GOD MODE ACTIVE</span> : "Staff Portal"}
             </span>
         </div>
       </Link>
@@ -56,7 +55,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
              <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={pathname === '/'} />
         </div>
 
-        {/* ZONE 1: CREATIVE TEAM (Visible to mostly everyone involved in the show) */}
+        {/* ZONE 1: CREATIVE TEAM */}
         {canViewLogistics && (
             <div className="animate-in slide-in-from-left-2 duration-300">
                 <div className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
@@ -66,7 +65,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
                     <NavItem href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
                     <NavItem href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
                     
-                    {/* Casting Suite: Requires specific 'view_auditions' or 'manage_casting' */}
+                    {/* Casting Suite */}
                     {canViewCasting && (
                         <div>
                             <button 
@@ -83,7 +82,6 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
                             {isCastingOpen && (
                                 <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1 animate-in slide-in-from-left-2 duration-200">
                                     <SubNavItem href="/auditions" icon={<Mic2 size={14}/>} label="Auditions" active={pathname === '/auditions'} />
-                                    {/* Callbacks & Grid usually require Manager access */}
                                     {canManageCasting && (
                                         <>
                                             <SubNavItem href="/callbacks" icon={<Megaphone size={14}/>} label="Callbacks" active={pathname === '/callbacks'} />
@@ -98,7 +96,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
             </div>
         )}
 
-        {/* ZONE 2: LOGISTICS & OPS (Volunteers, Staff, Contractors) */}
+        {/* ZONE 2: LOGISTICS & OPS */}
         {canViewLogistics && (
             <div className="animate-in slide-in-from-left-2 duration-300 delay-75">
                 <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
@@ -112,7 +110,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
             </div>
         )}
 
-        {/* ZONE 3: BUSINESS OFFICE (Admins, Execs, Finance Only) */}
+        {/* ZONE 3: BUSINESS OFFICE */}
         {canViewBusiness && (
             <div className="animate-in slide-in-from-left-2 duration-300 delay-100">
                 <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
@@ -125,7 +123,7 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
             </div>
         )}
 
-        {/* ZONE 4: ACADEMY (Staff Only) */}
+        {/* ZONE 4: ACADEMY */}
         {canViewAcademy && (
             <div className="animate-in slide-in-from-left-2 duration-300 delay-150">
                 <div className="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
@@ -147,7 +145,6 @@ export default function StaffSidebar({ globalRole = "Student", productionRole = 
   );
 }
 
-// ... NavItem and SubNavItem remain unchanged ...
 function NavItem({ href, icon, label, active }: any) {
     return (
         <Link 

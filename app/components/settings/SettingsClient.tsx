@@ -10,6 +10,7 @@ import {
 import { switchProduction } from '@/app/actions';
 import { signOut } from "next-auth/react";
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
+import { useSimulation } from '@/app/context/SimulationContext'; 
 
 // --- Types ---
 export interface FamilyMember {
@@ -34,27 +35,27 @@ interface SettingsProps {
   shows: any[];
   activeId: number;
   initialUser: UserProfile;
-  productionRole: string | null;
+  // We accept the REAL production role as a prop for reference/security checks
+  realProductionRole: string | null; 
 }
 
-export default function SettingsClient({ shows, activeId, initialUser, productionRole }: SettingsProps) {
+export default function SettingsClient({ shows, activeId, initialUser, realProductionRole }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   
-  // --- REALITY DISTORTION FIELD (GOD MODE) ---
-  const [simGlobal, setSimGlobal] = useState<string | null>(null);
-  const [simProd, setSimProd] = useState<string | null>(null);
+  // 🚀 USE THE BRIDGE: Get Effective Roles & Controls
+  const { 
+    role: effectiveGlobalRole, 
+    productionRole: effectiveProdRole, 
+    simulate, 
+    reset, 
+    isSimulating 
+  } = useSimulation();
   
-  const user = initialUser;
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
 
-  // 1. THE CHECKER: Determines access based on Real OR Simulated roles
+  // 1. THE CHECKER: Determines access based on EFFECTIVE (Simulated or Real) roles
   const checkAccess = (perm: Permission) => {
-    // If simGlobal/simProd are set, use them. Otherwise, use real data.
-    const effectiveGlobal = simGlobal || initialUser.role;
-    const effectiveProd = simProd !== null ? simProd : productionRole;
-
-    const granted = hasPermission(effectiveGlobal, effectiveProd, perm);
-    
+    const granted = hasPermission(effectiveGlobalRole, effectiveProdRole, perm);
     return {
       granted,
       level: granted ? (perm.includes('edit') || perm.includes('manage') ? 'write' : 'read') : 'locked'
@@ -62,7 +63,7 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
   };
 
   // 2. THE EJECTOR SEAT 💺
-  // If you lose permission for the tab you are looking at, go back to Profile.
+  // If you switch roles and lose permission for the current tab, redirect to Profile.
   useEffect(() => {
     const canSeeBilling = checkAccess('view_billing').granted;
     const canSeeSystem = checkAccess('view_cast_list').granted; // Proxy for Staff/Volunteer access
@@ -70,12 +71,12 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
     if (activeTab === 'billing' && !canSeeBilling) setActiveTab('profile');
     if (activeTab === 'permissions' && !canSeeSystem) setActiveTab('profile');
     if (activeTab === 'context' && !canSeeSystem) setActiveTab('profile');
-  }, [simGlobal, simProd, activeTab]);
+  }, [effectiveGlobalRole, effectiveProdRole, activeTab]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full relative">
         
-        {/* SIDEBAR NAVIGATION */}
+        {/* INNER SIDEBAR NAVIGATION */}
         <nav className="w-full lg:w-64 flex flex-col gap-1 shrink-0">
             <div className="px-4 py-4 mb-2">
                 <h1 className="text-xl font-black italic tracking-tighter text-white">SETTINGS</h1>
@@ -124,14 +125,14 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                             <p className="text-zinc-500 text-sm">Manage your personal contact information.</p>
                         </div>
                         <div className="px-3 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded-full uppercase tracking-wide">
-                            {user.role}
+                            {initialUser.role} {/* Always show REAL role here to avoid confusion */}
                         </div>
                     </div>
 
                     <div className="flex items-center gap-6 pb-8 border-b border-white/5">
                         <div className="w-24 h-24 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center text-3xl font-black text-zinc-700 shadow-2xl relative overflow-hidden">
-                            {user.name ? (
-                                user.name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase()
+                            {initialUser.name ? (
+                                initialUser.name.split(' ').map((n:string) => n[0]).join('').substring(0, 2).toUpperCase()
                             ) : 'AF'}
                         </div>
                         <div className="space-y-2">
@@ -142,11 +143,11 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InputGroup label="Full Name" value={user.name} icon={<User size={16}/>} />
-                        <InputGroup label="Email Address" value={user.email} icon={<Mail size={16}/>} disabled />
-                        <InputGroup label="Phone Number" value={user.phone} icon={<Phone size={16}/>} />
+                        <InputGroup label="Full Name" value={initialUser.name} icon={<User size={16}/>} />
+                        <InputGroup label="Email Address" value={initialUser.email} icon={<Mail size={16}/>} disabled />
+                        <InputGroup label="Phone Number" value={initialUser.phone} icon={<Phone size={16}/>} />
                         <div className="md:col-span-2">
-                             <InputGroup label="Mailing Address" value={user.address} icon={<MapPin size={16}/>} />
+                             <InputGroup label="Mailing Address" value={initialUser.address} icon={<MapPin size={16}/>} />
                         </div>
                     </div>
                 </div>
@@ -163,12 +164,12 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                        {user.familyMembers.length === 0 ? (
+                        {initialUser.familyMembers.length === 0 ? (
                              <div className="p-8 border border-dashed border-zinc-800 rounded-xl text-center text-zinc-500 text-sm">
                                 No family members linked to your account.
                              </div>
                         ) : (
-                            user.familyMembers.map((member) => (
+                            initialUser.familyMembers.map((member) => (
                                 <div key={member.id} className="group p-4 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 rounded-xl transition-all flex items-center justify-between">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400 overflow-hidden relative border border-white/5">
@@ -235,12 +236,14 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-white">
-                                        Global Role: {simGlobal || initialUser.role}
-                                        {simGlobal && <span className="text-red-400 ml-2 text-xs uppercase">(Simulated)</span>}
+                                        {/* Display Effective Role */}
+                                        Global Role: {effectiveGlobalRole}
+                                        {effectiveGlobalRole !== initialUser.role && <span className="text-red-400 ml-2 text-xs uppercase">(Simulated)</span>}
                                     </h4>
                                     <p className="text-xs text-zinc-500">
-                                        Show Role: {simProd !== null ? simProd : (productionRole || "None")}
-                                        {simProd !== null && <span className="text-red-400 ml-2 uppercase">(Simulated)</span>}
+                                        {/* Display Effective Production Role */}
+                                        Show Role: {effectiveProdRole || "None"}
+                                        {effectiveProdRole !== realProductionRole && <span className="text-red-400 ml-2 uppercase">(Simulated)</span>}
                                     </p>
                                 </div>
                             </div>
@@ -291,14 +294,15 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
         </div>
 
         {/* 3. THE DEV WIDGET (GOD MODE) */}
+        {/* Only visible to REAL Admins/Execs to prevent hacking */}
         {['Admin', 'Executive Director'].includes(initialUser.role) && (
             <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-10">
-                <div className="bg-zinc-900 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
+                <div className="bg-zinc-950 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
                     <div className="flex items-center gap-2 mb-3 text-red-400 border-b border-white/5 pb-2">
                         <Shield size={14} />
                         <span className="text-[10px] font-black uppercase tracking-widest">God Mode</span>
                         <button 
-                            onClick={() => { setSimGlobal(null); setSimProd(null); }}
+                            onClick={reset}
                             className="ml-auto text-[9px] underline text-zinc-500 hover:text-white"
                         >
                             Reset
@@ -309,14 +313,14 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                         <div>
                             <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Global Role</label>
                             <select 
-                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white"
-                                value={simGlobal || ""}
-                                onChange={(e) => setSimGlobal(e.target.value || null)}
+                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                value={isSimulating ? effectiveGlobalRole : ""}
+                                onChange={(e) => simulate(e.target.value || null, effectiveProdRole)}
                             >
                                 <option value="">Real ({initialUser.role})</option>
                                 <option value="Executive Director">Executive Director (You)</option>
-                                <option value="Finance Manager">Finance Manager (Krista)</option>
-                                <option value="Production Coordinator">Prod. Coordinator (Jenny)</option>
+                                <option value="Finance Manager">Finance Manager</option>
+                                <option value="Production Coordinator">Prod. Coordinator</option>
                                 <option value="Staff">Generic Staff</option>
                                 <option value="Contractor">Contractor</option>
                                 <option value="Parent/Guardian">Parent</option>
@@ -326,11 +330,11 @@ export default function SettingsClient({ shows, activeId, initialUser, productio
                         <div>
                             <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Simulate Show Role</label>
                             <select 
-                                className="w-full bg-zinc-950 border border-white/10 rounded px-2 py-1 text-xs text-white"
-                                value={simProd || ""}
-                                onChange={(e) => setSimProd(e.target.value || null)}
+                                className="w-full bg-zinc-900 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                                value={effectiveProdRole || ""}
+                                onChange={(e) => simulate(effectiveGlobalRole === initialUser.role ? null : effectiveGlobalRole, e.target.value || null)}
                             >
-                                <option value="">Real ({productionRole || "None"})</option>
+                                <option value="">Real ({realProductionRole || "None"})</option>
                                 <option value="Director">Director</option>
                                 <option value="Choreographer">Choreographer</option>
                                 <option value="Stage Manager">Stage Manager</option>
