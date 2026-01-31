@@ -273,30 +273,30 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🎨 COLOR THEMES: One for each "Engine"
+  // 🎨 THEMATIC COLOR ENGINE
   const getTrackStyles = (track: TrackType) => {
     switch (track) {
       case 'Music':
-        return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.1)]';
+        return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.15)]';
       case 'Dance':
-        return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.1)]';
+        return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
       case 'Acting':
-        return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.1)]';
+        return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
       default:
         return 'bg-zinc-800 border-zinc-500 text-zinc-100';
     }
   };
 
-  // 🚀 HELPERS
+  // 🚀 GRID INTERACTION HELPERS
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
       if(!sceneId) return;
       const startTime = hour + (min / 60);
       const newBlock: any = {
-          id: Date.now().toString(), // Temp ID
+          id: Date.now().toString(),
           sceneId, track, day, weekOffset: currentWeekOffset, startTime, duration: 30, status: 'New',
-          isMerged: false 
+          span: 1 
       };
       setSchedule((prev: any) => [...prev, newBlock]);
       setDraggedSceneId(null);
@@ -319,17 +319,28 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
           const currentIndex = tracks.indexOf(item.track);
           const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
           if (newIndex < 0 || newIndex >= tracks.length) return item;
-          return { ...item, track: tracks[newIndex], isMerged: false };
+          return { ...item, track: tracks[newIndex] };
       }));
   };
 
-  const toggleMerge = (itemId: string) => {
-      setSchedule((prev: any) => prev.map((item: any) => 
-          item.id === itemId ? { ...item, isMerged: !item.isMerged } : item
-      ));
+  const updateSpan = (itemId: string, direction: 'more' | 'less') => {
+      setSchedule((prev: any) => prev.map((item: any) => {
+          if (item.id !== itemId) return item;
+          const currentSpan = item.span || 1;
+          const tracks: TrackType[] = ['Acting', 'Music', 'Dance'];
+          const startIndex = tracks.indexOf(item.track);
+          
+          let newSpan = direction === 'more' ? currentSpan + 1 : currentSpan - 1;
+          
+          // Edge logic: Prevent spanning out of the grid bounds
+          if (startIndex + newSpan > tracks.length) newSpan = currentSpan;
+          if (newSpan < 1) newSpan = 1;
+
+          return { ...item, span: newSpan };
+      }));
   };
 
-  // 📅 CALENDAR MATH
+  // 📅 CALENDAR DATE LOGIC
   const weekLabel = useMemo(() => {
       const today = new Date();
       const nextFri = new Date(today);
@@ -338,7 +349,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   }, [currentWeekOffset]);
 
   const generateSlots = (start: number, end: number) => {
-      const s: { h: number; m: number; val: number; }[] = [];
+      const s = [];
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
       return s;
   };
@@ -368,8 +379,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                              <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
                          </div>
                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                              <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
-                              <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : ""}>
+                              <span className="bg-black/30 px-1 rounded px-1.5 py-0.5">Act {scene.act}</span>
+                              <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>
                                   {scene.cast.length} Actors
                               </span>
                          </div>
@@ -378,87 +389,87 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              </div>
          </aside>
 
-         {/* MAIN CALENDAR GRID */}
+         {/* MAIN CALENDAR WORKSPACE */}
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
-                 <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="text-zinc-400 hover:text-white"><ChevronLeft size={16}/></button>
-                 <span className="text-xs font-bold text-zinc-300 w-48 text-center">{weekLabel}</span>
-                 <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="text-zinc-400 hover:text-white"><ChevronRight size={16}/></button>
+                 <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronLeft size={18}/></button>
+                 <span className="text-xs font-black uppercase tracking-widest text-zinc-300 w-48 text-center">{weekLabel}</span>
+                 <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronRight size={18}/></button>
              </div>
              
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
-                 <div className="flex gap-4 h-full min-h-[800px]">
+                 <div className="flex gap-4 h-full min-h-[850px]">
                      {[
                          { day: 'Fri', slots: friSlots, start: FRI_START }, 
                          { day: 'Sat', slots: satSlots, start: SAT_START }
                      ].map((col: any) => (
-                         <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/50 border border-white/10 rounded-xl overflow-hidden">
-                             <div className="p-2 bg-zinc-800 text-center font-black uppercase text-zinc-400 text-xs tracking-widest">{col.day === 'Fri' ? 'Friday' : 'Saturday'}</div>
+                         <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/30 border border-white/10 rounded-2xl overflow-hidden">
+                             <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">{col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}</div>
                              <div className="flex-1 relative flex">
-                                 {/* Time labels */}
-                                 <div className="w-12 bg-zinc-950/50 border-r border-white/5 text-[9px] text-zinc-600 font-mono text-right py-2">
+                                 {/* Time Labels */}
+                                 <div className="w-14 bg-black/20 border-r border-white/5 text-[10px] text-zinc-600 font-mono text-right py-2 shrink-0">
                                      {col.slots.filter((s:any) => s.m === 0).map((s:any) => (
-                                         <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
+                                         <div key={s.val} style={{ height: '128px' }} className="pr-3 pt-1">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
                                      ))}
                                  </div>
                                  
-                                 {/* Track Lanes */}
+                                 {/* Track Matrix */}
                                  <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
                                      {['Acting', 'Music', 'Dance'].map((track) => (
-                                         <div key={track} className="relative">
-                                              <div className="absolute top-0 inset-x-0 p-1 text-[8px] font-black uppercase text-center text-zinc-700 bg-zinc-900/80 z-10">{track}</div>
+                                         <div key={track} className="relative group/lane">
+                                              <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10">{track}</div>
                                               {col.slots.map((slot:any) => (
-                                                  <div key={slot.val} className={`h-8 border-b border-white/[0.03] ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
+                                                  <div key={slot.val} className={`h-8 border-b border-white/[0.02] ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
                                                        onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
                                               ))}
                                               
-                                              {/* Render Scheduled Items for this track */}
+                                              {/* RENDER BLOCKS */}
                                               {schedule.filter((i: any) => i.day === col.day && i.track === track && i.weekOffset === currentWeekOffset).map((item: any) => {
                                                   const top = (item.startTime - col.start) * 128;
                                                   const height = (item.duration / 60) * 128;
                                                   const scene = sceneData.find((s:any) => s.id === item.sceneId);
+                                                  const span = item.span || 1;
                                                   
                                                   return (
                                                       <div 
                                                         key={item.id} 
-                                                        className={`absolute rounded border-l-4 p-2 shadow-xl text-xs overflow-hidden transition-all group hover:brightness-110
+                                                        className={`absolute rounded-xl border-l-[6px] p-3 shadow-2xl text-xs overflow-hidden transition-all group hover:brightness-110 active:scale-[0.98]
                                                           ${getTrackStyles(item.track)}
-                                                          ${item.isMerged ? 'z-40 ring-2 ring-white/20' : 'z-20 left-1 right-1'}`}
+                                                          ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}`}
                                                         style={{ 
                                                             top: `${top}px`, 
                                                             height: `${height}px`,
-                                                            width: item.isMerged ? 'calc(200% + 1rem)' : 'auto' 
+                                                            width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' 
                                                         }}
                                                       >
-                                                           {/* Header Row */}
-                                                           <div className="flex justify-between items-start mb-1">
-                                                              <div className="font-black truncate pr-2 uppercase tracking-tighter leading-tight">
-                                                                {item.isMerged ? '🤝 JOINT: ' : ''}{scene?.name}
+                                                           {/* Block Header */}
+                                                           <div className="flex justify-between items-start mb-2">
+                                                              <div className="font-black truncate pr-2 uppercase tracking-tighter leading-tight text-[11px]">
+                                                                {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
                                                               </div>
-                                                              <button onClick={() => deleteItem(item.id)} className="opacity-0 group-hover:opacity-100 p-0.5 bg-red-500 hover:bg-red-400 text-white rounded transition-opacity">
-                                                                  <X size={10} />
+                                                              <button onClick={() => deleteItem(item.id)} className="opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all transform hover:scale-110">
+                                                                  <X size={12} />
                                                               </button>
                                                            </div>
 
-                                                           {/* Teleport / Merge Bar */}
-                                                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <button onClick={() => switchTrack(item.id, 'left')} disabled={item.track === 'Acting'} className="p-1 bg-black/40 rounded disabled:opacity-0"><ChevronLeft size={8}/></button>
+                                                           {/* Track Teleport & Expansion HUD */}
+                                                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0">
+                                                                <button onClick={() => switchTrack(item.id, 'left')} disabled={item.track === 'Acting'} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronLeft size={10}/></button>
                                                                 
-                                                                <button 
-                                                                    onClick={() => toggleMerge(item.id)}
-                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase flex items-center gap-1 ${item.isMerged ? 'bg-white text-black' : 'bg-black/40 text-white'}`}
-                                                                >
-                                                                    <Maximize2 size={8}/> {item.isMerged ? 'Split' : 'Merge'}
-                                                                </button>
+                                                                <div className="flex items-center bg-black/40 rounded-md overflow-hidden border border-white/5">
+                                                                    <button onClick={() => updateSpan(item.id, 'less')} className="px-2 py-1 hover:bg-white/10 border-r border-white/5 transition-colors"><Minus size={10}/></button>
+                                                                    <span className="px-2 py-1 text-[8px] font-black tracking-widest text-white/80">{span}x</span>
+                                                                    <button onClick={() => updateSpan(item.id, 'more')} className="px-2 py-1 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
+                                                                </div>
 
-                                                                <button onClick={() => switchTrack(item.id, 'right')} disabled={item.track === 'Dance'} className="p-1 bg-black/40 rounded disabled:opacity-0"><ChevronRight size={8}/></button>
+                                                                <button onClick={() => switchTrack(item.id, 'right')} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronRight size={10}/></button>
                                                            </div>
 
-                                                           {/* Duration Controls */}
-                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 flex gap-1 bg-black/40 rounded p-0.5 transition-opacity">
-                                                               <button onClick={() => updateDuration(item.id, -15)} className="p-0.5 hover:bg-white/20"><Minus size={10}/></button>
-                                                               <span className="text-[8px] font-mono self-center px-1">{item.duration}m</span>
-                                                               <button onClick={() => updateDuration(item.id, 15)} className="p-0.5 hover:bg-white/20"><Plus size={10}/></button>
+                                                           {/* Resize Handle / Time HUD */}
+                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-md rounded-lg p-1 transition-all border border-white/10">
+                                                               <button onClick={() => updateDuration(item.id, -15)} className="p-1 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
+                                                               <span className="text-[9px] font-mono font-bold text-white px-1">{item.duration}m</span>
+                                                               <button onClick={() => updateDuration(item.id, 15)} className="p-1 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
                                                            </div>
                                                       </div>
                                                   )
