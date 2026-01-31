@@ -1,194 +1,62 @@
-import { cookies } from 'next/headers';
-import Link from 'next/link';
-import { auth } from "@/auth";
-import { 
-  Users, Calendar, BarChart3, Ticket, 
-  ChevronRight, Sparkles, Cat, 
-  Theater, Waves, GraduationCap
-} from 'lucide-react';
-
-// 1. Import Baserow Fetchers
-import { 
-  getActiveProduction, 
-  getShowById, 
-  getAssignments, 
-  getCreativeTeam, 
-  getClasses,
-  getAuditionees,    
-  getScenes,         
-  getProductionEvents 
-} from '@/app/lib/baserow';
-
-// 2. Import Components
-import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
-import SeasonContext from '@/app/components/dashboard/SeasonContext';
-import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress'; 
+import { getActiveProduction, getScenes, getCastDemographics } from '@/app/lib/baserow';
+import DashboardClient from '@/app/components/dashboard/DashboardClient';
+import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress';
+import { getAuditionees, getAssignments, getProductionEvents } from '@/app/lib/baserow';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
-  const session = await auth();
-  const userRole = (session?.user as any)?.role || "Guest";
-
-  // --- RESOLVE SHOW ---
-  const cookieStore = await cookies();
-  const cookieId = cookieStore.get('active_production_id')?.value;
-  let show = null;
-  if (cookieId) show = await getShowById(cookieId);
-  if (!show) show = await getActiveProduction();
-
-  if (!show) {
-     return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
-  }
-
-  // --- PARALLEL FETCH ---
-  const [
-    assignments, 
-    creativeTeam, 
-    allClasses,
-    auditionees,
-    scenes,
-    events
-  ] = await Promise.all([
-      getAssignments(show.id),
-      getCreativeTeam(show.id),
-      getClasses(),
-      getAuditionees(show.id),
-      getScenes(show.id),
-      getProductionEvents(show.id)
-  ]);
+export default async function ProductionHubPage() {
+  const production = await getActiveProduction();
   
-  // --- SHOW STATS ---
-  const uniqueCastIds = new Set(
-    assignments
-      .filter((a: any) => a.personId) 
-      .map((a: any) => a.personId)
-  );
-  const castCount = uniqueCastIds.size;
+  if (!production) return <div className="p-10 text-zinc-500">No Active Production</div>;
 
-  // --- WORKFLOW STATUS LOGIC (Database + Manual Override) ---
+  // 1. Fetch Data in Parallel
+  // We need scenes for the Tracker, demographics for the Overview, 
+  // and the others for the Workflow Progress bar (optional, but nice to have here too)
+  const [scenes, demographics, auditionees, assignments, events] = await Promise.all([
+      getScenes(production.id),
+      getCastDemographics(),
+      getAuditionees(production.id),
+      getAssignments(production.id),
+      getProductionEvents(production.id)
+  ]);
+
+  // 2. Workflow Status Logic (Same as Dashboard)
   const hasOverride = (key: string) => {
-     // Check if the production's override list contains this specific key
-     return show.workflowOverrides?.some((tag: any) => tag.value === key);
+     return production.workflowOverrides?.some((tag: any) => tag.value === key);
   };
 
   const workflowStatus = {
-      // 1. Auditions: >5 people logged OR manual override
       hasAuditions: auditionees.length > 5 || hasOverride('Auditions'),
-      
-      // 2. Callbacks: Casting started OR manual override
       hasCallbacks: assignments.length > 0 || hasOverride('Callbacks'), 
-
-      // 3. Casting: Assignments exist OR manual override
       hasCast: assignments.length > 0 || hasOverride('Casting'),
-      
-      // 4. Points: Scenes have difficulty scores OR manual override
       hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)) || hasOverride('Calibration'),
-      
-      // 5. Schedule: Events exist OR manual override
       hasSchedule: events.length > 0 || hasOverride('Scheduling')
   };
 
-  // --- THEME ENGINE ---
-  const getShowTheme = (title: string) => {
-    const t = (title || "").toLowerCase();
-    if (t.includes('lion')) return { icon: <Cat size={220} />, color: 'text-orange-500', bg: 'from-orange-900/40 to-red-900/20', accent: 'text-orange-400' };
-    if (t.includes('mermaid')) return { icon: <Waves size={220} />, color: 'text-cyan-500', bg: 'from-cyan-900/30 to-blue-900/20', accent: 'text-cyan-400' };
-    return { icon: <Theater size={220} />, color: 'text-blue-500', bg: 'from-zinc-900 to-zinc-900', accent: 'text-blue-500' };
-  };
-
-  const theme = getShowTheme(show?.title);
-
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 pb-20 overflow-y-auto custom-scrollbar space-y-8">
+    <main className="p-8 bg-zinc-950 min-h-screen text-white pb-24">
       
-      {/* 1. HERO (Restored) */}
-      <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
-         <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
-            {theme.icon}
-        </div>
-        <div className="relative z-10 max-w-5xl">
-            <div className="flex items-center gap-3 mb-4">
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors duration-1000 ${theme.accent}`}>Active Production</span>
-                <span className="w-1 h-1 rounded-full bg-white/20"></span>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{show?.season}</span>
-            </div>
-            <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">{show?.title}</h1>
-            <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
-                <div className="flex gap-2 shrink-0">
-                    <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                        <Users size={18} className="text-zinc-400"/>
-                        <span className="text-sm font-black text-white">{castCount} Cast</span>
-                    </div>
-                     <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                        <Ticket size={18} className={theme.accent}/>
-                        <span className={`text-sm font-black ${theme.accent}`}>Box Office</span>
-                    </div>
-                </div>
-                <div className="hidden xl:block w-px h-8 bg-white/10"></div>
-                {creativeTeam && <CreativeTeam team={creativeTeam as any} />}
-            </div>
-        </div>
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-8">
+         <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight">{production.title} Production Hub</h1>
+            <p className="text-zinc-400 text-sm mt-1">Real-time status tracking and analytics</p>
+         </div>
       </div>
 
-      {/* 2. WORKFLOW TRACKER (The New Part) */}
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* TRACKER TABS (The Core Feature) */}
+      <DashboardClient 
+        scenes={scenes} 
+        demographics={demographics} 
+      />
+      
+      {/* Optional: Add the Roadmap at the bottom as a footer context */}
+      <div className="mt-12 pt-12 border-t border-white/5 opacity-50 hover:opacity-100 transition-opacity">
+         <h3 className="text-xs font-bold uppercase text-zinc-500 mb-4 tracking-widest">Global Progress</h3>
          <WorkflowProgress status={workflowStatus} />
       </div>
 
-      {/* 3. ACTION GRID (Restored) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="space-y-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
-             <ActionCard href="/schedule" title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
-             <ActionCard href="/casting" title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
-        </div>
-        <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics</h3>
-            <ActionCard href="/roster" title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
-            <ActionCard href="/reports" title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
-        </div>
-        <div className="space-y-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> Academy & Season</h3>
-             <ActionCard href="/education" title="Class Manager" desc="Weekly attendance status and enrollment" icon={<GraduationCap className="text-pink-400"/>} color="bg-pink-400"/>
-             <div className="p-6 rounded-3xl border border-dashed border-zinc-800/50 flex flex-col items-center justify-center text-center group transition-all hover:bg-zinc-900/30">
-                <Sparkles size={24} className="text-zinc-800 group-hover:text-purple-500/50 transition-all duration-500 mb-2"/>
-                <span className="text-[10px] font-black uppercase text-zinc-700 tracking-tighter">Season Planning</span>
-            </div>
-        </div>
-      </div>
-
-      {/* 4. SEASON CONTEXT (Restored) */}
-      <SeasonContext 
-         initialSeason={show?.season} 
-         allClasses={allClasses} 
-         activeShowStats={{ castCount }}
-      />
-
-      {/* FOOTER */}
-      <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
-          <div className="flex gap-2">
-            <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.5.0</div>
-            <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">{userRole}</div>
-          </div>
-      </div>
-    </div>
+    </main>
   );
-}
-
-function ActionCard({ href, title, desc, icon, color }: any) {
-    return (
-        <Link href={href} className="group relative block bg-zinc-900/50 border border-white/5 p-6 rounded-3xl hover:bg-zinc-900 hover:border-white/10 transition-all duration-300 shadow-xl overflow-hidden backdrop-blur-sm">
-            <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-0 group-hover:opacity-10 blur-2xl transition-all duration-500 ${color}`} />
-            <div className="flex items-center gap-5 relative z-10">
-                <div className="p-4 bg-black/40 rounded-2xl border border-white/5 group-hover:scale-110 group-hover:bg-black/60 transition-all duration-500">{icon}</div>
-                <div className="flex-1 min-w-0">
-                    <h4 className="font-black text-white text-base group-hover:text-white transition-colors tracking-tight">{title}</h4>
-                    <p className="text-xs text-zinc-500 font-medium line-clamp-1">{desc}</p>
-                </div>
-                <ChevronRight size={18} className="text-zinc-800 group-hover:text-white transition-all transform group-hover:translate-x-1" />
-            </div>
-        </Link>
-    )
 }
