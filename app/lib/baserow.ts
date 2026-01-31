@@ -422,6 +422,35 @@ export async function getProductionEvents() {
 // ==============================================================================
 // 👥 PEOPLE & STAFF
 // ==============================================================================
+// app/lib/baserow.ts
+
+export async function getCastDemographics() {
+  // 1. Fetch from PEOPLE table using Schema ID
+  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, { size: "200" });
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    // Use Safe Gets with Schema Fields
+    name: safeGet(row[DB.PEOPLE.FIELDS.FULL_NAME] || row[DB.PEOPLE.FIELDS.FIRST_NAME]),
+    
+    // 🎂 Age
+    age: parseFloat(safeGet(row[DB.PEOPLE.FIELDS.AGE], 0)),
+    
+    // 📏 Height in Inches
+    height: parseFloat(safeGet(row[DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES], 0)),
+    
+    // 🎭 Experience: Count linked assignments
+    // This uses the 'CAST_CREW_ASSIGNMENTS' field from your schema
+    showCount: Array.isArray(row[DB.PEOPLE.FIELDS.CAST_CREW_ASSIGNMENTS]) 
+        ? row[DB.PEOPLE.FIELDS.CAST_CREW_ASSIGNMENTS].length 
+        : 0,
+    
+    // 🚻 Gender
+    gender: safeGet(row[DB.PEOPLE.FIELDS.GENDER], "Unknown"),
+  }));
+}
 
 export async function getPeople() {
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
