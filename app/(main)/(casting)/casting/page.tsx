@@ -50,7 +50,8 @@ export default async function CastingPage() {
         masterShowId={masterShowId}
         initialScenes={scenes} // 👈 Passing to CastingClient
         initialAuditionees={castingData.auditionees} // 👈 Passing to CastingClient
-        initialAssignments={castingData.assignments} // 👈 Passing to CastingClient
+        initialAssignments={castingData.assignments}
+        activeId={show.id} // 👈 Passing to CastingClient
       />
     </main>
   );

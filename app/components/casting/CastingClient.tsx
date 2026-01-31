@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Search, Filter, ChevronDown, ChevronRight, 
   UserPlus, X, Check, Save, Layers,
@@ -8,6 +9,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { updateCastAssignment } from '@/app/lib/baserow'; 
+import { generateCastingRows } from '@/app/actions/casting'; // Ensure you created this action
 
 // --- TYPES ---
 interface Role {
@@ -30,7 +32,6 @@ interface Assignment {
 interface Auditionee {
   id: number;
   name: string;
-  // ... other fields
 }
 
 interface Scene {
@@ -43,6 +44,7 @@ interface CastingClientProps {
   roles: Role[];
   auditionees: Auditionee[];
   scenes: Scene[];
+  activeId: number; // Needed for the "Initialize" action
   showStatus: string; // e.g. "Pre-Production", "In Production", "Archived"
 }
 
@@ -51,11 +53,14 @@ export default function CastingClient({
   roles = [], 
   auditionees = [], 
   scenes = [],
+  activeId,
   showStatus = "Pre-Production"
 }: CastingClientProps) {
   
+  const router = useRouter();
   const [localAssignments, setLocalAssignments] = useState<Assignment[]>(assignments);
   const [isSyncing, setIsSyncing] = useState<number | null>(null); // Track which row is updating
+  const [isGenerating, setIsGenerating] = useState(false); // Track massive generation
 
   // 1. DEFINE THE LOCK STATE
   // If the show is running or over, we freeze the casting grid to preserve history.
@@ -64,13 +69,28 @@ export default function CastingClient({
       return lockedStatuses.includes(showStatus);
   }, [showStatus]);
 
-  // --- 2. THE SYNC LOGIC (Fixes "0 Actors" Bug) ---
+  // 2. CRASH RECOVERY: INITIALIZE GRID
+  const handleInitialize = async () => {
+    if (!confirm("This will generate empty assignment rows for all Blueprint Roles. Continue?")) return;
+    setIsGenerating(true);
+    try {
+      await generateCastingRows(activeId); 
+      router.refresh(); 
+    } catch (e) {
+      alert("Failed to generate rows. Check console for details.");
+      console.error(e);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 3. SCENE SYNC LOGIC (Fixes "0 Actors" Bug)
   const handleSyncScenes = async (assignmentId: number, roleId: number) => {
     if (isLocked) return; // Security Guard 🛡️
 
     setIsSyncing(assignmentId);
     
-    // A. Find the Blueprint Default Scenes for this Role
+    // A. Find the Blueprint Default Scenes
     const roleBlueprint = roles.find((r) => r.id === roleId);
     if (!roleBlueprint) {
         setIsSyncing(null);
@@ -79,24 +99,22 @@ export default function CastingClient({
 
     const defaultScenes = roleBlueprint.defaultSceneIds || [];
 
-    // B. Optimistic Update (Update UI immediately)
+    // B. Optimistic Update
     setLocalAssignments(prev => prev.map(a => 
       a.id === assignmentId ? { ...a, sceneIds: defaultScenes } : a
     ));
 
     // C. Server Update
     try {
-        // Calls the backend to save the [1, 2, 3] scene array to Baserow
         await updateCastAssignment(assignmentId, null, defaultScenes); 
     } catch (e) {
         console.error("Sync failed", e);
-        // Optional: Revert optimistic update here on fail
     } finally {
         setIsSyncing(null);
     }
   };
 
-  // --- RENDER HELPER ---
+  // 4. HELPER: Get Scene Names
   const getSceneNames = (ids: number[]) => {
       if(!ids || ids.length === 0) return <span className="text-zinc-600 italic">No Scenes Assigned</span>;
       
@@ -108,10 +126,37 @@ export default function CastingClient({
       return names.join(", ");
   };
 
+  // --- RENDER: EMPTY STATE (CRASH RECOVERY) ---
+  if (localAssignments.length === 0 && !isLocked) {
+    return (
+        <div className="h-full flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 space-y-6">
+            <div className="p-6 bg-zinc-900 rounded-full border border-zinc-800 shadow-2xl">
+                <Wand2 size={48} className="text-zinc-700" />
+            </div>
+            <div className="text-center space-y-2">
+                <h2 className="text-xl font-black text-white italic tracking-tighter">GRID EMPTY</h2>
+                <p className="max-w-md mx-auto text-sm text-zinc-400">
+                    No assignment rows found for this production. <br/>
+                    The database may have been cleared or this is a new show.
+                </p>
+            </div>
+            <button 
+                onClick={handleInitialize}
+                disabled={isGenerating}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-xl font-bold uppercase tracking-widest flex items-center gap-3 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100"
+            >
+                {isGenerating ? <RefreshCw className="animate-spin"/> : <Layers />}
+                {isGenerating ? "Generating..." : "Initialize Grid from Roles"}
+            </button>
+        </div>
+    );
+  }
+
+  // --- RENDER: MAIN GRID ---
   return (
     <div className="h-full flex flex-col bg-zinc-950 text-white relative">
       
-      {/* 3. LOCKED BANNER */}
+      {/* LOCKED BANNER */}
       {isLocked && (
           <div className="bg-amber-900/20 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-widest text-amber-500 animate-in slide-in-from-top-2">
               <Lock size={12} /> 
@@ -122,7 +167,7 @@ export default function CastingClient({
       {/* HEADER TOOLBAR */}
       <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 shrink-0 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-4">
-            <h1 className="text-lg font-black italic tracking-tighter">CASTING GRID</h1>
+            <h1 className="text-lg font-black italic tracking-tighter text-zinc-200">CASTING GRID</h1>
             <div className="hidden md:flex bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 items-center gap-2 text-xs text-zinc-400">
                 <Filter size={14}/>
                 <span>Filter: All Roles</span>
@@ -131,9 +176,9 @@ export default function CastingClient({
         
         {/* HIDE ACTION BUTTONS IF LOCKED */}
         {!isLocked && (
-            <div className="flex items-center gap-2">
-                <div className="text-xs text-zinc-500 mr-2 font-mono">
-                    {localAssignments.filter(a => a.studentId).length} / {localAssignments.length}
+            <div className="flex items-center gap-4">
+                <div className="text-xs text-zinc-500 font-mono hidden md:block">
+                    {localAssignments.filter(a => a.studentId).length} / {localAssignments.length} Roles Filled
                 </div>
                 <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-emerald-900/20 active:scale-95">
                     <Save size={16}/> Publish
@@ -142,9 +187,9 @@ export default function CastingClient({
         )}
       </div>
 
-      {/* MAIN GRID */}
+      {/* GRID CONTENT */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-        <div className="grid gap-2 max-w-6xl mx-auto">
+        <div className="grid gap-2 max-w-7xl mx-auto">
             
             {/* TABLE HEADER */}
             <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-white/5 mb-2">
@@ -171,8 +216,10 @@ export default function CastingClient({
                         {/* 1. ROLE INFO */}
                         <div className="col-span-3 flex flex-col justify-center">
                             <div className="font-bold text-sm text-zinc-200">{assignment.roleName}</div>
-                            <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">
-                                {role?.category || "Ensemble"} <span className="mx-1 text-zinc-700">•</span> {role?.gender || "Any"}
+                            <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide flex items-center gap-2">
+                                <span className={role?.category === 'Lead' ? 'text-amber-500' : 'text-zinc-500'}>{role?.category || "Ensemble"}</span>
+                                <span className="text-zinc-700">•</span> 
+                                <span>{role?.gender || "Any"}</span>
                             </div>
                         </div>
 
@@ -187,8 +234,8 @@ export default function CastingClient({
                                     
                                     {!isLocked && (
                                         <button 
-                                            className="ml-auto text-zinc-600 hover:text-red-400 transition-colors"
-                                            onClick={() => {/* Remove Logic */}}
+                                            className="ml-auto text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                                            onClick={() => {/* Remove Logic Would Go Here */}}
                                         >
                                             <X size={12}/>
                                         </button>
@@ -215,7 +262,7 @@ export default function CastingClient({
                             {/* "Sync Required" Warning */}
                             {needsSync && !isLocked && (
                                 <div className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 items-center gap-2 animate-pulse">
-                                    <span className="text-[9px] text-amber-500 font-bold uppercase tracking-wider bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded shadow-sm">
+                                    <span className="text-[9px] text-amber-500 font-bold uppercase tracking-wider bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded shadow-sm cursor-help" title="This actor is missing scene data found in the blueprint.">
                                         <AlertTriangle size={10} className="inline mr-1 mb-0.5"/>
                                         Sync Needed
                                     </span>

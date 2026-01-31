@@ -942,3 +942,5 @@ export async function getGlobalSalesSummary() {
   
   return { totalSold, avgFill, performanceCount: data.length };
 }
+
+export { DB };
