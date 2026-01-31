@@ -1,7 +1,7 @@
 import { auth } from "@/auth"; // Assuming you use NextAuth
 import { redirect } from "next/navigation";
 import { getAllShows, getActiveProduction, getUserProfile } from "@/app/lib/baserow";
-import SettingsClient from "./SettingsClient";
+import SettingsClient from "@/app/components/settings/SettingsClient";
 import { cookies } from "next/headers";
 
 export default async function SettingsPage() {
