@@ -8,7 +8,7 @@ import {
   LayoutGrid, Coffee, Umbrella, Wand2,
   FileText, Mic2, Music, Theater,
   Target, AlertTriangle, Clock,
-  Save, Loader2
+  Save, Loader2, Maximize2, X
 } from 'lucide-react';
 
 // --- IMPORTS ---
@@ -273,24 +273,63 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // 🎨 COLOR THEMES: One for each "Engine"
+  const getTrackStyles = (track: TrackType) => {
+    switch (track) {
+      case 'Music':
+        return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.1)]';
+      case 'Dance':
+        return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.1)]';
+      case 'Acting':
+        return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.1)]';
+      default:
+        return 'bg-zinc-800 border-zinc-500 text-zinc-100';
+    }
+  };
+
+  // 🚀 HELPERS
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
       if(!sceneId) return;
       const startTime = hour + (min / 60);
-      const newBlock: ScheduledItem = {
-          id: Date.now().toString(),
-          sceneId, track, day, weekOffset: currentWeekOffset, startTime, duration: 30, status: 'New'
+      const newBlock: any = {
+          id: Date.now().toString(), // Temp ID
+          sceneId, track, day, weekOffset: currentWeekOffset, startTime, duration: 30, status: 'New',
+          isMerged: false 
       };
       setSchedule((prev: any) => [...prev, newBlock]);
       setDraggedSceneId(null);
   };
 
-  // 🟢 Fixed updateDuration to match Pam's 15 min requirement
-  const updateDuration = (itemId: string, change: number) => {
-      setSchedule((prev: any) => prev.map((item: any) => item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item));
+  const deleteItem = (itemId: string) => {
+      setSchedule((prev: any) => prev.filter((item: any) => item.id !== itemId));
   };
 
+  const updateDuration = (itemId: string, change: number) => {
+      setSchedule((prev: any) => prev.map((item: any) => 
+        item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item
+      ));
+  };
+
+  const switchTrack = (itemId: string, direction: 'left' | 'right') => {
+      const tracks: TrackType[] = ['Acting', 'Music', 'Dance'];
+      setSchedule((prev: any) => prev.map((item: any) => {
+          if (item.id !== itemId) return item;
+          const currentIndex = tracks.indexOf(item.track);
+          const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+          if (newIndex < 0 || newIndex >= tracks.length) return item;
+          return { ...item, track: tracks[newIndex], isMerged: false };
+      }));
+  };
+
+  const toggleMerge = (itemId: string) => {
+      setSchedule((prev: any) => prev.map((item: any) => 
+          item.id === itemId ? { ...item, isMerged: !item.isMerged } : item
+      ));
+  };
+
+  // 📅 CALENDAR MATH
   const weekLabel = useMemo(() => {
       const today = new Date();
       const nextFri = new Date(today);
@@ -339,26 +378,31 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              </div>
          </aside>
 
+         {/* MAIN CALENDAR GRID */}
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
                  <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="text-zinc-400 hover:text-white"><ChevronLeft size={16}/></button>
-                 <span className="text-xs font-bold text-zinc-300 w-32 text-center">{weekLabel}</span>
+                 <span className="text-xs font-bold text-zinc-300 w-48 text-center">{weekLabel}</span>
                  <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="text-zinc-400 hover:text-white"><ChevronRight size={16}/></button>
              </div>
+             
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
-                 <div className="flex gap-4 h-full min-h-[600px]">
+                 <div className="flex gap-4 h-full min-h-[800px]">
                      {[
                          { day: 'Fri', slots: friSlots, start: FRI_START }, 
                          { day: 'Sat', slots: satSlots, start: SAT_START }
                      ].map((col: any) => (
-                         <div key={col.day} className="flex-1 flex flex-col bg-zinc-900 border border-white/10 rounded-xl overflow-hidden">
-                             <div className="p-2 bg-zinc-800 text-center font-black uppercase text-zinc-400 text-xs">{col.day === 'Fri' ? 'Friday' : 'Saturday'}</div>
+                         <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/50 border border-white/10 rounded-xl overflow-hidden">
+                             <div className="p-2 bg-zinc-800 text-center font-black uppercase text-zinc-400 text-xs tracking-widest">{col.day === 'Fri' ? 'Friday' : 'Saturday'}</div>
                              <div className="flex-1 relative flex">
+                                 {/* Time labels */}
                                  <div className="w-12 bg-zinc-950/50 border-r border-white/5 text-[9px] text-zinc-600 font-mono text-right py-2">
                                      {col.slots.filter((s:any) => s.m === 0).map((s:any) => (
                                          <div key={s.val} style={{ height: '128px' }} className="pr-2 pt-1 border-b border-white/5">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
                                      ))}
                                  </div>
+                                 
+                                 {/* Track Lanes */}
                                  <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
                                      {['Acting', 'Music', 'Dance'].map((track) => (
                                          <div key={track} className="relative">
@@ -367,16 +411,53 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                                   <div key={slot.val} className={`h-8 border-b border-white/[0.03] ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
                                                        onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
                                               ))}
+                                              
+                                              {/* Render Scheduled Items for this track */}
                                               {schedule.filter((i: any) => i.day === col.day && i.track === track && i.weekOffset === currentWeekOffset).map((item: any) => {
                                                   const top = (item.startTime - col.start) * 128;
                                                   const height = (item.duration / 60) * 128;
                                                   const scene = sceneData.find((s:any) => s.id === item.sceneId);
+                                                  
                                                   return (
-                                                      <div key={item.id} className="absolute left-1 right-1 rounded border-l-4 p-2 shadow-lg bg-zinc-700 border-zinc-500 text-white text-xs overflow-hidden z-20 group"
-                                                           style={{ top: `${top}px`, height: `${height}px` }}>
-                                                           <div className="font-bold truncate">{scene?.name}</div>
-                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 flex gap-1 bg-black/40 rounded">
+                                                      <div 
+                                                        key={item.id} 
+                                                        className={`absolute rounded border-l-4 p-2 shadow-xl text-xs overflow-hidden transition-all group hover:brightness-110
+                                                          ${getTrackStyles(item.track)}
+                                                          ${item.isMerged ? 'z-40 ring-2 ring-white/20' : 'z-20 left-1 right-1'}`}
+                                                        style={{ 
+                                                            top: `${top}px`, 
+                                                            height: `${height}px`,
+                                                            width: item.isMerged ? 'calc(200% + 1rem)' : 'auto' 
+                                                        }}
+                                                      >
+                                                           {/* Header Row */}
+                                                           <div className="flex justify-between items-start mb-1">
+                                                              <div className="font-black truncate pr-2 uppercase tracking-tighter leading-tight">
+                                                                {item.isMerged ? '🤝 JOINT: ' : ''}{scene?.name}
+                                                              </div>
+                                                              <button onClick={() => deleteItem(item.id)} className="opacity-0 group-hover:opacity-100 p-0.5 bg-red-500 hover:bg-red-400 text-white rounded transition-opacity">
+                                                                  <X size={10} />
+                                                              </button>
+                                                           </div>
+
+                                                           {/* Teleport / Merge Bar */}
+                                                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button onClick={() => switchTrack(item.id, 'left')} disabled={item.track === 'Acting'} className="p-1 bg-black/40 rounded disabled:opacity-0"><ChevronLeft size={8}/></button>
+                                                                
+                                                                <button 
+                                                                    onClick={() => toggleMerge(item.id)}
+                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase flex items-center gap-1 ${item.isMerged ? 'bg-white text-black' : 'bg-black/40 text-white'}`}
+                                                                >
+                                                                    <Maximize2 size={8}/> {item.isMerged ? 'Split' : 'Merge'}
+                                                                </button>
+
+                                                                <button onClick={() => switchTrack(item.id, 'right')} disabled={item.track === 'Dance'} className="p-1 bg-black/40 rounded disabled:opacity-0"><ChevronRight size={8}/></button>
+                                                           </div>
+
+                                                           {/* Duration Controls */}
+                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 flex gap-1 bg-black/40 rounded p-0.5 transition-opacity">
                                                                <button onClick={() => updateDuration(item.id, -15)} className="p-0.5 hover:bg-white/20"><Minus size={10}/></button>
+                                                               <span className="text-[8px] font-mono self-center px-1">{item.duration}m</span>
                                                                <button onClick={() => updateDuration(item.id, 15)} className="p-0.5 hover:bg-white/20"><Plus size={10}/></button>
                                                            </div>
                                                       </div>
@@ -394,7 +475,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
     </div>
   );
 }
-
 // ... (BurnUpView remains same as previous step, no changes needed there)
 function BurnUpView({ sceneData }: any) {
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
