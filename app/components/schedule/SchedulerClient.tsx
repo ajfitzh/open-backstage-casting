@@ -53,41 +53,59 @@ export default function SchedulerClient({
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   
-  // --- SHARED DATA PREP (The Fix) ---
+  // --- SHARED DATA PREP (ROBUST FIX) ---
   const sceneData = useMemo(() => {
-    // 🛡️ SAFETY: Abort if data isn't loaded yet
     if (!scenes || !assignments) return [];
 
-    // 1. Create a Map: SceneID -> List of Actor Names
-    // We leverage the fact that 'assignments' now contains 'sceneIds'
+    // 1. Create a Map: SceneID -> Set of Actor Names
     const sceneCastMap = new Map<number, Set<string>>();
+
+    // Helper to normalize strings for matching (remove punctuation, lowercase)
+    const normalize = (s: string) => s?.toLowerCase().replace(/[^a-z0-9]/g, "") || "";
 
     assignments.forEach((a: any) => {
         const actorName = a.personName;
-        // Skip empty assignments or assignments without linked scenes
-        if (!actorName || !a.sceneIds) return;
+        if (!actorName) return;
 
-        a.sceneIds.forEach((sceneId: number) => {
-            if (!sceneCastMap.has(sceneId)) sceneCastMap.set(sceneId, new Set());
-            sceneCastMap.get(sceneId)?.add(actorName);
-        });
+        // STRATEGY A: Direct ID Match (Fastest)
+        if (a.sceneIds && a.sceneIds.length > 0) {
+            a.sceneIds.forEach((sid: number) => {
+                if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
+                sceneCastMap.get(sid)?.add(actorName);
+            });
+            return; // If we found IDs, skip text matching
+        }
+
+        // STRATEGY B: Text Fuzzy Match (Backup)
+        // If "scenes" is a string like "Under the Sea, Triton's Court"
+        if (a.scenes && typeof a.scenes === 'string') {
+            const sceneNames = a.scenes.split(',').map(normalize);
+            
+            scenes.forEach((s: any) => {
+                const sName = normalize(s.name);
+                // Check if this scene's name exists in the assignment's text list
+                if (sceneNames.some((n:string) => n.includes(sName) || sName.includes(n))) {
+                    if (!sceneCastMap.has(s.id)) sceneCastMap.set(s.id, new Set());
+                    sceneCastMap.get(s.id)?.add(actorName);
+                }
+            });
+        }
     });
 
-    // 2. Hydrate Scenes with Clean Keys
+    // 2. Hydrate Scenes
     return scenes.map((s: any) => {
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
 
         return {
             id: s.id,
-            // 🚨 FIX: Use 's.name' (Clean) instead of 's["Scene Name"]' (Raw)
             name: s.name || "Untitled Scene",
             act: s.act || "1",
             type: s.type || "Scene",
             
-            // Cast for the AutoScheduler (Array of objects)
+            // Cast objects for AutoScheduler
             cast: castNames.map(name => ({ name })),
-            // Cast for the Callboard (Array of strings)
+            // Simple string list for Callboard
             castNames: castNames, 
             
             status: 'New'
@@ -118,7 +136,6 @@ export default function SchedulerClient({
                     <h1 className="text-lg font-bold text-white">{productionTitle}</h1>
                 </div>
 
-                {/* TAB SWITCHER */}
                 <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
                     <button 
                         onClick={() => setActiveTab('calendar')}
@@ -178,7 +195,6 @@ export default function SchedulerClient({
             )}
         </div>
 
-        {/* AUTO SCHEDULER MODAL */}
         <AutoSchedulerModal 
             isOpen={isAutoSchedulerOpen} 
             onClose={() => setIsAutoSchedulerOpen(false)}
@@ -235,6 +251,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 
   return (
     <div className="flex h-full">
+         {/* SIDEBAR SCENE LIST */}
          <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
              <div className="p-4 border-b border-white/10">
                 <div className="relative">
@@ -248,16 +265,18 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                 </div>
              </div>
              <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar pt-2">
-                 {/* 🚨 FIX: Safe check for scene name */}
                  {sceneData.filter((s:any) => (s.name || "").toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
                      <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)}
-                         className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all">
+                         className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all group">
                          <div className="flex justify-between items-center mb-1">
                              <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
                          </div>
                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
                               <span className="bg-black/30 px-1 rounded">Act {scene.act}</span>
-                              <span>{scene.cast.length} Actors</span>
+                              {/* 🚨 VISUAL CONFIRMATION: Show actor count, turn red if 0 */}
+                              <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : ""}>
+                                  {scene.cast.length} Actors
+                              </span>
                          </div>
                      </div>
                  ))}
@@ -320,9 +339,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   );
 }
 
-// ============================================================================
-// SUB-COMPONENT: BURN-UP VIEW (Fixed Status Keys)
-// ============================================================================
+// ... (BurnUpView remains same as previous step, no changes needed there)
 function BurnUpView({ sceneData }: any) {
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
         const initial: any = {};
