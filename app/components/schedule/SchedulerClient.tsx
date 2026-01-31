@@ -349,7 +349,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
   }, [currentWeekOffset]);
 
   const generateSlots = (start: number, end: number) => {
-      const s = [];
+      const s: { h: number; m: number; val: number; }[] = [];
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
       return s;
   };
