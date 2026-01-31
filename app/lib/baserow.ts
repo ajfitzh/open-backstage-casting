@@ -344,7 +344,35 @@ function extractName(field: any, fallback: string = ""): string {
 }
 
 
+// app/lib/baserow.ts
 
+// ... existing imports
+
+export async function getCastDemographics() {
+  // 1. Fetch from PEOPLE table (ID 599)
+  // We use the specific field IDs from your schema to be safe
+  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, { size: "200" });
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    name: safeGet(row[DB.PEOPLE.FIELDS.FULL_NAME] || row["field_5735"]),
+    
+    // 🎂 Age (field_5739)
+    age: parseFloat(safeGet(row["field_5739"], 0)),
+    
+    // 📏 Height in Inches (field_5777)
+    height: parseFloat(safeGet(row["field_5777"], 0)),
+    
+    // 🎭 Experience: Length of "Cast/Crew Assignments" array (field_5788)
+    // This counts how many shows they have been linked to in the past
+    showCount: Array.isArray(row["field_5788"]) ? row["field_5788"].length : 0,
+    
+    // 🚻 Gender (field_5775) - Redundant backup if Auditions table misses it
+    gender: safeGet(row["field_5775"], "Unknown"),
+  }));
+}
 export async function getAssignments(productionId?: number) {
   const params: any = { size: "200" };
   if(productionId) params[`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
@@ -660,7 +688,7 @@ export async function getAuditionees(productionId?: number) {
           song: safeGet(row[(F as any).SONG] || row["Song"], ""),
           monologue: safeGet(row[(F as any).MONOLOGUE] || row["Monologue"], ""),
           conflicts: safeGet(row[F.CONFLICTS] || row["Conflicts"], "No known conflicts"),
-          
+          gender: safeGet(row[F.GENDER] || row["Gender"] || row["Sex"], "Unknown"),
           // Notes
           actingNotes: safeGet(row[F.ACTING_NOTES], "No notes logged."),
           musicNotes: safeGet(row[(F as any).MUSIC_NOTES], "No notes logged."),

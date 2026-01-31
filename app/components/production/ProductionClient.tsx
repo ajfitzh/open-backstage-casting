@@ -85,17 +85,15 @@ function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
         const total = uniqueCastIds.size;
         const castProfiles = auditionees.filter((a:any) => uniqueCastIds.has(a.id));
         
-        const getGender = (c: any) => {
-            // Check both clean 'gender' and raw 'Gender' just in case
-            const g = c.gender || c.Gender; 
-            if (typeof g === 'object' && g?.value) return g.value;
-            if (typeof g === 'string') return g;
-            return "Unknown";
-        };
+const getGender = (c: any) => {
+        // Because we fixed baserow.ts, c.gender is now a simple string!
+        // We trim() it just in case of whitespace.
+        const g = (c.gender || "Unknown").trim();
+        return g;
+    };
 
         const males = castProfiles.filter((c:any) => getGender(c) === 'Male').length;
-        const females = castProfiles.filter((c:any) => getGender(c) === 'Female').length;
-        const unknown = total - (males + females);
+    const females = castProfiles.filter((c:any) => getGender(c) === 'Female').length;const unknown = total - (males + females);
 
         return { total, males, females, unknown };
     }, [assignments, auditionees]);
