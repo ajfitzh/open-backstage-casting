@@ -1,10 +1,12 @@
+// app/lib/baserow.ts
+
 import { notFound } from "next/navigation";
-import { DB } from "@/app/lib/schema"; // 👈 Your new Source of Truth
+import { DB } from "@/app/lib/schema"; 
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 
-// 🚨 FIX: Added NEXT_PUBLIC_BASEROW_TOKEN to the list so it finds your .env value
+// Added NEXT_PUBLIC_BASEROW_TOKEN to the list so it finds your .env value
 const API_TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN || process.env.BASEROW_API_KEY;
 
 const HEADERS = {
@@ -12,44 +14,13 @@ const HEADERS = {
   "Content-Type": "application/json",
 };
 
-// --- LEGACY TABLE MAP ---
-export const TABLES = {
-  PEOPLE: DB.PEOPLE.ID,
-  PRODUCTIONS: DB.PRODUCTIONS.ID,
-  CLASSES: DB.CLASSES.ID,
-  VENUES: DB.VENUES.ID,
-  SPACES: DB.SPACES.ID,
-  RENTAL_RATES: DB.RENTAL_RATES.ID,
-  AUDITIONS: DB.AUDITIONS.ID,
-  ASSIGNMENTS: DB.ASSIGNMENTS.ID,
-  BLUEPRINT_ROLES: DB.BLUEPRINT_ROLES.ID,
-  SCENES: DB.SCENES.ID,
-  EVENTS: DB.EVENTS.ID,
-  CONFLICTS: DB.CONFLICTS.ID,
-  COMMITTEE_PREFS: DB.COMMITTEE_PREFS.ID,
-  ASSETS: DB.ASSETS.ID,
-  SHOW_TEAM: DB.SHOW_TEAM.ID,
-};
-// app/lib/baserow.ts
-
-export async function setCallbackStatus(rowId: number, status: string) {
-    const F = DB.AUDITIONS.FIELDS;
-    return await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/${rowId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            [F.STATUS]: status // Set to "Callback", "Called", or a specific Slot Name
-        })
-    });
-}
 // ==============================================================================
 // 🛡️ HELPERS (The "Adapter" Layer)
 // ==============================================================================
 
-// Central Fetcher - NO user_field_names
+// Central Fetcher
 export async function fetchBaserow(endpoint: string, options: RequestInit = {}, queryParams: Record<string, any> = {}) {
   try {
-    // 🚨 KEY CHANGE: removed user_field_names: "true"
     const params = new URLSearchParams(queryParams);
 
     let path = endpoint;
@@ -82,41 +53,43 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
   }
 }
 
-/**
- * Robust Getter for Raw Baserow Data
- * Handles:
- * - String/Number: Returns value
- * - Single Select: Returns value property
- * - Link Row: Returns value of first item (or name)
- */
 function safeGet(field: any, fallback: string | number = ""): any {
   if (field === null || field === undefined) return fallback;
-  
-  // Primitive types (Text, Number, Boolean)
   if (typeof field === 'string' || typeof field === 'number' || typeof field === 'boolean') return field;
-  
-  // Arrays (Link Row, File) - Return first item's value/name/url
   if (Array.isArray(field)) {
     if (field.length === 0) return fallback;
     const first = field[0];
     return first.value || first.name || first.url || fallback;
   }
-  
-  // Objects (Single Select)
   if (typeof field === 'object') {
     return field.value || field.name || fallback;
   }
-  
   return fallback;
 }
 
-// Extract ID from a Linked Row array safely
 function safeId(field: any): number | null {
   if (Array.isArray(field) && field.length > 0) return field[0].id;
   return null;
 }
 
-// Generic Delete
+function extractName(field: any, fallback: string = ""): string {
+  if (!field) return fallback;
+  if (Array.isArray(field) && field.length > 0) {
+      return field[0].value || fallback;
+  }
+  if (typeof field === "string") return field;
+  return fallback;
+}
+
+function safeJoin(field: any, fallback = ""): string {
+  if (!field) return fallback;
+  if (Array.isArray(field)) {
+    if (field.length === 0) return fallback;
+    return field.map((item: any) => item.value || item.name).join(", ");
+  }
+  return safeGet(field, fallback); 
+}
+
 export async function deleteRow(tableId: string, rowId: number | string) {
   const url = `/database/rows/table/${tableId}/${rowId}/`;
   const res = await fetchBaserow(url, { method: "DELETE" });
@@ -124,27 +97,21 @@ export async function deleteRow(tableId: string, rowId: number | string) {
 }
 
 // ==============================================================================
-// 🎓 EDUCATION (CLASSES & VENUES) - REFACTORED
+// 🎓 EDUCATION (CLASSES & VENUES)
 // ==============================================================================
-
-// app/lib/baserow.ts
-
-// app/lib/baserow.ts
 
 export async function getClasses() {
   let allRows: any[] = [];
   let page = 1;
   let hasMore = true;
 
-  // Loop until we have everything
   while (hasMore) {
     const data = await fetchBaserow(
       `/database/rows/table/${DB.CLASSES.ID}/`, 
       {}, 
       { 
         page: page.toString(), 
-        size: "200", // Max limit per page
-        // 🚨 REMOVED: [`order_by`]: ... (This was causing the 400 Error)
+        size: "200",
       } 
     );
 
@@ -152,7 +119,6 @@ export async function getClasses() {
       hasMore = false;
     } else {
       allRows = [...allRows, ...data];
-      // If we got less than the limit, we've reached the end
       if (data.length < 200) {
         hasMore = false;
       } else {
@@ -161,7 +127,6 @@ export async function getClasses() {
     }
   }
 
-  // Now map the FULL list
   return allRows.map((row: any) => ({
       id: row.id,
       name: safeGet(row[DB.CLASSES.FIELDS.CLASS_NAME], "Unnamed Class"),
@@ -175,6 +140,7 @@ export async function getClasses() {
       students: Array.isArray(row[DB.CLASSES.FIELDS.STUDENTS]) ? row[DB.CLASSES.FIELDS.STUDENTS].length : 0,
   }));
 }
+
 export async function getClassById(classId: string) {
   const row = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`);
 
@@ -190,7 +156,7 @@ export async function getClassById(classId: string) {
     location: safeGet(row[DB.CLASSES.FIELDS.LOCATION], "Main Campus"),
     day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
     time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
-    description: "", // Add Description to schema if exists, else empty
+    description: "", 
     ageRange: safeGet(row[DB.CLASSES.FIELDS.AGE_RANGE], "All Ages"),
     spaceName: safeGet(row[DB.CLASSES.FIELDS.SPACE]),
     students: Array.isArray(students) ? students.length : 0,
@@ -200,12 +166,10 @@ export async function getClassById(classId: string) {
 export async function getClassRoster(classId: string) {
   if (!classId) return [];
 
-  // 🚨 KEY FIX: Check BOTH 'CLASSES' (Teachers) AND 'CLASSES_STUDENTS' (Students)
-  // We use an OR filter to get people linked via EITHER field.
   const params = {
     filter_type: "OR",
-    [`filter__${DB.PEOPLE.FIELDS.CLASSES}__link_row_has`]: classId,          // Teachers?
-    [`filter__${DB.PEOPLE.FIELDS.CLASSES_STUDENTS}__link_row_has`]: classId, // Students!
+    [`filter__${DB.PEOPLE.FIELDS.CLASSES}__link_row_has`]: classId,          
+    [`filter__${DB.PEOPLE.FIELDS.CLASSES_STUDENTS}__link_row_has`]: classId, 
     size: "200"
   };
 
@@ -220,7 +184,6 @@ export async function getClassRoster(classId: string) {
     email: safeGet(s[DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL] || s[DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL]),
     phone: safeGet(s[DB.PEOPLE.FIELDS.PHONE_NUMBER]),
     photo: s[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
-    // Determine status based on which field matched
     status: s[DB.PEOPLE.FIELDS.CLASSES]?.some((c:any) => c.id == classId) ? "Instructor" : "Student",
     medical: safeGet(s[DB.PEOPLE.FIELDS.MEDICAL_NOTES], "None"),
   }));
@@ -237,8 +200,6 @@ export async function getVenueLogistics() {
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
 
   return venuesData.map((venue: any) => {
-    // Note: Checking linkage using ID logic. 
-    // We look for rates where the 'VENUE' link row contains this venue's ID
     const activeRate = ratesData.find((r: any) => {
         const linkedVenues = r[DB.RENTAL_RATES.FIELDS.VENUE] || [];
         return linkedVenues.some((v: any) => v.id === venue.id);
@@ -250,7 +211,6 @@ export async function getVenueLogistics() {
           return linkedVenues.some((v: any) => v.id === venue.id);
       })
       .map((space: any) => {
-        // Classes already processed via getClasses, so we filter normally
         const occupiedBy = classesData.filter((cls: any) => cls.spaceId === space.id);
         return {
           id: space.id,
@@ -277,9 +237,9 @@ export async function getVenueLogistics() {
 }
 
 // ==============================================================================
-// 🎭 PRODUCTION & CASTING - REFACTORED
+// 🎭 PRODUCTION & CASTING
 // ==============================================================================
-// --- Helper to clean up Show Data ---
+
 function mapShow(row: any) {
   const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
   return {
@@ -289,9 +249,8 @@ function mapShow(row: any) {
     status: rawStatus,
     isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
     image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
-    // Add location mapping if needed for the dashboard
     location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || "TBD",
-  masterShowLink: row[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE] || []
+    masterShowLink: row[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE] || []
   };
 }
 
@@ -299,80 +258,39 @@ export async function getActiveProduction() {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "50" });
   if (!Array.isArray(data)) return null;
   
-  // Find the active row
   const activeRow = data.find((r: any) => 
     safeGet(r[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || 
     safeGet(r[DB.PRODUCTIONS.FIELDS.STATUS]) === 'Active'
   ) || data[0];
 
-  // 🚨 FIX: Clean it before returning!
   return activeRow ? mapShow(activeRow) : null;
 }
 
 export async function getShowById(showId: string | number) {
   const row = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${showId}/`);
-  // 🚨 FIX: Clean it here too!
   return row && !row.error ? mapShow(row) : null;
 }
 
 export async function getAllShows() {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
-  // Reuse the helper
   return data.map(mapShow).sort((a: any, b: any) => b.id - a.id);
 }
-// --- Casting ---
+
+// --- Casting & Auditions ---
 
 export async function getRoles() {
+  // 🚨 FIX: Using BLUEPRINT_ROLES per schema
   return fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`);
 }
 
 export async function getAuditionSlots(productionId?: number) {
   const params: any = { size: "200" };
+  // 🚨 FIX: Using AUDITIONS table
   if(productionId) params[`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
   return fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {}, params); 
 }
-function extractName(field: any, fallback: string = ""): string {
-  if (!field) return fallback;
-  // If it's an array (Link Row), grab the first item's value
-  if (Array.isArray(field) && field.length > 0) {
-      return field[0].value || fallback;
-  }
-  // If it's a string, just return it
-  if (typeof field === "string") return field;
-  return fallback;
-}
 
-
-// app/lib/baserow.ts
-
-// ... existing imports
-
-export async function getCastDemographics() {
-  // 1. Fetch from PEOPLE table (ID 599)
-  // We use the specific field IDs from your schema to be safe
-  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, { size: "200" });
-
-  if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => ({
-    id: row.id,
-    name: safeGet(row[DB.PEOPLE.FIELDS.FULL_NAME] || row["field_5735"]),
-    
-    // 🎂 Age (field_5739)
-    age: parseFloat(safeGet(row["field_5739"], 0)),
-    
-    // 📏 Height in Inches (field_5777)
-    height: parseFloat(safeGet(row["field_5777"], 0)),
-    
-    // 🎭 Experience: Length of "Cast/Crew Assignments" array (field_5788)
-    // This counts how many shows they have been linked to in the past
-    showCount: Array.isArray(row["field_5788"]) ? row["field_5788"].length : 0,
-    
-    // 🚻 Gender (field_5775) - Redundant backup if Auditions table misses it
-    gender: safeGet(row["field_5775"], "Unknown"),
-  }));
-}
 export async function getAssignments(productionId?: number) {
   const params: any = { size: "200" };
   if(productionId) params[`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
@@ -382,7 +300,8 @@ export async function getAssignments(productionId?: number) {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    const roleName = safeGet(row[DB.ASSIGNMENTS.FIELDS.ASSIGNMENT] || row["Role"] || row["Character"], "Unnamed Role");
+    // 🚨 FIX: Fallback logic for Assignment Name
+    const roleName = safeGet(row[DB.ASSIGNMENTS.FIELDS.ASSIGNMENT] || row[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY], "Unnamed Role");
 
     return {
       id: row.id,
@@ -390,25 +309,27 @@ export async function getAssignments(productionId?: number) {
       personName: extractName(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
       personId: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
       
-      // 👈 ADD THIS LINE: This grabs the comma-separated string from the "Scenes" column
-      scenes: safeJoin(row["Scenes"] || row[DB.ASSIGNMENTS.FIELDS.SCENES], ""),
+      // 🚨 FIX: using SCENE_ASSIGNMENTS
+      scenes: safeJoin(row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS], ""),
 
       actors: row[DB.ASSIGNMENTS.FIELDS.PERSON] ? [{
         id: safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
         name: extractName(row[DB.ASSIGNMENTS.FIELDS.PERSON]),
       }] : [],
 
-      sceneIds: Array.isArray(row[DB.ASSIGNMENTS.FIELDS.SCENES]) 
-        ? row[DB.ASSIGNMENTS.FIELDS.SCENES].map((s: any) => s.id) 
+      sceneIds: Array.isArray(row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS]) 
+        ? row[DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS].map((s: any) => s.id) 
         : [],
       
       selectedActorIds: row[DB.ASSIGNMENTS.FIELDS.PERSON] ? [safeId(row[DB.ASSIGNMENTS.FIELDS.PERSON])] : []
     };
   });
 }
+
 export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
   const body = {
     [DB.ASSIGNMENTS.FIELDS.PERSON]: [personId],
+    // 🚨 FIX: Using PERFORMANCE_IDENTITY
     [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [roleId],
     [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId]
   };
@@ -418,19 +339,35 @@ export async function createCastAssignment(personId: number, roleId: number, pro
   });
 }
 
+// 🚨 THIS IS THE CRITICAL WRITER: Updates the actual role in Baserow
+export async function updateCastAssignment(assignmentId: number, personId: number | null, sceneIds?: number[]) {
+  const F = DB.ASSIGNMENTS.FIELDS;
+  const body: any = {};
+
+  if (personId !== undefined) {
+    body[F.PERSON] = personId ? [personId] : [];
+  }
+
+  if (sceneIds !== undefined) {
+    // 🚨 FIX: Using SCENE_ASSIGNMENTS
+    body[F.SCENE_ASSIGNMENTS] = sceneIds; 
+  }
+
+  return await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
 // --- Scenes & Assets ---
 
 export async function getScenes(productionId?: number) {
-  // 1. Prepare query parameters
-  const params: any = { 
-    size: "200",
-  };
+  const params: any = { size: "200" };
 
-  // 2. 🚨 THE FILTER: Only get scenes linked to this production
   if (productionId) {
-    // We use the 'link_row_has' filter on the Production field ID from your schema
+    // 🚨 FIX: Using correct PRODUCTION field ID
     params[`filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has`] = productionId;
-    // Optional: Sort by Order or Act/Scene Number if you have those fields
     params['order_by'] = `field_${DB.SCENES.FIELDS.ACT},field_${DB.SCENES.FIELDS.SCENE_NAME}`; 
   }
 
@@ -438,21 +375,16 @@ export async function getScenes(productionId?: number) {
 
   if (!Array.isArray(data)) return [];
 
-  // 3. Map the data to the clean keys the UI expects
   return data.map((row: any) => ({
     id: row.id,
     name: safeGet(row[DB.SCENES.FIELDS.SCENE_NAME], "Untitled Scene"),
     type: safeGet(row[DB.SCENES.FIELDS.SCENE_TYPE], "Scene"),
     act: safeGet(row[DB.SCENES.FIELDS.ACT], "I"),
-    // Add productionId to the object so the CastingClient knows when to refresh
     productionId: productionId 
   }));
 }
 
-// app/lib/baserow.ts
-
 export async function getProductionAssets(productionId?: number) {
-  // 1. Add Filtering to only get assets for this show
   const params: any = { size: "200" };
   if (productionId) {
     params[`filter__${DB.ASSETS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
@@ -462,30 +394,12 @@ export async function getProductionAssets(productionId?: number) {
 
   if (!Array.isArray(data)) return [];
 
-  // 2. MAP the raw data to clean objects
   return data.map((row: any) => ({
     id: row.id,
-    // Safely get the Name, defaulting to "Untitled" to prevent .match() crashes
     name: safeGet(row[DB.ASSETS.FIELDS.NAME], "Untitled Asset"),
     link: safeGet(row[DB.ASSETS.FIELDS.LINK], "#"),
     type: safeGet(row[DB.ASSETS.FIELDS.TYPE], "Prop"),
-    // Add any other fields your UI expects
   }));
-}
-
-// app/lib/baserow.ts
-
-/** * Returns a comma-separated string for Link Rows with multiple items 
- * (e.g. "Scene 1, Scene 4, Scene 5")
- */
-function safeJoin(field: any, fallback = ""): string {
-  if (!field) return fallback;
-  if (Array.isArray(field)) {
-    if (field.length === 0) return fallback;
-    // Map over all items and join them
-    return field.map((item: any) => item.value || item.name).join(", ");
-  }
-  return safeGet(field, fallback); // Fallback to standard safeGet if not an array
 }
 
 export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
@@ -513,10 +427,7 @@ export async function getPeople() {
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
 }
 
-// app/lib/baserow.ts
-
 export async function getCreativeTeam(productionId?: number) {
-  // 🚨 FIX: Add Filter! Only get staff linked to THIS production
   const params: any = { size: "100" };
   if (productionId) {
     params[`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`] = productionId;
@@ -531,7 +442,7 @@ export async function getCreativeTeam(productionId?: number) {
       const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], "");
       const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
 
-      if (!name) return null; // Skip empty rows
+      if (!name) return null;
 
       return {
         id: row.id,
@@ -541,10 +452,9 @@ export async function getCreativeTeam(productionId?: number) {
         color: getRoleColor(role)
       };
     })
-    .filter(Boolean); // Remove nulls
+    .filter(Boolean); 
 }
 
-// Helper for the UI colors (Restored)
 function getRoleColor(role: string) {
   const r = (role || "").toLowerCase();
   if (r.includes('director') && !r.includes('music') && !r.includes('assistant')) return 'bg-blue-600';
@@ -555,7 +465,6 @@ function getRoleColor(role: string) {
   if (r.includes('tech') || r.includes('light') || r.includes('sound')) return 'bg-indigo-600';
   return 'bg-zinc-600';
 }
-// app/lib/baserow.ts
 
 export async function getCommitteeData(productionId?: number) {
   const params: any = { size: "200" };
@@ -570,21 +479,22 @@ export async function getCommitteeData(productionId?: number) {
   return data.map((row: any) => ({
     id: row.id,
     
-    // 🛡️ Map using the Schema IDs
-    name: extractName(row[F.PERSON] || row[(F as any).PARENT_NAME]),
-    studentName: extractName(row[(F as any).STUDENT_NAME] || row[(F as any).STUDENT]),
+    // 🚨 FIX: Mapped to correct schema fields
+    name: extractName(row[F.STUDENT_NAME] || row[F.STUDENT_ID]),
+    studentName: extractName(row[F.STUDENT_NAME] || row[F.STUDENT_ID]),
 
-    preShow1: safeGet(row[F.FIRST_CHOICE] || row[(F as any).PRE_SHOW_1ST]),
-    preShow2: safeGet(row[F.SECOND_CHOICE] || row[(F as any).PRE_SHOW_2ND]),
+    preShow1: safeGet(row[F.PRE_SHOW_1ST]),
+    preShow2: safeGet(row[F.PRE_SHOW_2ND]), // Was PRE_SHOW_2ND
     
-    showWeek1: safeGet(row[(F as any).SHOW_WEEK_1ST]),
-    showWeek2: safeGet(row[(F as any).SHOW_WEEK_2ND]),
+    showWeek1: safeGet(row[F.SHOW_WEEK_1ST]),
+    showWeek2: safeGet(row[F.SHOW_WEEK_2ND]),
     
-    email: safeGet(row[(F as any).EMAIL]),
-    phone: safeGet(row[(F as any).PHONE]),
-    assigned: safeGet(row[F.ASSIGNED_COMMITTEE], ""),
+    email: safeGet(row[F.EMAIL]),
+    phone: safeGet(row[F.PHONE]),
+    assigned: safeGet(row[F.SHOW_WEEK_COMMITTEES], ""), // Was ASSIGNED_COMMITTEE
   }));
 }
+
 export async function getCommitteePreferences() {
   return fetchBaserow(`/database/rows/table/${DB.COMMITTEE_PREFS.ID}/`);
 }
@@ -596,15 +506,15 @@ export async function getConflicts() {
 export async function getComplianceData() {
   return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
 }
+
 // ==============================================================================
-// 🔐 AUTHENTICATION - REFACTORED
+// 🔐 AUTHENTICATION
 // ==============================================================================
 
 export async function findUserByEmail(email: string) {
   const params = {
     filter_type: "OR",
     size: "1",
-    // Use Field IDs for filtering
     [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
     [`filter__${DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
   };
@@ -624,25 +534,12 @@ export async function findUserByEmail(email: string) {
 }
 
 export async function verifyUserCredentials(email: string, password: string) {
-  // 1. Find the user
   const user = await findUserByEmail(email);
-  
-  // 2. If user doesn't exist, return null (NextAuth interprets this as "Access Denied")
   if (!user) return null;
-
-  // 3. (Optional) In the future, check the password here:
-  // if (user.storedPassword !== password) return null;
-
-  // 4. Return the full user object so NextAuth can bake it into the session
   return user; 
 }
 
-// --- WRITE HELPERS ---
-
-// app/lib/baserow.ts
-
 // --- AUDITIONS ---
-// app/lib/baserow.ts
 
 export async function getAuditionees(productionId?: number) {
   const params: any = { size: "200" };
@@ -655,17 +552,17 @@ export async function getAuditionees(productionId?: number) {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-      // 🚨 FIX: Extract Headshot URL from Baserow File Array
-      const headshotField = row[F.HEADSHOT] || row["Headshot"];
+      // Extract Headshot
+      const headshotField = row[F.HEADSHOT];
       const headshotUrl = Array.isArray(headshotField) && headshotField.length > 0 
         ? headshotField[0].url 
         : null;
 
-      // 🚨 FIX: Extract Video URL from Baserow File Array
-      const videoField = row[(F as any).AUDITION_VIDEO] || row["Audition Video"];
+      // Extract Video
+      const videoField = row[F.AUDITION_VIDEO];
       const videoUrl = Array.isArray(videoField) && videoField.length > 0 
         ? videoField[0].url 
-        : row[(F as any).DANCE_VIDEO] || null;
+        : row[F.DANCE_VIDEO] || null;
 
       return {
           id: row.id,
@@ -673,42 +570,35 @@ export async function getAuditionees(productionId?: number) {
           studentId: safeId(row[F.PERFORMER]),
           
           date: row[F.DATE] || null, 
-          headshot: headshotUrl, // Now a clean string URL
-          video: videoUrl,       // Now a clean string URL
+          headshot: headshotUrl,
+          video: videoUrl,
 
-          // Scores
           vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
           actingScore: safeGet(row[F.ACTING_SCORE], 0),
           danceScore: safeGet(row[F.DANCE_SCORE], 0),
           presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
           
-          // Bio Data
-          age: safeGet(row[(F as any).AGE] || row["Age"], "?"),
-          height: safeGet(row[(F as any).HEIGHT] || row["Height"], ""),
-          song: safeGet(row[(F as any).SONG] || row["Song"], ""),
-          monologue: safeGet(row[(F as any).MONOLOGUE] || row["Monologue"], ""),
-          conflicts: safeGet(row[F.CONFLICTS] || row["Conflicts"], "No known conflicts"),
-          gender: safeGet(row[F.GENDER] || row["Gender"] || row["Sex"], "Unknown"),
-          // Notes
+          age: safeGet(row[F.AGE], "?"),
+          height: safeGet(row[F.HEIGHT], ""),
+          song: safeGet(row[F.SONG], ""),
+          monologue: safeGet(row[F.MONOLOGUE], ""),
+          conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
+          gender: safeGet(row[F.GENDER], "Unknown"),
+          
           actingNotes: safeGet(row[F.ACTING_NOTES], "No notes logged."),
-          musicNotes: safeGet(row[(F as any).MUSIC_NOTES], "No notes logged."),
-          choreoNotes: safeGet(row[(F as any).CHOREOGRAPHY_NOTES], "No notes logged."),
-          dropInNotes: safeGet(row[(F as any).DROP_IN_NOTES], "No flags."),
-          adminNotes: safeGet(row[(F as any).ADMIN_NOTES], ""),
+          musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes logged."),
+          choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes logged."),
+          dropInNotes: safeGet(row[F.DROP_IN_NOTES], "No flags."),
+          adminNotes: safeGet(row[F.ADMIN_NOTES], ""),
           
           status: !row[F.DATE] ? "Walk-In" : "Scheduled",
       };
   });
 }
 
-// app/lib/baserow.ts
-
-// ... existing imports ... 
-
 // --- USER PROFILE & FAMILY ---
 
 export async function getUserProfile(email: string) {
-  // 1. Find the Main User
   const userRows = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
     filter_type: "OR",
     size: "1",
@@ -719,38 +609,33 @@ export async function getUserProfile(email: string) {
   if (!userRows || userRows.length === 0) return null;
 
   const user = userRows[0];
-  const familyLink = user[DB.PEOPLE.FIELDS.FAMILIES]; // The Link to the "Families" table
+  const familyLink = user[DB.PEOPLE.FIELDS.FAMILIES]; 
   
-  // 2. Prepare the basic profile
   const profile = {
     id: user.id.toString(),
     name: safeGet(user[DB.PEOPLE.FIELDS.FULL_NAME]),
     email: email,
     phone: safeGet(user[DB.PEOPLE.FIELDS.PHONE_NUMBER]),
     address: `${safeGet(user[DB.PEOPLE.FIELDS.ADDRESS])}, ${safeGet(user[DB.PEOPLE.FIELDS.CITY])}`,
-    role: safeGet(user[DB.PEOPLE.FIELDS.STATUS], "User"), // e.g. "Parent/Guardian"
+    role: safeGet(user[DB.PEOPLE.FIELDS.STATUS], "User"),
     image: user[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
     familyMembers: [] as any[]
   };
 
-  // 3. Fetch Family Members (if a Family Link exists)
   if (Array.isArray(familyLink) && familyLink.length > 0) {
     const familyId = familyLink[0].id;
-    
-    // Fetch ALL people linked to this Family ID
     const familyData = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
       [`filter__${DB.PEOPLE.FIELDS.FAMILIES}__link_row_has`]: familyId,
       size: "20"
     });
 
     if (Array.isArray(familyData)) {
-      // Filter out the current user so they don't appear twice
       profile.familyMembers = familyData
         .filter((member: any) => member.id !== user.id) 
         .map((member: any) => ({
           id: member.id,
           name: safeGet(member[DB.PEOPLE.FIELDS.FULL_NAME]),
-          role: safeGet(member[DB.PEOPLE.FIELDS.STATUS], "Student"), // e.g. "Student"
+          role: safeGet(member[DB.PEOPLE.FIELDS.STATUS], "Student"),
           age: parseInt(safeGet(member[DB.PEOPLE.FIELDS.AGE], 0)),
           image: member[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
         }));
@@ -760,12 +645,7 @@ export async function getUserProfile(email: string) {
   return profile;
 }
 
-// app/lib/baserow.ts
-
 export async function getUserProductionRole(userId: number, productionId: number) {
-  // We search the 'Show Team Assignments' table (610)
-  // We need a row that matches BOTH the Person AND the Production
-  
   const params = {
     filter_type: "AND",
     [`filter__${DB.SHOW_TEAM.FIELDS.PERSON}__link_row_has`]: userId,
@@ -775,128 +655,67 @@ export async function getUserProductionRole(userId: number, productionId: number
   const rows = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
 
   if (!rows || rows.length === 0) return null;
-
-  // Return the Role Name (e.g. "Director")
-  // Note: This assumes 'Position' is a Link Row to your Roles table, or a Text field.
-  // If it's a Link Row, we grab the value.
   return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
 }
-// --- CALLBACKS ---
 
+// --- CALLBACKS (COMMENTED OUT PENDING SCHEMA UPDATE) ---
+
+/*
 export async function getCallbackSlots(productionId: number) {
-  const params: any = { size: "100" };
-  // Using the Field ID from your schema for Production
-  params[`filter__${DB.CALLBACK_SLOTS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
-
-  const data = await fetchBaserow(`/database/rows/table/${DB.CALLBACK_SLOTS.ID}/`, {}, params);
-  
-  if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => ({
-    id: row.id,
-    time: row[DB.CALLBACK_SLOTS.FIELDS.TIME] || "TBD",
-    title: row[DB.CALLBACK_SLOTS.FIELDS.TITLE] || "Untitled Call",
-    type: row[DB.CALLBACK_SLOTS.FIELDS.TYPE] || "General",
-    description: row["Description"] || "",
-  }));
+  // Schema Missing
+  return [];
 }
 
 export async function getCallbackAssignments(productionId: number) {
-  const params: any = { size: "1000" };
-  // This table links Performers to specific Callback Slots
-  params[`filter__${DB.CALLBACK_ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`] = productionId;
-
-  const data = await fetchBaserow(`/database/rows/table/${DB.CALLBACK_ASSIGNMENTS.ID}/`, {}, params);
-
-  if (!Array.isArray(data)) return [];
-
-  return data.map((row: any) => ({
-    id: row.id,
-    performerId: safeId(row[DB.CALLBACK_ASSIGNMENTS.FIELDS.PERFORMER]),
-    slotId: safeId(row[DB.CALLBACK_ASSIGNMENTS.FIELDS.SLOT]),
-  }));
+  // Schema Missing
+  return [];
 }
+*/
+
 export async function submitAudition(studentId: number, productionId: number, extraData: any) {
     const F = DB.AUDITIONS.FIELDS;
     
-    // We map the "Pretty" keys from the UI back to the "Shielded" Field IDs
     const payload: any = {
         [F.PERFORMER]: [studentId],
         [F.PRODUCTION]: [productionId],
         [F.DATE]: new Date().toISOString(),
-        // Map scores if they exist in extraData
         [F.VOCAL_SCORE]: extraData.vocal || 0,
         [F.ACTING_SCORE]: extraData.acting || 0,
         [F.DANCE_SCORE]: extraData.dance || 0,
         [F.STAGE_PRESENCE_SCORE]: extraData.presence || 0,
-        // Map notes based on the judge role (handled in the component logic)
         [F.ACTING_NOTES]: extraData.notes || "" 
     };
     
-    // Note: If you need to save to specific note fields (Music/Choreo), 
-    // you can expand the logic here or pass the field ID directly from the component.
-
     return await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
     });
 }
-// app/lib/baserow.ts
 
 export async function getCastingData(productionId: number) {
-  // 🛡️ The Shield: Fetching the two sources needed to build the grid
   const [auditionees, assignments] = await Promise.all([
     getAuditionees(productionId),
     getAssignments(productionId)
   ]);
 
-  // We want to return a map of "Who is in what role" 
-  // and "Who is available to be cast"
-  return {
-    auditionees, // The pool of talent
-    assignments, // The current links between talent and roles
-  };
+  return { auditionees, assignments };
 }
 
-// 🚨 THIS IS THE CRITICAL WRITER: Updates the actual role in Baserow
-// app/lib/baserow.ts
-
-export async function updateCastAssignment(assignmentId: number, personId: number | null, sceneIds?: number[]) {
-    const F = DB.ASSIGNMENTS.FIELDS;
-    
-    const body: any = {};
-    
-    // Only update Person if provided (or explicitly null to clear)
-    if (personId !== undefined) {
-        body[F.PERSON] = personId ? [personId] : [];
-    }
-
-    // Only update Scenes if provided
-    if (sceneIds !== undefined) {
-        body[F.SCENES] = sceneIds; // Usually array of IDs for Link Row
-    }
-
-    return await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-    });
-}
 // Keep updateAuditionSlot as is
 export async function updateAuditionSlot(rowId: number, data: any) {
     return await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/${rowId}/?user_field_names=true`, {
         method: "PATCH",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
     });
 }
 
+// Fix: Removed STATUS field logic as it doesn't exist in Auditions schema
+// export async function setCallbackStatus(rowId: number, status: string) { ... }
+
 export async function updateRole(roleId: number, data: any) {
+  // 🚨 FIX: Using BLUEPRINT_ROLES
   return await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/${roleId}/`, { 
     method: "PATCH", 
     body: JSON.stringify(data) 
@@ -908,7 +727,6 @@ export async function updateRole(roleId: number, data: any) {
 // ==============================================================================
 
 export async function getPerformanceAnalytics(productionId?: number) {
-  // 1. Fetch from the PERFORMANCES table using the new Schema ID
   const data = await fetchBaserow(
     `/database/rows/table/${DB.PERFORMANCES.ID}/`, 
     {}, 
@@ -918,7 +736,6 @@ export async function getPerformanceAnalytics(productionId?: number) {
   if (!Array.isArray(data) || data.length === 0) return [];
 
   return data.map((row: any) => {
-    // 2. Use safeGet with the Schema Field IDs
     const sold = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TICKETS_SOLD], 0));
     const capacity = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TOTAL_INVENTORY], 0));
     const label = safeGet(row[DB.PERFORMANCES.FIELDS.PERFORMANCE], "Show");

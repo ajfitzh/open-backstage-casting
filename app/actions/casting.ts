@@ -6,29 +6,28 @@ import { revalidatePath } from "next/cache";
 export async function generateCastingRows(productionId: number) {
   console.log(`Generating casting rows for Production ${productionId}...`);
 
-  // 1. Fetch ALL Blueprint Roles (e.g. Ariel, Flounder, Ensemble)
-  // You might want to filter this by "Department = Cast" if you have crew roles mixed in
-  const roles = await fetchBaserow(`/database/rows/table/${DB.ROLES.ID}/`, {}, {
-    size: "200", // Ensure we get them all
-    // Optional: Add filter if you only want Cast roles
-    // [`filter__${DB.ROLES.FIELDS.DEPARTMENT}__equal`]: 'Cast' 
+  // 1. Fetch ALL Blueprint Roles
+  // 🟢 SCHEMA MATCH: Using DB.BLUEPRINT_ROLES
+  const roles = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, {
+    size: "200", 
+    "user_field_names": "true" 
   });
 
-  if (!roles || roles.length === 0) throw new Error("No Roles found in Blueprint!");
+  if (!roles || roles.length === 0) throw new Error("No Blueprint Roles found!");
 
   // 2. Prepare the Batch Create requests
-  // Baserow allows batch creating rows. We'll link the Role + The Production.
-  // We also PRE-FILL the scenes from the Role's default link!
   const newRows = roles.map((role: any) => ({
     [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-    [DB.ASSIGNMENTS.FIELDS.ROLE]: [role.id],
-    // Auto-fill scenes from the Role's "Default Scenes" field if it exists
-    [DB.ASSIGNMENTS.FIELDS.SCENES]: role[DB.ROLES.FIELDS.DEFAULT_SCENES] || [] 
+    
+    // 🟢 SCHEMA MATCH: Linking to 'Performance Identity'
+    [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id],
+    
+    // 🟢 SCHEMA MATCH: Linking to 'Scene Assignments'
+    // We grab the default scenes from the Blueprint's 'Active Scenes' field
+    [DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS]: role['Active Scenes']?.map((s:any) => s.id) || [] 
   }));
 
   // 3. Send to Baserow (Batch create)
-  // Baserow API limits batch size, so safe to do chunks if you have >100 roles.
-  // Assuming <100 roles for now:
   await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/batch/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

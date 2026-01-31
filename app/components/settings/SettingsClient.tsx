@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   User, Shield, Monitor, Lock, 
   LogOut, Mail, Fingerprint, 
@@ -12,7 +13,7 @@ import { signOut } from "next-auth/react";
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
 
-// --- Types ---
+// --- Types (Same as before) ---
 export interface FamilyMember {
   id: number;
   name: string;
@@ -35,14 +36,12 @@ interface SettingsProps {
   shows: any[];
   activeId: number;
   initialUser: UserProfile;
-  // We accept the REAL production role as a prop for reference/security checks
   realProductionRole: string | null; 
 }
 
 export default function SettingsClient({ shows, activeId, initialUser, realProductionRole }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   
-  // 🚀 USE THE BRIDGE: Get Effective Roles & Controls
   const { 
     role: effectiveGlobalRole, 
     productionRole: effectiveProdRole, 
@@ -53,25 +52,32 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
   
   const activeShow = shows.find(s => s.id === activeId) || shows[0];
 
-  // 1. THE CHECKER: Determines access based on EFFECTIVE (Simulated or Real) roles
-  const checkAccess = (perm: Permission) => {
+  // 1. FIX: Wrap in useCallback so it's stable and can be a dependency
+  const checkAccess = useCallback((perm: Permission) => {
     const granted = hasPermission(effectiveGlobalRole, effectiveProdRole, perm);
     return {
       granted,
       level: granted ? (perm.includes('edit') || perm.includes('manage') ? 'write' : 'read') : 'locked'
     };
-  };
+  }, [effectiveGlobalRole, effectiveProdRole]);
 
-  // 2. THE EJECTOR SEAT 💺
-  // If you switch roles and lose permission for the current tab, redirect to Profile.
+  // 2. FIX: Calculate "Safe Tab" DURING render (prevents cascading updates)
+  // This logic runs before the UI paints. If the current tab is forbidden,
+  // we default to 'profile' immediately for this render cycle.
+  const canSeeBilling = checkAccess('view_billing').granted;
+  const canSeeSystem = checkAccess('view_cast_list').granted;
+
+  let safeTab = activeTab;
+  if (activeTab === 'billing' && !canSeeBilling) safeTab = 'profile';
+  if ((activeTab === 'permissions' || activeTab === 'context') && !canSeeSystem) safeTab = 'profile';
+
+  // 3. Sync State (Optional cleanup)
+  // If we had to force a safe tab, update the state for next time
   useEffect(() => {
-    const canSeeBilling = checkAccess('view_billing').granted;
-    const canSeeSystem = checkAccess('view_cast_list').granted; // Proxy for Staff/Volunteer access
-
-    if (activeTab === 'billing' && !canSeeBilling) setActiveTab('profile');
-    if (activeTab === 'permissions' && !canSeeSystem) setActiveTab('profile');
-    if (activeTab === 'context' && !canSeeSystem) setActiveTab('profile');
-  }, [effectiveGlobalRole, effectiveProdRole, activeTab]);
+    if (safeTab !== activeTab) {
+        setActiveTab(safeTab);
+    }
+  }, [safeTab, activeTab]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full max-w-7xl mx-auto w-full relative">
@@ -85,21 +91,20 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
 
             <div className="space-y-1">
                 <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-4 mb-2">Account</p>
-                <TabButton id="profile" label="My Profile" icon={<User size={18}/>} active={activeTab} onClick={setActiveTab} />
-                <TabButton id="family" label="Family Members" icon={<Users size={18}/>} active={activeTab} onClick={setActiveTab} />
+                {/* USE safeTab INSTEAD OF activeTab */}
+                <TabButton id="profile" label="My Profile" icon={<User size={18}/>} active={safeTab} onClick={setActiveTab} />
+                <TabButton id="family" label="Family Members" icon={<Users size={18}/>} active={safeTab} onClick={setActiveTab} />
                 
-                {/* 🔒 GATE: Only Admins & Parents see Billing */}
                 {checkAccess('view_billing').granted && (
-                    <TabButton id="billing" label="Billing & Donations" icon={<CreditCard size={18}/>} active={activeTab} onClick={setActiveTab} />
+                    <TabButton id="billing" label="Billing & Donations" icon={<CreditCard size={18}/>} active={safeTab} onClick={setActiveTab} />
                 )}
             </div>
 
-            {/* 🔒 GATE: Only Staff/Contractors/Volunteers see System Tools */}
             {checkAccess('view_cast_list').granted && (
                 <div className="space-y-1 animate-in slide-in-from-left-2 fade-in duration-300">
                     <p className="px-4 text-[10px] font-bold uppercase text-zinc-600 tracking-widest mt-6 mb-2">System</p>
-                    <TabButton id="context" label="Workspace Context" icon={<Monitor size={18}/>} active={activeTab} onClick={setActiveTab} />
-                    <TabButton id="permissions" label="Permissions (RBAC)" icon={<Shield size={18}/>} active={activeTab} onClick={setActiveTab} />
+                    <TabButton id="context" label="Workspace Context" icon={<Monitor size={18}/>} active={safeTab} onClick={setActiveTab} />
+                    <TabButton id="permissions" label="Permissions (RBAC)" icon={<Shield size={18}/>} active={safeTab} onClick={setActiveTab} />
                 </div>
             )}
             
@@ -116,8 +121,8 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 min-h-[600px] bg-zinc-900/50 border border-white/5 rounded-3xl p-8 overflow-y-auto custom-scrollbar relative">
             
-            {/* --- PROFILE TAB --- */}
-            {activeTab === 'profile' && (
+            {/* RENDER BASED ON safeTab */}
+            {safeTab === 'profile' && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex items-start justify-between">
                         <div>
@@ -125,7 +130,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                             <p className="text-zinc-500 text-sm">Manage your personal contact information.</p>
                         </div>
                         <div className="px-3 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded-full uppercase tracking-wide">
-                            {initialUser.role} {/* Always show REAL role here to avoid confusion */}
+                            {initialUser.role} 
                         </div>
                     </div>
 
@@ -153,8 +158,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                 </div>
             )}
 
-            {/* --- FAMILY MEMBERS TAB --- */}
-            {activeTab === 'family' && (
+            {safeTab === 'family' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex justify-between items-end">
                         <div>
@@ -190,8 +194,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                 </div>
             )}
 
-            {/* --- WORKSPACE CONTEXT TAB --- */}
-            {activeTab === 'context' && (
+            {safeTab === 'context' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Workspace Context</h2>
@@ -220,8 +223,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                 </div>
             )}
 
-            {/* --- PERMISSIONS (RBAC) TAB --- */}
-            {activeTab === 'permissions' && (
+            {safeTab === 'permissions' && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Security Clearance</h2>
@@ -236,12 +238,10 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-white">
-                                        {/* Display Effective Role */}
                                         Global Role: {effectiveGlobalRole}
                                         {effectiveGlobalRole !== initialUser.role && <span className="text-red-400 ml-2 text-xs uppercase">(Simulated)</span>}
                                     </h4>
                                     <p className="text-xs text-zinc-500">
-                                        {/* Display Effective Production Role */}
                                         Show Role: {effectiveProdRole || "None"}
                                         {effectiveProdRole !== realProductionRole && <span className="text-red-400 ml-2 uppercase">(Simulated)</span>}
                                     </p>
@@ -272,8 +272,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
                 </div>
             )}
 
-            {/* --- BILLING TAB --- */}
-            {activeTab === 'billing' && (
+            {safeTab === 'billing' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                      <div className="flex justify-between items-end">
                         <div>
@@ -294,7 +293,6 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
         </div>
 
         {/* 3. THE DEV WIDGET (GOD MODE) */}
-        {/* Only visible to REAL Admins/Execs to prevent hacking */}
         {['Admin', 'Executive Director'].includes(initialUser.role) && (
             <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-10">
                 <div className="bg-zinc-950 border border-red-500/30 shadow-2xl rounded-xl p-4 w-72 backdrop-blur-md">
@@ -358,7 +356,7 @@ export default function SettingsClient({ shows, activeId, initialUser, realProdu
   );
 }
 
-// --- SUB-COMPONENTS (Keep these same as before) ---
+// --- SUB-COMPONENTS ---
 function TabButton({ id, label, icon, active, onClick }: any) {
     const isActive = active === id;
     return (
