@@ -5,19 +5,20 @@ import {
     Theater, Users, Image as ImageIcon, 
     Video, FileText, BarChart3, Palette, Box, Layers,
     ArrowUpRight, Target, CalendarClock, CheckCircle2,
-    TrendingUp, AlertTriangle, LayoutGrid, Timer
+    TrendingUp, AlertTriangle, LayoutGrid, Timer,
+    Ruler, GraduationCap, Sparkles
 } from 'lucide-react';
 
-// --- MOCK CONSTANTS FOR PACE ---
+// --- CONSTANTS ---
 const WEEKS_TOTAL = 10;
 const CURRENT_WEEK = 4; // Mocking that we are in Week 4
 const GOAL_WEEK_8 = 8;  // Super Saturday Target
 
-export default function ProductionClient({ show, assignments, auditionees, scenes, assets }: any) {
+export default function ProductionClient({ show, assignments, auditionees, scenes, assets, population = [] }: any) {
     const [activeTab, setActiveTab] = useState<'overview' | 'progress'>('overview');
     
-    // Safety check in case show is null (e.g. fresh load)
-    if (!show) return <div className="p-8 text-white">Loading Show Data...</div>;
+    // Safety check
+    if (!show) return <div className="h-screen flex items-center justify-center text-zinc-500 font-mono">Loading Show Data...</div>;
 
     return (
         <div className="flex flex-col h-full bg-zinc-950 text-white font-sans overflow-y-auto custom-scrollbar">
@@ -31,7 +32,6 @@ export default function ProductionClient({ show, assignments, auditionees, scene
                         </div>
                         <div>
                             <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Creative Control</div>
-                            {/* 🚨 FIX: show.Title -> show.title */}
                             <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white">{show.title}</h1>
                         </div>
                     </div>
@@ -57,9 +57,9 @@ export default function ProductionClient({ show, assignments, auditionees, scene
             <div className="p-8">
                 {activeTab === 'overview' ? (
                     <OverviewView 
-                        show={show} 
+                        show={show}
                         assignments={assignments} 
-                        auditionees={auditionees} 
+                        population={population} 
                         scenes={scenes} 
                         assets={assets} 
                     />
@@ -72,165 +72,195 @@ export default function ProductionClient({ show, assignments, auditionees, scene
 }
 
 // ============================================================================
-// 1. OVERVIEW TAB
+// 1. OVERVIEW TAB (Analytics & Assets)
 // ============================================================================
-function OverviewView({ show, assignments, auditionees, scenes, assets }: any) {
+function OverviewView({ assignments, population, scenes, assets }: any) {
     const [assetFilter, setAssetFilter] = useState("All");
 
-    // --- LOGIC: DEMOGRAPHICS ---
-    const demographics = useMemo(() => {
-        // 🚨 FIX: Use 'personId' (from your clean getAssignments) instead of Raw 'Person' array
-        const uniqueCastIds = new Set(assignments.map((a:any) => a.personId).filter(Boolean));
+    // --- LOGIC: CAST ANALYTICS ---
+    const stats = useMemo(() => {
+        // 1. Filter Population to only include people in THIS show
+        // We match assignments.personId to population.id
+        const activeIds = new Set(assignments.map((a:any) => a.personId).filter(Boolean));
+        const activeCast = population.filter((p:any) => activeIds.has(p.id));
         
-        const total = uniqueCastIds.size;
-        const castProfiles = auditionees.filter((a:any) => uniqueCastIds.has(a.id));
+        const total = activeCast.length;
+
+        // 2. Gender (Using the clean 'gender' string from baserow.ts)
+        const males = activeCast.filter((p:any) => (p.gender || "").trim() === 'Male').length;
+        const females = activeCast.filter((p:any) => (p.gender || "").trim() === 'Female').length;
         
-const getGender = (c: any) => {
-        // Because we fixed baserow.ts, c.gender is now a simple string!
-        // We trim() it just in case of whitespace.
-        const g = (c.gender || "Unknown").trim();
-        return g;
-    };
-
-        const males = castProfiles.filter((c:any) => getGender(c) === 'Male').length;
-    const females = castProfiles.filter((c:any) => getGender(c) === 'Female').length;const unknown = total - (males + females);
-
-        return { total, males, females, unknown };
-    }, [assignments, auditionees]);
-
-    // --- LOGIC: WORKLOAD ---
-    const workload = useMemo(() => {
-        const counts: Record<string, number> = {};
-        assignments.forEach((a:any) => {
-            // 🚨 FIX: Use 'personName' (clean) instead of Raw 'Person'
-            const name = a.personName || "Unknown";
-            if (name !== "Unknown") counts[name] = (counts[name] || 0) + 1;
+        // 3. Experience (Based on showCount)
+        const exp = { green: 0, journey: 0, pro: 0 };
+        activeCast.forEach((p:any) => {
+            const count = p.showCount || 0;
+            if (count <= 2) exp.green++;
+            else if (count <= 5) exp.journey++;
+            else exp.pro++;
         });
 
-        const sorted = Object.entries(counts).sort(([,a], [,b]) => b - a).slice(0, 5);
-        const avgRoles = demographics.total > 0 ? (assignments.length / demographics.total).toFixed(1) : "0.0";
+        // 4. Age
+        const validAges = activeCast.map((p:any) => p.age).filter((a:number) => a > 0);
+        const avgAge = validAges.length ? (validAges.reduce((a:number,b:number)=>a+b,0) / validAges.length).toFixed(1) : "N/A";
+        const minAge = validAges.length ? Math.min(...validAges) : 0;
+        const maxAge = validAges.length ? Math.max(...validAges) : 0;
 
-        return { topHeavy: sorted, avgRoles, totalAssignments: assignments.length };
-    }, [assignments, demographics.total]);
+        // 5. Height
+        const validHeights = activeCast.map((p:any) => p.height).filter((h:number) => h > 0);
+        const avgHeight = validHeights.length ? (validHeights.reduce((a:number,b:number)=>a+b,0) / validHeights.length).toFixed(1) : "N/A";
+
+        return { total, males, females, exp, avgAge, minAge, maxAge, avgHeight };
+    }, [assignments, population]);
 
     // --- LOGIC: ASSETS ---
     const filteredAssets = useMemo(() => {
         if (!assets) return [];
-        if (assetFilter === "All") return assets;
-        return assets.filter((a:any) => {
-             // 🚨 FIX: Use clean 'a.type' (no object check needed anymore)
-             return a.type === assetFilter;
-        });
+        return assetFilter === "All" ? assets : assets.filter((a:any) => a.type === assetFilter);
     }, [assets, assetFilter]);
-
-    // --- LOGIC: SCENES ---
-    const sceneStats = useMemo(() => {
-        if (!scenes) return { count: 0, cues: 0 };
-        // 🚨 FIX: Not using 'Minimum Performers' yet in getScenes, setting fallback
-        const cues = 0; 
-        return { count: scenes.length, cues };
-    }, [scenes]);
 
     return (
         <div className="space-y-8 animate-in slide-in-from-right-8 duration-500">
-             {/* ROW 1: CAST METRICS */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity text-blue-500"><Users size={64}/></div>
+             
+             {/* ROW 1: THE BIG NUMBERS */}
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* 1. CAST COUNT */}
+                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
+                    <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-blue-500"><Users size={80}/></div>
                     <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Total Cast</div>
-                    <div className="text-4xl font-black text-white mb-2">{demographics.total}</div>
-                    <div className="flex items-center gap-2 text-xs font-bold text-zinc-400">
-                        {demographics.males > 0 && <span className="bg-blue-900/30 text-blue-400 px-1.5 py-0.5 rounded">{demographics.males} M</span>}
-                        {demographics.females > 0 && <span className="bg-pink-900/30 text-pink-400 px-1.5 py-0.5 rounded">{demographics.females} F</span>}
-                        {demographics.unknown > 0 && <span className="bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded">{demographics.unknown} ?</span>}
+                    <div className="text-4xl font-black text-white mb-3">{stats.total}</div>
+                    
+                    {/* Gender Bar */}
+                    <div className="w-full h-1.5 bg-zinc-800 rounded-full flex overflow-hidden mb-2">
+                        <div style={{ width: `${stats.total ? (stats.males / stats.total) * 100 : 0}%` }} className="bg-blue-500"/>
+                        <div style={{ width: `${stats.total ? (stats.females / stats.total) * 100 : 0}%` }} className="bg-pink-500"/>
+                    </div>
+                    <div className="flex justify-between text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                        <span><span className="text-blue-400">{stats.males}</span> Male</span>
+                        <span><span className="text-pink-400">{stats.females}</span> Fem</span>
                     </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
-                    <div className="absolute right-0 top-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity text-emerald-500"><Layers size={64}/></div>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Workload</div>
-                    <div className="text-4xl font-black text-white mb-2">{workload.avgRoles}</div>
-                    <div className="text-xs font-bold text-emerald-500">Avg Roles / Kid</div>
-                </div>
+                {/* 2. EXPERIENCE LEVEL */}
+                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
+                    <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-amber-500"><Sparkles size={80}/></div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Experience</div>
+                    <div className="flex items-center gap-4">
+                         <div className="text-4xl font-black text-white">{stats.exp.pro}</div>
+                         <div className="text-xs text-purple-400 font-bold uppercase leading-tight">Veterans<br/>(6+ Shows)</div>
+                    </div>
 
-                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-5 col-span-2 flex flex-col justify-center relative overflow-hidden">
-                    <div className="flex justify-between items-end mb-3 relative z-10">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                            <BarChart3 size={14} className="text-amber-500"/> Heaviest Workloads
-                        </h3>
-                        <span className="text-[9px] text-zinc-600 uppercase font-bold">Total Assignments: {workload.totalAssignments}</span>
-                    </div>
-                    <div className="grid grid-cols-5 gap-2 relative z-10">
-                        {workload.topHeavy.map(([name, count], i) => (
-                            <div key={i} className="bg-black/40 border border-white/5 rounded-lg p-2 flex flex-col items-center text-center">
-                                <span className="text-lg font-black text-white leading-none">{count}</span>
-                                <span className="text-[9px] font-bold text-zinc-400 uppercase truncate w-full" title={name}>{name.split(' ')[0]}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* ROW 2: ASSETS */}
-            <div>
-                <div className="flex justify-between items-end mb-4">
-                    <h2 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2">
-                        <Palette size={20} className="text-pink-500"/> Design Hub
-                    </h2>
-                    <div className="flex bg-zinc-900 p-1 rounded-lg border border-white/5">
-                        {['All', 'Image', 'PDF', 'Audio'].map(type => (
-                            <button key={type} onClick={() => setAssetFilter(type)} className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${assetFilter === type ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>{type}</button>
-                        ))}
-                    </div>
-                </div>
-                {filteredAssets.length === 0 ? (
-                     <div className="w-full h-32 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-600 gap-2">
-                        <Box size={24} className="opacity-20"/>
-                        <p className="text-xs font-bold uppercase">No Design Assets Uploaded</p>
-                     </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                        {filteredAssets.map((asset: any) => {
-                            // 🚨 FIX: Use clean keys from backend
-                            const isImage = asset.type === 'Image' || (asset.link && asset.link.match(/\.(jpeg|jpg|gif|png)$/i));
-                            return (
-                                <a key={asset.id} href={asset.link} target="_blank" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
-                                    {isImage ? <img src={asset.link} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
-                                    <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
-                                        <p className="text-xs font-bold text-white truncate">{asset.name}</p>
-                                        <p className="text-[9px] font-black text-zinc-400 uppercase">{asset.type}</p>
-                                    </div>
-                                </a>
-                            )
-                        })}
-                    </div>
-                )}
-            </div>
-
-            {/* ROW 3: SCENES */}
-            <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">Show Structure</h3>
-                    <span className="text-xs font-mono text-zinc-500 bg-zinc-950 border border-white/10 px-3 py-1 rounded-full">{sceneStats.count} Scenes</span>
-                </div>
-                <div className="grid grid-cols-2 gap-8">
-                     {['Act 1', 'Act 2'].map(act => (
-                        <div key={act}>
-                            <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-3 border-b border-white/10 pb-1">{act}</h4>
-                            <div className="space-y-1">
-                                {scenes.filter((s:any) => {
-                                    // 🚨 FIX: Use clean s.act
-                                    return s.act === act || (act === 'Act 1' && s.act === 'I') || (act === 'Act 2' && s.act === 'II');
-                                }).map((s:any) => (
-                                    <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 rounded-lg">
-                                        {/* 🚨 FIX: s.name, s.type */}
-                                        <span className="font-bold text-zinc-300">{s.name}</span>
-                                        <span className="text-[10px] font-black text-zinc-600 uppercase">{s.type}</span>
-                                    </div>
-                                ))}
-                            </div>
+                    <div className="mt-4 flex gap-1 h-12 items-end">
+                        {/* Green Bar */}
+                        <div className="flex-1 flex flex-col justify-end gap-1 group/bar">
+                            <span className="text-[9px] font-bold text-emerald-500 text-center opacity-0 group-hover/bar:opacity-100 transition-opacity">{stats.exp.green}</span>
+                            <div className="w-full bg-emerald-500/20 border-t border-emerald-500 rounded-sm hover:bg-emerald-500 transition-all" style={{ height: stats.total ? `${(stats.exp.green / stats.total) * 100}%` : '0%' }}></div>
+                            <span className="text-[8px] font-black text-zinc-600 text-center uppercase">Green</span>
                         </div>
-                     ))}
+                        {/* Journey Bar */}
+                        <div className="flex-1 flex flex-col justify-end gap-1 group/bar">
+                            <span className="text-[9px] font-bold text-amber-500 text-center opacity-0 group-hover/bar:opacity-100 transition-opacity">{stats.exp.journey}</span>
+                            <div className="w-full bg-amber-500/20 border-t border-amber-500 rounded-sm hover:bg-amber-500 transition-all" style={{ height: stats.total ? `${(stats.exp.journey / stats.total) * 100}%` : '0%' }}></div>
+                            <span className="text-[8px] font-black text-zinc-600 text-center uppercase">Mid</span>
+                        </div>
+                        {/* Pro Bar */}
+                        <div className="flex-1 flex flex-col justify-end gap-1 group/bar">
+                            <span className="text-[9px] font-bold text-purple-500 text-center opacity-0 group-hover/bar:opacity-100 transition-opacity">{stats.exp.pro}</span>
+                            <div className="w-full bg-purple-500/20 border-t border-purple-500 rounded-sm hover:bg-purple-500 transition-all" style={{ height: stats.total ? `${(stats.exp.pro / stats.total) * 100}%` : '0%' }}></div>
+                            <span className="text-[8px] font-black text-zinc-600 text-center uppercase">Pro</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. AGE SPECS */}
+                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
+                    <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-emerald-500"><GraduationCap size={80}/></div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Avg Age</div>
+                    <div className="text-4xl font-black text-white mb-2">{stats.avgAge}</div>
+                    <div className="flex gap-2 mt-4">
+                        <div className="bg-zinc-950 rounded-lg px-3 py-2 border border-white/5 flex-1">
+                            <div className="text-[9px] text-zinc-500 font-bold uppercase">Youngest</div>
+                            <div className="text-lg font-bold text-white">{stats.minAge}</div>
+                        </div>
+                        <div className="bg-zinc-950 rounded-lg px-3 py-2 border border-white/5 flex-1">
+                            <div className="text-[9px] text-zinc-500 font-bold uppercase">Oldest</div>
+                            <div className="text-lg font-bold text-white">{stats.maxAge}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. HEIGHT SPECS */}
+                <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
+                    <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-pink-500"><Ruler size={80}/></div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Avg Height</div>
+                    <div className="text-4xl font-black text-white mb-2">{stats.avgHeight}<span className="text-lg text-zinc-600">&ldquo;</span></div>
+                    <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
+                        Data collected from {stats.total} cast members.
+                    </p>
+                </div>
+            </div>
+
+            {/* ROW 2: ASSETS & SCENES */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* 1. ASSET GRID (Design Hub) */}
+                <div className="lg:col-span-3">
+                     <div className="flex justify-between items-end mb-4">
+                        <h2 className="text-xl font-black uppercase italic tracking-tighter text-white flex items-center gap-2">
+                            <Palette size={20} className="text-pink-500"/> Design Hub
+                        </h2>
+                        <div className="flex bg-zinc-900 p-1 rounded-lg border border-white/5">
+                            {['All', 'Image', 'PDF', 'Audio'].map(type => (
+                                <button key={type} onClick={() => setAssetFilter(type)} className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${assetFilter === type ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>{type}</button>
+                            ))}
+                        </div>
+                    </div>
+                    {filteredAssets.length === 0 ? (
+                         <div className="w-full h-32 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-zinc-600 gap-2">
+                            <Box size={24} className="opacity-20"/>
+                            <p className="text-xs font-bold uppercase">No Design Assets Uploaded</p>
+                         </div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {filteredAssets.map((asset: any) => {
+                                const isImage = asset.type === 'Image' || (asset.link && asset.link.match(/\.(jpeg|jpg|gif|png)$/i));
+                                return (
+                                    <a key={asset.id} href={asset.link} target="_blank" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
+                                        {isImage ? <img src={asset.link} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
+                                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+                                            <p className="text-xs font-bold text-white truncate">{asset.name}</p>
+                                            <p className="text-[9px] font-black text-zinc-400 uppercase">{asset.type}</p>
+                                        </div>
+                                    </a>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. SCENE LIST */}
+                <div className="lg:col-span-3 bg-zinc-900 border border-white/5 rounded-3xl p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">Show Structure</h3>
+                        <span className="text-xs font-mono text-zinc-500 bg-zinc-950 border border-white/10 px-3 py-1 rounded-full">{scenes.length} Scenes</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-8">
+                         {['Act 1', 'Act 2'].map(act => (
+                            <div key={act}>
+                                <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-3 border-b border-white/10 pb-1">{act}</h4>
+                                <div className="space-y-1">
+                                    {scenes.filter((s:any) => {
+                                        return s.act === act || (act === 'Act 1' && s.act === 'I') || (act === 'Act 2' && s.act === 'II');
+                                    }).map((s:any) => (
+                                        <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 rounded-lg">
+                                            <span className="font-bold text-zinc-300">{s.name}</span>
+                                            <span className="text-[10px] font-black text-zinc-600 uppercase">{s.type}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                         ))}
+                    </div>
                 </div>
             </div>
         </div>
@@ -275,7 +305,6 @@ function ProgressView({ scenes }: any) {
         let completedUnits = 0;
 
         scenes.forEach((s: any) => {
-            // 🚨 FIX: Clean s.type
             const type = s.type;
             const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
             const hasDance = type === 'Dance' || type === 'Mixed';
@@ -391,7 +420,6 @@ function ProgressView({ scenes }: any) {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {scenes.map((s: any, i: number) => {
-                                // 🚨 FIX: Clean keys
                                 const type = s.type;
                                 const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
                                 const hasDance = type === 'Dance' || type === 'Mixed';
@@ -402,7 +430,6 @@ function ProgressView({ scenes }: any) {
                                     <tr key={s.id} className="hover:bg-white/5 transition-colors group">
                                         <td className="px-6 py-4 font-mono text-zinc-600">{i + 1}</td>
                                         <td className="px-6 py-4 font-bold text-zinc-300">
-                                            {/* 🚨 FIX: s.name */}
                                             {s.name}
                                             <span className="ml-2 text-[9px] font-normal text-zinc-600 border border-zinc-800 px-1.5 py-0.5 rounded uppercase">{type}</span>
                                         </td>

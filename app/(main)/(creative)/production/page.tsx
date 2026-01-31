@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { 
     getActiveProduction, getShowById, getAssignments, 
-    getAuditionees, getScenes, getProductionAssets 
+    getAuditionees, getScenes, getProductionAssets, getCastDemographics 
 } from '@/app/lib/baserow';
 import ProductionClient from '@/app/components/production/ProductionClient';
 
@@ -14,11 +14,13 @@ export default async function ProductionPage() {
   const activeProdId = show?.id || 0;
 
   // 2. Fetch Artistic Data
-  const [assignments, auditionees, scenes, assets] = await Promise.all([
-      getAssignments(activeProdId),    // Who is playing what?
-      getAuditionees(activeProdId),    // Demographics (Gender, Age, Height)
-      getScenes(activeProdId),         // Scope of show
-      getProductionAssets(activeProdId)// Set designs, prop lists, costume plots
+// Fetch all data in parallel
+  const [assignments, auditionees, scenes, assets, population] = await Promise.all([
+      getAssignments(activeProdId),
+      getAuditionees(activeProdId),
+      getScenes(activeProdId),
+      getProductionAssets(activeProdId),
+      getCastDemographics() // 👈 Fetch full population stats
   ]);
 
   return (
@@ -29,6 +31,7 @@ export default async function ProductionPage() {
             auditionees={auditionees}
             scenes={scenes}
             assets={assets}
+            population={population}
         />
     </main>
   );
