@@ -1,58 +1,40 @@
-import { cookies } from 'next/headers';
-import { 
-  getShowById, 
-  getActiveProduction, 
-  getScenes, // 👈 Added this
-  getCastingData // 👈 Added this to pre-fetch roles/auditionees if desired
-} from '@/app/lib/baserow';
-import CastingClient from '@/app/components/casting/CastingClient';
+"use server";
 
-export default async function CastingPage() {
-  const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value);
-  
-  // 1. Fetch the Production Object
-  let productionData = null;
-  if (activeId) {
-    productionData = await getShowById(activeId);
-  } 
-  
-  // Fallback if cookie is missing or production not found
-  if (!productionData) {
-    productionData = await getActiveProduction();
-  }
+import { fetchBaserow, DB } from "@/app/lib/baserow";
+import { revalidatePath } from "next/cache";
 
-  // 2. Extract Data using clean keys from mapShow()
-  const productionId = productionData?.id || 0;
-  const productionTitle = productionData?.title || "Select a Production";
-  
-  // 3. Extract Master Show ID
-  // Note: Ensure your mapShow helper in baserow.ts includes: 
-  // masterShowLink: row[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE]
-  const masterShowLink = productionData?.masterShowLink || []; 
-  const masterShowId = (Array.isArray(masterShowLink) && masterShowLink.length > 0) 
-    ? masterShowLink[0].id 
-    : null;
+export async function generateCastingRows(productionId: number) {
+  console.log(`Generating casting rows for Production ${productionId}...`);
 
-  // 4. 🚨 THE FIX: Fetch Scenes and Casting Data on the server
-  // This prevents the "Cannot read properties of undefined (reading 'map')" error
-  // by ensuring the client component starts with a full data set.
-  const [scenes, castingData] = await Promise.all([
-    getScenes(productionId),
-    getCastingData(productionId)
-  ]);
+  // 1. Fetch ALL Blueprint Roles from "Roles & Positions" Table
+  // ⚠️ FIX: Use DB.ROLES_POSITIONS instead of DB.ROLES
+  const roles = await fetchBaserow(`/database/rows/table/${DB.ROLES_POSITIONS.ID}/`, {}, {
+    size: "200", 
+    "user_field_names": "true" // Ensures we get 'Active Scenes' as a readable key
+  });
 
-  return (
-    <main className="min-h-screen bg-zinc-950">
-      <CastingClient 
-        productionId={productionId} 
-        productionTitle={productionTitle}
-        masterShowId={masterShowId}
-        initialScenes={scenes} // 👈 Passing to CastingClient
-        initialAuditionees={castingData.auditionees} // 👈 Passing to CastingClient
-        initialAssignments={castingData.assignments}
-        activeId={show.id} // 👈 Passing to CastingClient
-      />
-    </main>
-  );
+  if (!roles || roles.length === 0) throw new Error("No Roles found in Blueprint!");
+
+  // 2. Prepare the Batch Create requests
+  const newRows = roles.map((role: any) => ({
+    [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
+    
+    // ⚠️ FIX: Use PERFORMANCE_IDENTITY instead of ROLE
+    [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id],
+    
+    // ⚠️ FIX: Use SCENE_ASSIGNMENTS instead of SCENES
+    // And map from the Blueprint's "Active Scenes" field
+    [DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS]: role['Active Scenes']?.map((s:any) => s.id) || [] 
+  }));
+
+  // 3. Send to Baserow (Batch create)
+  await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/batch/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: newRows })
+  });
+
+  // 4. Refresh the UI
+  revalidatePath('/casting');
+  return { success: true, count: newRows.length };
 }
