@@ -7,7 +7,7 @@ import {
   TrendingUp, Calendar as CalendarIcon, 
   LayoutGrid, Coffee, Umbrella, Wand2,
   FileText, Mic2, Music, Theater,
-  Target, AlertTriangle, Clock // <--- ADDED THESE BACK
+  Target, AlertTriangle, Clock
 } from 'lucide-react';
 
 // --- IMPORTS ---
@@ -43,7 +43,6 @@ const TARGET_WEEK = 8;
 // ============================================================================
 export default function SchedulerClient({ 
     scenes = [], 
-    roles = [], 
     assignments = [], 
     people = [], 
     productionTitle = "Untitled Production" 
@@ -54,59 +53,47 @@ export default function SchedulerClient({
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   
-  // --- SHARED DATA PREP (With Safety Checks) ---
+  // --- SHARED DATA PREP (The Fix) ---
   const sceneData = useMemo(() => {
     // 🛡️ SAFETY: Abort if data isn't loaded yet
-    if (!people || !assignments || !scenes || !roles) return [];
+    if (!scenes || !assignments) return [];
 
-    // 1. Map Person ID -> Name
-    const personMap = new Map();
-    if (Array.isArray(people)) {
-        people.forEach((p: any) => {
-            personMap.set(p.id, { name: p["Full Name"] || `ID ${p.id}` });
+    // 1. Create a Map: SceneID -> List of Actor Names
+    // We leverage the fact that 'assignments' now contains 'sceneIds'
+    const sceneCastMap = new Map<number, Set<string>>();
+
+    assignments.forEach((a: any) => {
+        const actorName = a.personName;
+        // Skip empty assignments or assignments without linked scenes
+        if (!actorName || !a.sceneIds) return;
+
+        a.sceneIds.forEach((sceneId: number) => {
+            if (!sceneCastMap.has(sceneId)) sceneCastMap.set(sceneId, new Set());
+            sceneCastMap.get(sceneId)?.add(actorName);
         });
-    }
+    });
 
-    // 2. Map Role -> Cast
-    const roleCastMap = new Map<number, number[]>();
-    if (Array.isArray(assignments)) {
-        assignments.forEach((a: any) => {
-            const roleId = a["Performance Identity"]?.[0]?.id;
-            const personId = a["Person"]?.[0]?.id;
-            if(roleId && personId) {
-                const current = roleCastMap.get(roleId) || [];
-                if(!current.includes(personId)) roleCastMap.set(roleId, [...current, personId]);
-            }
-        });
-    }
-
-    // 3. Hydrate Scenes
-    if (!Array.isArray(scenes)) return [];
-    
+    // 2. Hydrate Scenes with Clean Keys
     return scenes.map((s: any) => {
-        const linkedRoles = Array.isArray(roles) ? roles.filter((r: any) => 
-            r["Active Scenes"]?.some((link:any) => link.id === s.id)
-        ) : [];
-
-        const castIds = new Set<number>();
-        linkedRoles.forEach((r: any) => {
-            const pIds = roleCastMap.get(r.id) || [];
-            pIds.forEach(id => castIds.add(id));
-        });
-
-        const castList = Array.from(castIds).map(id => personMap.get(id)).filter(Boolean).map(p => p.name);
+        const castSet = sceneCastMap.get(s.id) || new Set();
+        const castNames = Array.from(castSet);
 
         return {
             id: s.id,
-            name: s["Scene Name"],
-            act: s["Act"]?.value || "1",
-            type: s["Scene Type"]?.value || "Scene",
-            cast: Array.from(castIds).map(id => personMap.get(id)).filter(Boolean),
-            castNames: castList, 
+            // 🚨 FIX: Use 's.name' (Clean) instead of 's["Scene Name"]' (Raw)
+            name: s.name || "Untitled Scene",
+            act: s.act || "1",
+            type: s.type || "Scene",
+            
+            // Cast for the AutoScheduler (Array of objects)
+            cast: castNames.map(name => ({ name })),
+            // Cast for the Callboard (Array of strings)
+            castNames: castNames, 
+            
             status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
-  }, [scenes, roles, assignments, people]);
+  }, [scenes, assignments]);
 
   // --- DERIVED DATA FOR CALLBOARD ---
   const callboardSchedule = useMemo(() => {
@@ -252,11 +239,17 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              <div className="p-4 border-b border-white/10">
                 <div className="relative">
                     <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"/>
-                    <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Filter scenes..." className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none"/>
+                    <input 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                        placeholder="Filter scenes..." 
+                        className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none text-white"
+                    />
                 </div>
              </div>
              <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar pt-2">
-                 {sceneData.filter((s:any) => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
+                 {/* 🚨 FIX: Safe check for scene name */}
+                 {sceneData.filter((s:any) => (s.name || "").toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
                      <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)}
                          className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all">
                          <div className="flex justify-between items-center mb-1">
@@ -273,9 +266,9 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
-                 <button onClick={() => setCurrentWeekOffset(c => c - 1)}><ChevronLeft size={16}/></button>
+                 <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="text-zinc-400 hover:text-white"><ChevronLeft size={16}/></button>
                  <span className="text-xs font-bold text-zinc-300 w-32 text-center">{weekLabel}</span>
-                 <button onClick={() => setCurrentWeekOffset(c => c + 1)}><ChevronRight size={16}/></button>
+                 <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="text-zinc-400 hover:text-white"><ChevronRight size={16}/></button>
              </div>
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[600px]">
@@ -328,7 +321,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 }
 
 // ============================================================================
-// SUB-COMPONENT: BURN-UP VIEW
+// SUB-COMPONENT: BURN-UP VIEW (Fixed Status Keys)
 // ============================================================================
 function BurnUpView({ sceneData }: any) {
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
@@ -363,7 +356,7 @@ function BurnUpView({ sceneData }: any) {
 
         sceneData.forEach((s: any) => {
             const type = (s.type || "").toLowerCase();
-            const p = progress[s.id];
+            const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
             const needsMusic = type.includes('song') || type.includes('mixed');
             const needsDance = type.includes('dance') || type.includes('mixed');
             const needsBlock = true; 
