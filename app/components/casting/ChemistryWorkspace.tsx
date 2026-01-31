@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
-import { Users, Filter, X, Check, Ruler, Scale, AlertOctagon, Trophy } from "lucide-react";
+import { Users, Filter, X, Check, Ruler, Scale, AlertOctagon } from "lucide-react";
 
 // --- 🛠️ UTILITIES ---
 const safeVal = (val: any, fallback: string | number = "-") => {
@@ -10,36 +11,51 @@ const safeVal = (val: any, fallback: string | number = "-") => {
   if (typeof val === "object") return val.value ?? val.id ?? fallback;
   return val;
 };
+// 🛡️ REFACTORED HELPERS
+const getSceneName = (scene: any) => {
+  const val = scene.name || scene["Scene Name"];
+  return typeof val === 'object' ? val.value : (val || "Untitled Scene");
+};
 
+const getSceneType = (scene: any) => {
+  const val = scene.type || scene["Scene Type"];
+  // If Baserow returns a Select object, grab the .value
+  return typeof val === 'object' ? val.value : (val || "Scene");
+};
+
+const getSceneAct = (scene: any) => {
+  const val = scene.act || scene.Act;
+  return typeof val === 'object' ? val.value : (val || "");
+};
 // --- 📊 METRICS CONFIGURATION ---
-// aligned with your Baserow Columns (Vocal Score, Acting Score, etc)
+// 🚨 REFACTORED: Now uses lowercase clean keys from your baserow.ts getAuditionees()
 const METRICS = [
   { 
     label: "Vocal", 
-    getValue: (a: any) => safeVal(a["Vocal Score"], 0),
+    getValue: (a: any) => a.vocalScore, // matched to F.VOCAL_SCORE
     format: (v: any) => (
       <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-emerald-500/20 text-emerald-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>
-        {Number(v).toFixed(1)}
+        {Number(v || 0).toFixed(1)}
       </span>
     )
   },
   { 
     label: "Acting", 
-    getValue: (a: any) => safeVal(a["Acting Score"], 0),
+    getValue: (a: any) => a.actingScore, // matched to F.ACTING_SCORE
     format: (v: any) => (
       <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-purple-500/20 text-purple-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>
-        {Number(v).toFixed(1)}
+        {Number(v || 0).toFixed(1)}
       </span>
     )
   },
   { 
     label: "Height", 
-    getValue: (a: any) => safeVal(a.Height, "-"),
+    getValue: (a: any) => a.height || "-", 
     format: (v: any) => <div className="flex justify-center items-center gap-1 font-mono text-zinc-400 text-xs"><Ruler size={10} className="opacity-50" /> {v}</div> 
   },
   { 
     label: "Age", 
-    getValue: (a: any) => safeVal(a.Age, "?"),
+    getValue: (a: any) => a.age || "?", 
     format: (v: any) => <span className="text-zinc-400 text-xs">{v}</span> 
   }
 ];
@@ -71,7 +87,7 @@ function RoleComparisonCard({
       {/* ROLE HEADER */}
       <div className="flex items-center gap-3 mb-4 pl-2 border-l-2 border-purple-500/50">
          <h2 className="text-xl font-black uppercase text-white tracking-tighter italic">{role.name}</h2>
-         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-white/5">{role.type}</span>
+         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-white/5">{role.type || "Role"}</span>
          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-white/5">{role.actors?.length || 0} Candidates</span>
       </div>
 
@@ -88,30 +104,27 @@ function RoleComparisonCard({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
-                  {/* CORNER HEADER */}
                   <th className="p-4 w-24 md:w-32 bg-zinc-900/50 border-b border-r border-white/5 text-[10px] font-black uppercase text-zinc-500 tracking-wider text-right align-bottom sticky left-0 z-10 backdrop-blur-sm">
                     Candidate
                   </th>
                   
-                  {/* CANDIDATE COLUMNS */}
                   {role.actors.map((actor: any) => {
                     const isSelected = role.selectedActorIds?.includes(actor.id);
                     return (
                       <th key={actor.id} className={`p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col ${isSelected ? 'bg-purple-900/10' : ''}`}>
-                         {/* HEADSHOT & ACTIONS */}
                          <div className={`relative aspect-[3/4] rounded-lg overflow-hidden border shadow-lg mb-2 transition-all ${isSelected ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-white/10'}`}>
+                            {/* 🚨 FIX: Using actor.headshot */}
                             <img 
-                                title={actor.Performer} 
-                                src={safeVal(actor.Headshot, "https://placehold.co/400x600/111/444?text=No+Img")} 
+                                title={actor.name} 
+                                src={actor.headshot || "https://placehold.co/400x600/111/444?text=No+Img"} 
                                 className="w-full h-full object-cover" 
+                                alt=""
                             />
                             
-                            {/* REMOVE BUTTON */}
                             <button onClick={() => onRemoveActor(String(role.id), actor.id)} className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/col:opacity-100 transition-opacity z-20">
                                 <X size={14} />
                             </button>
                             
-                            {/* SELECT / CAST BUTTON */}
                             <div className={`absolute inset-x-0 bottom-0 p-2 flex justify-center bg-gradient-to-t from-black/90 to-transparent transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/col:opacity-100'}`}>
                                 <button onClick={() => onConfirmRole(String(role.id), actor.id)} className={`rounded-full shadow-xl flex items-center justify-center gap-1 px-3 py-1.5 transition-all text-xs font-bold ${isSelected ? 'bg-purple-600 text-white' : 'bg-white text-black hover:bg-emerald-400'}`}>
                                     {isSelected ? <><Check size={12} /> CAST</> : "SELECT"}
@@ -119,19 +132,18 @@ function RoleComparisonCard({
                             </div>
                          </div>
                          
-                         {/* NAME DISPLAY (Using Performer field directly) */}
                          <div className="text-center px-1">
+                            {/* 🚨 FIX: Using actor.name */}
                             <p className={`text-sm font-black leading-tight line-clamp-2 ${isSelected ? 'text-purple-300' : 'text-white'}`}>
-                                {actor.Performer || "Unknown Name"} 
+                                {actor.name || "Unknown"} 
                             </p>
                          </div>
                       </th>
-                  )})}
+                    )})}
                   <th className="p-4 border-b border-white/5 min-w-[50px] bg-zinc-900/30 border-dashed border-l border-white/10"></th>
                 </tr>
               </thead>
               <tbody className="text-xs font-bold text-zinc-300">
-                  {/* METRIC ROWS */}
                   {METRICS.map((metric, i) => (
                       <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
                           <td className="p-3 border-b border-r border-white/5 text-right text-zinc-500 uppercase text-[10px] sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">
@@ -146,14 +158,12 @@ function RoleComparisonCard({
                       </tr>
                   ))}
                   
-                  {/* CONFLICTS ROW */}
                   <tr className="bg-red-900/5">
                       <td className="p-3 border-r border-white/5 text-right text-red-500/70 font-black uppercase text-[10px] align-top pt-4 sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">
                         Conflicts
                       </td>
                       {role.actors.map((actor: any) => {
-                          const conflictStr = safeVal(actor.Conflicts, "");
-                          // Basic filtering of conflicts
+                          const conflictStr = actor.conflicts || "";
                           const conflicts = typeof conflictStr === 'string' 
                             ? conflictStr.split(',').filter((c: string) => c && !c.includes("No known")) 
                             : [];
@@ -185,26 +195,16 @@ function RoleComparisonCard({
 }
 
 // --- 🚀 MAIN COMPONENT ---
-interface Props {
-  roles: any[]; 
-  onDropActor: (e: React.DragEvent, roleId: string) => void;
-  onRemoveActor: (roleId: string, actorId: number) => void;
-  onSelectRole: (role: any) => void;
-  onConfirmRole: (roleId: string, actorId: number) => void;
-}
-
-export default function ChemistryWorkspace({ roles, onDropActor, onRemoveActor, onConfirmRole }: Props) {
+// (Remains largely the same, but ensure props match CastingClient)
+export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveActor, onConfirmRole }: Props) {
   const [activeFilter, setActiveFilter] = useState("Lead");
 
-  // Filter roles based on the tabs
   const visibleRoles = roles.filter(r => 
-    activeFilter === "All" || safeVal(r.type).includes(activeFilter)
+    activeFilter === "All" || (r.type && String(r.type).includes(activeFilter))
   );
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 relative overflow-hidden">
-      
-      {/* HEADER */}
       <header className="p-4 border-b border-white/5 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 backdrop-blur-md z-30">
          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
             <h1 className="text-xl font-black italic uppercase flex items-center gap-2 text-white">
@@ -225,7 +225,6 @@ export default function ChemistryWorkspace({ roles, onDropActor, onRemoveActor, 
          </div>
       </header>
 
-      {/* COMPARISON STAGE */}
       <div className="flex-1 overflow-x-auto overflow-y-auto p-4 md:p-8 custom-scrollbar bg-zinc-950 space-y-12 pb-24 md:pb-8">
             {visibleRoles.length === 0 && (
                 <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 opacity-50 min-h-[300px]">

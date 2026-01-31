@@ -148,26 +148,12 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
       console.log(`🚀 Loading Auditions for ${productionTitle} (ID: ${productionId})...`);
       
       try {
-        // 1. Fetch raw data
-        const slots = await getAuditionees();
+        // 1. Fetch CLEAN data (The new baserow.ts handles the ugly extraction)
+        const slots = await getAuditionees(productionId);
 
-        // 2. Filter using the PROPS (Server Context)
-        const showAuditions = slots.filter((row: any) => {
-          const prodArray = row.Production || [];
-          if (!prodArray.length) return false;
-          // STRICT ID CHECK
-          return prodArray.some((p: any) => p.id === productionId);
-        });
-
-        console.log(`✅ Loaded ${showAuditions.length} actors.`);
+        console.log(`✅ Loaded ${slots.length} actors.`);
         
-        // Helper to extract baserow values
-        const getLookupValue = (field: any) => {
-          if (!field) return null;
-          if (Array.isArray(field)) return field[0]?.value || field[0];
-          return field?.value || field;
-        };
-
+        // Helper to format height if needed
         const formatHeight = (val: any) => {
           if (!val) return "N/A";
           if (String(val).includes("'")) return val; 
@@ -176,80 +162,54 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
           return `${Math.floor(num / 12)}'${num % 12}"`;
         };
 
-        const getExperienceLabel = (field: any) => {
-          let count = 0;
-          let roleList = "";
-          if (field) {
-            if (Array.isArray(field)) {
-               count = field.length;
-               roleList = field.map((item: any) => typeof item === 'object' ? item.value : item).join(", ");
-            } else if (typeof field === 'string') {
-               const split = field.split(',');
-               count = split.length;
-               roleList = field;
-            }
-          }
-          return { label: count > 0 ? `Shows: ${count}` : "First Show", list: roleList };
-        };
+        const formattedSchedule: Performer[] = slots.map((row: any) => {
+   let session: AuditionSession = "Video/Remote";
+   let displayTime = "TBD";
 
-        const formattedSchedule: Performer[] = showAuditions.map((row: any) => {
-           const rawDate = row.Date;
-           let displayTime = "TBD";
-           let session: AuditionSession = "Video/Remote";
-
-           if (rawDate) {
-             const dateObj = new Date(rawDate);
-             const dayOfWeek = dateObj.getDay(); 
-             if (dayOfWeek === 4) session = "Thursday";
-             else if (dayOfWeek === 5) session = "Friday";
-             displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-           }
-           
-           let videoUrl = null;
-           if (row["Dance Video"]) {
-               videoUrl = row["Dance Video"];
-           } 
-           if (!videoUrl) {
-               const rawVideo = row["Audition Video"]; 
-               if (Array.isArray(rawVideo) && rawVideo.length > 0) videoUrl = rawVideo[0].url;
-               else if (typeof rawVideo === 'string' && rawVideo.startsWith('http')) videoUrl = rawVideo;
+   if (row.date) {
+     const dateObj = new Date(row.date); // "03/05/2026 17:00" parses correctly in JS
+     const dayOfWeek = dateObj.getDay(); 
+     
+     // 4 = Thursday, 5 = Friday
+     if (dayOfWeek === 4) session = "Thursday";
+     else if (dayOfWeek === 5) session = "Friday";
+     
+     displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+   } else if (row.video) {
+               session = "Video/Remote";
            }
 
-           let headshotUrl = null;
-           const rawHeadshot = row.Headshot;
-           if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) headshotUrl = rawHeadshot[0].url;
-           else if (row.Headshot?.url) headshotUrl = row.Headshot.url;
-
-           const experienceData = getExperienceLabel(row["Past Roles"] || row["Past Productions"]);
+           // Check for Walk-In status
+           if (row.status === "Walk-In") session = "Walk-In";
 
            return {
              id: row.id,
              originalId: row.id, 
-             performerId: row.Performer?.[0]?.id,
-             name: Array.isArray(row.Performer) ? row.Performer[0]?.value : (row.Performer || "Unknown"),
-             avatar: headshotUrl,
-             age: String(getLookupValue(row.Age) || "?"),
-             video: videoUrl,
-             height: formatHeight(getLookupValue(row.Height)),
-             vocalRange: getLookupValue(row["Vocal Range"]),
-             dob: getLookupValue(row.Birthdate),
-             conflicts: getLookupValue(row.Conflicts),
-             tenure: experienceData.label,
-             pastRoles: experienceData.list,
-             song: row.Song || "No song listed",
-             monologue: row.Monologue || "No monologue listed",
+             performerId: row.studentId, // Mapped in baserow.ts
+             name: row.name || "Unknown Actor", // Mapped in baserow.ts
+             avatar: row.headshot || null,      // Mapped in baserow.ts
+             age: row.age || "?",
+             video: row.video || null,
+             height: formatHeight(row.height),
+             vocalRange: row.vocalRange || "",
+             dob: row.dob || "",
+             conflicts: row.conflicts || "",
+             tenure: row.status || "Unknown", // "New" or "Returning"
+             pastRoles: row.pastRoles || [],
+             song: row.song || "",
+             monologue: row.monologue || "",
              timeSlot: displayTime,
              session: session,
-             vocal: row["Vocal Score"] || 0,
-             acting: row["Acting Score"] || 0,
-             dance: row["Dance Score"] || 0,
-             presence: row["Stage Presence Score"] || 0,
-             actingNotes: row["Acting Notes"] || "",
-             musicNotes: row["Music Notes"] || "",
-             choreoNotes: row["Choreography Notes"] || "",
-             dropInNotes: row["Drop-In Notes"] || "",
-             adminNotes: row["Admin Notes"] || "",
-             isWalkIn: false
+             vocal: parseFloat(row.vocalScore) || 0,
+             acting: parseFloat(row.actingScore) || 0,
+             dance: parseFloat(row.danceScore) || 0,
+             presence: parseFloat(row.presenceScore) || 0,
+             actingNotes: row.actingNotes || "",
+             musicNotes: row.musicNotes || "",
+             choreoNotes: row.choreoNotes || "",
+             dropInNotes: row.dropInNotes || "",
+             adminNotes: row.adminNotes || "",
+             isWalkIn: row.status === "Walk-In"
            };
         });
 
@@ -261,7 +221,7 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
         });
         setGrades(initialGrades);
 
-        // For Walk-Ins, we might want to filter or keep all, strictly logic dictates keep all
+        // Store full list for walk-in search
         setAllStudents(slots);
 
       } catch (err) {
@@ -273,7 +233,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
 
     loadData();
   }, [isReady, productionId, productionTitle]);
-
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
 

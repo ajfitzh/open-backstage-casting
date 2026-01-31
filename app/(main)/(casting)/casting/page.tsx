@@ -1,39 +1,57 @@
 import { cookies } from 'next/headers';
-import { getShowById, getActiveProduction } from '@/app/lib/baserow';
+import { 
+  getShowById, 
+  getActiveProduction, 
+  getScenes, // 👈 Added this
+  getCastingData // 👈 Added this to pre-fetch roles/auditionees if desired
+} from '@/app/lib/baserow';
 import CastingClient from '@/app/components/casting/CastingClient';
 
 export default async function CastingPage() {
   const cookieStore = await cookies();
-  let activeId = Number(cookieStore.get('active_production_id')?.value);
+  const activeId = Number(cookieStore.get('active_production_id')?.value);
   
-  // 1. Fetch the Full Production Object
+  // 1. Fetch the Production Object
   let productionData = null;
-
   if (activeId) {
     productionData = await getShowById(activeId);
   } 
   
-  // Fallback if no cookie
+  // Fallback if cookie is missing or production not found
   if (!productionData) {
     productionData = await getActiveProduction();
   }
 
-  // 2. Extract Key IDs
+  // 2. Extract Data using clean keys from mapShow()
   const productionId = productionData?.id || 0;
-  const productionTitle = productionData?.Title || "Select a Production";
+  const productionTitle = productionData?.title || "Select a Production";
   
-  // 🔍 THE FIX: Get the Blueprint ID (Master Show)
-  // This looks at the "Master Show Database" column in your Productions table
-  const masterShowLink = productionData?.["Master Show Database"];
-  const masterShowId = (masterShowLink && masterShowLink.length > 0) ? masterShowLink[0].id : null;
+  // 3. Extract Master Show ID
+  // Note: Ensure your mapShow helper in baserow.ts includes: 
+  // masterShowLink: row[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE]
+  const masterShowLink = productionData?.masterShowLink || []; 
+  const masterShowId = (Array.isArray(masterShowLink) && masterShowLink.length > 0) 
+    ? masterShowLink[0].id 
+    : null;
+
+  // 4. 🚨 THE FIX: Fetch Scenes and Casting Data on the server
+  // This prevents the "Cannot read properties of undefined (reading 'map')" error
+  // by ensuring the client component starts with a full data set.
+  const [scenes, castingData] = await Promise.all([
+    getScenes(productionId),
+    getCastingData(productionId)
+  ]);
 
   return (
     <main className="min-h-screen bg-zinc-950">
       <CastingClient 
         productionId={productionId} 
         productionTitle={productionTitle}
-        masterShowId={masterShowId} // <--- Passing the Blueprint ID
+        masterShowId={masterShowId}
+        initialScenes={scenes} // 👈 Passing to CastingClient
+        initialAuditionees={castingData.auditionees} // 👈 Passing to CastingClient
+        initialAssignments={castingData.assignments} // 👈 Passing to CastingClient
       />
     </main>
   );
-} 
+}

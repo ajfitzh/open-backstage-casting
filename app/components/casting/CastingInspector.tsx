@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, CheckCircle2, Mic2, Move, FileText, ExternalLink, Clock } from "lucide-react";
+import { X, Mic2, Move, FileText, ExternalLink, Clock } from "lucide-react";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 
 // Helper to generate consistent colors for roles
@@ -13,7 +13,7 @@ const getRoleColor = (roleName: string) => {
   if (name.includes("ursula") || name.includes("villain")) return "bg-purple-600 border-purple-400 shadow-[0_0_10px_rgba(147,51,234,0.4)]";
   if (name.includes("ensemble")) return "bg-emerald-600 border-emerald-400";
   if (name.includes("new role")) return "bg-amber-600 border-amber-400";
-  // Default hash-like fallback
+  
   const colors = [
     "bg-cyan-600 border-cyan-400", 
     "bg-indigo-600 border-indigo-400", 
@@ -23,16 +23,13 @@ const getRoleColor = (roleName: string) => {
   return colors[roleName.length % colors.length];
 };
 
-export default function CastingInspector({ actor, allScenes, stats, onClose }: any) {
+export default function CastingInspector({ actor, allScenes = [], stats = { assignments: {}, assignedRoleNames: [] }, onClose }: any) {
   const [showFullProfile, setShowFullProfile] = useState(false);
 
   if (!actor) return null;
 
   return (
     <>
-      {/* MOBILE: Fixed full screen overlay (z-50)
-          DESKTOP: Relative sidebar (z-20) 
-      */}
       <div className="fixed inset-0 md:static md:inset-auto z-50 md:z-20 w-full md:w-[350px] h-full flex flex-col bg-zinc-900 md:border-l border-white/5 shadow-2xl transition-all">
         
         {/* HEADER */}
@@ -40,21 +37,24 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
           <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors p-2 bg-black/20 rounded-full md:bg-transparent"><X size={20} /></button>
           
           <div className="flex items-start gap-4">
-             <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0">
-               <img src={actor.Headshot} className="w-full h-full object-cover" />
+             <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0 bg-zinc-800">
+               {/* 🚨 FIX: Using 'headshot' instead of 'Headshot' */}
+               <img src={actor.headshot} className="w-full h-full object-cover" alt={actor.name} />
              </div>
              <div>
-                <h2 className="text-lg font-black text-white leading-tight">{actor.Performer}</h2>
+                {/* 🚨 FIX: Using 'name' instead of 'Performer' */}
+                <h2 className="text-lg font-black text-white leading-tight">{actor.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
-                    {actor.Gender && actor.Gender !== "N/A" && (
-                        <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.Gender}</span>
+                    {actor.gender && actor.gender !== "N/A" && (
+                        <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.gender}</span>
                     )}
-                    <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.Age || "Age ?"}</span>
+                    <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.age || "Age ?"}</span>
                 </div>
                 <div className="flex gap-2 mt-3">
-                   {actor.grades?.actingNotes && <FileText size={14} className="text-blue-500" title="Has Acting Notes" />}
-                   {actor.grades?.vocalNotes && <Mic2 size={14} className="text-purple-500" title="Has Vocal Notes" />}
-                   {actor.grades?.danceNotes && <Move size={14} className="text-emerald-500" title="Has Dance Notes" />}
+                   {/* 🚨 FIX: Updated paths to match getAuditionees clean object */}
+                   {actor.actingNotes && <FileText size={14} className="text-blue-500" title="Has Acting Notes" />}
+                   {actor.musicNotes && <Mic2 size={14} className="text-purple-500" title="Has Vocal Notes" />}
+                   {actor.choreoNotes && <Move size={14} className="text-emerald-500" title="Has Dance Notes" />}
                 </div>
              </div>
           </div>
@@ -62,14 +62,14 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
 
         {/* SCROLLABLE TIMELINE BODY */}
         <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-zinc-950/50">
-            {/* Timeline Line */}
             <div className="absolute left-[27px] top-0 bottom-0 w-px bg-white/5 z-0" />
 
             <div className="p-4 space-y-1 relative z-10">
                  {allScenes.map((scene: any) => {
-                     const roleInScene = stats.assignments[scene.id];
+                     // Check if your scene data uses "id" or "Scene Name"
+                     const roleInScene = stats.assignments?.[scene.id];
                      const isCast = !!roleInScene;
-                     const isConflict = roleInScene && roleInScene.includes('+'); 
+                     const isConflict = roleInScene && typeof roleInScene === 'string' && roleInScene.includes('+'); 
                      const dotColor = isConflict ? "bg-red-500 border-red-400 animate-pulse" : getRoleColor(roleInScene);
 
                      return (
@@ -80,15 +80,14 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
                             }
                          >
                              <div className="w-8 flex flex-col items-end shrink-0">
-                                 <span className={`text-[9px] font-black uppercase ${isCast ? 'text-white' : 'text-zinc-600'}`}>{scene.Act}</span>
+                                 <span className={`text-[9px] font-black uppercase ${isCast ? 'text-white' : 'text-zinc-600'}`}>{scene.act || scene.Act}</span>
                              </div>
 
                              <div className={`w-3 h-3 rounded-full border-2 shrink-0 transition-transform ${isCast ? dotColor : 'bg-zinc-900 border-zinc-700'}`} />
 
                              <div className="min-w-0 flex-1">
                                  <div className="flex justify-between items-baseline">
-                                     <p className={`text-xs font-bold truncate ${isCast ? 'text-zinc-200' : 'text-zinc-500'}`}>{scene["Scene Name"]}</p>
-                                     {!isCast && <span className="text-[9px] text-zinc-700 uppercase hidden group-hover:block">{scene["Scene Type"]}</span>}
+                                     <p className={`text-xs font-bold truncate ${isCast ? 'text-zinc-200' : 'text-zinc-500'}`}>{scene.name || scene["Scene Name"]}</p>
                                  </div>
                                  
                                  {isCast && (
@@ -109,7 +108,7 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
 
         {/* FOOTER ACTIONS */}
         <div className="p-4 border-t border-white/5 bg-zinc-900 z-20 shrink-0 space-y-3 pb-safe">
-             {stats.assignedRoleNames.length > 0 && (
+            {stats.assignedRoleNames?.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pb-2">
                     {stats.assignedRoleNames.map((role: string) => (
                         <span key={role} className="text-[9px] font-bold text-zinc-300 bg-zinc-800 px-2 py-1 rounded border border-white/5 flex items-center gap-1">
@@ -118,7 +117,7 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
                         </span>
                     ))}
                 </div>
-             )}
+            )}
 
             <button 
                 onClick={() => setShowFullProfile(true)}
@@ -131,15 +130,13 @@ export default function CastingInspector({ actor, allScenes, stats, onClose }: a
 
       </div>
 
-      {/* MODAL (Now matches Callback Logic EXACTLY) */}
       {showFullProfile && (
         <ActorProfileModal 
           actor={{
             ...actor,
-            name: actor.Performer,  // Modal expects 'name', we have 'Performer'
-            avatar: actor.Headshot, // Modal expects 'avatar', we have 'Headshot'
+            // 🚨 FIX: Already clean from getAuditionees, just passing through
+            avatar: actor.headshot, 
           }}
-          grades={actor.grades} 
           onClose={() => setShowFullProfile(false)}
         />
       )}
