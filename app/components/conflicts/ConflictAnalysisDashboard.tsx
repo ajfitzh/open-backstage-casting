@@ -1,78 +1,75 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import { Calendar, AlertTriangle, Clock, ChevronDown, Users, CheckCircle2 } from 'lucide-react';
+import { Calendar, AlertTriangle, Clock, Users, CheckCircle2 } from 'lucide-react';
 
-export default function ConflictAnalysisDashboard({ scenes, assignments, people, conflictRows, events }: any) {
+// Define the shape of the clean data coming from baserow.ts
+interface Props {
+  conflicts: any[]; // The clean array from getProductionConflicts
+  events: any[];    // The clean array of events
+  castSize: number; // Total number of actors
+}
+
+export default function ConflictAnalysisDashboard({ conflicts, events, castSize }: Props) {
 
   // --- 🧠 THE BRAIN: EVENT-BASED ANALYTICS ---
   const analytics = useMemo(() => {
     
-    // 1. Calculate Real Cast Size
-    const uniqueCastIds = new Set(assignments.map((a: any) => a["Person"]?.[0]?.id));
-    const totalCastSize = uniqueCastIds.size || 1; 
-
-    // 2. Sort Events Chronologically
+    // 1. Sort Events Chronologically
     const sortedEvents = [...events].sort((a: any, b: any) => 
-        new Date(a["Event Date"]).getTime() - new Date(b["Event Date"]).getTime()
+        new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    // 3. Map Conflicts to specific Event IDs
+    // 2. Map Conflicts to specific Event IDs
     const eventConflictMap = new Map<number, Set<number>>();
 
-    conflictRows.forEach((row: any) => {
-        const personId = row["Person"]?.[0]?.id;
-        const linkedEventIds = row["Production Event"]?.map((e: any) => e.id) || [];
-        
-        if (personId && linkedEventIds.length > 0) {
-            linkedEventIds.forEach((eventId: number) => {
-                if (!eventConflictMap.has(eventId)) eventConflictMap.set(eventId, new Set());
-                eventConflictMap.get(eventId)?.add(personId);
-            });
+    conflicts.forEach((c: any) => {
+        // If the conflict is linked to a specific event ID
+        if (c.eventId && c.personId) {
+            if (!eventConflictMap.has(c.eventId)) eventConflictMap.set(c.eventId, new Set());
+            eventConflictMap.get(c.eventId)?.add(c.personId);
         }
+        
+        // OPTIONAL: If you have logic to map date-based conflicts to events, add it here
+        // e.g. if c.date === event.date
     });
 
-    // 4. Build Event Objects
-    const processedEvents = sortedEvents.map((evt: any, index: number) => {
-        const dateObj = new Date(evt["Event Date"]);
+    // 3. Build Event Objects
+    const processedEvents = sortedEvents.map((evt: any) => {
+        const dateObj = new Date(evt.date);
         const absentees = eventConflictMap.get(evt.id) || new Set();
-        let absentCount = absentees.size;
+        const absentCount = absentees.size;
         
-        // --- 🚨 DEMO AUGMENTATION START 🚨 ---
-        // Artificial injection to demonstrate UI states if data is too clean
-        if (index === 2) { 
-            // Force a "Yellow" day (approx 85% availability)
-            absentCount = Math.max(absentCount, Math.floor(totalCastSize * 0.15));
-        }
-        if (index === 6) {
-            // Force a "Red" day (approx 70% availability)
-            absentCount = Math.max(absentCount, Math.floor(totalCastSize * 0.30));
-        }
-        // --- DEMO AUGMENTATION END ---
-
-        // Accurate Math: (Cast Size - Absents) / Cast Size
-        const availability = Math.round(((totalCastSize - absentCount) / totalCastSize) * 100);
+        // 🧮 Calculate Availability
+        const availability = castSize > 0 
+            ? Math.round(((castSize - absentCount) / castSize) * 100)
+            : 100;
         
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
         const dateStr = dateObj.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
         
-        const startTime = evt["Start Time"] ? new Date(evt["Start Time"]).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : "";
-        const endTime = evt["End Time"] ? new Date(evt["End Time"]).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : "";
+        // Format Times (assuming ISO strings or HH:MM)
+        const formatTime = (t: string) => {
+            if(!t) return "";
+            // Handle "18:00:00" format or ISO
+            const d = t.includes('T') ? new Date(t) : new Date(`1970-01-01T${t}`);
+            return d.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+        };
 
         return {
             id: evt.id,
             label: dayName,
             date: dateStr,
             fullDate: dateObj,
-            time: `${startTime} - ${endTime}`,
-            type: evt["Event Type"]?.value || "Rehearsal",
+            time: `${formatTime(evt.startTime)} - ${formatTime(evt.endTime)}`,
+            type: evt.type || "Rehearsal",
             absentCount,
             availability,
             weekNum: getWeekNumber(dateObj) 
         };
     });
 
-    // 5. Group by Week
+    // 4. Group by Week
     const groupedWeeks: any[] = [];
     let currentWeek: any[] = [];
     let lastWeekNum = -1;
@@ -87,42 +84,27 @@ export default function ConflictAnalysisDashboard({ scenes, assignments, people,
     });
     if (currentWeek.length > 0) groupedWeeks.push(currentWeek);
 
-
-    // 6. Hardest Scenes (Weighted Logic)
-    const sceneScores = scenes.map((scene: any) => {
-        const actorIds = scene.actors || [];
-        const totalConflicts = actorIds.reduce((acc: number, pid: number) => {
-            let c = 0;
-            eventConflictMap.forEach((absentees) => { if(absentees.has(pid)) c++; });
-            return acc + c;
-        }, 0);
-        return { ...scene, conflictLoad: totalConflicts, size: actorIds.length };
-    }).sort((a: any, b: any) => b.conflictLoad - a.conflictLoad);
-
-    return { weeks: groupedWeeks, hardestScenes: sceneScores.slice(0, 5), totalCastSize };
-  }, [scenes, assignments, people, conflictRows, events]);
+    return { weeks: groupedWeeks };
+  }, [conflicts, events, castSize]);
 
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 h-[500px]">
+    <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
         
-        {/* 📅 VERTICAL SCROLLING WEEKLY FEED */}
-        <div className="col-span-2 bg-zinc-900 border border-white/10 rounded-xl flex flex-col overflow-hidden shadow-xl">
+        {/* 📅 REHEARSAL FLOW STRIP */}
+        <div className="bg-zinc-900 border border-white/10 rounded-xl flex flex-col overflow-hidden shadow-xl max-h-[400px]">
             <div className="p-4 border-b border-white/10 bg-zinc-900 z-10 flex justify-between items-center shadow-sm">
                 <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                    <Calendar size={16} className="text-blue-500"/> Rehearsal Flow
+                    <Calendar size={16} className="text-blue-500"/> Rehearsal Attendance Forecast
                 </h3>
-                <span className="text-[10px] font-mono text-zinc-600">
-                    Based on {analytics.totalCastSize} Cast Members
-                </span>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-zinc-950/50">
-                {analytics.weeks.length === 0 && <div className="text-zinc-500 italic text-sm">No events scheduled.</div>}
+                {analytics.weeks.length === 0 && <div className="text-zinc-500 italic text-sm p-4">No events found linked to this production.</div>}
 
                 {analytics.weeks.map((weekEvents: any[], i: number) => {
                     const firstEvt = weekEvents[0];
-                    const isHeavyWeek = weekEvents.length > 3; 
+                    const isHeavyWeek = weekEvents.length > 4; 
 
                     return (
                         <div key={i} className="animate-in fade-in slide-in-from-bottom-2 duration-500" style={{animationDelay: `${i * 50}ms`}}>
@@ -139,7 +121,7 @@ export default function ConflictAnalysisDashboard({ scenes, assignments, people,
                             </div>
 
                             {/* The Grid of Cards for this Week */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                                 {weekEvents.map((evt: any) => {
                                     // Color Coding Logic
                                     let color = "bg-emerald-900/10 border-emerald-500/20 hover:border-emerald-500/50";
@@ -151,7 +133,7 @@ export default function ConflictAnalysisDashboard({ scenes, assignments, people,
                                         textC = "text-amber-500"; 
                                         barC = "bg-amber-500";
                                     }
-                                    if (evt.availability < 80) { 
+                                    if (evt.availability < 75) { 
                                         color = "bg-red-900/10 border-red-500/20 hover:border-red-500/50"; 
                                         textC = "text-red-500"; 
                                         barC = "bg-red-500";
@@ -198,34 +180,6 @@ export default function ConflictAnalysisDashboard({ scenes, assignments, people,
                         </div>
                     );
                 })}
-            </div>
-        </div>
-
-        {/* ⚠️ HARDEST SCENES */}
-        <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 flex flex-col shadow-lg h-full">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <AlertTriangle size={14} className="text-red-500"/> Difficult Scenes
-            </h3>
-            
-            <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
-                {analytics.hardestScenes.map((scene: any, i: number) => (
-                    <div key={scene.id} className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5 group hover:border-red-500/30 transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <span className={`text-xs font-mono font-bold w-5 h-5 flex items-center justify-center rounded ${i === 0 ? 'bg-red-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
-                                {i+1}
-                            </span>
-                            <div className="min-w-0">
-                                <div className="text-xs font-bold text-zinc-200 truncate pr-2">{scene.name}</div>
-                                <div className="text-[9px] text-zinc-500">{scene.size} Actors</div>
-                            </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                            <div className="text-sm font-black text-red-400 leading-none">{scene.conflictLoad}</div>
-                            <div className="text-[8px] uppercase font-bold text-zinc-600 mt-0.5">Pts</div>
-                        </div>
-                    </div>
-                ))}
-                {analytics.hardestScenes.length === 0 && <div className="text-xs text-zinc-500 italic p-4 text-center">No conflict data available yet.</div>}
             </div>
         </div>
     </div>

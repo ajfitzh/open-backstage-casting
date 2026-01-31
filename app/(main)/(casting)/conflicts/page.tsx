@@ -1,52 +1,30 @@
-import { cookies } from 'next/headers';
+// app/(production)/conflicts/page.tsx
 import { 
-    getShowById, 
-    getActiveProduction,
-    getScenes,
-    getRoles,
-    getAssignments,
-    getPeople,
-    getConflicts,
-    getProductionEvents // <--- Import this
-} from '@/app/lib/baserow';
-import ConflictClient from '@/app/components/conflicts/ConflictClient';
+  getActiveProduction, 
+  getProductionConflicts, 
+  getProductionEvents 
+} from "@/app/lib/baserow"; // Ensure getProductionEvents is imported
+import ConflictsClient from "@/app/components/conflicts/ConflictsClient";
 
 export default async function ConflictsPage() {
-  const cookieStore = await cookies();
-  let activeId = Number(cookieStore.get('active_production_id')?.value);
-  let showTitle = "Select a Production";
+  const production = await getActiveProduction();
 
-  if (activeId) {
-    const showData = await getShowById(activeId);
-    if (showData && !Array.isArray(showData)) showTitle = showData.Title;
-  } else {
-    const defaultShow = await getActiveProduction();
-    if (defaultShow) {
-      activeId = defaultShow.id;
-      showTitle = defaultShow.Title;
-    }
+  if (!production) {
+    return <div className="p-10 text-zinc-500">No active production found.</div>;
   }
 
-  // Fetch ALL the data
-  const [scenes, roles, assignments, people, conflicts, events] = await Promise.all([
-      getScenes(activeId),
-      getRoles(),
-      getAssignments(activeId),
-      getPeople(),
-      getConflicts(activeId),
-      getProductionEvents(activeId) // <--- Fetch the calendar
+  // Fetch Conflicts AND Events
+  const [conflicts, events] = await Promise.all([
+    getProductionConflicts(production.id),
+    getProductionEvents(production.id) // We need to add this helper in step 3
   ]);
 
   return (
     <main className="h-screen bg-zinc-950 overflow-hidden">
-      <ConflictClient 
-        scenes={scenes}
-        roles={roles}
-        assignments={assignments}
-        people={people}
-        conflictRows={conflicts}
-        eventRows={events} // <--- Pass it to client
-        productionTitle={showTitle}
+      <ConflictsClient 
+        production={production} 
+        initialConflicts={conflicts} 
+        initialEvents={events} // Pass events down
       />
     </main>
   );

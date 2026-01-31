@@ -154,7 +154,59 @@ export async function getClasses() {
   }));
 }
 
+// app/lib/baserow.ts
 
+// ... existing imports and code ...
+
+// ==============================================================================
+// 🗓️ CONFLICTS & SCHEDULING
+// ==============================================================================
+
+export async function getProductionConflicts(productionId: number) {
+  const F = DB.CONFLICTS.FIELDS;
+  
+  const params = {
+    size: "200",
+    [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
+    // Sort by date lookup (might vary based on Baserow version, sorting client-side is safer for lookups)
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.CONFLICTS.ID}/`, {}, params);
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => {
+    // Handle Date Lookup (Lookups return an array of values)
+    let conflictDate = "Undated";
+    const dateField = row[F.DATE]; // Lookup field
+    
+    if (Array.isArray(dateField) && dateField.length > 0) {
+      // Often looks like [{ id: 1, value: "2024-01-22" }]
+      conflictDate = dateField[0].value; 
+    } else if (typeof dateField === "string") {
+      conflictDate = dateField;
+    }
+
+    return {
+      id: row.id,
+      // Person Details
+      personId: safeId(row[F.PERSON]),
+      personName: extractName(row[F.PERSON], "Unknown Person"),
+      personAvatar: row[F.PERSON]?.[0]?.headshot?.[0]?.url || null, // Hypothetical deep access if you add headshots to lookup
+
+      // Conflict Details
+      type: safeGet(row[F.CONFLICT_TYPE], "Absent"), // Absent, Late, Leave Early
+      minutes: parseInt(safeGet(row[F.MINUTES_LATE_EARLY], 0)),
+      submittedVia: safeGet(row[F.SUBMITTED_VIA], "Manual"),
+      notes: safeGet(row[F.NOTES], ""),
+      
+      // Scheduling
+      eventId: safeId(row[F.PRODUCTION_EVENT]),
+      date: conflictDate,
+      dateObj: new Date(conflictDate), // For sorting
+    };
+  }).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+}
 export async function getClassById(classId: string) {
   const row = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`);
 
@@ -429,8 +481,27 @@ export async function createProductionAsset(name: string, url: string, type: str
   });
 }
 
-export async function getProductionEvents() {
-  return fetchBaserow(`/database/rows/table/${DB.EVENTS.ID}/`);
+// app/lib/baserow.ts
+
+export async function getProductionEvents(productionId: number) {
+  const F = DB.EVENTS.FIELDS;
+  const params = {
+    size: "200",
+    [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
+    order_by: `field_${F.EVENT_DATE}`
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.EVENTS.ID}/`, {}, params);
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    date: row[F.EVENT_DATE],
+    startTime: row[F.START_TIME],
+    endTime: row[F.END_TIME],
+    type: safeGet(row[F.EVENT_TYPE], "Rehearsal"),
+    isRequired: safeGet(row[F.IS_REQUIRED]),
+  }));
 }
 
 // ==============================================================================
