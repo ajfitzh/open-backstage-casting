@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from "next-auth/react";
 import { switchProduction } from '@/app/actions';
-import { useSimulation } from '@/app/context/SimulationContext'; // 👈 IMPORT THIS
+import { useSimulation } from '@/app/context/SimulationContext'; 
 import { 
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
   Check, Sparkles, Archive, Clock, Rocket, Bug, Wrench, Settings, LogOut,
@@ -29,7 +29,6 @@ export default function GlobalHeaderClient({
   const [showDebug, setShowDebug] = useState(false);
 
   // 🚀 CONNECT TO THE MATRIX
-  // We rename 'role' to 'effectiveRole' to avoid confusion
   const { role: effectiveRole, isSimulating } = useSimulation();
 
   const navRef = useRef<HTMLDivElement>(null);
@@ -250,17 +249,27 @@ export default function GlobalHeaderClient({
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsNavOpen(false)} />
           <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
             <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10">
+              
               <SectionHeader label="Workspace" />
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
               </div>
+
               <SectionHeader label="Company" />
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Roster" active={pathname === '/roster'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Analytics" active={pathname === '/reports'} />
               </div>
+
+              {/* 🟢 NEW ACADEMY SECTION */}
+              <SectionHeader label="Academy" />
+              <div className="space-y-1">
+                <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
+                <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
+              </div>
+
             </div>
             <div className="p-4 border-t border-white/5 bg-zinc-950/50">
                <button onClick={() => signOut({ callbackUrl: "/login" })} className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">

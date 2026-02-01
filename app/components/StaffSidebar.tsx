@@ -140,6 +140,12 @@ export default function StaffSidebar() {
                 </div>
                 <div className="space-y-1">
                     <NavItem href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
+                <NavItem 
+                        href="/education/hiring" 
+                        icon={<UserSquare2 size={18}/>} 
+                        label="Hiring Portal" 
+                        active={pathname === '/education/hiring'} 
+                    />
                 </div>
             </div>
         )}
