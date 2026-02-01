@@ -719,7 +719,56 @@ export async function getUserProductionRole(userId: number, productionId: number
   if (!rows || rows.length === 0) return null;
   return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
 }
+// app/lib/baserow.ts
 
+// ... existing imports
+
+export async function getTeacherApplicants() {
+  const F = DB.PEOPLE.FIELDS;
+  
+  // Filter for anyone with an "Applicant" or "Interviewing" tag
+  const params = {
+    filter_type: "OR",
+    size: "200",
+    [`filter__${F.STATUS}__multiple_select_has`]: "Faculty Applicant",
+    [`filter__${F.STATUS}__multiple_select_has`]: "Faculty Interviewing",
+    // We optionally include 'Active Faculty' if you want to see recent hires on the board
+    [`filter__${F.STATUS}__multiple_select_has`]: "Active Faculty",
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, params);
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    name: safeGet(row[F.FULL_NAME] || row[F.FIRST_NAME]),
+    email: safeGet(row[F.CYT_ACCOUNT_PERSONAL_EMAIL]),
+    // We map the raw status array to find the one relevant to hiring
+    // This helps if they are also a "Parent" - we just want to know their hiring status
+    status: row[F.STATUS]?.map((s:any) => s.value) || [],
+    headshot: row[F.HEADSHOT]?.[0]?.url || null,
+    notes: safeGet(row[F.BIO_ORIGINAL], ""), 
+  }));
+}
+
+// Function to move them between columns
+export async function updateApplicantStatus(personId: number, currentTags: string[], newStatus: string) {
+  // We need to be careful not to remove "Parent/Guardian" when we change "Applicant" to "Interviewing"
+  // 1. Remove old hiring tags
+  const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
+  const keptTags = currentTags.filter(tag => !hiringTags.includes(tag));
+  
+  // 2. Add the new status
+  const finalTags = [...keptTags, newStatus];
+
+  return await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/${personId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      [DB.PEOPLE.FIELDS.STATUS]: finalTags 
+    })
+  });
+}
 // ==============================================================================
 // 📊 ANALYTICS
 // ==============================================================================
