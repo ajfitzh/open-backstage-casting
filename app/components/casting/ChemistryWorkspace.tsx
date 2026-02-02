@@ -199,7 +199,7 @@ function RoleComparisonCard({
 export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveActor, onConfirmRole }: Props) {
   const [activeFilter, setActiveFilter] = useState("Lead");
 
-  const visibleRoles = roles.filter(r => 
+  const visibleRoles = roles.filter((r: { type: any; }) => 
     activeFilter === "All" || (r.type && String(r.type).includes(activeFilter))
   );
 
@@ -233,7 +233,7 @@ export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveAc
                 </div>
             )}
 
-            {visibleRoles.map(role => (
+            {visibleRoles.map((role: unknown) => (
                <RoleComparisonCard 
                   key={role.id}
                   role={role}

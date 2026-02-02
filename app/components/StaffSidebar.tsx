@@ -116,6 +116,12 @@ export default function StaffSidebar() {
                     <NavItem href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
                     <NavItem href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
                     <NavItem href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
+                <NavItem 
+    href="/season" 
+    icon={<LayoutGrid size={18}/>} 
+    label="Season Planner" 
+    active={pathname === '/season'} 
+/>
                 </div>
             </div>
         )}
