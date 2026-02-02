@@ -117,38 +117,60 @@ export async function switchProduction(formData: FormData) {
   redirect(redirectPath);
 }
 
-export async function markStepComplete(stepKey: string) {
-  const production = await getActiveProduction();
-  if (!production) return;
+export async function markStepComplete(productionId: number, stepKey: string) {
+  if (!productionId) return;
 
-  const keyMap: Record<string, string> = {
+const keyMap: Record<string, string> = {
+    // Standard Phases
     'auditions': 'Auditions',
     'callbacks': 'Callbacks',
     'casting': 'Casting',
     'points': 'Calibration',
-    'schedule': 'Scheduling'
+    'schedule': 'Scheduling',
+    
+    // New Phases
+    'rehearsals': 'Rehearsals',
+    'superSat': 'SuperSaturday',      // <--- Matches Baserow Option
+    'tech': 'Tech Week',
+    'weekend1': 'ShowWeekend1',
+    'weekend2': 'ShowWeekend2',
+    
+    // Weekly Tasks
+    'WeeklyReports': 'WeeklyReports',
+    'WeeklySchedule': 'WeeklySchedule'
   };
   
   const targetTag = keyMap[stepKey];
   if (!targetTag) return;
 
-  const currentTags = production.workflowOverrides || []; 
-  // Baserow returns array of objects {id, value, color}, we just need the values to push back
-  const currentValues = currentTags.map((t: any) => t.value);
+  try {
+    const freshRow = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
+    
+    if (!freshRow || freshRow.error) {
+        throw new Error("Could not fetch fresh production data");
+    }
 
-  if (!currentValues.includes(targetTag)) {
-    const newValues = [...currentValues, targetTag];
+    const currentTags = freshRow[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [];
+    const currentValues = currentTags.map((t: any) => t.value);
 
-    await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${production.id}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
-      }),
-    });
+    // Append only if unique
+    if (!currentValues.includes(targetTag)) {
+      const newValues = [...currentValues, targetTag];
+
+      await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
+        }),
+      });
+      
+      revalidatePath("/");
+      revalidatePath("/dashboard");
+    }
+  } catch (e) {
+      console.error("Workflow Update Failed:", e);
   }
-
-  revalidatePath("/");
 }
 
 // --- SCENE ANALYSIS ACTIONS ---

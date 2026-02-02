@@ -3,12 +3,12 @@
 import { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, Cell, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, ZAxis
+  ResponsiveContainer, Cell, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, ZAxis, Legend
 } from 'recharts';
 import { 
   LayoutGrid, BarChart2, Zap, Landmark, Search, 
   ArrowLeft, Users, Ticket, DollarSign, PieChart as PieIcon, 
-  Crown, Sparkles // Icons for Mainstage vs Lite
+  Crown, Sparkles, Box, Tent, MapPin // <--- Added MapPin
 } from 'lucide-react';
 
 export default function AnalyticsDashboard({ performanceData, showData, ticketPrice }: { performanceData: any[], showData: any[], ticketPrice: number }) {
@@ -16,13 +16,14 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
   const [selectedShow, setSelectedShow] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 1. ENRICH DATA WITH TIERS
-  // We assume if the average venue capacity per performance is > 300, it's a Mainstage
+  // 1. NORMALIZE TIERS
   const tieredShows = useMemo(() => {
     return showData.map(show => {
-      const avgCapacity = show.totalCapacity / (show.performances || 1);
-      const tier = avgCapacity > 300 ? "Mainstage" : "Lite";
-      return { ...show, tier, avgCapacity };
+      let tier = "Other";
+      const typeLower = (show.type || "").toLowerCase();
+      if (typeLower.includes("main")) tier = "Mainstage";
+      else if (typeLower.includes("lite")) tier = "Lite";
+      return { ...show, tier };
     });
   }, [showData]);
 
@@ -35,12 +36,11 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
     return data;
   }, [tieredShows, searchTerm]);
 
-  // --- SPLIT STATS (The "True" Analysis) ---
+  // --- SPLIT STATS ---
   const tierStats = useMemo(() => {
     const calcStats = (shows: any[]) => {
       if (!shows.length) return { avgFill: 0, revenue: 0, count: 0 };
       const totalRev = shows.reduce((acc, curr) => acc + (curr.totalSold * ticketPrice), 0);
-      // We calculate Fill Rate based on TOTAL seats available in that tier, not averaging percentages
       const totalCap = shows.reduce((acc, curr) => acc + curr.totalCapacity, 0);
       const totalSold = shows.reduce((acc, curr) => acc + curr.totalSold, 0);
       const avgFill = totalCap > 0 ? Math.round((totalSold / totalCap) * 100) : 0;
@@ -50,8 +50,31 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
     return {
       mainstage: calcStats(filteredShows.filter(s => s.tier === "Mainstage")),
       lite: calcStats(filteredShows.filter(s => s.tier === "Lite")),
-      total: calcStats(filteredShows)
+      other: calcStats(filteredShows.filter(s => s.tier === "Other")),
     };
+  }, [filteredShows, ticketPrice]);
+
+  // --- VENUE INTELLIGENCE ---
+  const venueStats = useMemo(() => {
+    const venues: Record<string, { name: string, count: number, totalRev: number, totalFill: number, shows: number }> = {};
+    
+    filteredShows.forEach(show => {
+        const vName = show.venue || "Unknown Venue";
+        if (!venues[vName]) venues[vName] = { name: vName, count: 0, totalRev: 0, totalFill: 0, shows: 0 };
+        
+        venues[vName].count += 1;
+        venues[vName].totalRev += (show.totalSold * ticketPrice);
+        venues[vName].totalFill += show.avgFill;
+        venues[vName].shows += 1;
+    });
+
+    const venueList = Object.values(venues);
+    const mostUsed = [...venueList].sort((a,b) => b.count - a.count)[0] || { name: "N/A", count: 0 };
+    const mostProfitable = [...venueList].sort((a,b) => b.totalRev - a.totalRev)[0] || { name: "N/A", totalRev: 0 };
+    // Calculate avg fill per venue correctly
+    const highestFill = [...venueList].map(v => ({ ...v, avgFill: Math.round(v.totalFill / v.shows) })).sort((a,b) => b.avgFill - a.avgFill)[0] || { name: "N/A", avgFill: 0 };
+
+    return { mostUsed, mostProfitable, highestFill };
   }, [filteredShows, ticketPrice]);
 
   // --- RENDER HELPERS ---
@@ -105,73 +128,109 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                  
                  {/* 1. THE SPLIT METRICS HEADER */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* MAINSTAGE CARD */}
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {/* MAINSTAGE */}
                     <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-3xl relative overflow-hidden group hover:border-blue-500/30 transition-colors">
                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                          <Crown size={120} />
+                          <Crown size={100} />
                        </div>
                        <div className="relative z-10">
-                          <h3 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                             <Crown size={14} /> Mainstage Performance
+                          <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <Crown size={14} /> Mainstage
                           </h3>
-                          <div className="flex gap-8">
-                             <div>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Avg Fill Rate</p>
-                                <p className={`text-3xl font-black ${tierStats.mainstage.avgFill < 50 ? 'text-red-500' : 'text-white'}`}>
-                                   {tierStats.mainstage.avgFill}%
-                                </p>
-                             </div>
-                             <div>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Revenue</p>
-                                <p className="text-3xl font-black text-white">{formatCurrency(tierStats.mainstage.revenue)}</p>
-                             </div>
+                          <div className="flex flex-col gap-1">
+                             <span className="text-3xl font-black text-white">{tierStats.mainstage.avgFill}%</span>
+                             <span className="text-[10px] uppercase tracking-widest text-zinc-500">Avg Fill Rate</span>
                           </div>
-                          <p className="mt-4 text-[10px] text-zinc-500">
-                             Across {tierStats.mainstage.count} large-venue productions
-                          </p>
+                          <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                             <span className="text-xs font-bold text-white">{formatCurrency(tierStats.mainstage.revenue)}</span>
+                             <span className="text-[9px] font-bold text-zinc-500">{tierStats.mainstage.count} Shows</span>
+                          </div>
                        </div>
                     </div>
 
-                    {/* LITE CARD */}
+                    {/* LITE */}
                     <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-3xl relative overflow-hidden group hover:border-amber-500/30 transition-colors">
                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                          <Sparkles size={120} />
+                          <Sparkles size={100} />
                        </div>
                        <div className="relative z-10">
-                          <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                             <Sparkles size={14} /> CYT Lite Performance
+                          <h3 className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <Sparkles size={14} /> CYT Lite
                           </h3>
-                          <div className="flex gap-8">
+                          <div className="flex flex-col gap-1">
+                             <span className="text-3xl font-black text-white">{tierStats.lite.avgFill}%</span>
+                             <span className="text-[10px] uppercase tracking-widest text-zinc-500">Avg Fill Rate</span>
+                          </div>
+                          <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                             <span className="text-xs font-bold text-white">{formatCurrency(tierStats.lite.revenue)}</span>
+                             <span className="text-[9px] font-bold text-zinc-500">{tierStats.lite.count} Shows</span>
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* OTHER */}
+                    <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-3xl relative overflow-hidden group hover:border-zinc-500/30 transition-colors">
+                       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                          <Tent size={100} />
+                       </div>
+                       <div className="relative z-10">
+                          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <Tent size={14} /> Other Programs
+                          </h3>
+                          <div className="flex flex-col gap-1">
+                             <span className="text-3xl font-black text-white">{tierStats.other.avgFill}%</span>
+                             <span className="text-[10px] uppercase tracking-widest text-zinc-500">Avg Fill Rate</span>
+                          </div>
+                          <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+                             <span className="text-xs font-bold text-white">{formatCurrency(tierStats.other.revenue)}</span>
+                             <span className="text-[9px] font-bold text-zinc-500">{tierStats.other.count} Shows</span>
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* 🆕 VENUE INTELLIGENCE CARD */}
+                    <div className="bg-gradient-to-br from-zinc-900 to-black border border-white/5 p-6 rounded-3xl relative overflow-hidden">
+                       <div className="absolute top-0 right-0 p-4 opacity-10">
+                          <MapPin size={100} />
+                       </div>
+                       <div className="relative z-10 h-full flex flex-col justify-between">
+                          <h3 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <MapPin size={14} /> Venue Intelligence
+                          </h3>
+                          
+                          <div className="space-y-4">
                              <div>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Avg Fill Rate</p>
-                                <p className="text-3xl font-black text-white">
-                                   {tierStats.lite.avgFill}%
+                                <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Most Frequent</p>
+                                <p className="text-sm font-bold text-white truncate" title={venueStats.mostUsed.name}>
+                                   {venueStats.mostUsed.name}
                                 </p>
+                                <p className="text-[10px] text-emerald-500">{venueStats.mostUsed.count} Productions</p>
                              </div>
-                             <div>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Revenue</p>
-                                <p className="text-3xl font-black text-white">{formatCurrency(tierStats.lite.revenue)}</p>
+                             
+                             <div className="pt-3 border-t border-white/5">
+                                <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Highest Fill Rate</p>
+                                <p className="text-sm font-bold text-white truncate" title={venueStats.highestFill.name}>
+                                   {venueStats.highestFill.name}
+                                </p>
+                                <p className="text-[10px] text-blue-500">{venueStats.highestFill.avgFill}% Average</p>
                              </div>
                           </div>
-                          <p className="mt-4 text-[10px] text-zinc-500">
-                             Across {tierStats.lite.count} small-venue productions
-                          </p>
                        </div>
                     </div>
                  </div>
 
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* LEFT: SCATTER CHART (Better for showing outliers) */}
+                    {/* SCATTER CHART */}
                     <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-6 rounded-[2.5rem]">
                        <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-                          <LayoutGrid size={16} className="text-emerald-500" /> Efficiency Matrix: Fill % vs Venue Size
+                          <LayoutGrid size={16} className="text-emerald-500" /> Efficiency Matrix
                        </h3>
                        <div className="h-[400px]">
                           <ResponsiveContainer width="100%" height="100%">
                              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#18181b" />
-                                <XAxis type="number" dataKey="avgCapacity" name="Venue Size" unit=" seats" stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
+                                <XAxis type="number" dataKey="totalCapacity" name="Total Seats" unit=" seats" stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
                                 <YAxis type="number" dataKey="avgFill" name="Fill Rate" unit="%" stroke="#3f3f46" tick={{fill: '#71717a', fontSize: 10}} />
                                 <ZAxis type="number" dataKey="totalSold" range={[50, 400]} name="Tickets Sold" />
                                 <Tooltip 
@@ -180,11 +239,26 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
                                       if (active && payload && payload.length) {
                                         const data = payload[0].payload;
                                         return (
-                                          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-xl">
+                                          <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-xl shadow-xl min-w-[180px]">
                                             <p className="text-xs font-bold text-white mb-1">{data.name}</p>
-                                            <p className="text-[10px] text-zinc-400">Venue: {Math.round(data.avgCapacity)} seats</p>
-                                            <p className="text-[10px] text-zinc-400">Fill: <span className={data.avgFill < 50 ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{data.avgFill}%</span></p>
-                                            <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest">{data.tier}</p>
+                                            
+                                            {/* VENUE IN TOOLTIP */}
+                                            <div className="flex items-center gap-1.5 mb-2 text-[10px] text-zinc-400 border-b border-zinc-800 pb-2">
+                                               <MapPin size={10} /> 
+                                               <span className="truncate max-w-[150px]">{data.venue}</span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                               <div>
+                                                  <span className="text-zinc-500 block uppercase tracking-tighter">Capacity</span>
+                                                  <span className="text-zinc-300 font-bold">{Math.round(data.totalCapacity).toLocaleString()}</span>
+                                               </div>
+                                               <div>
+                                                  <span className="text-zinc-500 block uppercase tracking-tighter">Fill Rate</span>
+                                                  <span className={data.avgFill < 50 ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>{data.avgFill}%</span>
+                                               </div>
+                                            </div>
+                                            <p className="text-[9px] text-zinc-600 mt-2 uppercase tracking-widest text-right">{data.tier}</p>
                                           </div>
                                         );
                                       }
@@ -194,15 +268,13 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
                                 <Legend />
                                 <Scatter name="Mainstage" data={filteredShows.filter(s => s.tier === 'Mainstage')} fill="#3b82f6" shape="circle" onClick={(data: any) => setSelectedShow(data)} className="cursor-pointer opacity-80 hover:opacity-100" />
                                 <Scatter name="CYT Lite" data={filteredShows.filter(s => s.tier === 'Lite')} fill="#f59e0b" shape="triangle" onClick={(data: any) => setSelectedShow(data)} className="cursor-pointer opacity-80 hover:opacity-100" />
+                                <Scatter name="Other" data={filteredShows.filter(s => s.tier === 'Other')} fill="#71717a" shape="square" onClick={(data: any) => setSelectedShow(data)} className="cursor-pointer opacity-80 hover:opacity-100" />
                              </ScatterChart>
                           </ResponsiveContainer>
                        </div>
-                       <div className="text-center text-[10px] text-zinc-500 uppercase tracking-widest mt-4">
-                          Click any point to inspect production
-                       </div>
                     </div>
 
-                    {/* RIGHT: LIST VIEW */}
+                    {/* LIST VIEW */}
                     <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                        {filteredShows.map(show => (
                           <button 
@@ -212,16 +284,25 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
                           >
                              <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
-                                   {show.tier === 'Mainstage' ? <Crown size={12} className="text-blue-500"/> : <Sparkles size={12} className="text-amber-500"/>}
+                                   {show.tier === 'Mainstage' && <Crown size={12} className="text-blue-500"/>}
+                                   {show.tier === 'Lite' && <Sparkles size={12} className="text-amber-500"/>}
+                                   {show.tier === 'Other' && <Box size={12} className="text-zinc-500"/>}
                                    <p className="text-[10px] font-black text-zinc-500 uppercase">{show.season}</p>
                                 </div>
                                 <div className={`w-2 h-2 rounded-full ${show.avgFill > 75 ? 'bg-emerald-500' : 'bg-red-500'}`} />
                              </div>
                              <p className="text-sm font-bold text-white mb-1 group-hover:text-blue-400 transition-colors truncate">{show.name}</p>
+                             
+                             {/* VENUE IN LIST */}
+                             <div className="flex items-center gap-1 text-[10px] text-zinc-500 mb-2">
+                                <MapPin size={10} />
+                                <span className="truncate">{show.venue}</span>
+                             </div>
+
                              <div className="flex gap-3 text-[10px] font-medium text-zinc-400">
                                 <span>{show.avgFill}% Sold</span>
                                 <span>•</span>
-                                <span>{Math.round(show.avgCapacity)} cap.</span>
+                                <span>{Math.round(show.totalCapacity).toLocaleString()} cap.</span>
                              </div>
                           </button>
                        ))}
@@ -232,7 +313,7 @@ export default function AnalyticsDashboard({ performanceData, showData, ticketPr
 
             {activeTab === 'seasons' && (
               <div className="p-8 text-center text-zinc-500 italic">
-                  Season history view is being updated to support tiered breakdown.
+                  Season history view is being updated...
               </div>
             )}
           </div>
@@ -266,6 +347,9 @@ function SingleShowView({ show, ticketPrice }: { show: any, ticketPrice: number 
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${show.tier === 'Mainstage' ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500'}`}>
                         {show.tier} Production
                     </span>
+                    <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1">
+                        <MapPin size={10} /> {show.venue}
+                    </span>
                 </div>
                 <h1 className="text-4xl font-black text-white tracking-tighter">{show.name}</h1>
                 <p className="text-zinc-500 mt-2 font-medium">Season: {show.season || "Unknown"}</p>
@@ -273,7 +357,7 @@ function SingleShowView({ show, ticketPrice }: { show: any, ticketPrice: number 
             <div className="flex gap-4">
                 <MetricCard label="Revenue" value={`$${(show.totalSold * ticketPrice).toLocaleString()}`} icon={<DollarSign size={16} className="text-emerald-500"/>} />
                 <MetricCard label="Fill Rate" value={`${show.avgFill}%`} icon={<Users size={16} className="text-blue-500"/>} />
-                <MetricCard label="Venue Cap" value={Math.round(show.avgCapacity).toLocaleString()} icon={<Ticket size={16} className="text-zinc-500"/>} />
+                <MetricCard label="Venue Cap" value={Math.round(show.totalCapacity).toLocaleString()} icon={<Ticket size={16} className="text-zinc-500"/>} />
             </div>
             </div>
 

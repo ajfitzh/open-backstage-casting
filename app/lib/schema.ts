@@ -436,6 +436,7 @@ export const DB = {
       "PRODUCTIONS": "field_6114", // link_row
       "CLASSES": "field_6122", // link_row
       "RENTAL_RATES": "field_6214", // link_row
+      "SEASON": "field_6262", // link_row
     }
   },
   CLASSES: {
@@ -555,6 +556,7 @@ export const DB = {
       "END_DATE": "field_6247", // date
       "PRODUCTIONS": "field_6250", // link_row
       "STAFF_INTEREST": "field_6257", // link_row
+      "SESSIONS": "field_6263", // link_row
     }
   },
   STAFF_INTEREST: {

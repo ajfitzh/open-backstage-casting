@@ -116,7 +116,7 @@ export async function getClasses() {
     }
   }
 
-  return allRows.map((row: any) => ({
+return allRows.map((row: any) => ({
       id: row.id,
       name: safeGet(row[DB.CLASSES.FIELDS.CLASS_NAME], "Unnamed Class"),
       session: safeGet(row[DB.CLASSES.FIELDS.SESSION], "Unknown Session"),
@@ -127,7 +127,13 @@ export async function getClasses() {
       day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
       time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
       type: safeGet(row[DB.CLASSES.FIELDS.TYPE], "General"),
-      ageRange: formatAgeRange(row), // FIXED
+      
+      // ✅ NEW: Pass raw integers for filtering
+      minAge: parseInt(safeGet(row[DB.CLASSES.FIELDS.MINIMUM_AGE], 0)),
+      maxAge: parseInt(safeGet(row[DB.CLASSES.FIELDS.MAXIMUM_AGE], 99)),
+      
+      // Keep the pretty string for display
+      ageRange: formatAgeRange(row),
       students: Array.isArray(row[DB.CLASSES.FIELDS.STUDENTS]) ? row[DB.CLASSES.FIELDS.STUDENTS].length : 0,
   }));
 }
@@ -234,11 +240,16 @@ function mapShow(row: any) {
   return {
     id: row.id,
     title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled Show"),
-    season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"), // FIXED
+    season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"),
     status: rawStatus,
+    type: safeGet(row[DB.PRODUCTIONS.FIELDS.TYPE], "Other"), 
     isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
     image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
-    location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION]) || safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE]) || "TBD",
+    productionSession: safeGet(row[DB.PRODUCTIONS.FIELDS.SESSION], ""),
+    // 🛠️ FIX: Separate Branch (Location) from Specific Venue
+    branch: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"), 
+    venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "null"), // This grabs "Fredericksburg Academy"
+    
     workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
   };
 }
@@ -254,7 +265,31 @@ export async function getActiveProduction() {
 
   return activeRow ? mapShow(activeRow) : null;
 }
+// app/lib/baserow.ts
 
+export async function getSeasons() {
+  const data = await fetchBaserow(
+    `/database/rows/table/${DB.SEASONS.ID}/`, 
+    {}, 
+    { 
+      size: "200",
+      // Sort by start date (descending usually makes sense for UI, but we sort in client too)
+      order_by: `${DB.SEASONS.FIELDS.START_DATE}` 
+    }
+  );
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    name: safeGet(row[DB.SEASONS.FIELDS.NAME], "Unnamed Season"),
+    startDate: safeGet(row[DB.SEASONS.FIELDS.START_DATE]),
+    endDate: safeGet(row[DB.SEASONS.FIELDS.END_DATE]),
+    status: safeGet(row[DB.SEASONS.FIELDS.STATUS], "Planning"), 
+    // Count how many productions are linked to this season
+    productionCount: Array.isArray(row[DB.SEASONS.FIELDS.PRODUCTIONS]) ? row[DB.SEASONS.FIELDS.PRODUCTIONS].length : 0
+  })).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+}
 export async function getShowById(id: string | number) {
   const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${id}/`);
   if (!data || data.error) return null;
@@ -299,10 +334,12 @@ export async function getRoles() {
 
 export async function getAssignments(productionId?: number) {
   const F = DB.ASSIGNMENTS.FIELDS;
-  const params: any = { size: "200", user_field_names: "true" };
+  
+  // 1. REMOVE 'user_field_names: "true"' so keys match DB.SCHEMA (e.g. field_5786)
+  const params: any = { size: "200" }; 
 
   if (productionId) {
-    params[`filter__field_${F.PRODUCTION}__link_row_has`] = productionId;
+    params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   }
 
   const data = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, params);
@@ -313,7 +350,8 @@ export async function getAssignments(productionId?: number) {
     return {
       id: row.id,
       assignment: safeGet(row[F.ASSIGNMENT]),
-      personId: personObj ? personObj.id : 0,
+      // Now this will find the data because row["field_..."] exists
+      personId: personObj ? personObj.id : 0, 
       personName: personObj ? personObj.value : "Unknown Actor",
     };
   });
@@ -872,10 +910,12 @@ export async function getPerformanceAnalytics(productionId?: number) {
   const data = await fetchBaserow(`/database/rows/table/${DB.PERFORMANCES.ID}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
-  return data.map((row: any) => {
+return data.map((row: any) => {
     const sold = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TICKETS_SOLD], 0));
     const capacity = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TOTAL_INVENTORY], 0));
     return {
+      // ✅ ADD THIS: Get the Link ID so we can match it to the Production Type
+      productionId: safeId(row[DB.PERFORMANCES.FIELDS.PRODUCTION]), 
       name: safeGet(row[DB.PERFORMANCES.FIELDS.PERFORMANCE], "Show"),
       sold: sold,
       capacity: capacity,

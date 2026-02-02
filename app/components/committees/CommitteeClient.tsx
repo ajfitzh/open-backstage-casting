@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -49,6 +49,7 @@ export default function CommitteeDashboard({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- HELPER: Get Preferences based on current View ---
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const getPrefs = (p: any) => {
       if (groupBy === 'Pre-Show') {
           return { first: p.preShow1, second: p.preShow2, third: p.preShow3 };
@@ -144,7 +145,7 @@ export default function CommitteeDashboard({
           else groups["Unassigned"].push(p);
       });
       return groups;
-  }, [rawData, assignments, groupBy]);
+  }, [groupBy, rawData, assignments, getPrefs]);
 
   const currentTeam = selectedCommittee ? groupedData[selectedCommittee] : [];
   const leadershipKey = `${groupBy}:${selectedCommittee}`;

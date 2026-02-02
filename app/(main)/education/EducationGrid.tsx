@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { 
   Users, MapPin, Clock, Filter, ChevronDown, Calendar, Search, X, 
-  LayoutGrid, Building2, BarChart3, Church, School, Warehouse, DollarSign
+  LayoutGrid, Building2, BarChart3, Church, School, DollarSign, UserSquare2
 } from "lucide-react";
 import ClassManagerModal from "@/app/components/education/ClassManagerModal";
 
@@ -24,14 +24,11 @@ function getSessionValue(sessionName: string) {
   return (year * 100) + term;
 }
 
-// Extract "River Club Church" from "River Club Church - Dance Room"
 function getVenueName(cls: any) {
     if (!cls.spaceName) return "TBD Location";
-    // Split by " - " and take the first part, or just return spaceName if no hyphen
     return cls.spaceName.split(' - ')[0].trim();
 }
 
-// Generate a deterministic "Brand Color" for each venue
 function getVenueTheme(venueName: string) {
     const name = venueName.toLowerCase();
     if (name.includes('river club')) return { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', icon: <Church size={14}/> };
@@ -40,6 +37,14 @@ function getVenueTheme(venueName: string) {
     if (name.includes('life')) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: <Users size={14}/> };
     return { color: 'text-zinc-400', bg: 'bg-zinc-800', border: 'border-white/5', icon: <MapPin size={14}/> };
 }
+
+// 🆕 NEW: Age Buckets for smarter filtering
+const AGE_BUCKETS = [
+  { label: "Minis (5-7)", min: 5, max: 7 },
+  { label: "Youth (8-12)", min: 8, max: 12 },
+  { label: "Teens (13-18)", min: 13, max: 18 },
+  { label: "Adult (18+)", min: 18, max: 100 },
+];
 
 export default function EducationGrid({ classes }: { classes: any[] }) {
   const [selectedClass, setSelectedClass] = useState<any>(null);
@@ -58,28 +63,41 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
   const sessionClasses = useMemo(() => {
     return classes.map(c => ({
         ...c,
-        venue: getVenueName(c) // Inject Venue Name here for easy filtering
+        venue: getVenueName(c),
+        // Ensure we have numbers for math
+        minAge: c.minAge || 0,
+        maxAge: c.maxAge || 99
     })).filter(c => c.session === activeSession);
   }, [classes, activeSession]);
 
-  // 3. EXTRACT FILTERS FROM CURRENT DATA
+  // 3. EXTRACT FILTERS
   const availableVenues = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.venue))).sort(), [sessionClasses]);
   const availableDays = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.day).filter(Boolean))).sort(), [sessionClasses]);
-  const availableAges = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.ageRange).filter(Boolean))).sort(), [sessionClasses]);
 
   // 4. FILTERS STATE
   const [filterVenue, setFilterVenue] = useState<string | null>(null);
   const [filterDay, setFilterDay] = useState<string | null>(null);
-  const [filterAge, setFilterAge] = useState<string | null>(null);
+  const [filterAgeLabel, setFilterAgeLabel] = useState<string | null>(null); // Use Label, not exact string
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 5. APPLY FILTERS
+  // 5. APPLY FILTERS (Upgraded Logic)
   const visibleClasses = sessionClasses.filter(c => {
     const matchesVenue = filterVenue ? c.venue === filterVenue : true;
     const matchesDay = filterDay ? c.day === filterDay : true;
-    const matchesAge = filterAge ? c.ageRange === filterAge : true;
+    
+    // 🆕 NEW: Age Range Overlap Logic
+    let matchesAge = true;
+    if (filterAgeLabel) {
+       const bucket = AGE_BUCKETS.find(b => b.label === filterAgeLabel);
+       if (bucket) {
+          // Check intersection: [ClassMin, ClassMax] overlaps with [BucketMin, BucketMax]
+          matchesAge = c.maxAge >= bucket.min && c.minAge <= bucket.max;
+       }
+    }
+
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.teacher.toLowerCase().includes(searchQuery.toLowerCase());
+    
     return matchesVenue && matchesDay && matchesAge && matchesSearch;
   });
 
@@ -160,12 +178,11 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
             </div>
         </div>
 
-        {/* --- VENUE STRIP (The "Pretty Color-Coded" Feature) --- */}
+        {/* --- VENUE STRIP --- */}
         {viewMode !== 'metrics' && (
             <div className="space-y-4">
                 {/* Venue Pills */}
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    {/* "All Venues" Pill */}
                     <button 
                         onClick={() => setFilterVenue(null)}
                         className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${
@@ -179,7 +196,6 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
                         <span className="text-[9px] font-medium opacity-60">{sessionClasses.length} Classes</span>
                     </button>
 
-                    {/* Dynamic Venue Pills */}
                     {availableVenues.map(venue => {
                         const theme = getVenueTheme(venue);
                         const count = sessionClasses.filter(c => c.venue === venue).length;
@@ -216,9 +232,15 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
                         </button>
                     ))}
                     <div className="w-px h-4 bg-white/10 mx-1 hidden sm:block"></div>
-                    {availableAges.map(age => (
-                        <button key={age} onClick={() => setFilterAge(filterAge === age ? null : age)} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${filterAge === age ? 'bg-zinc-100 text-black border-white' : 'bg-zinc-900/30 border-white/5 text-zinc-500 hover:text-white'}`}>
-                            {age}
+                    
+                    {/* 🆕 UPDATED AGE FILTERS: Using Buckets */}
+                    {AGE_BUCKETS.map(bucket => (
+                        <button 
+                           key={bucket.label} 
+                           onClick={() => setFilterAgeLabel(filterAgeLabel === bucket.label ? null : bucket.label)} 
+                           className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${filterAgeLabel === bucket.label ? 'bg-zinc-100 text-black border-white' : 'bg-zinc-900/30 border-white/5 text-zinc-500 hover:text-white'}`}
+                        >
+                            {bucket.label.split(" ")[0]}
                         </button>
                     ))}
                 </div>
@@ -315,21 +337,44 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
   );
 }
 
+// ... (Subcomponents remain the same, just copied from your original file)
 function ClassCard({ cls, onClick }: any) {
     const theme = getVenueTheme(cls.venue);
     return (
-        <div onClick={onClick} className="group cursor-pointer bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all p-6 rounded-3xl relative overflow-hidden flex flex-col h-full shadow-sm hover:shadow-2xl">
-            <div className={`absolute top-0 right-0 p-24 ${theme.bg} blur-3xl rounded-full opacity-0 group-hover:opacity-40 transition-opacity duration-500`} />
-            <div className="relative z-10 flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${cls.students > 0 ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-zinc-950 text-zinc-600 border-white/5'}`}>{cls.students > 0 ? `${cls.students} Students` : 'Empty'}</span>
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">{cls.ageRange}</span>
+        <div onClick={onClick} className="group cursor-pointer bg-zinc-900/40 border border-white/5 hover:border-white/10 hover:bg-zinc-900/60 rounded-2xl p-5 transition-all flex flex-col h-full relative overflow-hidden shadow-sm hover:shadow-2xl">
+            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br rounded-bl-full -mr-8 -mt-8 pointer-events-none opacity-10 ${theme.bg.replace('bg-', 'from-').replace('/10', '')} to-transparent`} />
+
+            <div className="mb-4">
+                <div className="flex items-start justify-between gap-4">
+                    <h3 className="font-bold text-zinc-100 leading-tight group-hover:text-emerald-400 transition-colors">
+                        {cls.name}
+                    </h3>
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="shrink-0 px-2 py-1 bg-white/5 rounded text-[10px] font-bold text-zinc-500 border border-white/5 uppercase tracking-wide whitespace-nowrap">
+                            {cls.ageRange}
+                        </span>
+                        {cls.type && cls.type !== "General" && (
+                            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-600">
+                                {cls.type}
+                            </span>
+                        )}
+                    </div>
                 </div>
-                <h3 className="text-lg font-black text-white leading-tight mb-1 group-hover:text-blue-100 transition-colors line-clamp-2">{cls.name}</h3>
-                <p className="text-xs font-bold text-zinc-500 mb-6">{cls.teacher}</p>
-                <div className="mt-auto flex flex-col gap-2 text-xs text-zinc-400 font-medium border-t border-white/5 pt-4 group-hover:border-white/10 transition-colors">
-                    <div className="flex items-center gap-2"><div className={theme.color}>{theme.icon}</div> <span className="truncate">{cls.venue}</span></div>
-                    <div className="flex items-center gap-2"><Clock size={14} className="text-zinc-600"/> {cls.day} • {cls.time}</div>
+                <p className="text-xs text-zinc-500 font-medium mt-1 flex items-center gap-1">
+                    <School size={10}/> {cls.teacher}
+                </p>
+            </div>
+
+            <div className="mt-auto space-y-2 pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs text-zinc-400">
+                        <Calendar size={14} className="text-zinc-600"/>
+                        <span className="font-bold text-zinc-300">{cls.day}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                        <Users size={14} className="text-zinc-600"/>
+                        <span>{cls.students} Enrolled</span>
+                    </div>
                 </div>
             </div>
         </div>

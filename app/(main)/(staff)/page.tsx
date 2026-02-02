@@ -13,7 +13,7 @@ export default async function StaffPage() {
 
   if (activeId) {
       const prod = await getActiveProduction(); 
-      if(prod) productionTitle = prod.Title;
+      if(prod) productionTitle = prod.title;
   }
 
   return (

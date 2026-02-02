@@ -14,9 +14,11 @@ import {
   getAssignments, 
   getCreativeTeam, 
   getClasses,
-  getAuditionees,    
+  getAuditionees,     
   getScenes,         
-  getProductionEvents 
+  getProductionEvents,
+  getSeasons,
+  getAllShows // <--- ADD THIS
 } from '@/app/lib/baserow';
 
 // 2. Import Components
@@ -41,21 +43,25 @@ export default async function DashboardPage() {
      return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
-  // --- PARALLEL FETCH ---
+// --- PARALLEL FETCH ---
   const [
     assignments, 
     creativeTeam, 
     allClasses,
     auditionees,
     scenes,
-    events
+    events,
+    allSeasons,
+    allShows // <--- ADD THIS VARIABLE
   ] = await Promise.all([
       getAssignments(show.id),
       getCreativeTeam(show.id),
       getClasses(),
       getAuditionees(show.id),
       getScenes(show.id),
-      getProductionEvents(show.id)
+      getProductionEvents(show.id),
+      getSeasons(),
+      getAllShows() // <--- ADD THIS FUNCTION CALL
   ]);
   
   // --- SHOW STATS ---
@@ -72,21 +78,25 @@ export default async function DashboardPage() {
      return show.workflowOverrides?.some((tag: any) => tag.value === key);
   };
 
-  const workflowStatus = {
-      // 1. Auditions: >5 people logged OR manual override
+const workflowStatus = {
+      // Standard Phases
       hasAuditions: auditionees.length > 5 || hasOverride('Auditions'),
-      
-      // 2. Callbacks: Casting started OR manual override
       hasCallbacks: assignments.length > 0 || hasOverride('Callbacks'), 
-
-      // 3. Casting: Assignments exist OR manual override
       hasCast: assignments.length > 0 || hasOverride('Casting'),
+      hasPoints: scenes.some((s: any) => s.load?.music > 0) || hasOverride('Calibration'),
+      hasSchedule: events.length > 0 || hasOverride('Scheduling'),
       
-      // 4. Points: Scenes have difficulty scores OR manual override
-      hasPoints: scenes.some((s: any) => s.load && (s.load.music > 0 || s.load.dance > 0 || s.load.block > 0)) || hasOverride('Calibration'),
+      // 🆕 NEW PHASES
+hasRehearsals: hasOverride('Rehearsals'),
+      hasSuperSat: hasOverride('SuperSaturday'), // <--- NEW
+      hasTech: hasOverride('Tech Week'),
       
-      // 5. Schedule: Events exist OR manual override
-      hasSchedule: events.length > 0 || hasOverride('Scheduling')
+      hasWeekend1: hasOverride('ShowWeekend1'), 
+      hasWeekend2: hasOverride('ShowWeekend2'),
+
+      // 🆕 WEEKLY TASKS (These are just tags we toggle on/off)
+      reportsDone: hasOverride('WeeklyReports'),
+      scheduleDone: hasOverride('WeeklySchedule')
   };
 
   // --- THEME ENGINE ---
@@ -133,7 +143,8 @@ export default async function DashboardPage() {
 
       {/* 2. WORKFLOW TRACKER */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-         <WorkflowProgress status={workflowStatus} />
+         <WorkflowProgress status={workflowStatus}
+         productionId={show.id} />
       </div>
 
       {/* 3. ACTION GRID */}
@@ -158,12 +169,13 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* 4. SEASON CONTEXT */}
-      <SeasonContext 
-         initialSeason={show?.season} 
-         allClasses={allClasses} 
-         activeShowStats={{ castCount }}
-      />
+<SeasonContext 
+      activeSeasonName={show?.season} 
+      seasons={allSeasons}
+      allClasses={allClasses} 
+      allShows={allShows} // <--- PASS IT DOWN
+      activeShowStats={{ castCount }}
+  />
 
       {/* FOOTER */}
       <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">
