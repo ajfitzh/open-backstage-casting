@@ -97,17 +97,34 @@ export default function SeasonContext({
       return { shows: filteredShows, sessions: filteredSessions };
   }, [seasonData, lineupFilter]);
 
-  // 4. CALCULATE STATS
+// 3. CALCULATE STATS
   const stats = useMemo(() => {
+    // A. Count students in the classes for the SELECTED season
     const academyCount = seasonData.classes.reduce((acc: number, c: any) => acc + (c.students || 0), 0);
-    const isCurrentSeason = selectedSeasonName === activeSeasonName;
-    const castCount = isCurrentSeason ? (activeShowStats?.castCount || 0) : 0; 
-    const totalStudents = academyCount + castCount;
+    
+    // B. Always show the REAL active cast count (Global Stat)
+    // We stop hiding this when the seasons don't match.
+    const castCount = activeShowStats?.castCount || 0; 
+
+    // C. Total Reach
+    // Since cast members are required to be in classes, they are ALREADY in 'academyCount'.
+    // So Total Reach = Academy Count.
+    // The Cast Count is just a "subset" stat.
+    const totalStudents = academyCount;
+    
+    // D. Family Estimate
     const familyCount = Math.floor(totalStudents * 0.75); 
 
-    return { academyCount, familyCount, totalStudents, castCount, isCurrentSeason };
+    return { 
+        academyCount, 
+        familyCount, 
+        totalStudents, 
+        castCount, 
+        // We still track this boolean for labeling purposes (e.g. "Historical Data")
+        isCurrentSeason: selectedSeasonName === activeSeasonName 
+    };
   }, [seasonData, selectedSeasonName, activeSeasonName, activeShowStats]);
-
+  
   const currentSeasonObj = sortedSeasons.find(s => s.name === selectedSeasonName);
 
   return (
@@ -118,7 +135,7 @@ export default function SeasonContext({
         </div>
 
         {/* HEADER */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 relative z-10">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 relative z-20">
             <div>
                 <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">

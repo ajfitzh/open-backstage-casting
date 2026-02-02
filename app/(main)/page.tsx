@@ -18,7 +18,7 @@ import {
   getScenes,         
   getProductionEvents,
   getSeasons,
-  getAllShows // <--- ADD THIS
+  getAllShows
 } from '@/app/lib/baserow';
 
 // 2. Import Components
@@ -40,10 +40,10 @@ export default async function DashboardPage() {
   if (!show) show = await getActiveProduction();
 
   if (!show) {
-     return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
+      return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
-// --- PARALLEL FETCH ---
+  // --- PARALLEL FETCH ---
   const [
     assignments, 
     creativeTeam, 
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
     scenes,
     events,
     allSeasons,
-    allShows // <--- ADD THIS VARIABLE
+    allShows 
   ] = await Promise.all([
       getAssignments(show.id),
       getCreativeTeam(show.id),
@@ -61,43 +61,23 @@ export default async function DashboardPage() {
       getScenes(show.id),
       getProductionEvents(show.id),
       getSeasons(),
-      getAllShows() // <--- ADD THIS FUNCTION CALL
+      getAllShows()
   ]);
   
-  // --- SHOW STATS ---
-  const uniqueCastIds = new Set(
-    assignments
-      .filter((a: any) => a.personId) 
-      .map((a: any) => a.personId)
-  );
-  const castCount = uniqueCastIds.size;
+  // --- FIX: ROBUST CAST COUNT ---
+  // If Baserow IDs are missing (0), fallback to unique Person Names.
+  const uniqueCast = new Set();
+  assignments.forEach((a: any) => {
+      if (a.personId && a.personId !== 0) uniqueCast.add(a.personId);
+      else if (a.personName && a.personName !== "Unknown Actor") uniqueCast.add(a.personName);
+  });
+  const castCount = uniqueCast.size;
 
-  // --- WORKFLOW STATUS LOGIC (Database + Manual Override) ---
-  const hasOverride = (key: string) => {
-     // Check if the production's override list contains this specific key
-     return show.workflowOverrides?.some((tag: any) => tag.value === key);
-  };
-
-const workflowStatus = {
-      // Standard Phases
-      hasAuditions: auditionees.length > 5 || hasOverride('Auditions'),
-      hasCallbacks: assignments.length > 0 || hasOverride('Callbacks'), 
-      hasCast: assignments.length > 0 || hasOverride('Casting'),
-      hasPoints: scenes.some((s: any) => s.load?.music > 0) || hasOverride('Calibration'),
-      hasSchedule: events.length > 0 || hasOverride('Scheduling'),
-      
-      // 🆕 NEW PHASES
-hasRehearsals: hasOverride('Rehearsals'),
-      hasSuperSat: hasOverride('SuperSaturday'), // <--- NEW
-      hasTech: hasOverride('Tech Week'),
-      
-      hasWeekend1: hasOverride('ShowWeekend1'), 
-      hasWeekend2: hasOverride('ShowWeekend2'),
-
-      // 🆕 WEEKLY TASKS (These are just tags we toggle on/off)
-      reportsDone: hasOverride('WeeklyReports'),
-      scheduleDone: hasOverride('WeeklySchedule')
-  };
+  // --- WORKFLOW STATUS ---
+  // We just pass the raw tags to the client now. 
+  // The Client Component handles the logic for "Pre-Pro" vs "Grind" vs "Tech".
+  const rawTags = show.workflowOverrides?.map((tag: any) => tag.value) || [];
+  const workflowStatus = { tags: rawTags };
 
   // --- THEME ENGINE ---
   const getShowTheme = (title: string) => {
@@ -143,8 +123,10 @@ hasRehearsals: hasOverride('Rehearsals'),
 
       {/* 2. WORKFLOW TRACKER */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-         <WorkflowProgress status={workflowStatus}
-         productionId={show.id} />
+         <WorkflowProgress 
+            status={workflowStatus} 
+            productionId={show.id} 
+         />
       </div>
 
       {/* 3. ACTION GRID */}
@@ -169,13 +151,14 @@ hasRehearsals: hasOverride('Rehearsals'),
         </div>
       </div>
 
-<SeasonContext 
-      activeSeasonName={show?.season} 
-      seasons={allSeasons}
-      allClasses={allClasses} 
-      allShows={allShows} // <--- PASS IT DOWN
-      activeShowStats={{ castCount }}
-  />
+      {/* 4. SEASON CONTEXT */}
+      <SeasonContext 
+          activeSeasonName={show?.season} 
+          seasons={allSeasons}
+          allClasses={allClasses} 
+          allShows={allShows} 
+          activeShowStats={{ castCount }}
+      />
 
       {/* FOOTER */}
       <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">

@@ -100,49 +100,49 @@ export async function updateClassSchedule(
   revalidatePath("/education/planning");
   revalidatePath("/education"); 
 }
-// app/lib/actions.ts
-
-// ... (keep your existing imports and markStepComplete function) ...
-
 export async function toggleWorkflowTag(productionId: number, tagKey: string) {
   if (!productionId) return;
 
-  // Map friendly keys to DB values
+  // 1. Static Map for the unique phases
   const keyMap: Record<string, string> = {
-    'WeeklyReports': 'WeeklyReports',
-    'WeeklySchedule': 'WeeklySchedule',
-    'ShowWeekend1': 'ShowWeekend1', 
-    'ShowWeekend2': 'ShowWeekend2',
+    // Pre-Pro
+    'auditions': 'Auditions',
+    'callbacks': 'Callbacks',
+    'casting': 'Casting',
+    'first_reh': 'FirstRehearsal',
+    
+    // Tech
+    'superSat': 'SuperSaturday',
+    'tech_mon': 'Tech_Mon',
+    'tech_tue': 'Tech_Tue',
+    'tech_wed': 'Tech_Wed',
+    'tech_thu': 'Tech_Thu',
+    'tech_fri': 'Tech_Fri',
+    
+    // Run
+    'weekend1': 'ShowWeekend1',
+    'weekend2': 'ShowWeekend2',
   };
   
-  const targetTag = keyMap[tagKey] || tagKey; // Fallback to raw key if not in map
+  // 2. Dynamic Fallback: If not in map, pass it through (For W1_Report, etc.)
+  const targetTag = keyMap[tagKey] || tagKey;
 
   try {
-    // 1. Fetch FRESH data
-    // We use user_field_names=true to make reading the array easier
     const freshRow = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
-    
-    if (!freshRow || freshRow.error) {
-        console.error("Fetch failed in toggleWorkflowTag", freshRow);
-        throw new Error("Fetch failed");
-    }
+    if (!freshRow || freshRow.error) throw new Error("Fetch failed");
 
-    // 2. Get current tags (Baserow returns objects like [{id: 1, value: "Auditions"}])
     const currentTags = freshRow[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [];
     const currentValues = currentTags.map((t: any) => t.value);
 
     let newValues;
     
-    // 3. TOGGLE LOGIC
+    // 3. TOGGLE LOGIC (Add/Remove)
     if (currentValues.includes(targetTag)) {
-       // Remove it
        newValues = currentValues.filter((v: string) => v !== targetTag);
     } else {
-       // Add it
        newValues = [...currentValues, targetTag];
     }
 
-    // 4. Save back to Baserow
     await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
