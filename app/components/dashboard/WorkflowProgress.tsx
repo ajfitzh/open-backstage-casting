@@ -1,7 +1,8 @@
 "use client";
 
 import { useOptimistic, startTransition } from 'react';
-import { Check, Circle, ArrowRight, ClipboardList, CalendarClock, Zap, CalendarDays, Curtain, Truck } from 'lucide-react';
+// 🛠️ FIX: Removed 'Curtain', added 'Ticket'
+import { Check, Circle, ArrowRight, ClipboardList, CalendarClock, Zap, CalendarDays, Ticket, Truck } from 'lucide-react';
 import { markStepComplete, toggleWorkflowTag } from '@/app/lib/actions';
 
 // Expanded Lifecycle including Super Saturday
@@ -11,7 +12,7 @@ const STEPS = [
   { key: 'casting', label: 'Casting', short: 'Cast' },
   { key: 'points', label: 'Calibration', short: 'Pts' },
   { key: 'rehearsals', label: 'Rehearsals', short: 'Reh' },
-  { key: 'superSat', label: 'Move-In', short: 'Move-In' }, // 🆕
+  { key: 'superSat', label: 'Move-In', short: 'Move-In' },
   { key: 'tech', label: 'Tech Week', short: 'Tech' },      
   { key: 'weekend1', label: 'Opening Wknd', short: 'Opener' }, 
   { key: 'weekend2', label: 'Closing Wknd', short: 'Closer' }, 
@@ -30,7 +31,7 @@ export default function WorkflowProgress({ status, productionId }: { status: any
             'points': 'hasPoints',
             'schedule': 'hasSchedule',
             'rehearsals': 'hasRehearsals',
-            'superSat': 'hasSuperSat', // 🆕
+            'superSat': 'hasSuperSat',
             'tech': 'hasTech',
             'weekend1': 'hasWeekend1',
             'weekend2': 'hasWeekend2',
@@ -189,7 +190,8 @@ export default function WorkflowProgress({ status, productionId }: { status: any
              <div className="bg-purple-500/5 border border-purple-500/10 rounded-2xl p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 animate-pulse">
-                        <Curtain size={20} />
+                        {/* 🛠️ FIX: Swapped Curtain for Ticket */}
+                        <Ticket size={20} />
                     </div>
                     <div>
                         <p className="text-xs font-bold text-white">Performance Mode: {STEPS[activeIndex].label}</p>
@@ -205,7 +207,7 @@ export default function WorkflowProgress({ status, productionId }: { status: any
             </div>
         )}
 
-        {/* SCENARIO C: STANDARD ADVANCE (Including Super Saturday) */}
+        {/* SCENARIO C: STANDARD ADVANCE */}
         {!isRehearsalPhase && !isShowRun && activeIndex < 9 && (
             <div className="bg-zinc-950/50 rounded-2xl p-4 flex items-center justify-between border border-white/5">
                 <div className="flex items-center gap-4">
