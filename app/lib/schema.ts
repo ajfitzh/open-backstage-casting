@@ -154,7 +154,11 @@ export const DB = {
         TIME_SLOT: "field_6120",
         TYPE: "field_6217",
         AGE_RANGE: "field_6121",
-        STUDENTS: "field_6150"
+        STUDENTS: "field_6150",
+        STATUS: "field_6241", // Change this to your actual Field ID for "Status"
+        DESCRIPTION: "field_6242", // Add a Long Text field for descriptions
+        OBJECTIVES: "field_6243",   // Add a Long Text field for Learning Objectives
+        IS_CORE: "field_6240", // Boolean field to indicate if it's a core class
     }
   },
   VENUES: {

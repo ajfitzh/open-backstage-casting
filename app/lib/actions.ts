@@ -7,7 +7,20 @@ import { getClassRoster, fetchBaserow, getActiveProduction } from "@/app/lib/bas
 import { DB } from "@/app/lib/schema";
 
 // --- HELPERS ---
+// app/lib/actions.ts
 
+// ... existing imports ...
+import { submitClassProposal, claimBounty } from "@/app/lib/baserow";
+
+export async function submitProposalAction(data: any) {
+    await submitClassProposal(data);
+    revalidatePath("/education/portal");
+}
+
+export async function claimBountyAction(classId: number, teacherName: string) {
+    await claimBounty(classId, teacherName);
+    revalidatePath("/education/portal");
+}
 // Converts decimal time (18.5) to HH:MM string ("18:30")
 // Used to construct ISO strings for Baserow
 const formatTimeHHMM = (decimal: number) => {
@@ -83,7 +96,7 @@ export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance
   const fieldMap = {
     'music': F.MUSIC_STATUS,
     'dance': F.DANCE_STATUS,
-    'block': F.BLOCK_STATUS // Matched to Schema
+    'block': F.BLOCKING_STATUS // Matched to Schema
   };
 
   const targetField = fieldMap[field];
@@ -168,7 +181,7 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                   [DB.EVENTS.FIELDS.PRODUCTION]: [productionId],
-                  [DB.EVENTS.FIELDS.DATE]: date,
+                  [DB.EVENTS.FIELDS.EVENT_DATE]: date,
                   [DB.EVENTS.FIELDS.START_TIME]: startDateTime,
                   [DB.EVENTS.FIELDS.END_TIME]: endDateTime,
                   [DB.EVENTS.FIELDS.EVENT_TYPE]: "Rehearsal"

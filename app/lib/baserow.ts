@@ -769,6 +769,88 @@ export async function updateApplicantStatus(personId: number, currentTags: strin
     })
   });
 }
+
+// app/lib/baserow.ts
+
+// ... existing imports
+
+export async function getTeacherClasses(teacherName: string) {
+  const F = DB.CLASSES.FIELDS;
+  // Fetch classes where Teacher Name matches
+  const params = {
+    size: "200",
+    [`filter__${F.TEACHER}__contains`]: teacherName,
+    "user_field_names": "true"
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {}, params);
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+      id: row.id,
+      name: safeGet(row[F.CLASS_NAME], "Untitled"),
+      session: safeGet(row[F.SESSION], "Unknown"),
+      status: safeGet(row[F.STATUS], "Active"), // "Active", "Completed", "Proposed"
+      students: Array.isArray(row[F.STUDENTS]) ? row[F.STUDENTS].length : 0,
+      description: safeGet(row[F.DESCRIPTION], ""),
+      objectives: safeGet(row[F.OBJECTIVES], ""),
+      ageRange: safeGet(row[F.AGE_RANGE], "All Ages"),
+      type: safeGet(row[F.TYPE], "General"),
+  }));
+}
+
+export async function getOpenBounties() {
+  const F = DB.CLASSES.FIELDS;
+  const params = {
+    size: "50",
+    [`filter__${F.STATUS}__equal`]: "Seeking Instructor", // The "Bounty" tag
+    "user_field_names": "true"
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {}, params);
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+      id: row.id,
+      name: safeGet(row[F.CLASS_NAME], "Untitled Core Class"),
+      session: safeGet(row[F.SESSION], "Next Season"),
+      ageRange: safeGet(row[F.AGE_RANGE], "TBD"),
+      day: safeGet(row[F.DAY], "TBD"),
+      time: safeGet(row[F.TIME_SLOT], "TBD"),
+      isCore: true
+  }));
+}
+
+export async function submitClassProposal(data: any) {
+    const F = DB.CLASSES.FIELDS;
+    const payload = {
+        [F.CLASS_NAME]: data.name,
+        [F.TEACHER]: data.teacher,
+        [F.SESSION]: data.session,
+        [F.STATUS]: "Proposed", // <--- Enters the pipeline here
+        [F.DESCRIPTION]: data.description,
+        [F.OBJECTIVES]: data.objectives,
+        [F.AGE_RANGE]: data.ageRange,
+        [F.TYPE]: data.type
+    };
+    return await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+}
+
+export async function claimBounty(classId: number, teacherName: string) {
+    const F = DB.CLASSES.FIELDS;
+    return await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            [F.TEACHER]: teacherName,
+            [F.STATUS]: "Drafting" // Moves from 'Seeking' to 'Drafting'
+        })
+    });
+}
 // ==============================================================================
 // 📊 ANALYTICS
 // ==============================================================================
