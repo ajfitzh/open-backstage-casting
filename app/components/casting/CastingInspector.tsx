@@ -132,12 +132,13 @@ export default function CastingInspector({ actor, allScenes = [], stats = { assi
 
       {showFullProfile && (
         <ActorProfileModal 
-                  actor={{
-                      ...actor,
-                      // 🚨 FIX: Already clean from getAuditionees, just passing through
-                      avatar: actor.headshot,
-                  }}
-                  onClose={() => setShowFullProfile(false)} grades={undefined}        />
+          actor={{
+            ...actor,
+            // 🚨 FIX: Already clean from getAuditionees, just passing through
+            avatar: actor.headshot, 
+          }}
+          onClose={() => setShowFullProfile(false)}
+        />
       )}
     </>
   );
