@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, Draggable, DraggableProvided, DroppableProvided, DroppableStateSnapshot } from "@hello-pangea/dnd";
 import { UserCircle, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { JSX } from "react/jsx-runtime";
 
@@ -133,34 +133,34 @@ export default function SeasonBoard({
             Talent Pool ({talentPool.length})
           </h3>
           
-          <Droppable droppableId="talent-pool">
-            {(provided: { droppableProps: JSX.IntrinsicAttributes & React.ClassAttributes<HTMLDivElement> & React.HTMLAttributes<HTMLDivElement>; innerRef: React.Ref<HTMLDivElement> | undefined; placeholder: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; }) => (
-              <div 
-                {...provided.droppableProps} 
-                ref={provided.innerRef}
-                className="flex-1 overflow-y-auto space-y-2 pr-2"
-              >
-                {talentPool.map((user, index) => (
-                  <Draggable key={user.id} draggableId={user.id.toString()} index={index}>
-                    {(provided) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        className="p-3 bg-white border border-slate-200 rounded shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group"
-                      >
-                        <div className="font-medium text-slate-800">{user.name}</div>
-                        <div className="text-xs text-slate-500 truncate">
-                          {user.roles.join(", ")}
-                        </div>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
+<Droppable droppableId="talent-pool">
+  {(provided: DroppableProvided) => (
+    <div 
+      {...provided.droppableProps} 
+      ref={provided.innerRef}
+      className="flex-1 overflow-y-auto space-y-2 pr-2"
+    >
+      {talentPool.map((user, index) => (
+        <Draggable key={user.id} draggableId={user.id.toString()} index={index}>
+          {(provided: DraggableProvided) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.draggableProps}
+              {...provided.dragHandleProps}
+              className="p-3 bg-white border border-slate-200 rounded shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group"
+            >
+              <div className="font-medium text-slate-800">{user.name}</div>
+              <div className="text-xs text-slate-500 truncate">
+                {user.roles.join(", ")}
               </div>
-            )}
-          </Droppable>
+            </div>
+          )}
+        </Draggable>
+      ))}
+      {provided.placeholder}
+    </div>
+  )}
+</Droppable>
         </div>
 
       </div>
@@ -176,28 +176,28 @@ function SlotItem({ slot, currentTeam }: { slot: ProductionSlot, currentTeam: St
         {slot.role}
       </div>
       
-      <Droppable droppableId={slot.id}>
-        {(provided: { innerRef: React.Ref<HTMLDivElement> | undefined; droppableProps: JSX.IntrinsicAttributes & React.ClassAttributes<HTMLDivElement> & React.HTMLAttributes<HTMLDivElement>; placeholder: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; }, snapshot: { isDraggingOver: any; }) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            className={`
-              min-h-[60px] rounded border-2 transition-colors p-2
-              ${snapshot.isDraggingOver ? 'bg-slate-50 border-slate-400' : 'bg-slate-50/50 border-dashed border-slate-300'}
-              ${slot.filledBy ? 'bg-white border-solid' : ''}
-            `}
-          >
-            {slot.filledBy ? (
-              <FilledSlotCard user={slot.filledBy} slot={slot} team={currentTeam} />
-            ) : (
-              <div className="h-full flex items-center justify-center text-slate-300 text-sm italic">
-                Drag staff here
-              </div>
-            )}
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
+<Droppable droppableId={slot.id}>
+  {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
+    <div
+      ref={provided.innerRef}
+      {...provided.droppableProps}
+      className={`
+        min-h-[60px] rounded border-2 transition-colors p-2
+        ${snapshot.isDraggingOver ? 'bg-slate-50 border-slate-400' : 'bg-slate-50/50 border-dashed border-slate-300'}
+        ${slot.filledBy ? 'bg-white border-solid' : ''}
+      `}
+    >
+      {slot.filledBy ? (
+        <FilledSlotCard user={slot.filledBy} slot={slot} team={currentTeam} />
+      ) : (
+        <div className="h-full flex items-center justify-center text-slate-300 text-sm italic">
+          Drag staff here
+        </div>
+      )}
+      {provided.placeholder}
+    </div>
+  )}
+</Droppable>
     </div>
   );
 }
