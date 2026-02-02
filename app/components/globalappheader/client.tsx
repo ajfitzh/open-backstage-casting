@@ -9,9 +9,9 @@ import { switchProduction } from '@/app/actions';
 import { useSimulation } from '@/app/context/SimulationContext'; 
 import { 
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
-  Check, Sparkles, Archive, Clock, Rocket, Bug, Wrench, Settings, LogOut,
-  Theater, UserSquare2, AlertOctagon, BarChart3, GraduationCap, LayoutGrid, Mic2, Megaphone,
-  User2Icon
+  Sparkles, Clock, Rocket, Bug, Wrench, Settings, LogOut,
+  UserSquare2, BarChart3, GraduationCap, LayoutGrid, Mic2, Megaphone,
+  User2Icon, FilePlus, Theater, VenetianMask, AlertOctagon
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ 
@@ -105,7 +105,7 @@ export default function GlobalHeaderClient({
             >
               <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Production Context</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">{activeShow.title}</span>
+                <span className="text-sm font-bold text-white max-w-[150px] truncate md:max-w-none">{activeShow.title}</span>
                 <ChevronsUpDown size={12} className="text-zinc-600"/>
               </div>
             </button>
@@ -202,7 +202,7 @@ export default function GlobalHeaderClient({
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setShowDebug(!showDebug)} 
-            className={`p-2 rounded-full transition-all ${showDebug ? 'text-amber-500 bg-amber-500/10' : 'text-zinc-700 hover:text-zinc-400'}`}
+            className={`hidden md:block p-2 rounded-full transition-all ${showDebug ? 'text-amber-500 bg-amber-500/10' : 'text-zinc-700 hover:text-zinc-400'}`}
           >
             <Wrench size={18} />
           </button>
@@ -211,12 +211,9 @@ export default function GlobalHeaderClient({
             <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-3 group">
               <div className="hidden md:flex flex-col items-end leading-tight text-right">
                 <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{user?.name || "Sign In"}</span>
-                
-                {/* 🚨 FIX: USE DYNAMIC ROLE FROM CONTEXT */}
                 <span className={`text-[10px] font-black uppercase tracking-tighter ${isSimulating ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`}>
                     {effectiveRole || "Guest"}
                 </span>
-
               </div>
               <div className={`w-8 h-8 rounded-full bg-zinc-800 border flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:border-emerald-500/50 transition-all ${isSimulating ? 'border-red-500/50 ring-2 ring-red-500/20' : 'border-zinc-700'}`}>
                 {user?.image ? <img src={user.image} alt="User Avatar" className="w-full h-full rounded-full object-cover" /> : userInitials}
@@ -251,30 +248,51 @@ export default function GlobalHeaderClient({
           <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
             <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10">
               
-              <SectionHeader label="Workspace" />
-              <div className="space-y-1">
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
+              {/* 🎭 CREATIVE TEAM */}
+              <div>
+                <SectionHeader label="Creative Team" />
+                <div className="space-y-1">
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
+                </div>
               </div>
 
-              <SectionHeader label="Company" />
-              <div className="space-y-1">
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Roster" active={pathname === '/roster'} />
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Analytics" active={pathname === '/reports'} />
+              {/* 🎤 CASTING SUITE */}
+              <div>
+                <SectionHeader label="Casting Suite" />
+                <div className="space-y-1">
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
+                </div>
               </div>
 
-              {/* 🟢 NEW ACADEMY SECTION */}
-              <SectionHeader label="Academy" />
-              <div className="space-y-1">
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
-                <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
-              <MenuLink onClick={() => setIsNavOpen(false)} href="/education/portal" icon={<User2Icon size={18}/>} label="Faculty Portal" active={pathname === '/education/hiring'} />
-              <MenuLink onClick={() => setIsNavOpen(false)} href="/education/planning" icon={<User2Icon size={18}/>} label="Class Planner" active={pathname === '/education/hiring'} />
-              
+              {/* 🚛 LOGISTICS */}
+              <div>
+                <SectionHeader label="Logistics & Ops" />
+                <div className="space-y-1">
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Reports & Fees" active={pathname === '/reports'} />
+                </div>
+              </div>
+
+              {/* 🎓 ACADEMY (Improved & Fixed) */}
+              <div>
+                <SectionHeader label="Academy" />
+                <div className="space-y-1">
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/proposals" icon={<FilePlus size={18}/>} label="Proposals & Bounties" active={pathname === '/education/proposals'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/portal" icon={<Sparkles size={18}/>} label="Faculty Portal" active={pathname === '/education/portal'} />
+                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/planning" icon={<LayoutGrid size={18}/>} label="Class Planner" active={pathname === '/education/planning'} />
+                </div>
               </div>
 
             </div>
+            
+            {/* FOOTER */}
             <div className="p-4 border-t border-white/5 bg-zinc-950/50">
                <button onClick={() => signOut({ callbackUrl: "/login" })} className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
                   <LogOut size={16} /> <span className="text-xs font-bold uppercase">Sign Out</span>
@@ -314,7 +332,7 @@ function ProductionItem({ prod, activeId, pathname }: { prod: any, activeId: num
 }
 
 function SectionHeader({ label }: { label: string }) {
-  return <div className="px-3 mb-2 text-[10px] font-black text-zinc-600 uppercase tracking-widest">{label}</div>
+  return <div className="px-3 mb-2 text-[10px] font-black text-zinc-600 uppercase tracking-widest mt-2">{label}</div>
 }
 
 function MenuLink({ href, icon, label, active, onClick }: any) {

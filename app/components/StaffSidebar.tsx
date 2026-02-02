@@ -10,7 +10,7 @@ import {
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
   Home, Theater, Banknote, SlidersHorizontal, 
-  Sparkles
+  Sparkles, FilePlus // <--- Added FilePlus icon for Proposals
 } from 'lucide-react';
 import { hasPermission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -140,25 +140,39 @@ export default function StaffSidebar() {
                     Academy
                 </div>
                 <div className="space-y-1">
-                    <NavItem href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
-                <NavItem 
+                    <NavItem 
+                        href="/education" 
+                        icon={<GraduationCap size={18}/>} 
+                        label="Class Manager" 
+                        active={pathname === '/education'} 
+                    />
+                    
+                    {/* 👇 NEW LINK FOR PROPOSALS & BOUNTIES 👇 */}
+                    <NavItem 
+                        href="/education/proposals" 
+                        icon={<FilePlus size={18}/>} 
+                        label="Proposals & Bounties" 
+                        active={pathname === '/education/proposals'} 
+                    />
+
+                    <NavItem 
                         href="/education/hiring" 
                         icon={<UserSquare2 size={18}/>} 
                         label="Hiring Portal" 
                         active={pathname === '/education/hiring'} 
                     />
                     <NavItem 
-                href="/education/portal" 
-                icon={<Sparkles size={18}/>} 
-                label="Faculty Portal" 
-                active={pathname === '/education/portal'} 
-            />
-            <NavItem 
-        href="/education/planning" 
-        icon={<LayoutGrid size={18}/>} 
-        label="Class Planner" 
-        active={pathname === '/education/planning'} 
-    />
+                        href="/education/portal" 
+                        icon={<Sparkles size={18}/>} 
+                        label="Faculty Portal" 
+                        active={pathname === '/education/portal'} 
+                    />
+                    <NavItem 
+                        href="/education/planning" 
+                        icon={<LayoutGrid size={18}/>} 
+                        label="Class Planner" 
+                        active={pathname === '/education/planning'} 
+                    />
                 </div>
             </div>
         )}
