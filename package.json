@@ -19,7 +19,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.6.0",
-    "tailwind-merge": "^2.2.1"
+    "tailwind-merge": "^2.2.1",
+    "@hello-pangea/dnd": "^1.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

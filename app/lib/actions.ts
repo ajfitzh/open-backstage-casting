@@ -3,23 +3,48 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getClassRoster, fetchBaserow, getActiveProduction } from "@/app/lib/baserow";
+import { 
+  getClassRoster, 
+  fetchBaserow, 
+  getActiveProduction, 
+  submitClassProposal, 
+  claimBounty 
+} from "@/app/lib/baserow";
 import { DB } from "@/app/lib/schema";
 
 // --- HELPERS ---
-// app/lib/actions.ts
+export async function getSeasonBoard(seasonId: string) {
+  // 1. Fetch Season Metadata
+  // We use the 'fetchBaserow' helper you already have imported
+  const seasonRes = await fetchBaserow(
+    `/database/rows/table/${DB.SEASONS.ID}/${seasonId}/?user_field_names=true`
+  );
+  
+  if (!seasonRes.ok) {
+    throw new Error(`Failed to fetch season: ${seasonRes.statusText}`);
+  }
+  const season = await seasonRes.json();
 
-// ... existing imports ...
-import { submitClassProposal, claimBounty } from "@/app/lib/baserow";
+  // 2. Fetch the "Talent Pool" (Applications linked to this Season)
+  // We filter Table 642 by the Season ID Link
+  const staffRes = await fetchBaserow(
+    `/database/rows/table/${DB.STAFF_INTEREST.ID}/?user_field_names=true&filter__field_${DB.STAFF_INTEREST.FIELDS.SEASON}__link_row_has=${seasonId}`
+  );
+  const talentPool = await staffRes.json();
 
-export async function submitProposalAction(data: any) {
-    await submitClassProposal(data);
-    revalidatePath("/education/portal");
-}
+  // 3. Fetch the Productions (The Slots linked to this Season)
+  // We filter Table 600 by the Season ID Link
+  const prodRes = await fetchBaserow(
+    `/database/rows/table/${DB.PRODUCTIONS.ID}/?user_field_names=true&filter__field_${DB.PRODUCTIONS.FIELDS.SEASON_LINKED}__link_row_has=${seasonId}`
+  );
+  const productions = await prodRes.json();
 
-export async function claimBountyAction(classId: number, teacherName: string) {
-    await claimBounty(classId, teacherName);
-    revalidatePath("/education/portal");
+  // 4. Return the combined "War Room" object
+  return {
+    season: season,
+    talentPool: talentPool.results,
+    productions: productions.results
+  };
 }
 // Converts decimal time (18.5) to HH:MM string ("18:30")
 // Used to construct ISO strings for Baserow
@@ -29,12 +54,45 @@ const formatTimeHHMM = (decimal: number) => {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 };
 
-// --- EXISTING ACTIONS ---
+// --- EDUCATION ACTIONS ---
+
+export async function submitProposalAction(data: any) {
+  await submitClassProposal(data);
+  revalidatePath("/education/portal");
+}
+
+export async function claimBountyAction(classId: number, teacherName: string) {
+  await claimBounty(classId, teacherName);
+  revalidatePath("/education/portal");
+}
 
 export async function fetchRosterAction(classId: string) {
   const roster = await getClassRoster(classId);
   return roster;
 }
+
+export async function updateClassSchedule(
+  classId: number, 
+  payload: { day: string; time: string; location: string; status: string }
+) {
+  const F = DB.CLASSES.FIELDS;
+   
+  await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      [F.DAY]: payload.day,
+      [F.TIME_SLOT]: payload.time,
+      [F.LOCATION]: payload.location,
+      [F.STATUS]: payload.status 
+    })
+  });
+   
+  revalidatePath("/education/planning");
+  revalidatePath("/education"); 
+}
+
+// --- PRODUCTION MANAGEMENT ACTIONS ---
 
 export async function switchProduction(formData: FormData) {
   const productionId = formData.get("productionId")?.toString();
@@ -50,7 +108,41 @@ export async function switchProduction(formData: FormData) {
   redirect(redirectPath);
 }
 
-// --- PRODUCTION ANALYSIS ACTIONS ---
+export async function markStepComplete(stepKey: string) {
+  const production = await getActiveProduction();
+  if (!production) return;
+
+  const keyMap: Record<string, string> = {
+    'auditions': 'Auditions',
+    'callbacks': 'Callbacks',
+    'casting': 'Casting',
+    'points': 'Calibration',
+    'schedule': 'Scheduling'
+  };
+  
+  const targetTag = keyMap[stepKey];
+  if (!targetTag) return;
+
+  const currentTags = production.workflowOverrides || []; 
+  // Baserow returns array of objects {id, value, color}, we just need the values to push back
+  const currentValues = currentTags.map((t: any) => t.value);
+
+  if (!currentValues.includes(targetTag)) {
+    const newValues = [...currentValues, targetTag];
+
+    await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${production.id}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
+      }),
+    });
+  }
+
+  revalidatePath("/");
+}
+
+// --- SCENE ANALYSIS ACTIONS ---
 
 type SceneLoadUpdate = {
   id: number;
@@ -87,16 +179,13 @@ export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
   return { success: true };
 }
 
-// --- SHOW HUB STATUS ACTION ---
-
 export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance' | 'block', status: string) {
   const F = DB.SCENES.FIELDS;
   
-  // Map "Traffic Light" names to Baserow Field IDs
   const fieldMap = {
     'music': F.MUSIC_STATUS,
     'dance': F.DANCE_STATUS,
-    'block': F.BLOCKING_STATUS // Matched to Schema
+    'block': F.BLOCKING_STATUS 
   };
 
   const targetField = fieldMap[field];
@@ -112,49 +201,14 @@ export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance
   revalidatePath("/production");
 }
 
-// --- WORKFLOW OVERRIDE ACTION ---
-
-export async function markStepComplete(stepKey: string) {
-  const production = await getActiveProduction();
-  if (!production) return;
-
-  const keyMap: Record<string, string> = {
-    'auditions': 'Auditions',
-    'callbacks': 'Callbacks',
-    'casting': 'Casting',
-    'points': 'Calibration',
-    'schedule': 'Scheduling'
-  };
-  
-  const targetTag = keyMap[stepKey];
-  if (!targetTag) return;
-
-  const currentTags = production.workflowOverrides || []; 
-  const currentValues = currentTags.map((t: any) => t.value);
-
-  if (!currentValues.includes(targetTag)) {
-    const newValues = [...currentValues, targetTag];
-
-    await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${production.id}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
-      }),
-    });
-  }
-
-  revalidatePath("/");
-}
-
-// --- SCHEDULING ACTIONS (PARENT-CHILD LOGIC) ---
+// --- SCHEDULING ALGORITHM ACTIONS ---
 
 export async function saveScheduleBatch(productionId: number, items: any[]) {
-  // 1. Group items by Day to handle Parents
-  // items.date is "YYYY-MM-DD"
+  // 1. Group items by Date to handle Parent Containers
   const itemsByDate: Record<string, any[]> = {};
   
   items.forEach(item => {
+      // Ensure we have a valid date string (YYYY-MM-DD)
       if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
       itemsByDate[item.date].push(item);
   });
@@ -162,17 +216,15 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
   const promises = Object.entries(itemsByDate).map(async ([date, dayItems]) => {
       
       // A. FIND OR CREATE PARENT EVENT ("The Container")
-      // Logic: If no ID passed, we assume we need to create a new 
-      // "Rehearsal Block" that spans the min/max time of these slots.
-      
       let parentEventId = dayItems[0].existingParentEventId; 
 
       if (!parentEventId) {
           // Calculate container duration
           const minTime = Math.min(...dayItems.map((i:any) => i.startTime)); 
+          // End time is start + duration (converted from minutes to decimal hours if needed)
+          // Assuming i.duration is in minutes based on (i.duration/60) usage below
           const maxTime = Math.max(...dayItems.map((i:any) => i.startTime + (i.duration/60))); 
           
-          // Construct Full ISO DateTimes for Baserow Date Fields
           const startDateTime = `${date}T${formatTimeHHMM(minTime)}:00`;
           const endDateTime = `${date}T${formatTimeHHMM(maxTime)}:00`;
 
@@ -184,7 +236,7 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
                   [DB.EVENTS.FIELDS.EVENT_DATE]: date,
                   [DB.EVENTS.FIELDS.START_TIME]: startDateTime,
                   [DB.EVENTS.FIELDS.END_TIME]: endDateTime,
-                  [DB.EVENTS.FIELDS.EVENT_TYPE]: "Rehearsal"
+                  [DB.EVENTS.FIELDS.EVENT_TYPE]: "Rehearsal" // Default type
               })
           });
           
@@ -193,25 +245,27 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
             parentEventId = parentData.id;
           } else {
              console.error("Failed to create parent event:", await parentRes.text());
-             return; // Stop if parent failed
+             return; 
           }
       }
 
       // B. CREATE THE SLOTS ("The 30-min Blocks")
-      // These link to the Parent Event we just created
       if (parentEventId) {
+        // Use DB.SCHEDULE_SLOTS instead of DB.SLOTS to match your Schema
+        const SLOT_DB = DB.SCHEDULE_SLOTS; 
+        
         const slotPromises = dayItems.map(item => {
              const slotStartDateTime = `${date}T${formatTimeHHMM(item.startTime)}:00`;
 
-             return fetchBaserow(`/database/rows/table/${DB.SLOTS.ID}/`, {
+             return fetchBaserow(`/database/rows/table/${SLOT_DB.ID}/`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    [DB.SLOTS.FIELDS.EVENT_LINK]: [parentEventId], // Link to Parent
-                    [DB.SLOTS.FIELDS.SCENE]: [item.sceneId],       // Link to Scene
-                    [DB.SLOTS.FIELDS.TRACK]: item.track,           // e.g. "Music"
-                    [DB.SLOTS.FIELDS.START_TIME]: slotStartDateTime,
-                    [DB.SLOTS.FIELDS.DURATION]: item.duration
+                    [SLOT_DB.FIELDS.EVENT_LINK]: [parentEventId], 
+                    [SLOT_DB.FIELDS.SCENE]: [item.sceneId],       
+                    [SLOT_DB.FIELDS.TRACK]: item.track,           
+                    [SLOT_DB.FIELDS.START_TIME]: slotStartDateTime,
+                    [SLOT_DB.FIELDS.DURATION]: item.duration
                 })
              });
         });
@@ -222,25 +276,4 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
   await Promise.all(promises);
   revalidatePath("/schedule");
   return { success: true };
-}
-
-export async function updateClassSchedule(
-  classId: number, 
-  payload: { day: string; time: string; location: string; status: string }
-) {
-    const F = DB.CLASSES.FIELDS;
-    
-    await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            [F.DAY]: payload.day,
-            [F.TIME_SLOT]: payload.time,
-            [F.LOCATION]: payload.location,
-            [F.STATUS]: payload.status // Usually sets it to 'Drafting' or 'Active'
-        })
-    });
-    
-    revalidatePath("/education/planning");
-    revalidatePath("/education"); // Updates public grid too
 }

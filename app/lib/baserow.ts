@@ -74,6 +74,17 @@ function extractName(field: any, fallback: string = ""): string {
   return fallback;
 }
 
+// Helper to reconstruct Age Range string from Min/Max integers
+function formatAgeRange(row: any): string {
+    const min = parseInt(safeGet(row[DB.CLASSES.FIELDS.MINIMUM_AGE], 0));
+    const max = parseInt(safeGet(row[DB.CLASSES.FIELDS.MAXIMUM_AGE], 0));
+  
+    if (!min && !max) return "All Ages";
+    if (min && !max) return `${min}+`;
+    if (!min && max) return `Up to ${max}`;
+    return `${min} - ${max}`;
+}
+
 export async function deleteRow(tableId: string, rowId: number | string) {
   const url = `/database/rows/table/${tableId}/${rowId}/`;
   const res = await fetchBaserow(url, { method: "DELETE" });
@@ -116,7 +127,7 @@ export async function getClasses() {
       day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
       time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
       type: safeGet(row[DB.CLASSES.FIELDS.TYPE], "General"),
-      ageRange: safeGet(row[DB.CLASSES.FIELDS.AGE_RANGE], "All Ages"),
+      ageRange: formatAgeRange(row), // FIXED
       students: Array.isArray(row[DB.CLASSES.FIELDS.STUDENTS]) ? row[DB.CLASSES.FIELDS.STUDENTS].length : 0,
   }));
 }
@@ -135,8 +146,8 @@ export async function getClassById(classId: string) {
     location: safeGet(row[DB.CLASSES.FIELDS.LOCATION], "Main Campus"),
     day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
     time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
-    description: "", 
-    ageRange: safeGet(row[DB.CLASSES.FIELDS.AGE_RANGE], "All Ages"),
+    description: safeGet(row[DB.CLASSES.FIELDS.DESCRIPTION], ""), 
+    ageRange: formatAgeRange(row), // FIXED
     spaceName: safeGet(row[DB.CLASSES.FIELDS.SPACE]),
     students: Array.isArray(students) ? students.length : 0,
   };
@@ -223,7 +234,7 @@ function mapShow(row: any) {
   return {
     id: row.id,
     title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled Show"),
-    season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON], "Unknown Season"),
+    season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"), // FIXED
     status: rawStatus,
     isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
     image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
@@ -274,14 +285,15 @@ export async function getPeople() {
 }
 
 export async function getRoles() {
-  const F = DB.ROLES.FIELDS;
-  const data = await fetchBaserow(`/database/rows/table/${DB.ROLES.ID}/`, {}, { size: "200", user_field_names: "true" });
+  // FIXED: Mapped to BLUEPRINT_ROLES
+  const F = DB.BLUEPRINT_ROLES.FIELDS;
+  const data = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { size: "200", user_field_names: "true" });
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
     id: row.id,
-    name: row[F.NAME],
-    type: row[F.TYPE]
+    name: row[F.ROLE_NAME], // FIXED
+    type: row[F.ROLE_TYPE]  // FIXED
   }));
 }
 
@@ -343,12 +355,13 @@ export async function updateCastAssignment(assignmentId: number, personId: numbe
 // ==============================================================================
 
 export async function getScheduleSlots(productionId: number) {
-  const F = DB.SLOTS.FIELDS;
+  // FIXED: Mapped to SCHEDULE_SLOTS
+  const F = DB.SCHEDULE_SLOTS.FIELDS;
   const events = await getProductionEvents(productionId);
   if (events.length === 0) return [];
   const eventIds = events.map((e: any) => e.id);
 
-  const slotsData = await fetchBaserow(`/database/rows/table/${DB.SLOTS.ID}/`, {}, { size: "200", user_field_names: "true" });
+  const slotsData = await fetchBaserow(`/database/rows/table/${DB.SCHEDULE_SLOTS.ID}/`, {}, { size: "200", user_field_names: "true" });
   if (!Array.isArray(slotsData)) return [];
 
   return slotsData
@@ -622,7 +635,8 @@ export async function updateAuditionSlot(rowId: number, data: any) {
 }
 
 export async function updateRole(roleId: number, data: any) {
-  return await fetchBaserow(`/database/rows/table/${DB.ROLES.ID}/${roleId}/`, { 
+  // FIXED: Mapped to BLUEPRINT_ROLES
+  return await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/${roleId}/`, { 
     method: "PATCH", 
     body: JSON.stringify(data) 
   });
@@ -719,7 +733,6 @@ export async function getUserProductionRole(userId: number, productionId: number
   if (!rows || rows.length === 0) return null;
   return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
 }
-// app/lib/baserow.ts
 
 // ... existing imports
 
@@ -747,7 +760,7 @@ export async function getTeacherApplicants() {
     // This helps if they are also a "Parent" - we just want to know their hiring status
     status: row[F.STATUS]?.map((s:any) => s.value) || [],
     headshot: row[F.HEADSHOT]?.[0]?.url || null,
-    notes: safeGet(row[F.BIO_ORIGINAL], ""), 
+    notes: safeGet(row[F.ORIGINAL_BIO], ""), // FIXED
   }));
 }
 
@@ -769,8 +782,6 @@ export async function updateApplicantStatus(personId: number, currentTags: strin
     })
   });
 }
-
-// app/lib/baserow.ts
 
 // ... existing imports
 
@@ -794,7 +805,7 @@ export async function getTeacherClasses(teacherName: string) {
       students: Array.isArray(row[F.STUDENTS]) ? row[F.STUDENTS].length : 0,
       description: safeGet(row[F.DESCRIPTION], ""),
       objectives: safeGet(row[F.OBJECTIVES], ""),
-      ageRange: safeGet(row[F.AGE_RANGE], "All Ages"),
+      ageRange: formatAgeRange(row), // FIXED
       type: safeGet(row[F.TYPE], "General"),
   }));
 }
@@ -814,7 +825,7 @@ export async function getOpenBounties() {
       id: row.id,
       name: safeGet(row[F.CLASS_NAME], "Untitled Core Class"),
       session: safeGet(row[F.SESSION], "Next Season"),
-      ageRange: safeGet(row[F.AGE_RANGE], "TBD"),
+      ageRange: formatAgeRange(row), // FIXED
       day: safeGet(row[F.DAY], "TBD"),
       time: safeGet(row[F.TIME_SLOT], "TBD"),
       isCore: true
@@ -830,7 +841,9 @@ export async function submitClassProposal(data: any) {
         [F.STATUS]: "Proposed", // <--- Enters the pipeline here
         [F.DESCRIPTION]: data.description,
         [F.OBJECTIVES]: data.objectives,
-        [F.AGE_RANGE]: data.ageRange,
+        // FIXED: Using Min/Max now
+        [F.MINIMUM_AGE]: parseInt(data.minAge || 0), 
+        [F.MAXIMUM_AGE]: parseInt(data.maxAge || 0),
         [F.TYPE]: data.type
     };
     return await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {

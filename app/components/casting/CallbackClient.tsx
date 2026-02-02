@@ -39,7 +39,7 @@ export default function CallbackManager({ initialAuditionees, productionTitle }:
               onDragStart={(e) => e.dataTransfer.setData("performerId", p.id.toString())}
               className="bg-zinc-900 border border-white/5 p-3 rounded-xl flex items-center gap-3 cursor-grab hover:bg-zinc-800 transition-colors"
             >
-               <img src={p.headshot} className="w-8 h-8 rounded-full object-cover border border-white/10" />
+               <img alt="headshot" src={p.headshot} className="w-8 h-8 rounded-full object-cover border border-white/10" />
                <div className="text-xs font-bold truncate">{p.name}</div>
             </div>
           ))}
@@ -65,7 +65,7 @@ export default function CallbackManager({ initialAuditionees, productionTitle }:
                 <div className="p-4 space-y-2 overflow-y-auto flex-1">
                     {assigned.map((p: any) => (
                         <div key={p.id} className="flex items-center gap-3 bg-zinc-950 p-2 rounded-xl border border-white/5 group">
-                            <img src={p.headshot} className="w-6 h-6 rounded-full object-cover" />
+                            <img alt="headshot" src={p.headshot} className="w-6 h-6 rounded-full object-cover" />
                             <span className="text-xs font-bold flex-1">{p.name}</span>
                             <button onClick={() => {
                                 const n = {...localAssignments};
