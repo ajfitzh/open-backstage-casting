@@ -9,7 +9,8 @@ import {
   AlertOctagon, BarChart3, VenetianMask, 
   Settings, ChevronDown, ChevronRight,
   Mic2, Megaphone, LayoutGrid, GraduationCap,
-  Home, Theater, Banknote, SlidersHorizontal 
+  Home, Theater, Banknote, SlidersHorizontal, 
+  Sparkles
 } from 'lucide-react';
 import { hasPermission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -146,6 +147,12 @@ export default function StaffSidebar() {
                         label="Hiring Portal" 
                         active={pathname === '/education/hiring'} 
                     />
+                    <NavItem 
+                href="/education/portal" 
+                icon={<Sparkles size={18}/>} 
+                label="Faculty Portal" 
+                active={pathname === '/education/portal'} 
+            />
                 </div>
             </div>
         )}
