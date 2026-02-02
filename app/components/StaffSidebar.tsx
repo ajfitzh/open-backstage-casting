@@ -153,6 +153,12 @@ export default function StaffSidebar() {
                 label="Faculty Portal" 
                 active={pathname === '/education/portal'} 
             />
+            <NavItem 
+        href="/education/planning" 
+        icon={<LayoutGrid size={18}/>} 
+        label="Class Planner" 
+        active={pathname === '/education/planning'} 
+    />
                 </div>
             </div>
         )}

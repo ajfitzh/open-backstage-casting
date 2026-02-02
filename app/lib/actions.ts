@@ -223,3 +223,24 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
   revalidatePath("/schedule");
   return { success: true };
 }
+
+export async function updateClassSchedule(
+  classId: number, 
+  payload: { day: string; time: string; location: string; status: string }
+) {
+    const F = DB.CLASSES.FIELDS;
+    
+    await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            [F.DAY]: payload.day,
+            [F.TIME_SLOT]: payload.time,
+            [F.LOCATION]: payload.location,
+            [F.STATUS]: payload.status // Usually sets it to 'Drafting' or 'Active'
+        })
+    });
+    
+    revalidatePath("/education/planning");
+    revalidatePath("/education"); // Updates public grid too
+}

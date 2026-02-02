@@ -270,6 +270,7 @@ export default function GlobalHeaderClient({
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
               <MenuLink onClick={() => setIsNavOpen(false)} href="/education/portal" icon={<User2Icon size={18}/>} label="Faculty Portal" active={pathname === '/education/hiring'} />
+                            <MenuLink onClick={() => setIsNavOpen(false)} href="/education/planning" icon={<User2Icon size={18}/>} label="Class Planner" active={pathname === '/education/hiring'} />
               
               </div>
 
