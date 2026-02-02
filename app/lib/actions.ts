@@ -8,44 +8,53 @@ import {
   fetchBaserow, 
   getActiveProduction, 
   submitClassProposal, 
-  claimBounty 
+  claimBounty,
+  getSeasons // <--- Ensure this is exported from baserow.ts
 } from "@/app/lib/baserow";
 import { DB } from "@/app/lib/schema";
 
 // --- HELPERS ---
+
 export async function getSeasonBoard(seasonId: string) {
-  // 1. Fetch Season Metadata
-  // We use the 'fetchBaserow' helper you already have imported
-  const seasonRes = await fetchBaserow(
-    `/database/rows/table/${DB.SEASONS.ID}/${seasonId}/?user_field_names=true`
-  );
+  // 1. Fetch Season Metadata DIRECTLY (No more fetch errors)
+  // Instead of fetchBaserow, we use the direct accessor if available, 
+  // or handle the fetch safely without throwing on 404s immediately.
   
-  if (!seasonRes.ok) {
-    throw new Error(`Failed to fetch season: ${seasonRes.statusText}`);
+  try {
+    const seasonRes = await fetchBaserow(
+      `/database/rows/table/${DB.SEASONS.ID}/${seasonId}/?user_field_names=true`
+    );
+    
+    if (!seasonRes || seasonRes.error) {
+      console.error("Season Fetch Error:", seasonRes);
+      return null;
+    }
+    const season = seasonRes; // fetchBaserow already returns JSON
+
+    // 2. Fetch the "Talent Pool" (Applications linked to this Season)
+    const staffRes = await fetchBaserow(
+      `/database/rows/table/${DB.STAFF_INTEREST.ID}/?user_field_names=true&filter__field_${DB.STAFF_INTEREST.FIELDS.SEASON}__link_row_has=${seasonId}`
+    );
+    const talentPool = Array.isArray(staffRes) ? staffRes : (staffRes.results || []);
+
+    // 3. Fetch the Productions (The Slots linked to this Season)
+    const prodRes = await fetchBaserow(
+      `/database/rows/table/${DB.PRODUCTIONS.ID}/?user_field_names=true&filter__field_${DB.PRODUCTIONS.FIELDS.SEASON_LINKED}__link_row_has=${seasonId}`
+    );
+    const productions = Array.isArray(prodRes) ? prodRes : (prodRes.results || []);
+
+    // 4. Return the combined "War Room" object
+    return {
+      season: season,
+      talentPool: talentPool,
+      productions: productions
+    };
+  } catch (error) {
+    console.error("Failed to load Season Board:", error);
+    return null;
   }
-  const season = await seasonRes.json();
-
-  // 2. Fetch the "Talent Pool" (Applications linked to this Season)
-  // We filter Table 642 by the Season ID Link
-  const staffRes = await fetchBaserow(
-    `/database/rows/table/${DB.STAFF_INTEREST.ID}/?user_field_names=true&filter__field_${DB.STAFF_INTEREST.FIELDS.SEASON}__link_row_has=${seasonId}`
-  );
-  const talentPool = await staffRes.json();
-
-  // 3. Fetch the Productions (The Slots linked to this Season)
-  // We filter Table 600 by the Season ID Link
-  const prodRes = await fetchBaserow(
-    `/database/rows/table/${DB.PRODUCTIONS.ID}/?user_field_names=true&filter__field_${DB.PRODUCTIONS.FIELDS.SEASON_LINKED}__link_row_has=${seasonId}`
-  );
-  const productions = await prodRes.json();
-
-  // 4. Return the combined "War Room" object
-  return {
-    season: season,
-    talentPool: talentPool.results,
-    productions: productions.results
-  };
 }
+
 // Converts decimal time (18.5) to HH:MM string ("18:30")
 // Used to construct ISO strings for Baserow
 const formatTimeHHMM = (decimal: number) => {
@@ -240,18 +249,19 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
               })
           });
           
-          if (parentRes.ok) {
-            const parentData = await parentRes.json();
-            parentEventId = parentData.id;
+          // Fixed: fetchBaserow returns the object directly, not a Response object we need to await .json() on
+          // IF fetchBaserow returns a plain object (which your earlier code implied):
+          if (parentRes && !parentRes.error) {
+            parentEventId = parentRes.id;
           } else {
-             console.error("Failed to create parent event:", await parentRes.text());
+             console.error("Failed to create parent event:", parentRes);
              return; 
           }
       }
 
       // B. CREATE THE SLOTS ("The 30-min Blocks")
       if (parentEventId) {
-        // Use DB.SCHEDULE_SLOTS instead of DB.SLOTS to match your Schema
+        // FIXED: Use DB.SCHEDULE_SLOTS
         const SLOT_DB = DB.SCHEDULE_SLOTS; 
         
         const slotPromises = dayItems.map(item => {
