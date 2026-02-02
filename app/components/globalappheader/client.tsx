@@ -10,7 +10,8 @@ import { useSimulation } from '@/app/context/SimulationContext';
 import { 
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
   Check, Sparkles, Archive, Clock, Rocket, Bug, Wrench, Settings, LogOut,
-  Theater, UserSquare2, AlertOctagon, BarChart3, GraduationCap, LayoutGrid, Mic2, Megaphone
+  Theater, UserSquare2, AlertOctagon, BarChart3, GraduationCap, LayoutGrid, Mic2, Megaphone,
+  User2Icon
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ 
@@ -268,6 +269,8 @@ export default function GlobalHeaderClient({
               <div className="space-y-1">
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
                 <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
+              <MenuLink onClick={() => setIsNavOpen(false)} href="/education/portal" icon={<User2Icon size={18}/>} label="Faculty Portal" active={pathname === '/education/hiring'} />
+              
               </div>
 
             </div>
