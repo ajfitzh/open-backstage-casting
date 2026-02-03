@@ -1,7 +1,7 @@
 import { getPerformanceAnalytics, getAllShows, getVenues } from "@/app/lib/baserow";
 import AnalyticsDashboard from "./analytics-client";
 
-export const revalidate = 60; 
+export const revalidate = 0; // Force no-cache so logs run every time
 
 // 1. PHYSICAL CAPACITIES (Source of Truth)
 const VENUE_CAPACITIES: Record<string, number> = {
@@ -13,11 +13,15 @@ const VENUE_CAPACITIES: Record<string, number> = {
 };
 
 export default async function AnalyticsPage() {
+  console.log("--- STARTING ANALYTICS PAGE LOAD ---");
+
   const [rawData, allShows, allVenues] = await Promise.all([
     getPerformanceAnalytics(),
     getAllShows(),
     getVenues()
   ]);
+
+  console.log(`Loaded ${rawData.length} performance rows and ${allShows.length} shows.`);
 
   // 2. BUILD DYNAMIC CAPACITY MAP
   const venueCapMap = new Map<string, number>();
@@ -29,7 +33,7 @@ export default async function AnalyticsPage() {
   const metaMap = new Map(allShows.map((s: any) => [s.id, s]));
   const showsMap = new Map();
 
-  rawData.forEach((row: any) => {
+  rawData.forEach((row: any, index: number) => {
     const meta = row.productionId ? metaMap.get(row.productionId) : null;
     
     let showName = "Unknown";
@@ -41,14 +45,27 @@ export default async function AnalyticsPage() {
       showName = meta.title;
       season = meta.season?.value || meta.season || "Other";
       
-// 1. EXTRACT ID AND VALUE
-      // We prioritize the ID (2826) because names can change or have typos.
+      // --- DEBUGGING BLOCK START ---
       const typeId = meta.type?.id; 
       const typeValue = meta.type?.value || meta.type;
 
-      // 2. ID-BASED MAPPING (The Source of Truth)
+      // Only log the first few rows or specific shows to avoid flooding, 
+      // but let's log ALL "Lite" candidates to be sure.
+      const isLikelyLite = showName.toLowerCase().includes("lite") || typeValue === "Lite";
+      
+      if (isLikelyLite) {
+         console.log(`\n[DEBUG] Processing: "${showName}"`);
+         console.log(`   > Raw Type ID: ${typeId} (Type: ${typeof typeId})`);
+         console.log(`   > Raw Type Value: "${typeValue}"`);
+      }
+      // --- DEBUGGING BLOCK END ---
+
+      // 2. ID-BASED MAPPING
       if (typeId) {
-        switch (typeId) {
+        // Ensure we are matching numbers, handle string "2826" just in case
+        const safeId = Number(typeId); 
+
+        switch (safeId) {
           case 2824: // Main Stage
             type = "Mainstage";
             break;
@@ -62,19 +79,16 @@ export default async function AnalyticsPage() {
             type = "Master Camp";
             break;
           default:
-            // If ID exists but isn't one of the big ones, use the text value
             type = typeValue !== "Other" ? typeValue : "Other";
         }
       } 
-      
-      // 3. FALLBACK: STRING MAPPING (If ID is missing)
+      // 3. FALLBACK: STRING MAPPING
       else if (typeValue && typeValue !== "Other") {
           if (typeValue === "Lite") type = "CYT Lite";
           else if (typeValue === "Main Stage") type = "Mainstage";
           else type = typeValue;
       } 
-      
-      // 4. LAST RESORT: GUESS FROM TITLE (If data is empty)
+      // 4. LAST RESORT
       else {
           const lowerTitle = showName.toLowerCase();
           if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
@@ -84,6 +98,10 @@ export default async function AnalyticsPage() {
           } else {
               type = "Other";
           }
+      }
+
+      if (isLikelyLite) {
+          console.log(`   > FINAL DECISION: "${type}"`);
       }
 
       const rawVenue = meta.venue || meta.branch;
@@ -122,6 +140,10 @@ export default async function AnalyticsPage() {
     avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0
   })).sort((a: any, b: any) => b.totalSold - a.totalSold);
 
+  console.log("--- FINAL TALLY ---");
+  const liteCount = showData.filter((s:any) => s.type === "CYT Lite").length;
+  console.log(`Shows categorized as "CYT Lite": ${liteCount}`);
+  
   return (
     <div className="h-[calc(100vh-4rem)] overflow-hidden bg-zinc-950">
       <AnalyticsDashboard 
