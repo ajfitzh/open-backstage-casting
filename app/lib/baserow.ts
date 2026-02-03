@@ -191,7 +191,7 @@ export async function getVenues() {
   const data = await fetchBaserow(
     `/database/rows/table/${DB.VENUES.ID}/`, 
     {}, 
-    { size: "200", user_field_names: "true" }
+    { size: "200"}
   );
   
   if (!Array.isArray(data)) return [];
