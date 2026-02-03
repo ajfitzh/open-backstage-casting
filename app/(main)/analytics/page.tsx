@@ -8,7 +8,7 @@ export default async function AnalyticsPage() {
   const [rawData, allShows, allVenues] = await Promise.all([
     getPerformanceAnalytics(),
     getAllShows(),
-    getVenues() // <--- Fetch the Source of Truth
+    getVenues(), // <--- Fetch the Source of Truth
   ]);
 
   // 2. BUILD DYNAMIC CAPACITY MAP
@@ -84,6 +84,7 @@ export default async function AnalyticsPage() {
       <AnalyticsDashboard 
         performanceData={rawData} 
         showData={showData} 
+        venues={allVenues} // <--- PASS THE FULL VENUES ARRAY
         ticketPrice={15} 
       />
     </div>

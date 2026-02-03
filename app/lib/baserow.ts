@@ -185,6 +185,8 @@ export async function getClassRoster(classId: string) {
 }
 // app/lib/baserow.ts
 
+// app/lib/baserow.ts
+
 export async function getVenues() {
   const data = await fetchBaserow(
     `/database/rows/table/${DB.VENUES.ID}/`, 
@@ -201,10 +203,11 @@ export async function getVenues() {
     marketingName: row[DB.VENUES.FIELDS.PUBLIC_NAME_MARKETING],
     type: typeof row[DB.VENUES.FIELDS.TYPE] === 'object' 
           ? row[DB.VENUES.FIELDS.TYPE]?.value 
-          : row[DB.VENUES.FIELDS.TYPE]
+          : row[DB.VENUES.FIELDS.TYPE] || "Hybrid",
+    // Count the linked rows in the 'Productions' field
+    historicalShows: row[DB.VENUES.FIELDS.PRODUCTIONS]?.length || 0 
   }));
 }
-
 export async function getVenueLogistics() {
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
     fetchBaserow(`/database/rows/table/${DB.VENUES.ID}/`, {}, { size: "200" }),
