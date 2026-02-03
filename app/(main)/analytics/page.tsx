@@ -1,143 +1,163 @@
-import { getPerformanceAnalytics, getAllShows, getVenues } from "@/app/lib/baserow";
+import { getPerformanceAnalytics, getAllShows, getVenues, getSeasons } from "@/app/lib/baserow";
 import AnalyticsDashboard from "./analytics-client";
 
-// 🔴 DEBUG MODE: Force no-cache so you see logs every refresh
-export const revalidate = 0; 
+export const revalidate = 0;
+
+// 🛠️ HELPER: Parse legacy JSON
+function parseLegacySales(jsonString: string) {
+  if (!jsonString) return { sold: 0, capacity: 0, count: 0 };
+  try {
+    const cleanString = jsonString.replace(/""/g, '"');
+    const data = JSON.parse(cleanString);
+    if (!Array.isArray(data)) return { sold: 0, capacity: 0, count: 0 };
+    let sold = 0; let capacity = 0;
+    data.forEach((perf: any) => {
+      sold += Number(perf.sold) || 0;
+      capacity += Number(perf.total) || 0;
+    });
+    return { sold, capacity, count: data.length };
+  } catch (e) {
+    return { sold: 0, capacity: 0, count: 0 };
+  }
+}
+
+const toUSD = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
 
 export default async function AnalyticsPage() {
-  console.log("\n\n==================================================");
-  console.log("🕵️‍♂️ STARTING ANALYTICS DIAGNOSTIC RUN");
-  console.log("==================================================\n");
-
-  const [rawData, allShows, allVenues] = await Promise.all([
+  const [rawData, allShows, allVenues, allSeasons] = await Promise.all([
     getPerformanceAnalytics(),
     getAllShows(),
-    getVenues()
+    getVenues(),
+    getSeasons()
   ]);
 
-  console.log(`✅ Loaded ${rawData.length} sales rows and ${allShows.length} show metadata records.`);
-
-  // 1. BUILD CAPACITY MAP
+  // 1. MAPS
   const venueCapMap = new Map<string, number>();
   allVenues.forEach((v: any) => {
     if (v.name) venueCapMap.set(v.name, v.capacity);
     if (v.marketingName) venueCapMap.set(v.marketingName, v.capacity);
   });
 
-  // 2. PROCESS SHOWS
-  const metaMap = new Map(allShows.map((s: any) => [s.id, s]));
-  const showsMap = new Map();
-
-  // Counters for the summary log
-  let countLite = 0;
-  let countMain = 0;
-  let countOther = 0;
-
-  rawData.forEach((row: any) => {
-    const meta = row.productionId ? metaMap.get(row.productionId) : null;
-    
-    let showName = "Unknown";
-    let season = "Other";
-    let type = "Other";
-    let venue = "Unknown Venue";
-    let decisionReason = "Default"; // For logging
-
-if (meta) {
-      showName = meta.title;
-      season = meta.season?.value || meta.season || "Other";
-      
-      // 🛡️ EXTRACT SAFE DATA
-      const typeId = meta.type?.id; 
-      const typeValue = meta.type?.value || meta.type;
-
-      // 🎯 STRICT CATEGORIZATION (Priority: ID > Value > Safe Fallback)
-      
-      // 1. CHECK FOR LITE (ID 2826 is the smoking gun)
-      if (typeId === 2826 || typeValue === "Lite") {
-          type = "CYT Lite";
-      } 
-      // 2. CHECK FOR MAINSTAGE
-      else if (typeId === 2824 || typeValue === "Main Stage") {
-          type = "Mainstage";
-      }
-      // 3. CHECK FOR CYT+
-      else if (typeId === 2830 || typeValue === "CYT+") {
-          type = "CYT+";
-      }
-      // 4. EXISTING TAG PASSTHROUGH (e.g. "Master Camp", "CCT")
-      else if (typeValue && typeValue !== "Other") {
-          type = typeValue;
-      }
-      // 5. LAST RESORT FALLBACK (Only if DB is empty)
-      else {
-          const lower = showName.toLowerCase();
-          
-          // Only assume Lite if it explicitly says "Kids" or "Lite"
-          // We REMOVED "Jr" from here to protect Little Mermaid Jr.
-          if (lower.includes("lite") || lower.includes("kids")) {
-              type = "CYT Lite";
-          } else if (lower.includes("cyt+")) {
-              type = "CYT+";
-          } else {
-              type = "Other";
-          }
-      }
-
-      const rawVenue = meta.venue || meta.branch;
-      venue = Array.isArray(rawVenue) ? rawVenue[0]?.value : rawVenue || "TBD";
-    }
-
-    if (!showsMap.has(showName)) {
-      showsMap.set(showName, {
-        id: row.productionId || showName,
-        name: showName,
-        season: season,
-        type: type,
-        venue: venue,
-        totalSold: 0,
-        totalCapacity: 0,
-        performances: 0
-      });
-    }
-
-    const show = showsMap.get(showName);
-    
-    // 3. CAPACITY LOGIC
-    const realVenueCap = venueCapMap.get(venue);
-    const performanceCap = realVenueCap ? Math.max(realVenueCap, row.capacity) : row.capacity;
-
-    show.totalSold += row.sold;
-    show.totalCapacity += performanceCap;
-    show.performances += 1;
+  const seasonDateMap = new Map<string, number>();
+  allSeasons.forEach((s: any) => {
+    if (s.name && s.startDate) seasonDateMap.set(s.name, new Date(s.startDate).getTime());
   });
 
-  const showData = Array.from(showsMap.values()).map((show: any) => {
-    // Tally for final report
-    if (show.type === "CYT Lite") countLite++;
-    else if (show.type === "Mainstage") countMain++;
-    else countOther++;
+  // 2. BUILD SHOWS
+  const showsMap = new Map();
+  allShows.forEach((meta: any) => {
+    const showName = meta.title || `Show ${meta.id}`;
+    
+    // Categorization
+    const typeValue = meta.type?.value || meta.type || "";
+    let type = "Other";
+    if (typeValue === "Lite" || showName.toLowerCase().includes("lite")) type = "CYT Lite";
+    else if (typeValue === "Main Stage") type = "Mainstage";
 
+    // Legacy Data
+    const legacyJson = meta.Performances || meta.field_6177; 
+    const legacyStats = parseLegacySales(legacyJson);
+
+    showsMap.set(meta.id, {
+      id: meta.id,
+      name: showName,
+      season: meta.season?.value || meta.season || "Other",
+      type: type,
+      venue: Array.isArray(meta.venue) ? meta.venue[0]?.value : meta.venue || "TBD",
+      totalSold: legacyStats.sold,
+      totalCapacity: legacyStats.capacity,
+      performances: legacyStats.count,
+      source: legacyStats.count > 0 ? "Legacy JSON" : "Inventory"
+    });
+  });
+
+  // 3. LINK DATA
+  rawData.forEach((row: any) => {
+    let show = showsMap.get(row.productionId);
+    if (!show) {
+      const rawName = row.name.split(" - ")[0];
+      for (const s of showsMap.values()) {
+        if (s.name === rawName) { show = s; break; }
+      }
+    }
+    if (show) {
+      const realVenueCap = venueCapMap.get(show.venue);
+      const performanceCap = realVenueCap ? Math.max(realVenueCap, row.capacity) : row.capacity;
+      show.totalSold += row.sold;
+      show.totalCapacity += performanceCap;
+      show.performances += 1;
+      if (show.source === "Legacy JSON") show.source = "Hybrid";
+      else show.source = "Modern Linked";
+    }
+  });
+
+  // 4. SORT & PREP
+  const showData = Array.from(showsMap.values()).map((show: any) => ({
+    ...show,
+    avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0,
+    revenue: show.totalSold * 15
+  })).sort((a: any, b: any) => {
+    const dateA = seasonDateMap.get(a.season) || 0;
+    const dateB = seasonDateMap.get(b.season) || 0;
+    if (dateA !== dateB) return dateA - dateB;
+    return b.totalSold - a.totalSold;
+  });
+
+  // 5. SUMMARY STATS (Top Header)
+  const categories = ["Mainstage", "CYT Lite", "Other"];
+  const summaryStats = categories.map(cat => {
+    const shows = showData.filter((s: any) => s.type === cat);
+    const totalSold = shows.reduce((acc, s) => acc + s.totalSold, 0);
+    const totalCap = shows.reduce((acc, s) => acc + s.totalCapacity, 0);
+    const totalRev = shows.reduce((acc, s) => acc + s.revenue, 0);
+    const count = shows.length;
     return {
-      ...show,
-      avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0
+      label: cat === "Other" ? "OTHER PROGRAMS" : cat.toUpperCase(),
+      fillRate: totalCap > 0 ? Math.round((totalSold / totalCap) * 100) : 0,
+      revenue: totalRev,
+      count: count,
+      perShowAvg: count > 0 ? Math.round(totalRev / count) : 0
     };
-  }).sort((a: any, b: any) => b.totalSold - a.totalSold);
-
-  console.log("\n--------------------------------------------------");
-  console.log("📊 FINAL CATEGORY COUNTS");
-  console.log(`   Mainstage: ${countMain}`);
-  console.log(`   CYT Lite:  ${countLite}  <-- IF THIS IS 0, CHECK THE LOGS ABOVE!`);
-  console.log(`   Other:     ${countOther}`);
-  console.log("--------------------------------------------------\n");
+  });
 
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-hidden bg-zinc-950">
-      <AnalyticsDashboard 
-        performanceData={rawData} 
-        showData={showData} 
-        venues={allVenues}
-        ticketPrice={15} 
-      />
+    // 🚨 CSS FIX: h-screen instead of min-h-screen
+    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
+      
+      {/* 🟢 TOP PROFIT MODEL SUMMARY */}
+      <div className="w-full border-b border-zinc-800 bg-zinc-900/50 p-6 shrink-0">
+        <div className="max-w-[1920px] mx-auto">
+          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Profit Model & Efficiency</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {summaryStats.map((stat) => (
+              <div key={stat.label} className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-lg font-black text-white tracking-tight">{stat.label}</h3>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${stat.fillRate > 80 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>{stat.fillRate}% FILL</span>
+                  </div>
+                  <div className="text-2xl font-medium text-white tabular-nums tracking-tighter mb-1">{toUSD(stat.revenue)}</div>
+                  <div className="text-xs text-zinc-500">across {stat.count} Productions</div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-zinc-800 flex justify-between items-center">
+                  <span className="text-[10px] font-semibold text-zinc-500 uppercase">Avg / Show</span>
+                  <span className="text-sm font-bold text-emerald-400 tabular-nums">{toUSD(stat.perShowAvg)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 📉 MAIN DASHBOARD */}
+      <div className="flex-1 overflow-hidden relative">
+        <AnalyticsDashboard 
+          performanceData={rawData} 
+          showData={showData} 
+          venues={allVenues}
+          ticketPrice={15} 
+        />
+      </div>
     </div>
   );
 }

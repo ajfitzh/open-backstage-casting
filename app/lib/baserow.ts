@@ -339,19 +339,20 @@ export async function getAllShows() {
 
   return data.map((row: any) => {
     // 2. ROBUST TYPE EXTRACTION 🛠️
-    // We access the row using the ID from schema.ts (field_5745)
     const typeObj = row[DB.PRODUCTIONS.FIELDS.TYPE];
-    
-    // Safety check: typeObj might be null, or an object with a .value property
     const typeValue = typeObj?.value || "Other"; 
 
     return {
       id: row.id,
       title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled"),
       season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"),
-      type: typeValue, // <--- Now holds "Lite", "Main Stage", etc.
+      type: typeValue,
       venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
-      workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
+      workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [],
+
+      // ✅ FIX: Pass the legacy JSON field so page.tsx can access it.
+      // We look for 'field_6177' (your legacy Performances field ID)
+      Performances: row['field_6177'] || row['Performances'] || null
     };
   }).sort((a: any, b: any) => b.id - a.id);
 }
