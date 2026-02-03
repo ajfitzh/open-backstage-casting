@@ -1,24 +1,28 @@
-import { getPerformanceAnalytics, getAllShows, getVenues } from "@/app/lib/baserow"; // <--- Add getVenues
+import { getPerformanceAnalytics, getAllShows, getVenues } from "@/app/lib/baserow";
 import AnalyticsDashboard from "./analytics-client";
 
 export const revalidate = 60; 
 
+// 1. PHYSICAL CAPACITIES (Source of Truth)
+const VENUE_CAPACITIES: Record<string, number> = {
+  "Kingdom Baptist Church": 204,
+  "KBC": 204,
+  "Spotsylvania High School": 1000,
+  "Stafford High School": 1000,
+  "River Club": 400,
+};
+
 export default async function AnalyticsPage() {
-  // 1. FETCH EVERYTHING PARALLEL
   const [rawData, allShows, allVenues] = await Promise.all([
     getPerformanceAnalytics(),
     getAllShows(),
-    getVenues(), // <--- Fetch the Source of Truth
+    getVenues()
   ]);
 
   // 2. BUILD DYNAMIC CAPACITY MAP
-  // This replaces the hardcoded list. It creates a lookup like:
-  // { "Kingdom Baptist": 204, "Chancellor HS": 783 }
   const venueCapMap = new Map<string, number>();
-  
   allVenues.forEach((v: any) => {
     if (v.name) venueCapMap.set(v.name, v.capacity);
-    // Optional: Add mapping for the "Marketing Name" too, just in case
     if (v.marketingName) venueCapMap.set(v.marketingName, v.capacity);
   });
 
@@ -36,8 +40,26 @@ export default async function AnalyticsPage() {
     if (meta) {
       showName = meta.title;
       season = meta.season?.value || meta.season || "Other";
-      type = meta.type?.value || meta.type || "Other";
       
+      // 🛠️ ROBUST TYPE DETECTION
+      // 1. Try the direct field value
+      const rawType = meta.type?.value || meta.type;
+      
+      // 2. If valid, use it. If missing/Other, try to guess from Title.
+      if (rawType && rawType !== "Other") {
+          type = rawType;
+      } else {
+          // Fallback: Guess based on Title keywords
+          const lowerTitle = showName.toLowerCase();
+          if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
+              type = "Lite";
+          } else if (lowerTitle.includes("cyt+")) {
+              type = "CYT+"; // Will fall into "Other" unless you add a tier for it
+          } else {
+              type = "Other";
+          }
+      }
+
       const rawVenue = meta.venue || meta.branch;
       venue = Array.isArray(rawVenue) ? rawVenue[0]?.value : rawVenue || "TBD";
     } else {
@@ -60,13 +82,8 @@ export default async function AnalyticsPage() {
 
     const show = showsMap.get(showName);
     
-    // 3. DYNAMIC CAPACITY LOGIC
-    // Look up the venue in our database map
+    // 3. CAPACITY LOGIC
     const realVenueCap = venueCapMap.get(venue);
-    
-    // Logic: If we have a "Hard Limit" from the venues table, use it as the floor.
-    // If the ticketing system (row.capacity) is somehow HIGHER (e.g. standing room), trust that.
-    // But usually, row.capacity is LOWER (artificial scarcity), so we ignore it in favor of the real cap.
     const performanceCap = realVenueCap ? Math.max(realVenueCap, row.capacity) : row.capacity;
 
     show.totalSold += row.sold;
@@ -84,7 +101,7 @@ export default async function AnalyticsPage() {
       <AnalyticsDashboard 
         performanceData={rawData} 
         showData={showData} 
-        venues={allVenues} // <--- PASS THE FULL VENUES ARRAY
+        venues={allVenues}
         ticketPrice={15} 
       />
     </div>
