@@ -8,7 +8,7 @@ import {
 import { 
   LayoutGrid, BarChart2, Zap, Landmark, Search, 
   ArrowLeft, Users, Ticket, DollarSign, PieChart as PieIcon, 
-  Crown, Sparkles, Box, Tent, MapPin, TrendingUp, History, Building2, Calculator, Coins
+  Crown, Sparkles, Box, Tent, MapPin, TrendingUp, History, Building2, Calculator, Coins, BarChart3
 } from 'lucide-react';
 
 export default function AnalyticsDashboard({ 
@@ -26,8 +26,9 @@ export default function AnalyticsDashboard({
   const [selectedShow, setSelectedShow] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // 🆕 NEW STATE FOR PROFITABILITY
-  const [chartMode, setChartMode] = useState<'fill' | 'profit'>('fill');
+  // 🆕 NEW STATE FOR CHART MODES (Fill %, Raw Sales #, Profit $)
+  const [chartMode, setChartMode] = useState<'fill' | 'sales' | 'profit'>('fill');
+  
   const [rentEstimates, setRentEstimates] = useState<Record<string, number>>({
       "Fredericksburg Academy": 2500,
       "Spotsylvania High School": 3000,
@@ -115,16 +116,18 @@ export default function AnalyticsDashboard({
         
         // Calculate Metrics
         const fill = show.avgFill;
+        const sold = show.totalSold; // NEW: Raw Ticket Count
         const revenue = show.totalSold * ticketPrice;
         const profit = revenue - rent;
 
         if (!seasonMap[season][vKey]) {
-            seasonMap[season][vKey] = { fill, profit, count: 1 };
+            seasonMap[season][vKey] = { fill, profit, sold, count: 1 };
         } else {
             const prev = seasonMap[season][vKey];
             seasonMap[season][vKey] = {
                 fill: prev.fill + fill,
                 profit: prev.profit + profit,
+                sold: prev.sold + sold,
                 count: prev.count + 1
             };
         }
@@ -135,9 +138,11 @@ export default function AnalyticsDashboard({
         const result: any = { name: s.name };
         Object.keys(s).forEach(key => {
             if (key !== 'name') {
-                // Average the values for the season
+                // Average the values for the season (e.g. "Average Tickets Sold Per Show")
                 if (chartMode === 'fill') {
                     result[key] = Math.round(s[key].fill / s[key].count);
+                } else if (chartMode === 'sales') {
+                    result[key] = Math.round(s[key].sold / s[key].count);
                 } else {
                     result[key] = Math.round(s[key].profit / s[key].count);
                 }
@@ -161,6 +166,18 @@ export default function AnalyticsDashboard({
 
   // --- RENDER HELPERS ---
   const formatCurrency = (val: number) => `$${val.toLocaleString()}`;
+
+  // Helper for Chart Titles
+  const getChartTitle = () => {
+      if (chartMode === 'sales') return "Ticket Volume (Raw Sales)";
+      if (chartMode === 'profit') return "Profitability Simulator";
+      return "Fill Rate Trends";
+  };
+  const getChartSub = () => {
+      if (chartMode === 'sales') return "Avg. Tickets Sold Per Production";
+      if (chartMode === 'profit') return "Net Profit Per Show (Est)";
+      return "Venue Performance Over Time";
+  };
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 text-zinc-200">
@@ -405,12 +422,18 @@ export default function AnalyticsDashboard({
                         </div>
                         
                         {/* 🆕 CHART TOGGLER */}
-                        <div className="flex bg-zinc-900 border border-white/5 p-1 rounded-xl">
+                        <div className="flex bg-zinc-900 border border-white/5 p-1 rounded-xl gap-1">
                             <button
                                 onClick={() => setChartMode('fill')}
                                 className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${chartMode === 'fill' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
                             >
                                 <TrendingUp size={12}/> Fill Trends
+                            </button>
+                            <button
+                                onClick={() => setChartMode('sales')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${chartMode === 'sales' ? 'bg-purple-500/10 text-purple-400 shadow-lg border border-purple-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                <Ticket size={12}/> Ticket Vol.
                             </button>
                              <button
                                 onClick={() => setChartMode('profit')}
@@ -428,11 +451,11 @@ export default function AnalyticsDashboard({
                             <div className="flex justify-between items-end mb-6 relative z-10">
                                 <div>
                                     <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                        {chartMode === 'fill' ? <TrendingUp size={14}/> : <Calculator size={14}/>} 
-                                        {chartMode === 'fill' ? 'Fill Rate Trends' : 'Profitability Simulator'}
+                                        {chartMode === 'fill' ? <TrendingUp size={14}/> : chartMode === 'sales' ? <BarChart3 size={14}/> : <Calculator size={14}/>} 
+                                        {getChartTitle()}
                                     </h4>
                                     <p className="text-2xl font-black text-white">
-                                        {chartMode === 'fill' ? 'Venue Performance Over Time' : 'Net Profit Per Show (Est)'}
+                                        {getChartSub()}
                                     </p>
                                 </div>
                                 <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest">
@@ -452,12 +475,20 @@ export default function AnalyticsDashboard({
                                             axisLine={false} 
                                             tickLine={false} 
                                             unit={chartMode === 'fill' ? "%" : ""} 
-                                            tickFormatter={chartMode === 'profit' ? (val) => `$${val/1000}k` : undefined}
+                                            tickFormatter={(val) => {
+                                                if (chartMode === 'profit') return `$${val/1000}k`;
+                                                if (chartMode === 'sales') return val.toLocaleString();
+                                                return val;
+                                            }}
                                         />
                                         <Tooltip 
                                             contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px' }}
                                             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
-                                            formatter={chartMode === 'profit' ? (val: any) => formatCurrency(val) : (val: any) => `${val}%`}
+                                            formatter={(val: any) => {
+                                                if (chartMode === 'profit') return formatCurrency(val);
+                                                if (chartMode === 'sales') return `${val} Tickets`;
+                                                return `${val}%`;
+                                            }}
                                         />
                                         {/* Dynamic Lines for Top Venues */}
                                         {enrichedVenues.slice(0, 3).map((v, i) => (
@@ -509,7 +540,7 @@ export default function AnalyticsDashboard({
                                     </div>
                                     
                                     {/* DYNAMIC CONTENT AREA */}
-                                    {chartMode === 'fill' ? (
+                                    {chartMode !== 'profit' ? (
                                         <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
                                             <div>
                                                 <div className="flex items-center gap-1.5 text-zinc-500 mb-1">
