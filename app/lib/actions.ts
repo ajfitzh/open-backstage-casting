@@ -366,3 +366,106 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
   revalidatePath("/schedule");
   return { success: true };
 }
+
+// --- CASTING ACTIONS ---
+
+// 1. TOGGLE CHICLET (Single Click)
+export async function toggleSceneAssignment(
+  studentId: number, 
+  sceneId: number, 
+  productionId: number, 
+  isActive: boolean // True = Create, False = Delete
+) {
+  if (isActive) {
+    // CREATE
+    await fetchBaserow(`/database/rows/table/628/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        "field_6032": [studentId],    // Person
+        "field_6033": [sceneId],      // Scene
+        "field_6036": [productionId], // Production
+        "field_6040": 3009            // Default to "Ensemble" type (Safe default)
+      })
+    });
+  } else {
+    // DELETE (Find ID first)
+    const existing = await fetchBaserow(`/database/rows/table/628/`, {}, {
+      filter_type: "AND",
+      [`filter__field_6032__link_row_has`]: studentId,
+      [`filter__field_6033__link_row_has`]: sceneId,
+      [`filter__field_6036__link_row_has`]: productionId
+    });
+
+    if (Array.isArray(existing) && existing.length > 0) {
+      const rowId = existing[0].id;
+      await fetchBaserow(`/database/rows/table/628/${rowId}/`, {
+        method: "DELETE"
+      });
+    }
+  }
+  revalidatePath("/casting");
+}
+
+// 2. INITIALIZE SCENES (The "Big Button")
+// This is the server-side logic we discussed earlier to hydrate the table
+export async function initializeSceneAssignments(productionId: number) {
+  // A. Fetch Blueprint (Table 605) to get the "Template"
+  const blueprintRes = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, {
+    size: "200",
+    user_field_names: "true" 
+  });
+  
+  // B. Fetch Current Assignments (Who is playing who?)
+  const castRes = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
+    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+    user_field_names: "true"
+  });
+
+  if (!Array.isArray(blueprintRes) || !Array.isArray(castRes)) return { success: false };
+
+  // C. Build the Map
+  const blueprintMap = new Map();
+  blueprintRes.forEach((role: any) => {
+    // Store the list of Default Scene IDs for this Role
+    // 'Active Scenes' is the link field in Blueprint
+    const sceneIds = role['Active Scenes']?.map((s: any) => s.id) || [];
+    blueprintMap.set(role.id, sceneIds);
+  });
+
+  // D. Create Operations
+  const operations = [];
+  
+  for (const assignment of castRes) {
+    // Get the Role ID (Performance Identity)
+    const roleId = assignment['Performance Identity']?.[0]?.id;
+    const studentId = assignment['Person']?.[0]?.id;
+
+    if (roleId && studentId && blueprintMap.has(roleId)) {
+      const sceneIds = blueprintMap.get(roleId);
+      
+      for (const sceneId of sceneIds) {
+        operations.push({
+          "field_6032": [studentId],    // Person
+          "field_6033": [sceneId],      // Scene
+          "field_6036": [productionId], // Production
+          "field_6040": 3007            // Default to "Lead" (Safe assumption for blueprint roles)
+        });
+      }
+    }
+  }
+
+  // E. Execute (Sequential for safety, parallel in prod)
+  let count = 0;
+  for (const op of operations) {
+    await fetchBaserow(`/database/rows/table/628/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(op)
+    });
+    count++;
+  }
+
+  revalidatePath("/casting");
+  return { success: true, count };
+}

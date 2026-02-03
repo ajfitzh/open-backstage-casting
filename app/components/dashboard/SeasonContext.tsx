@@ -82,14 +82,12 @@ export default function SeasonContext({
           sessions: Object.entries(seasonData.classSessions) 
       };
 
-      // ✅ FIX: Check title, season string, OR the specific productionSession field
       const filteredShows = seasonData.shows.filter((s: any) => 
           (s.title && s.title.includes(lineupFilter)) || 
           (s.season && s.season.includes(lineupFilter)) ||
-          (s.productionSession && s.productionSession.includes(lineupFilter)) // <--- The magic fix
+          (s.productionSession && s.productionSession.includes(lineupFilter))
       );
 
-      // Filter Class Sessions: Check the session key (e.g. "Fall 2025")
       const filteredSessions = Object.entries(seasonData.classSessions).filter(([name]) => 
           name.includes(lineupFilter)
       );
@@ -99,20 +97,9 @@ export default function SeasonContext({
 
 // 3. CALCULATE STATS
   const stats = useMemo(() => {
-    // A. Count students in the classes for the SELECTED season
     const academyCount = seasonData.classes.reduce((acc: number, c: any) => acc + (c.students || 0), 0);
-    
-    // B. Always show the REAL active cast count (Global Stat)
-    // We stop hiding this when the seasons don't match.
     const castCount = activeShowStats?.castCount || 0; 
-
-    // C. Total Reach
-    // Since cast members are required to be in classes, they are ALREADY in 'academyCount'.
-    // So Total Reach = Academy Count.
-    // The Cast Count is just a "subset" stat.
     const totalStudents = academyCount;
-    
-    // D. Family Estimate
     const familyCount = Math.floor(totalStudents * 0.75); 
 
     return { 
@@ -120,7 +107,6 @@ export default function SeasonContext({
         familyCount, 
         totalStudents, 
         castCount, 
-        // We still track this boolean for labeling purposes (e.g. "Historical Data")
         isCurrentSeason: selectedSeasonName === activeSeasonName 
     };
   }, [seasonData, selectedSeasonName, activeSeasonName, activeShowStats]);
@@ -134,50 +120,76 @@ export default function SeasonContext({
             <Heart size={300} className="text-pink-500 rotate-12"/>
         </div>
 
-        {/* HEADER */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 relative z-20">
-            <div>
-                <div className="flex items-center gap-2 mb-1">
-                    <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                        <LayoutGrid size={14} className="text-blue-500" /> Organization
-                    </h2>
-                    <span className="text-zinc-700">/</span>
+        {/* HEADER AREA */}
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end mb-10 gap-8 relative z-20">
+            
+            {/* LEFT SIDE: Controls & Title */}
+            <div className="flex flex-col gap-4 w-full xl:w-auto">
+                
+                {/* 1. TOP ROW: Breadcrumbs + Tabs */}
+                <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8">
                     
-                    {/* SEASON PICKER */}
-                    <div className="relative">
-                        <button 
-                            onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="flex items-center gap-1 text-xs font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-colors"
-                        >
-                            {selectedSeasonName} <ChevronDown size={12} className={`transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}/>
-                        </button>
+                    {/* Breadcrumb / Picker */}
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                            <LayoutGrid size={14} className="text-blue-500" /> Organization
+                        </h2>
+                        <span className="text-zinc-700">/</span>
                         
-                        {isMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-64 bg-zinc-950 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto custom-scrollbar ring-1 ring-white/10">
-                                {sortedSeasons.map((s: any) => (
-                                    <button
-                                        key={s.id}
-                                        onClick={() => { setSelectedSeasonName(s.name); setIsMenuOpen(false); }}
-                                        className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors flex justify-between items-center ${selectedSeasonName === s.name ? 'bg-blue-500/10' : ''}`}
-                                    >
-                                        <span className={`text-[10px] font-bold uppercase tracking-widest ${selectedSeasonName === s.name ? 'text-blue-400' : 'text-zinc-400'}`}>
-                                            {s.name}
-                                        </span>
-                                        {s.status === "Active" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                        <div className="relative">
+                            <button 
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                className="flex items-center gap-1 text-xs font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                                {selectedSeasonName} <ChevronDown size={12} className={`transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}/>
+                            </button>
+                            
+                            {isMenuOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-64 bg-zinc-950 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto custom-scrollbar ring-1 ring-white/10">
+                                    {sortedSeasons.map((s: any) => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => { setSelectedSeasonName(s.name); setIsMenuOpen(false); }}
+                                            className={`w-full text-left px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors flex justify-between items-center ${selectedSeasonName === s.name ? 'bg-blue-500/10' : ''}`}
+                                        >
+                                            <span className={`text-[10px] font-bold uppercase tracking-widest ${selectedSeasonName === s.name ? 'text-blue-400' : 'text-zinc-400'}`}>
+                                                {s.name}
+                                            </span>
+                                            {s.status === "Active" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {/* 2. MOVED FILTERS HERE */}
+                    <div className="flex gap-1 bg-zinc-950 p-1 rounded-lg border border-white/5 self-start">
+                        {LINEUP_FILTERS.map(filter => (
+                            <button
+                                key={filter}
+                                onClick={() => setLineupFilter(filter)}
+                                className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                    lineupFilter === filter 
+                                    ? 'bg-zinc-800 text-white shadow-sm' 
+                                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                }`}
+                            >
+                                {filter}
+                            </button>
+                        ))}
+                    </div>
+
                 </div>
                 
-                <h3 className="text-2xl font-black italic text-white tracking-tight flex items-center gap-3">
+                {/* 3. BIG TITLE */}
+                <h3 className="text-3xl font-black italic text-white tracking-tight flex items-center gap-3">
                     Season Overview
                     {currentSeasonObj?.status === "Planning" && <span className="px-2 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-500 border border-amber-500/20 not-italic uppercase tracking-wide">Planning</span>}
                 </h3>
             </div>
             
-            {/* Staff Strip */}
+            {/* RIGHT SIDE: Staff Strip */}
             <div className="flex flex-wrap gap-3">
                 {SEASON_STAFF.map((staff, i) => (
                     <div key={i} className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/10 transition-colors cursor-default">
@@ -226,32 +238,14 @@ export default function SeasonContext({
             />
         </div>
 
-        {/* SEASON LINEUP */}
+        {/* SEASON LINEUP GRID (Tabs removed from here) */}
         <div className="relative z-10 pt-6 border-t border-white/5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h4 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
-                    <Calendar size={12}/> Season Lineup
-                </h4>
-                
-                {/* FILTER BUTTONS */}
-                <div className="flex gap-1 bg-zinc-950 p-1 rounded-xl border border-white/5">
-                    {LINEUP_FILTERS.map(filter => (
-                        <button
-                            key={filter}
-                            onClick={() => setLineupFilter(filter)}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                lineupFilter === filter 
-                                ? 'bg-zinc-800 text-white shadow-sm' 
-                                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
-                            }`}
-                        >
-                            {filter}
-                        </button>
-                    ))}
-                </div>
+            <div className="flex items-center gap-2 mb-6 text-zinc-500">
+                <Calendar size={14}/> 
+                <h4 className="text-xs font-black uppercase tracking-widest">Season Lineup</h4>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-bottom-4 duration-500">
                 
                 {/* 1. PRODUCTIONS */}
                 {visibleLineup.shows.map((show: any) => (
