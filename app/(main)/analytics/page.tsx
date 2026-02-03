@@ -41,30 +41,50 @@ export default async function AnalyticsPage() {
       showName = meta.title;
       season = meta.season?.value || meta.season || "Other";
       
-// 1. Try the direct field value
-const rawType = meta.type?.value || meta.type;
+// 1. EXTRACT ID AND VALUE
+      // We prioritize the ID (2826) because names can change or have typos.
+      const typeId = meta.type?.id; 
+      const typeValue = meta.type?.value || meta.type;
 
-// 2. If valid, use it. If missing/Other, try to guess from Title.
-if (rawType && rawType !== "Other") {
-    // 🩹 BUG SQUASH: Map DB "Lite" to Dashboard "CYT Lite"
-    if (rawType === "Lite") {
-        type = "CYT Lite";
-    } else if (rawType === "Main Stage") {
-        type = "Mainstage"; // Optional: Normalize space if needed
-    } else {
-        type = rawType;
-    }
-} else {
-    // Fallback: Guess based on Title keywords
-    const lowerTitle = showName.toLowerCase();
-    if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
-        type = "CYT Lite"; // <--- Update this fallback too!
-    } else if (lowerTitle.includes("cyt+")) {
-        type = "CYT+";
-    } else {
-        type = "Other";
-    }
-}
+      // 2. ID-BASED MAPPING (The Source of Truth)
+      if (typeId) {
+        switch (typeId) {
+          case 2824: // Main Stage
+            type = "Mainstage";
+            break;
+          case 2826: // Lite
+            type = "CYT Lite";
+            break;
+          case 2830: // CYT+
+            type = "CYT+";
+            break;
+          case 2825: // Master Camp
+            type = "Master Camp";
+            break;
+          default:
+            // If ID exists but isn't one of the big ones, use the text value
+            type = typeValue !== "Other" ? typeValue : "Other";
+        }
+      } 
+      
+      // 3. FALLBACK: STRING MAPPING (If ID is missing)
+      else if (typeValue && typeValue !== "Other") {
+          if (typeValue === "Lite") type = "CYT Lite";
+          else if (typeValue === "Main Stage") type = "Mainstage";
+          else type = typeValue;
+      } 
+      
+      // 4. LAST RESORT: GUESS FROM TITLE (If data is empty)
+      else {
+          const lowerTitle = showName.toLowerCase();
+          if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
+              type = "CYT Lite";
+          } else if (lowerTitle.includes("cyt+")) {
+              type = "CYT+";
+          } else {
+              type = "Other";
+          }
+      }
 
       const rawVenue = meta.venue || meta.branch;
       venue = Array.isArray(rawVenue) ? rawVenue[0]?.value : rawVenue || "TBD";
