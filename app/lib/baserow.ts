@@ -183,6 +183,27 @@ export async function getClassRoster(classId: string) {
     medical: safeGet(s[DB.PEOPLE.FIELDS.MEDICAL_NOTES], "None"),
   }));
 }
+// app/lib/baserow.ts
+
+export async function getVenues() {
+  const data = await fetchBaserow(
+    `/database/rows/table/${DB.VENUES.ID}/`, 
+    {}, 
+    { size: "200", user_field_names: "true" }
+  );
+  
+  if (!Array.isArray(data)) return [];
+
+  return data.map((row: any) => ({
+    id: row.id,
+    name: row[DB.VENUES.FIELDS.VENUE_NAME] || "Unknown Venue",
+    capacity: parseInt(row[DB.VENUES.FIELDS.SEATING_CAPACITY]) || 0,
+    marketingName: row[DB.VENUES.FIELDS.PUBLIC_NAME_MARKETING],
+    type: typeof row[DB.VENUES.FIELDS.TYPE] === 'object' 
+          ? row[DB.VENUES.FIELDS.TYPE]?.value 
+          : row[DB.VENUES.FIELDS.TYPE]
+  }));
+}
 
 export async function getVenueLogistics() {
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
