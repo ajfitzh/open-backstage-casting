@@ -41,24 +41,30 @@ export default async function AnalyticsPage() {
       showName = meta.title;
       season = meta.season?.value || meta.season || "Other";
       
-      // 🛠️ ROBUST TYPE DETECTION
-      // 1. Try the direct field value
-      const rawType = meta.type?.value || meta.type;
-      
-      // 2. If valid, use it. If missing/Other, try to guess from Title.
-      if (rawType && rawType !== "Other") {
-          type = rawType;
-      } else {
-          // Fallback: Guess based on Title keywords
-          const lowerTitle = showName.toLowerCase();
-          if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
-              type = "Lite";
-          } else if (lowerTitle.includes("cyt+")) {
-              type = "CYT+"; // Will fall into "Other" unless you add a tier for it
-          } else {
-              type = "Other";
-          }
-      }
+// 1. Try the direct field value
+const rawType = meta.type?.value || meta.type;
+
+// 2. If valid, use it. If missing/Other, try to guess from Title.
+if (rawType && rawType !== "Other") {
+    // 🩹 BUG SQUASH: Map DB "Lite" to Dashboard "CYT Lite"
+    if (rawType === "Lite") {
+        type = "CYT Lite";
+    } else if (rawType === "Main Stage") {
+        type = "Mainstage"; // Optional: Normalize space if needed
+    } else {
+        type = rawType;
+    }
+} else {
+    // Fallback: Guess based on Title keywords
+    const lowerTitle = showName.toLowerCase();
+    if (lowerTitle.includes("lite") || lowerTitle.includes("kids")) {
+        type = "CYT Lite"; // <--- Update this fallback too!
+    } else if (lowerTitle.includes("cyt+")) {
+        type = "CYT+";
+    } else {
+        type = "Other";
+    }
+}
 
       const rawVenue = meta.venue || meta.branch;
       venue = Array.isArray(rawVenue) ? rawVenue[0]?.value : rawVenue || "TBD";
