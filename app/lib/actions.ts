@@ -284,44 +284,65 @@ export async function toggleSceneAssignment(
   revalidatePath("/casting");
 }
 
-// 2. AUTO-ASSIGN SCENES (The "Big Button")
+// app/lib/actions.ts
+
+// ... (keep imports)
+
+// 2. AUTO-ASSIGN SCENES (The "Smart" Version)
+// Logic: Read the CURRENT Production's Scenes -> Find Linked Roles -> Assign Actors
 export async function initializeSceneAssignments(productionId: number) {
-  // A. Fetch Blueprint
-  const blueprintRes = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { size: "200" });
   
-  // B. Fetch Cast
-  const castRes = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
-    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    size: "200"
+  // A. Fetch Scenes for THIS Production (With their linked Blueprint Roles)
+  const scenesRes = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, {
+    [`filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+    "size": "200",
+    "user_field_names": "true" // Use names to easily find "Blueprint Roles" link
   });
 
-  if (!Array.isArray(blueprintRes) || !Array.isArray(castRes)) return { success: false, count: 0 };
+  // B. Fetch Current Cast Assignments
+  const castRes = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
+    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+    "size": "200",
+    "user_field_names": "true"
+  });
 
-  const blueprintMap = new Map();
-  blueprintRes.forEach((role: any) => {
-    // Get scene IDs linked in Blueprint
-    const sceneIds = role[DB.BLUEPRINT_ROLES.FIELDS.ACTIVE_SCENES]?.map((s: any) => s.id) || [];
-    blueprintMap.set(role.id, sceneIds);
+  if (!Array.isArray(scenesRes) || !Array.isArray(castRes)) return { success: false, count: 0 };
+
+  // C. Build Map: Role ID -> Actor ID
+  // "If the scene needs Role #5, who is playing Role #5?"
+  const roleToActorMap = new Map();
+  castRes.forEach((assignment: any) => {
+      const role = assignment['Performance Identity']?.[0]; // Link to Blueprint Role
+      const actor = assignment['Person']?.[0]; // Link to Person
+      if (role && actor) {
+          roleToActorMap.set(role.id, actor.id);
+      }
   });
 
   const operations = [];
-  for (const assignment of castRes) {
-    const roleId = assignment[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]?.[0]?.id;
-    const studentId = assignment[DB.ASSIGNMENTS.FIELDS.PERSON]?.[0]?.id;
 
-    if (roleId && studentId && blueprintMap.has(roleId)) {
-      const sceneIds = blueprintMap.get(roleId);
-      for (const sceneId of sceneIds) {
-        operations.push({
-          [DB.SCENE_ASSIGNMENTS.FIELDS.PERSON]: [studentId],
-          [DB.SCENE_ASSIGNMENTS.FIELDS.SCENE]: [sceneId],
-          [DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-          [DB.SCENE_ASSIGNMENTS.FIELDS.SLOT_TYPE]: 3007 // "Lead"
-        });
+  // D. Iterate Scenes
+  for (const scene of scenesRes) {
+      // Get the Roles tagged in this Scene
+      // (This field name might vary slightly in your DB, check schema or CSV header)
+      const linkedRoles = scene['Blueprint Roles'] || []; 
+
+      for (const role of linkedRoles) {
+          const actorId = roleToActorMap.get(role.id);
+          
+          if (actorId) {
+              // We have a match! Scene needs Ariel -> Jackson is Ariel -> Assign Jackson to Scene
+              operations.push({
+                  [DB.SCENE_ASSIGNMENTS.FIELDS.PERSON]: [actorId],
+                  [DB.SCENE_ASSIGNMENTS.FIELDS.SCENE]: [scene.id],
+                  [DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
+                  [DB.SCENE_ASSIGNMENTS.FIELDS.SLOT_TYPE]: 3007 // "Lead" (or 3009 for Ensemble)
+              });
+          }
       }
-    }
   }
 
+  // E. Execute Creation
   let count = 0;
   for (const op of operations) {
     await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {
@@ -336,11 +357,31 @@ export async function initializeSceneAssignments(productionId: number) {
   return { success: true, count };
 }
 
-// 3. GENERATE EMPTY ROWS (Initialize Grid)
+// app/lib/actions.ts
+
+// ... (keep existing imports)
+
+// 3. GENERATE EMPTY ROWS (Smart Version)
 export async function generateCastingRows(productionId: number) {
-  const blueprintRoles = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { size: "200" });
+  
+  // A. Get the Master Show ID from the Production
+  const production = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
+  const masterShowId = production['Master Show Database']?.[0]?.id;
+
+  if (!masterShowId) {
+      console.error("❌ Cannot initialize: No Master Show linked to this Production.");
+      return { success: false };
+  }
+
+  // B. Fetch ONLY Roles for this Master Show
+  const blueprintRoles = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { 
+    [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
+    size: "200" 
+  });
+  
   if (!Array.isArray(blueprintRoles)) return { success: false };
 
+  // C. Fetch Existing Assignments (to avoid duplicates)
   const existing = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
     [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
     size: "200"
@@ -352,6 +393,7 @@ export async function generateCastingRows(productionId: number) {
       : []
   );
 
+  // D. Create Missing Rows
   let count = 0;
   for (const role of blueprintRoles) {
     if (!existingRoleIds.has(role.id)) {
