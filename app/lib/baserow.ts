@@ -325,10 +325,35 @@ export async function getShowById(id: string | number) {
   return mapShow(data);
 }
 
+// app/lib/baserow.ts
+
 export async function getAllShows() {
-  const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "200" });
+  // 1. Fetch raw data (NO user_field_names)
+  const data = await fetchBaserow(
+    `/database/rows/table/${DB.PRODUCTIONS.ID}/`, 
+    {}, 
+    { size: "200" } 
+  );
+
   if (!Array.isArray(data)) return [];
-  return data.map(mapShow).sort((a: any, b: any) => b.id - a.id);
+
+  return data.map((row: any) => {
+    // 2. ROBUST TYPE EXTRACTION 🛠️
+    // We access the row using the ID from schema.ts (field_5745)
+    const typeObj = row[DB.PRODUCTIONS.FIELDS.TYPE];
+    
+    // Safety check: typeObj might be null, or an object with a .value property
+    const typeValue = typeObj?.value || "Other"; 
+
+    return {
+      id: row.id,
+      title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled"),
+      season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"),
+      type: typeValue, // <--- Now holds "Lite", "Main Stage", etc.
+      venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
+      workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
+    };
+  }).sort((a: any, b: any) => b.id - a.id);
 }
 
 // ==============================================================================

@@ -41,13 +41,17 @@ export default function AnalyticsDashboard({
       setRentEstimates(prev => ({ ...prev, [venueName]: num }));
   };
 
-  // 1. NORMALIZE TIERS
+ // 1. NORMALIZE TIERS (Updated for Schema values)
   const tieredShows = useMemo(() => {
     return showData.map(show => {
       let tier = "Other";
       const typeLower = (show.type || "").toLowerCase();
-      if (typeLower.includes("main")) tier = "Mainstage";
-      else if (typeLower.includes("lite")) tier = "Lite";
+      
+      // 🛠️ FIX: Check for specific schema values
+      if (typeLower.includes("main")) tier = "Mainstage"; // Catches "Main Stage"
+      else if (typeLower.includes("lite")) tier = "Lite"; // Catches "Lite"
+      else if (typeLower.includes("cyt+")) tier = "Other"; // Or make a new tier!
+      
       return { ...show, tier };
     });
   }, [showData]);
@@ -491,18 +495,19 @@ export default function AnalyticsDashboard({
                                             }}
                                         />
                                         {/* Dynamic Lines for Top Venues */}
-                                        {enrichedVenues.slice(0, 3).map((v, i) => (
-                                            <Line 
-                                                key={v.name}
-                                                type="monotone" 
-                                                dataKey={v.name} 
-                                                stroke={[ '#10b981', '#3b82f6', '#f59e0b' ][i]} 
-                                                strokeWidth={3}
-                                                dot={{ r: 4, fill: '#09090b', strokeWidth: 2 }}
-                                                activeDot={{ r: 6 }}
-                                                connectNulls
-                                            />
-                                        ))}
+                                        {enrichedVenues.slice(0, 5).map((v, i) => (
+            <Line 
+                key={v.name}
+                type="monotone" 
+                dataKey={v.name} 
+                // Extended Color Palette for 5 lines
+                stroke={[ '#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6' ][i]} 
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#09090b', strokeWidth: 2 }}
+                activeDot={{ r: 6 }}
+                connectNulls
+            />
+        ))}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
