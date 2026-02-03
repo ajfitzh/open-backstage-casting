@@ -187,26 +187,31 @@ export async function getClassRoster(classId: string) {
 
 // app/lib/baserow.ts
 
+// app/lib/baserow.ts
+
 export async function getVenues() {
   const data = await fetchBaserow(
     `/database/rows/table/${DB.VENUES.ID}/`, 
     {}, 
-    { size: "200"}
+    { size: "200" } // Removed user_field_names=true
   );
   
   if (!Array.isArray(data)) return [];
 
-  return data.map((row: any) => ({
-    id: row.id,
-    name: row[DB.VENUES.FIELDS.VENUE_NAME] || "Unknown Venue",
-    capacity: parseInt(row[DB.VENUES.FIELDS.SEATING_CAPACITY]) || 0,
-    marketingName: row[DB.VENUES.FIELDS.PUBLIC_NAME_MARKETING],
-    type: typeof row[DB.VENUES.FIELDS.TYPE] === 'object' 
-          ? row[DB.VENUES.FIELDS.TYPE]?.value 
-          : row[DB.VENUES.FIELDS.TYPE] || "Hybrid",
-    // Count the linked rows in the 'Productions' field
-    historicalShows: row[DB.VENUES.FIELDS.PRODUCTIONS]?.length || 0 
-  }));
+  return data.map((row: any) => {
+    // 1. Safe extraction of the Select Object
+    const typeField = row[DB.VENUES.FIELDS.TYPE];
+    const typeValue = typeField?.value || "Hybrid"; // Use optional chaining to be safe
+
+    return {
+      id: row.id,
+      name: row[DB.VENUES.FIELDS.VENUE_NAME] || "Unknown Venue",
+      capacity: parseInt(row[DB.VENUES.FIELDS.SEATING_CAPACITY]) || 0,
+      marketingName: row[DB.VENUES.FIELDS.PUBLIC_NAME_MARKETING],
+      type: typeValue, // <--- Use the safe value
+      historicalShows: row[DB.VENUES.FIELDS.PRODUCTIONS]?.length || 0 
+    };
+  });
 }
 export async function getVenueLogistics() {
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([

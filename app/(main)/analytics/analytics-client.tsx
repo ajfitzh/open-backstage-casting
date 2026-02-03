@@ -8,7 +8,7 @@ import {
 import { 
   LayoutGrid, BarChart2, Zap, Landmark, Search, 
   ArrowLeft, Users, Ticket, DollarSign, PieChart as PieIcon, 
-  Crown, Sparkles, Box, Tent, MapPin, TrendingUp, History, Building2
+  Crown, Sparkles, Box, Tent, MapPin, TrendingUp, History, Building2, Calculator, Coins
 } from 'lucide-react';
 
 export default function AnalyticsDashboard({ 
@@ -25,6 +25,20 @@ export default function AnalyticsDashboard({
   const [activeTab, setActiveTab] = useState<'overview' | 'seasons'>('overview');
   const [selectedShow, setSelectedShow] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // 🆕 NEW STATE FOR PROFITABILITY
+  const [chartMode, setChartMode] = useState<'fill' | 'profit'>('fill');
+  const [rentEstimates, setRentEstimates] = useState<Record<string, number>>({
+      "Fredericksburg Academy": 2500,
+      "Spotsylvania High School": 3000,
+      "King George High School": 1500,
+      "Kingdom Baptist Church": 500
+  });
+
+  const handleRentChange = (venueName: string, val: string) => {
+      const num = parseInt(val.replace(/[^0-9]/g, '')) || 0;
+      setRentEstimates(prev => ({ ...prev, [venueName]: num }));
+  };
 
   // 1. NORMALIZE TIERS
   const tieredShows = useMemo(() => {
@@ -86,31 +100,52 @@ export default function AnalyticsDashboard({
     return { mostUsed, mostProfitable, highestFill };
   }, [filteredShows, ticketPrice]);
 
-  // --- VENUE TREND DATA (LINE CHART) ---
-  const venueTrendData = useMemo(() => {
+  // --- 🆕 CHART DATA GENERATOR ---
+  const chartData = useMemo(() => {
     // Group shows by Season
     const seasonMap: Record<string, any> = {};
-    
-    // Sort shows roughly by season (assuming order in array implies time, reverse if needed)
-    // We want chronological order for the chart (Oldest -> Newest)
     const chronologicalShows = [...showData].reverse(); 
 
     chronologicalShows.forEach(show => {
         const season = show.season || "Unknown";
         if (!seasonMap[season]) seasonMap[season] = { name: season };
         
-        // Clean venue name to be a valid key
         const vKey = show.venue;
+        const rent = rentEstimates[vKey] || 0;
+        
+        // Calculate Metrics
+        const fill = show.avgFill;
+        const revenue = show.totalSold * ticketPrice;
+        const profit = revenue - rent;
+
         if (!seasonMap[season][vKey]) {
-            seasonMap[season][vKey] = show.avgFill;
+            seasonMap[season][vKey] = { fill, profit, count: 1 };
         } else {
-            // Average if multiple shows in one season at same venue
-            seasonMap[season][vKey] = Math.round((seasonMap[season][vKey] + show.avgFill) / 2);
+            const prev = seasonMap[season][vKey];
+            seasonMap[season][vKey] = {
+                fill: prev.fill + fill,
+                profit: prev.profit + profit,
+                count: prev.count + 1
+            };
         }
     });
 
-    return Object.values(seasonMap);
-  }, [showData]);
+    // Flatten for Recharts
+    return Object.values(seasonMap).map((s: any) => {
+        const result: any = { name: s.name };
+        Object.keys(s).forEach(key => {
+            if (key !== 'name') {
+                // Average the values for the season
+                if (chartMode === 'fill') {
+                    result[key] = Math.round(s[key].fill / s[key].count);
+                } else {
+                    result[key] = Math.round(s[key].profit / s[key].count);
+                }
+            }
+        });
+        return result;
+    });
+  }, [showData, chartMode, rentEstimates, ticketPrice]);
 
   // --- ENRICHED VENUE LIST (SCORECARDS) ---
   const enrichedVenues = useMemo(() => {
@@ -121,7 +156,7 @@ export default function AnalyticsDashboard({
           const totalRevenue = stats.reduce((acc, s) => acc + (s.totalSold * ticketPrice), 0);
           const avgFill = stats.length ? Math.round(stats.reduce((acc, s) => acc + s.avgFill, 0) / stats.length) : 0;
           return { ...v, trackedShows: stats.length, totalRevenue, avgFill };
-      }).sort((a,b) => b.trackedShows - a.trackedShows); // Most active first
+      }).sort((a,b) => b.trackedShows - a.trackedShows); 
   }, [venues, showData, ticketPrice]);
 
   // --- RENDER HELPERS ---
@@ -358,24 +393,47 @@ export default function AnalyticsDashboard({
 
                  {/* === NEW: VENUE DEEP DIVE === */}
                  <div className="pt-8 border-t border-white/5 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    <h3 className="text-xl font-black text-white uppercase italic tracking-tighter mb-6 flex items-center gap-3">
-                        <MapPin size={24} className="text-emerald-500"/> 
-                        Venue Intelligence
-                        <span className="text-xs font-bold text-zinc-500 not-italic tracking-normal bg-zinc-900 px-3 py-1 rounded-full border border-white/5">
-                            Real Capacity Data
-                        </span>
-                    </h3>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
+                        <div>
+                             <h3 className="text-xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3">
+                                <MapPin size={24} className="text-emerald-500"/> 
+                                Venue Intelligence
+                                <span className="text-xs font-bold text-zinc-500 not-italic tracking-normal bg-zinc-900 px-3 py-1 rounded-full border border-white/5">
+                                    Real Capacity Data
+                                </span>
+                            </h3>
+                        </div>
+                        
+                        {/* 🆕 CHART TOGGLER */}
+                        <div className="flex bg-zinc-900 border border-white/5 p-1 rounded-xl">
+                            <button
+                                onClick={() => setChartMode('fill')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${chartMode === 'fill' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                <TrendingUp size={12}/> Fill Trends
+                            </button>
+                             <button
+                                onClick={() => setChartMode('profit')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${chartMode === 'profit' ? 'bg-emerald-500/10 text-emerald-400 shadow-lg border border-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                            >
+                                <Coins size={12}/> Profit Model
+                            </button>
+                        </div>
+                    </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         
-                        {/* 1. TREND CHART */}
-                        <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem]">
-                            <div className="flex justify-between items-end mb-6">
+                        {/* 1. TREND/PROFIT CHART */}
+                        <div className="lg:col-span-2 bg-zinc-900/50 border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden">
+                            <div className="flex justify-between items-end mb-6 relative z-10">
                                 <div>
                                     <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                        <TrendingUp size={14}/> Fill Rate Trends
+                                        {chartMode === 'fill' ? <TrendingUp size={14}/> : <Calculator size={14}/>} 
+                                        {chartMode === 'fill' ? 'Fill Rate Trends' : 'Profitability Simulator'}
                                     </h4>
-                                    <p className="text-2xl font-black text-white">Venue Performance Over Time</p>
+                                    <p className="text-2xl font-black text-white">
+                                        {chartMode === 'fill' ? 'Venue Performance Over Time' : 'Net Profit Per Show (Est)'}
+                                    </p>
                                 </div>
                                 <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest">
                                     <span className="flex items-center gap-2 text-emerald-400"><div className="w-2 h-2 rounded-full bg-emerald-500"/>Top Performer</span>
@@ -383,17 +441,25 @@ export default function AnalyticsDashboard({
                                 </div>
                             </div>
                             
-                            <div className="h-[350px]">
+                            <div className="h-[350px] relative z-10">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={venueTrendData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                    <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
                                         <XAxis dataKey="name" stroke="#52525b" tick={{fontSize: 10}} axisLine={false} tickLine={false} dy={10} />
-                                        <YAxis stroke="#52525b" tick={{fontSize: 10}} axisLine={false} tickLine={false} unit="%" />
+                                        <YAxis 
+                                            stroke="#52525b" 
+                                            tick={{fontSize: 10}} 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            unit={chartMode === 'fill' ? "%" : ""} 
+                                            tickFormatter={chartMode === 'profit' ? (val) => `$${val/1000}k` : undefined}
+                                        />
                                         <Tooltip 
                                             contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px' }}
                                             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                                            formatter={chartMode === 'profit' ? (val: any) => formatCurrency(val) : (val: any) => `${val}%`}
                                         />
-                                        {/* Dynamic Lines for Top 3 Venues by Activity */}
+                                        {/* Dynamic Lines for Top Venues */}
                                         {enrichedVenues.slice(0, 3).map((v, i) => (
                                             <Line 
                                                 key={v.name}
@@ -409,19 +475,30 @@ export default function AnalyticsDashboard({
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
+
+                            {/* Background Watermark for Profit Mode */}
+                            {chartMode === 'profit' && (
+                                <div className="absolute -bottom-10 -right-10 text-emerald-900/10 pointer-events-none">
+                                    <DollarSign size={300} strokeWidth={1} />
+                                </div>
+                            )}
                         </div>
 
-                        {/* 2. VENUE SCORECARDS */}
+                        {/* 2. VENUE SCORECARDS / RENT INPUTS */}
                         <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                             {enrichedVenues.map((v) => (
-                                <div key={v.id} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl group hover:border-emerald-500/30 transition-all">
+                                <div key={v.id} className={`border p-5 rounded-2xl group transition-all relative ${
+                                    chartMode === 'profit' 
+                                    ? 'bg-zinc-900 border-emerald-500/30 hover:bg-zinc-800' 
+                                    : 'bg-zinc-900 border-white/5 hover:border-emerald-500/30'
+                                }`}>
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center gap-2">
                                             <div className="p-2 bg-zinc-800 rounded-lg text-zinc-400 group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-colors">
                                                 <Building2 size={16}/>
                                             </div>
-                                            <div>
-                                                <h4 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{v.name}</h4>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors truncate max-w-[120px]" title={v.name}>{v.name}</h4>
                                                 <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">{v.type}</p>
                                             </div>
                                         </div>
@@ -431,26 +508,46 @@ export default function AnalyticsDashboard({
                                         </div>
                                     </div>
                                     
-                                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
-                                        <div>
-                                            <div className="flex items-center gap-1.5 text-zinc-500 mb-1">
-                                                <History size={10} />
-                                                <span className="text-[9px] uppercase tracking-widest font-bold">History</span>
+                                    {/* DYNAMIC CONTENT AREA */}
+                                    {chartMode === 'fill' ? (
+                                        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                                            <div>
+                                                <div className="flex items-center gap-1.5 text-zinc-500 mb-1">
+                                                    <History size={10} />
+                                                    <span className="text-[9px] uppercase tracking-widest font-bold">History</span>
+                                                </div>
+                                                <div className="text-xs font-bold text-zinc-300">
+                                                    {v.historicalShows} <span className="text-zinc-600 font-medium">Productions</span>
+                                                </div>
                                             </div>
-                                            <div className="text-xs font-bold text-zinc-300">
-                                                {v.historicalShows} <span className="text-zinc-600 font-medium">Productions</span>
+                                            <div>
+                                                <div className="flex items-center gap-1.5 text-zinc-500 mb-1">
+                                                    <TrendingUp size={10} />
+                                                    <span className="text-[9px] uppercase tracking-widest font-bold">Avg Fill</span>
+                                                </div>
+                                                <div className={`text-xs font-bold ${v.avgFill > 80 ? 'text-emerald-500' : v.avgFill > 60 ? 'text-blue-500' : 'text-zinc-400'}`}>
+                                                    {v.avgFill || 0}%
+                                                </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <div className="flex items-center gap-1.5 text-zinc-500 mb-1">
-                                                <TrendingUp size={10} />
-                                                <span className="text-[9px] uppercase tracking-widest font-bold">Avg Fill</span>
-                                            </div>
-                                            <div className={`text-xs font-bold ${v.avgFill > 80 ? 'text-emerald-500' : v.avgFill > 60 ? 'text-blue-500' : 'text-zinc-400'}`}>
-                                                {v.avgFill || 0}%
+                                    ) : (
+                                        /* RENT INPUT MODE */
+                                        <div className="mt-4 pt-4 border-t border-emerald-500/20">
+                                            <label className="text-[9px] uppercase tracking-widest font-bold text-emerald-400 mb-1 flex items-center gap-1">
+                                                <Coins size={10} /> Est. Rent (Per Show)
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-bold">$</span>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-1.5 pl-6 pr-3 text-sm font-bold text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                                                    value={rentEstimates[v.name] || ""}
+                                                    placeholder="0"
+                                                    onChange={(e) => handleRentChange(v.name, e.target.value)}
+                                                />
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
