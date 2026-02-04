@@ -2,30 +2,29 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
+import { generateCastingRows } from '@/app/lib/actions';
 
-// --- TYPES (Matching your Clean Server Data) ---
+// --- TYPES ---
 type BaserowLink = { id: number; value: string };
 
 type AssignmentRow = {
-  id: number; // Row ID in Assignments Table
+  id: number; 
   role: BaserowLink[];   
   person: BaserowLink[];
   production: { id: number }[];
-  // Local UI state for the Draft mode
   _pendingScenes?: BaserowLink[]; 
 };
 
 type BlueprintRole = {
   id: number;
-  name: string; // The Role Name (e.g., "Ariel")
-  activeScenes: BaserowLink[]; // The Default Chiclets
+  name: string; 
+  activeScenes: BaserowLink[]; 
 };
 
 interface CastingClientProps {
   assignments: AssignmentRow[];
   blueprintRoles: BlueprintRole[];
-  activeId: number; // Production ID
+  activeId: number; 
 }
 
 export default function CastingClient({ 
@@ -35,61 +34,50 @@ export default function CastingClient({
 }: CastingClientProps) {
   const router = useRouter();
   
-  // 1. Local State
+  // State
   const [rows, setRows] = useState<AssignmentRow[]>(assignments);
   const [isLoading, setIsLoading] = useState(false);
   const hasInitialized = useRef(false);
 
-  // 2. Sync Props to State (When Server Refreshes)
+  // Sync Props
   useEffect(() => {
     setRows(assignments);
   }, [assignments]);
 
-  // 3. 🟢 AUTO-INIT: If Grid is Empty, Create Rows
+  // 🟢 AUTO-INIT
   useEffect(() => {
     const initGrid = async () => {
-      // If we have rows, or already ran this, STOP.
       if (assignments.length > 0 || hasInitialized.current) return;
       
       hasInitialized.current = true;
       setIsLoading(true);
 
       try {
-        console.log("🚀 Grid empty. Auto-Initializing...");
         const result = await generateCastingRows(activeId);
         if (result.success) {
            router.refresh(); 
-           // isLoading stays true until new props arrive
         } else {
            setIsLoading(false);
         }
       } catch (e) {
-        console.error("Init Error", e);
         setIsLoading(false);
       }
     };
-
     initGrid();
   }, [assignments.length, activeId, router]);
 
-  // Stop loading spinner when data arrives
+  // Stop loading
   useEffect(() => {
-    if (assignments.length > 0 && isLoading) {
-      setIsLoading(false);
-    }
+    if (assignments.length > 0 && isLoading) setIsLoading(false);
   }, [assignments.length, isLoading]);
 
 
-  // 4. 🔵 DRAFT BUTTON: Fill Chiclets from Blueprint
+  // 🔵 DRAFT BUTTON (The Chiclet Fix)
   const handleDraftAutoFill = () => {
     const draftState = rows.map((row) => {
-      // Get the Role ID attached to this row
       const roleId = row.role?.[0]?.id;
-      
-      // Find the "Master" definition for this role
       const blueprint = blueprintRoles.find(bp => bp.id === roleId);
 
-      // If found, copy the Default Scenes into our pending slot
       if (blueprint && blueprint.activeScenes?.length > 0) {
         return {
           ...row,
@@ -102,94 +90,118 @@ export default function CastingClient({
     setRows(draftState);
   };
 
-  // 5. SAVE (Stub for tonight)
   const handleSave = async () => {
-    // This is where you'd call syncCastingChanges
-    // For tonight, we just want to see the visual chiclets working!
-    alert("Draft Chiclets are visible! (Save logic goes here)");
+    alert("This will save the Blue Chiclets to the database tomorrow!");
   };
 
   // --- RENDER ---
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-         <div className="animate-spin h-10 w-10 border-4 border-blue-600 rounded-full border-t-transparent"></div>
-         <p className="text-gray-500 font-medium">Initializing Casting Grid...</p>
+      <div className="flex flex-col items-center justify-center h-full space-y-4 text-zinc-400">
+         <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
+         <p className="text-xs uppercase tracking-widest">Initializing Grid...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* HEADER CONTROLS */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">Casting Grid</h2>
-          <p className="text-sm text-gray-500">{rows.length} Roles Found</p>
+    <div className="flex h-[calc(100vh-4rem)]"> {/* Full height minus header */}
+      
+      {/* LEFT: THE GRID */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
+        
+        {/* Toolbar */}
+        <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
+          <div>
+            <h2 className="text-lg font-bold text-white">Casting Grid</h2>
+            <p className="text-xs text-zinc-500 font-mono mt-1">
+              {rows.length} ROLES • {blueprintRoles.length} BLUEPRINTS
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={handleDraftAutoFill}
+              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all"
+            >
+              Draft Defaults
+            </button>
+            <button 
+              onClick={handleSave}
+              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all"
+            >
+              Save Changes
+            </button>
+          </div>
         </div>
-        <div className="space-x-3">
-          <button 
-            onClick={handleDraftAutoFill}
-            className="px-4 py-2 bg-indigo-100 text-indigo-700 font-semibold rounded hover:bg-indigo-200 transition-colors"
-          >
-            Draft: Auto-Fill Defaults
-          </button>
-          <button 
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            Save Updates
-          </button>
+
+        {/* Table Area */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+          <div className="border border-zinc-800 rounded-lg overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                <tr>
+                  <th className="p-3 border-b border-zinc-800 w-1/4">Role Identity</th>
+                  <th className="p-3 border-b border-zinc-800 w-1/4">Actor</th>
+                  <th className="p-3 border-b border-zinc-800">Scene Assignments</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+                {rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
+                    {/* ROLE */}
+                    <td className="p-3 text-sm font-medium text-zinc-200">
+                      {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
+                    </td>
+
+                    {/* ACTOR */}
+                    <td className="p-3 text-sm text-zinc-400">
+                      {row.person?.[0]?.value ? (
+                        <span className="text-emerald-400">{row.person[0].value}</span>
+                      ) : (
+                        <span className="text-zinc-600 italic">Unassigned</span>
+                      )}
+                    </td>
+
+                    {/* CHICLETS */}
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {row._pendingScenes && row._pendingScenes.length > 0 ? (
+                          row._pendingScenes.map(scene => (
+                            <span 
+                              key={scene.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+                            >
+                              {scene.value.split(" -")[0]} {/* Strip the show name for cleaner UI */}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-zinc-700 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                            Click &quot;Draft Defaults&quot; to load
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* THE GRID */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider">
-            <tr>
-              <th className="p-4 border-b">Role</th>
-              <th className="p-4 border-b">Actor</th>
-              <th className="p-4 border-b">Assigned Scenes (Chiclets)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50">
-                {/* ROLE NAME */}
-                <td className="p-4 font-medium text-gray-900 w-1/4">
-                  {row.role?.[0]?.value || <span className="text-red-400 italic">No Role</span>}
-                </td>
-
-                {/* ACTOR NAME */}
-                <td className="p-4 text-gray-600 w-1/4">
-                  {row.person?.[0]?.value || <span className="text-gray-400 italic">Unassigned</span>}
-                </td>
-
-                {/* SCENE CHICLETS */}
-                <td className="p-4">
-                  <div className="flex flex-wrap gap-2">
-                    {/* Render Pending/Draft Scenes */}
-                    {row._pendingScenes && row._pendingScenes.length > 0 ? (
-                      row._pendingScenes.map(scene => (
-                        <span 
-                          key={scene.id}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
-                        >
-                          {scene.value}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-gray-300 text-sm">No scenes</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* RIGHT: SIDEBAR (Placeholder for tomorrow) */}
+      <div className="w-80 border-l border-zinc-800 bg-zinc-900 flex flex-col">
+        <div className="p-4 border-b border-zinc-800">
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">Actor Bank</h3>
+        </div>
+        <div className="flex-1 p-4 flex flex-col items-center justify-center text-zinc-600 text-center space-y-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-users opacity-50"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <p className="text-sm">Audition Data Loading...</p>
+          <p className="text-xs opacity-50">(We will wire this up tomorrow!)</p>
+        </div>
       </div>
+
     </div>
   );
 }
