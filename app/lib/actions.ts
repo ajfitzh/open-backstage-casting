@@ -6,7 +6,6 @@ import { revalidatePath } from "next/cache";
 import { 
   getClassRoster, 
   fetchBaserow, 
-  getSeasons, 
   submitClassProposal, 
   claimBounty
 } from "@/app/lib/baserow";
@@ -247,9 +246,76 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
   return { success: true };
 }
 
-// --- CASTING ACTIONS (FIXED) ---
+// --- CASTING ACTIONS ---
 
-// 1. TOGGLE CHICLET
+// 1. GENERATE EMPTY ROWS (Initialize Grid) - OPTIMIZED PARALLEL
+export async function generateCastingRows(productionId: number) {
+  console.log(`[Action] Generating rows for Production ${productionId}`);
+
+  // A. Get Master Show ID
+  const production = await fetchBaserow(
+    `/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`
+  );
+  
+  if (!production) return { success: false, error: "Production not found" };
+
+  const masterShowId = production['Master Show Database']?.[0]?.id;
+  if (!masterShowId) return { success: false, error: "No Master Show linked" };
+
+  // B. Fetch Blueprint Roles (Strictly filtered by Master Show)
+  const blueprintRoles = await fetchBaserow(
+    `/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, 
+    {}, 
+    { 
+      // Prevent "Ghost Data" from other shows
+      [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
+      size: "200" 
+    }
+  );
+  
+  if (!Array.isArray(blueprintRoles)) return { success: false, error: "Failed to fetch blueprint" };
+
+  // C. Fetch Existing (Avoid Duplicates)
+  const existing = await fetchBaserow(
+    `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
+    {}, 
+    {
+      [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+      size: "200"
+    }
+  );
+  
+  const existingRoleIds = new Set(
+    Array.isArray(existing) 
+      ? existing.map((r: any) => r[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]?.[0]?.id) 
+      : []
+  );
+
+  // D. Create Missing Rows (Parallelized)
+  const rolesToCreate = blueprintRoles.filter(role => !existingRoleIds.has(role.id));
+  
+  if (rolesToCreate.length === 0) {
+    return { success: true, count: 0, message: "Already up to date" };
+  }
+
+  const createPromises = rolesToCreate.map(role => 
+    fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
+        [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id]
+      })
+    })
+  );
+
+  await Promise.all(createPromises);
+
+  revalidatePath("/casting");
+  return { success: true, count: rolesToCreate.length };
+}
+
+// 2. TOGGLE CHICLET (Single)
 export async function toggleSceneAssignment(
   studentId: number, sceneId: number, productionId: number, isActive: boolean
 ) {
@@ -257,7 +323,7 @@ export async function toggleSceneAssignment(
   const F = DB.SCENE_ASSIGNMENTS.FIELDS;
 
   if (isActive) {
-    // CREATE (Double Prefix Removed ✅)
+    // CREATE
     await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -265,7 +331,7 @@ export async function toggleSceneAssignment(
         [F.PERSON]: [studentId],      
         [F.SCENE]: [sceneId],        
         [F.PRODUCTION]: [productionId],
-        [F.SLOT_TYPE]: 3009 
+        [F.SLOT_TYPE]: 3007 // Default to Lead
       })
     });
   } else {
@@ -284,22 +350,16 @@ export async function toggleSceneAssignment(
   revalidatePath("/casting");
 }
 
-// app/lib/actions.ts
-
-// ... (keep imports)
-
-// 2. AUTO-ASSIGN SCENES (The "Smart" Version)
-// Logic: Read the CURRENT Production's Scenes -> Find Linked Roles -> Assign Actors
+// 3. AUTO-ASSIGN SCENES (Draft Mode)
 export async function initializeSceneAssignments(productionId: number) {
-  
-  // A. Fetch Scenes for THIS Production (With their linked Blueprint Roles)
+  // A. Fetch Scenes (With linked Blueprint Roles)
   const scenesRes = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, {
     [`filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has`]: productionId,
     "size": "200",
-    "user_field_names": "true" // Use names to easily find "Blueprint Roles" link
+    "user_field_names": "true" 
   });
 
-  // B. Fetch Current Cast Assignments
+  // B. Fetch Current Cast
   const castRes = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
     [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
     "size": "200",
@@ -308,12 +368,11 @@ export async function initializeSceneAssignments(productionId: number) {
 
   if (!Array.isArray(scenesRes) || !Array.isArray(castRes)) return { success: false, count: 0 };
 
-  // C. Build Map: Role ID -> Actor ID
-  // "If the scene needs Role #5, who is playing Role #5?"
+  // C. Map Role -> Actor
   const roleToActorMap = new Map();
   castRes.forEach((assignment: any) => {
-      const role = assignment['Performance Identity']?.[0]; // Link to Blueprint Role
-      const actor = assignment['Person']?.[0]; // Link to Person
+      const role = assignment['Performance Identity']?.[0]; 
+      const actor = assignment['Person']?.[0]; 
       if (role && actor) {
           roleToActorMap.set(role.id, actor.id);
       }
@@ -321,28 +380,23 @@ export async function initializeSceneAssignments(productionId: number) {
 
   const operations = [];
 
-  // D. Iterate Scenes
+  // D. Find Matches
   for (const scene of scenesRes) {
-      // Get the Roles tagged in this Scene
-      // (This field name might vary slightly in your DB, check schema or CSV header)
       const linkedRoles = scene['Blueprint Roles'] || []; 
-
       for (const role of linkedRoles) {
           const actorId = roleToActorMap.get(role.id);
-          
           if (actorId) {
-              // We have a match! Scene needs Ariel -> Jackson is Ariel -> Assign Jackson to Scene
               operations.push({
                   [DB.SCENE_ASSIGNMENTS.FIELDS.PERSON]: [actorId],
                   [DB.SCENE_ASSIGNMENTS.FIELDS.SCENE]: [scene.id],
                   [DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.SLOT_TYPE]: 3007 // "Lead" (or 3009 for Ensemble)
+                  [DB.SCENE_ASSIGNMENTS.FIELDS.SLOT_TYPE]: 3007 
               });
           }
       }
   }
 
-  // E. Execute Creation
+  // E. Execute (Parallelized Batches recommended, but sequential for safety here)
   let count = 0;
   for (const op of operations) {
     await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {
@@ -357,64 +411,48 @@ export async function initializeSceneAssignments(productionId: number) {
   return { success: true, count };
 }
 
-// app/lib/actions.ts
+// 4. SYNC CHANGES (Bulk Save)
+export async function syncCastingChanges(productionId: number, changes: any[]) {
+  const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
+  const F = DB.SCENE_ASSIGNMENTS.FIELDS;
 
-// ... (keep existing imports)
+  for (const change of changes) {
+      if (!change.studentId) continue;
 
-// 3. GENERATE EMPTY ROWS (Smart Version)
-export async function generateCastingRows(productionId: number) {
-  
-  // A. Get the Master Show ID from the Production
-  const production = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
-  const masterShowId = production['Master Show Database']?.[0]?.id;
+      // Additions
+      for (const sceneId of change.addedSceneIds) {
+          await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                  [F.PERSON]: [change.studentId],
+                  [F.SCENE]: [sceneId],
+                  [F.PRODUCTION]: [productionId]
+              })
+          });
+      }
 
-  if (!masterShowId) {
-      console.error("❌ Cannot initialize: No Master Show linked to this Production.");
-      return { success: false };
+      // Removals
+      for (const sceneId of change.removedSceneIds) {
+          const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
+              filter_type: "AND",
+              [`filter__${F.PERSON}__link_row_has`]: change.studentId,
+              [`filter__${F.SCENE}__link_row_has`]: sceneId,
+              [`filter__${F.PRODUCTION}__link_row_has`]: productionId
+          });
+
+          if (Array.isArray(existing) && existing.length > 0) {
+              await fetchBaserow(`/database/rows/table/${TABLE_ID}/${existing[0].id}/`, { method: "DELETE" });
+          }
+      }
   }
-
-  // B. Fetch ONLY Roles for this Master Show
-  const blueprintRoles = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { 
-    [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
-    size: "200" 
-  });
-  
-  if (!Array.isArray(blueprintRoles)) return { success: false };
-
-  // C. Fetch Existing Assignments (to avoid duplicates)
-  const existing = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
-    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    size: "200"
-  });
-  
-  const existingRoleIds = new Set(
-    Array.isArray(existing) 
-      ? existing.map((r: any) => r[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]?.[0]?.id) 
-      : []
-  );
-
-  // D. Create Missing Rows
-  let count = 0;
-  for (const role of blueprintRoles) {
-    if (!existingRoleIds.has(role.id)) {
-      await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-          [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id]
-        })
-      });
-      count++;
-    }
-  }
-
   revalidatePath("/casting");
-  return { success: true, count };
+  return { success: true };
 }
 
-// 4. CLEAR CASTING DATA
+// 5. CLEAR ALL CASTING DATA
 export async function clearCastingData(productionId: number) {
+  // Delete Assignments
   const sceneAssigns = await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {}, {
     [`filter__${DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
     size: "200"
@@ -426,6 +464,7 @@ export async function clearCastingData(productionId: number) {
     }
   }
 
+  // Delete Rows
   const castAssigns = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
     [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
     size: "200"
@@ -435,56 +474,6 @@ export async function clearCastingData(productionId: number) {
     for (const row of castAssigns) {
       await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${row.id}/`, { method: "DELETE" });
     }
-  }
-
-  revalidatePath("/casting");
-  return { success: true };
-}
-// app/lib/actions.ts
-
-// ... (previous imports)
-
-// 🟢 NEW: BULK SAVE ACTION
-export async function syncCastingChanges(productionId: number, changes: any[]) {
-  const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
-  const F = DB.SCENE_ASSIGNMENTS.FIELDS;
-
-  // We process sequentially to avoid rate limits, but you could Promise.all() small batches
-  for (const change of changes) {
-      if (!change.studentId) continue;
-
-      // 1. Handle ADDITIONS
-      for (const sceneId of change.addedSceneIds) {
-          await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                  [F.PERSON]: [change.studentId],
-                  [F.SCENE]: [sceneId],
-                  [F.PRODUCTION]: [productionId],
-                  [F.SLOT_TYPE]: 3007 // Default to Lead/Cast
-              })
-          });
-      }
-
-      // 2. Handle REMOVALS
-      for (const sceneId of change.removedSceneIds) {
-          // We must find the Row ID first. 
-          // Optimization: In a real app, we'd cache these IDs on the client, 
-          // but for now we fetch to be safe.
-          const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
-              filter_type: "AND",
-              [`filter__${F.PERSON}__link_row_has`]: change.studentId,
-              [`filter__${F.SCENE}__link_row_has`]: sceneId,
-              [`filter__${F.PRODUCTION}__link_row_has`]: productionId
-          });
-
-          if (Array.isArray(existing) && existing.length > 0) {
-              await fetchBaserow(`/database/rows/table/${TABLE_ID}/${existing[0].id}/`, { 
-                  method: "DELETE" 
-              });
-          }
-      }
   }
 
   revalidatePath("/casting");
