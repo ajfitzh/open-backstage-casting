@@ -497,6 +497,7 @@ export async function getScenes(productionId?: number) {
       order: parseInt(safeGet(row[F.ORDER], row.id)), 
       name: safeGet(row[F.SCENE_NAME], "Untitled Scene"),
       type: safeGet(row[F.SCENE_TYPE], "Scene").value || "Scene",
+      act: safeGet(row["field_6025"], "Act 1"),
       status: {
         music: safeGet(row[F.MUSIC_STATUS])?.value?.toLowerCase() || "new",
         dance: safeGet(row[F.DANCE_STATUS])?.value?.toLowerCase() || "new",

@@ -136,7 +136,8 @@ export default async function CastingPage() {
   const allScenes = (Array.isArray(allScenesRaw) ? allScenesRaw : []).map((row: any) => ({
     id: row.id,
     name: safeVal(row[DB.SCENES.FIELDS.SCENE_NAME] || "Scene"), // And this
-    order: parseFloat(row[DB.SCENES.FIELDS.ORDER] || row.id)
+    order: parseFloat(row[DB.SCENES.FIELDS.ORDER] || row.id),
+    act: safeVal(row["field_6025"]) || "Act 1" // ✅ Pass Act to Client
   }));
 
   return (
