@@ -12,23 +12,15 @@ export default async function CastingPage() {
   if (!productionId) redirect("/");
   const prodIdNum = parseInt(productionId);
 
-  // 1. FETCH PRODUCTION
-  const production = await fetchBaserow(
-    `/database/rows/table/${DB.PRODUCTIONS.ID}/${prodIdNum}/`
-  );
-  const masterShowId = production[DB.PRODUCTIONS.FIELDS.MASTER_SHOW_DATABASE]?.[0]?.id;
-  if (!masterShowId) return <div>Error: No Master Show linked.</div>;
-
-  // 2. PARALLEL FETCH (Assignments, Blueprints, Scenes, AND Auditions)
-  const [assignmentsRaw, blueprintRaw, sceneAssignsRaw, allScenesRaw, auditionsRaw] = await Promise.all([
+  // 1. PARALLEL FETCH
+  // We fetch assignments/blueprints/scenes as usual
+  // BUT we replace the raw Auditions fetch with a targeted filtered list
+  const [assignmentsRaw, blueprintRaw, sceneAssignsRaw, allScenesRaw, auditioneesRaw] = await Promise.all([
     fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
       [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: prodIdNum,
       "size": "200"
     }),
-    fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, {
-      [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
-      "size": "200"
-    }),
+    fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { "size": "200" }),
     fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {}, {
       [`filter__${DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: prodIdNum,
       "size": "200",
@@ -39,7 +31,7 @@ export default async function CastingPage() {
       "order_by": `field_${DB.SCENES.FIELDS.ORDER}`, 
       "size": "200"
     }),
-    // E. AUDITIONS (New!)
+    // ✅ FILTERED AUDITIONEES (Only for this show)
     fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {}, {
       [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: prodIdNum,
       "size": "200",
@@ -47,21 +39,50 @@ export default async function CastingPage() {
     })
   ]);
 
-  // 3. MAP SCENES & AUDITIONS
-  const allScenes = (Array.isArray(allScenesRaw) ? allScenesRaw : []).map((row: any) => ({
-    id: row.id,
-    name: row[DB.SCENES.FIELDS.SCENE_NAME] || "Scene",
-    order: parseFloat(row[DB.SCENES.FIELDS.ORDER] || row.id)
-  }));
-
-  // Audition Lookup: StudentID -> AuditionRow
-  const auditionMap: Record<number, any> = {};
-  (Array.isArray(auditionsRaw) ? auditionsRaw : []).forEach((row: any) => {
+  // 2. MAP ROSTER
+  // We create a clean "Roster" object for the sidebar
+  const roster = (Array.isArray(auditioneesRaw) ? auditioneesRaw : []).map((row: any) => {
+    // Safety check for performer linkage
     const studentId = row['Performer']?.[0]?.id;
-    if (studentId) auditionMap[studentId] = row;
+    const name = row['Performer']?.[0]?.value || "Unknown Actor";
+    
+    return {
+      id: studentId || Math.random(), // Fallback ID
+      name: name,
+      avatar: row['Headshot']?.[0]?.url || null,
+      
+      // Scores for Sorting
+      vocalScore: parseFloat(row['Vocal Score'] || 0),
+      actingScore: parseFloat(row['Acting Score'] || 0),
+      danceScore: parseFloat(row['Dance Score'] || 0),
+      
+      // Full Data for Modal
+      auditionInfo: {
+        avatar: row['Headshot']?.[0]?.url,
+        height: row['Height'],
+        age: row['Age'],
+        vocalRange: row['Vocal Range'],
+        song: row['Audition Song'],
+        monologue: row['Monologue'],
+        conflicts: row['Conflicts'],
+        tenure: "5 Shows", // Placeholder or fetch from People table
+        dob: "Unknown", 
+        pastRoles: [] 
+      },
+      auditionGrades: {
+        vocal: parseFloat(row['Vocal Score'] || 0),
+        acting: parseFloat(row['Acting Score'] || 0),
+        dance: parseFloat(row['Dance Score'] || 0),
+        presence: parseFloat(row['Stage Presence Score'] || 0),
+        vocalNotes: row['Music Notes'],
+        actingNotes: row['Acting Notes'],
+        choreoNotes: row['Choreography Notes'],
+        adminNotes: row['Admin Notes']
+      }
+    };
   });
 
-  // Scene Assignments Lookup
+  // 3. MAP GRID (Standard logic)
   const personSceneMap = new Map();
   (Array.isArray(sceneAssignsRaw) ? sceneAssignsRaw : []).forEach((row: any) => {
     const personId = row['Person']?.[0]?.id;
@@ -72,16 +93,16 @@ export default async function CastingPage() {
     }
   });
 
-  // 4. CLEAN DATA
+  // We also create a lookup map to inject audition data into the grid cards
+  const auditionMap = new Map(roster.map((r: any) => [r.id, r]));
+
   const F_ASSIGN = DB.ASSIGNMENTS.FIELDS;
   const F_BP = DB.BLUEPRINT_ROLES.FIELDS;
 
   const cleanAssignments = (Array.isArray(assignmentsRaw) ? assignmentsRaw : []).map((row: any) => {
     const personObj = row[F_ASSIGN.PERSON]?.[0];
     const personId = personObj?.id;
-    
-    // Inject Audition Data if exists
-    const auditionData = personId ? auditionMap[personId] : null;
+    const rosterData: any = personId ? auditionMap.get(personId) : null;
 
     return {
       id: row.id,
@@ -90,47 +111,32 @@ export default async function CastingPage() {
       production: row[F_ASSIGN.PRODUCTION],
       savedScenes: personId ? (personSceneMap.get(personId) || []) : [],
       
-      // Pass clean audition data for the Modal
-      auditionInfo: auditionData ? {
-        avatar: auditionData['Headshot']?.[0]?.url,
-        height: auditionData['Height'],
-        age: auditionData['Age'],
-        vocalRange: auditionData['Vocal Range'], // Check your DB field name for this
-        song: auditionData['Audition Song'],
-        monologue: auditionData['Monologue'],
-        conflicts: auditionData['Conflicts'],
-        tenure: "5 Shows", // You might need to calc this from DB.PEOPLE
-        dob: "Unknown",    // You might need to fetch from DB.PEOPLE
-        pastRoles: []      // Fetch from DB.PEOPLE if needed
-      } : null,
-      
-      auditionGrades: auditionData ? {
-        vocal: parseInt(auditionData['Vocal Score'] || 0),
-        acting: parseInt(auditionData['Acting Score'] || 0),
-        dance: parseInt(auditionData['Dance Score'] || 0),
-        presence: parseInt(auditionData['Stage Presence Score'] || 0),
-        vocalNotes: auditionData['Music Notes'],
-        actingNotes: auditionData['Acting Notes'],
-        choreoNotes: auditionData['Choreography Notes'],
-        adminNotes: auditionData['Admin Notes']
-      } : null
+      // Inject Roster Data
+      auditionInfo: rosterData ? rosterData.auditionInfo : null,
+      auditionGrades: rosterData ? rosterData.auditionGrades : null
     };
   });
 
   const cleanBlueprint = (Array.isArray(blueprintRaw) ? blueprintRaw : []).map((row: any) => ({
     id: row.id,
     name: row[F_BP.ROLE_NAME],
+    type: row[F_BP.ROLE_TYPE]?.value || "Role",
     activeScenes: row[F_BP.ACTIVE_SCENES]
   }));
 
+  const allScenes = (Array.isArray(allScenesRaw) ? allScenesRaw : []).map((row: any) => ({
+    id: row.id,
+    name: row[DB.SCENES.FIELDS.SCENE_NAME] || "Scene",
+    order: parseFloat(row[DB.SCENES.FIELDS.ORDER] || row.id)
+  }));
+
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-white">
-      <CastingClient 
-        activeId={prodIdNum}
-        assignments={cleanAssignments}
-        blueprintRoles={cleanBlueprint}
-        allScenes={allScenes}
-      />
-    </div>
+    <CastingClient 
+      activeId={prodIdNum}
+      assignments={cleanAssignments}
+      blueprintRoles={cleanBlueprint}
+      allScenes={allScenes}
+      roster={roster} // <--- Passing the filtered roster
+    />
   );
 }
