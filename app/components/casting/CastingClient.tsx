@@ -9,7 +9,9 @@ import {
 import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
 import CallbackActorModal from './CallbackActorModal';
 
-// --- TYPES ---
+// ============================================================================
+// 1. TYPES
+// ============================================================================
 type BaserowLink = { id: number; value: string };
 
 type AssignmentRow = {
@@ -45,9 +47,9 @@ interface CastingClientProps {
   activeId: number; 
 }
 
-// ------------------------------------------------------------------
-// 🧩 SUB-COMPONENT: ROSTER SIDEBAR (The Left Column)
-// ------------------------------------------------------------------
+// ============================================================================
+// 2. SUB-COMPONENT: ROSTER SIDEBAR
+// ============================================================================
 function RosterSidebar({ 
   students, 
   onSelect, 
@@ -60,7 +62,6 @@ function RosterSidebar({
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"name" | "score">("name");
 
-  // Filter & Sort Logic
   const filtered = students
     .filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
@@ -74,14 +75,12 @@ function RosterSidebar({
 
   return (
     <aside className="w-72 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0 h-full">
-      {/* HEADER */}
       <div className="p-4 border-b border-zinc-800 bg-zinc-900/20">
         <div className="flex justify-between items-end mb-3">
            <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500">Audition Pool</h2>
            <span className="text-xs font-bold text-zinc-400">{filtered.length} Actors</span>
         </div>
         
-        {/* SEARCH & SORT TOOLS */}
         <div className="flex gap-2">
             <div className="relative flex-1">
                 <Search size={12} className="absolute left-2 top-2 text-zinc-600" />
@@ -96,14 +95,12 @@ function RosterSidebar({
             <button 
                 onClick={() => setSort(s => s === "name" ? "score" : "name")}
                 className={`p-1.5 border rounded transition-colors ${sort === 'score' ? 'bg-blue-500/10 border-blue-500/50 text-blue-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'}`}
-                title={`Sort by ${sort === 'name' ? 'Score' : 'Name'}`}
             >
                 <ArrowUpDown size={12} />
             </button>
         </div>
       </div>
 
-      {/* STUDENT LIST */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
         {filtered.map(student => {
            const count = assignedCounts[student.id] || 0;
@@ -112,17 +109,16 @@ function RosterSidebar({
                 key={student.id}
                 draggable="true"
                 onClick={() => onSelect(student)}
+                // ✅ VITAL: Sets data for the drop handler
                 onDragStart={(e) => e.dataTransfer.setData("actorId", String(student.id))}
                 className="group bg-zinc-900 border border-zinc-800/50 p-2 rounded-xl flex items-center gap-3 cursor-grab active:cursor-grabbing hover:bg-zinc-800 hover:border-zinc-700 transition-all shadow-sm"
             >
-                {/* AVATAR */}
                 <div className="relative w-9 h-9 shrink-0">
                     <img 
                         src={student.avatar || "https://placehold.co/100x100/222/888?text=?"} 
                         alt={student.name} 
-                        className="w-full h-full rounded-full object-cover border border-white/10 group-hover:border-white/30 transition-colors"
+                        className="w-full h-full rounded-full object-cover border border-white/10"
                     />
-                    {/* ASSIGNED BADGE */}
                     {count > 0 && (
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full text-[9px] font-bold flex items-center justify-center text-white border-2 border-zinc-900 shadow-md">
                             {count}
@@ -130,11 +126,8 @@ function RosterSidebar({
                     )}
                 </div>
                 
-                {/* INFO */}
                 <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-zinc-300 truncate group-hover:text-white transition-colors">{student.name}</div>
-                    
-                    {/* MINI SCORES (Visual Indicator) */}
+                    <div className="text-xs font-bold text-zinc-300 truncate group-hover:text-white">{student.name}</div>
                     <div className="flex items-center gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
                        <div title={`Vocal: ${student.vocalScore}`} className={`w-1.5 h-1.5 rounded-full ${student.vocalScore >= 4 ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
                        <div title={`Acting: ${student.actingScore}`} className={`w-1.5 h-1.5 rounded-full ${student.actingScore >= 4 ? 'bg-purple-500' : 'bg-zinc-700'}`} />
@@ -142,7 +135,6 @@ function RosterSidebar({
                     </div>
                 </div>
                 
-                {/* HOVER ACTION */}
                 <div className="opacity-0 group-hover:opacity-100 text-zinc-500 -mr-1 transition-opacity">
                    <MoreHorizontal size={14} />
                 </div>
@@ -154,9 +146,116 @@ function RosterSidebar({
   );
 }
 
-// ------------------------------------------------------------------
-// 🚀 MAIN CLIENT COMPONENT
-// ------------------------------------------------------------------
+// ============================================================================
+// 3. SUB-COMPONENT: CHEMISTRY WORKSPACE
+// ============================================================================
+// Metrics Config
+const METRICS = [
+    { label: "Vocal", getValue: (a: any) => a.vocalScore, format: (v: any) => <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-emerald-500/20 text-emerald-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>{Number(v || 0).toFixed(1)}</span> },
+    { label: "Acting", getValue: (a: any) => a.actingScore, format: (v: any) => <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-purple-500/20 text-purple-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>{Number(v || 0).toFixed(1)}</span> },
+    { label: "Height", getValue: (a: any) => a.height || "-", format: (v: any) => <div className="flex justify-center items-center gap-1 font-mono text-zinc-400 text-xs"><Ruler size={10} className="opacity-50" /> {v}</div> },
+    { label: "Age", getValue: (a: any) => a.age || "?", format: (v: any) => <span className="text-zinc-400 text-xs">{v}</span> }
+  ];
+  
+function ChemistryWorkspace({ roles = [], onRemoveActor, onDropActor }: { roles: any[], onRemoveActor: any, onDropActor: any }) {
+    const [activeFilter, setActiveFilter] = useState("All");
+    const visibleRoles = roles.filter((r) => activeFilter === "All" || (r.type && String(r.type).includes(activeFilter)));
+  
+    return (
+      <div className="h-full flex flex-col bg-zinc-950 relative overflow-hidden">
+        <header className="px-4 py-3 border-b border-white/5 bg-zinc-900/50 flex flex-row justify-between items-center gap-4 shrink-0 backdrop-blur-md z-30">
+           <div className="flex items-center gap-4 w-full">
+              <h1 className="text-sm font-black italic uppercase flex items-center gap-2 text-zinc-400">
+                  <Scale className="text-purple-500" size={16} /> Head-to-Head
+              </h1>
+              <div className="h-6 w-px bg-white/10 mx-2"></div>
+              <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-white/5">
+                  {["All", "Lead", "Supporting", "Featured", "Ensemble"].map(filter => (
+                      <button key={filter} onClick={() => setActiveFilter(filter)} className={`px-3 py-1 text-[10px] font-bold uppercase rounded transition-all ${activeFilter === filter ? 'bg-purple-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>{filter}</button>
+                  ))}
+              </div>
+           </div>
+        </header>
+  
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-zinc-950 space-y-12 pb-24 md:pb-8">
+              {visibleRoles.length === 0 && (
+                  <div className="flex flex-col items-center justify-center text-zinc-600 opacity-50 min-h-[300px]"><Filter size={48} className="mb-4" /><p>No roles match this filter.</p></div>
+              )}
+  
+              {visibleRoles.map((role) => (
+                 <div key={role.id} 
+                      className="group relative"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => onDropActor(e, String(role.id))}
+                 >
+                    <div className="flex items-center gap-3 mb-4 pl-2 border-l-2 border-purple-500/50">
+                      <h2 className="text-xl font-black uppercase text-white tracking-tighter italic">{role.name}</h2>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-white/5">{role.type || "Role"}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-white/5">{role.actors?.length || 0} Candidates</span>
+                    </div>
+  
+                    <div className={`rounded-xl border border-white/5 bg-zinc-900/20 overflow-hidden transition-all ${(!role.actors || role.actors.length === 0) ? 'border-dashed border-zinc-800 h-32 flex items-center justify-center' : ''}`}>
+                      {(!role.actors || role.actors.length === 0) ? (
+                          <div className="text-zinc-600 flex items-center gap-2">
+                              <Users size={20} />
+                              <span className="text-xs font-bold uppercase tracking-wider">Drag candidates here</span>
+                          </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr>
+                                <th className="p-4 w-24 bg-zinc-900/50 border-b border-r border-white/5 text-[10px] font-black uppercase text-zinc-500 tracking-wider text-right align-bottom sticky left-0 z-10 backdrop-blur-sm">Candidate</th>
+                                {role.actors.map((actor: any) => (
+                                    <th key={actor.id} className="p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col">
+                                      <div className="relative aspect-[3/4] rounded-lg overflow-hidden border border-white/10 shadow-lg mb-2">
+                                          <img src={actor.headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" alt="" />
+                                          <button onClick={() => onRemoveActor(role.id, actor.id)} className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/col:opacity-100 transition-opacity z-20"><X size={14} /></button>
+                                      </div>
+                                      <div className="text-center px-1"><p className="text-sm font-black leading-tight line-clamp-2 text-white">{actor.name}</p></div>
+                                    </th>
+                                ))}
+                                <th className="p-4 border-b border-white/5 min-w-[50px] bg-zinc-900/30 border-dashed border-l border-white/10"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-xs font-bold text-zinc-300">
+                                {METRICS.map((metric, i) => (
+                                    <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
+                                        <td className="p-3 border-b border-r border-white/5 text-right text-zinc-500 uppercase text-[10px] sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">{metric.label}</td>
+                                        {role.actors.map((actor: any) => (<td key={actor.id} className="p-3 border-b border-r border-white/5 text-center">{metric.format(metric.getValue(actor))}</td>))}
+                                        <td className="border-b border-white/5 bg-zinc-900/30 border-l border-dashed border-white/10"></td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-red-900/5">
+                                    <td className="p-3 border-r border-white/5 text-right text-red-500/70 font-black uppercase text-[10px] align-top pt-4 sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">Conflicts</td>
+                                    {role.actors.map((actor: any) => (
+                                        <td key={actor.id} className="p-3 border-r border-white/5 text-center align-top">
+                                            {(actor.conflicts?.length > 0) ? (
+                                                <div className="flex flex-col gap-1 items-center">
+                                                    {actor.conflicts.slice(0, 3).map((c: string, i: number) => (
+                                                        <div key={i} className="flex items-center gap-1 text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded w-fit max-w-[140px] truncate"><AlertOctagon size={8} className="shrink-0" /> {c}</div>
+                                                    ))}
+                                                </div>
+                                            ) : <span className="text-[10px] text-emerald-500/50 flex items-center justify-center gap-1"><Check size={10}/> Clear</span>}
+                                        </td>
+                                    ))}
+                                    <td className="bg-zinc-900/30 border-l border-dashed border-white/10"></td>
+                                </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                 </div>
+              ))}
+        </div>
+      </div>
+    );
+}
+
+// ============================================================================
+// 4. MAIN CLIENT COMPONENT
+// ============================================================================
 export default function CastingClient({ 
   assignments = [], 
   blueprintRoles = [], 
@@ -175,7 +274,6 @@ export default function CastingClient({
 
   useEffect(() => { setRows(assignments); }, [assignments]);
 
-  // Init Grid
   useEffect(() => {
     const initGrid = async () => {
       if (assignments.length > 0 || hasInitialized.current) return;
@@ -194,7 +292,6 @@ export default function CastingClient({
     if (assignments.length > 0 && isLoading) setIsLoading(false);
   }, [assignments.length, isLoading]);
 
-  // Actions
   const handleDraftAutoFill = () => {
     const draftState = rows.map((row) => {
       const roleId = row.role?.[0]?.id;
@@ -230,7 +327,67 @@ export default function CastingClient({
     setIsSaving(false);
   };
 
-  // Helper: Get student track
+  // ✅ HANDLER: DROP
+  const handleDropAssignment = (e: React.DragEvent, roleId: number) => {
+    e.preventDefault();
+    const actorIdStr = e.dataTransfer.getData("actorId");
+    if (!actorIdStr) return;
+    
+    const actorId = parseInt(actorIdStr);
+    const actor = roster.find(r => r.id === actorId);
+    if (!actor) return;
+
+    setRows(prevRows => prevRows.map(row => {
+      if (row.id === roleId) {
+        // Create a Baserow-friendly Person object
+        const newPerson = { id: actor.id, value: actor.name };
+        
+        return {
+          ...row,
+          person: [newPerson], // Replaces existing actor
+          // We update the cached info so the UI updates instantly
+          auditionInfo: actor.auditionInfo,
+          auditionGrades: actor.auditionGrades
+        };
+      }
+      return row;
+    }));
+  };
+
+  const handleRemoveActor = (roleId: number, actorId: number) => {
+    setRows(prev => prev.map(r => {
+      if (r.id === roleId) {
+         return { ...r, person: r.person.filter(p => p.id !== actorId) };
+      }
+      return r;
+    }));
+  };
+
+  const getChemistryData = () => {
+    return rows.map(row => {
+        const bp = blueprintRoles.find(b => b.id === row.role?.[0]?.id);
+        return {
+            id: row.id,
+            name: row.role?.[0]?.value || "Unknown",
+            type: bp?.type || "Role", 
+            actors: row.person?.map(p => {
+                // We try to find enhanced data if available, fallback to basic
+                const richData = roster.find(r => r.id === p.id);
+                return {
+                    id: p.id,
+                    name: p.value,
+                    headshot: richData?.avatar || row.auditionInfo?.avatar,
+                    vocalScore: richData?.vocalScore || row.auditionGrades?.vocal,
+                    actingScore: richData?.actingScore || row.auditionGrades?.acting,
+                    height: richData?.auditionInfo?.height || row.auditionInfo?.height,
+                    age: richData?.auditionInfo?.age || row.auditionInfo?.age,
+                    conflicts: (richData?.auditionInfo?.conflicts || row.auditionInfo?.conflicts)?.split(',') || []
+                };
+            }) || []
+        };
+    });
+  };
+
   const getStudentTimeline = (studentId: number) => {
     const studentRoles = rows.filter(r => r.person?.some(p => p.id === studentId));
     return allScenes.map(scene => {
@@ -248,13 +405,14 @@ export default function CastingClient({
     });
   };
 
-  // Count Assignments for Roster Badge
   const assignedCounts = rows.reduce((acc, row) => {
-      row.person?.forEach(p => {
-          acc[p.id] = (acc[p.id] || 0) + 1;
-      });
+      row.person?.forEach(p => { acc[p.id] = (acc[p.id] || 0) + 1; });
       return acc;
   }, {} as Record<number, number>);
+
+  const activeStudentRow = selectedStudent 
+    ? rows.find(r => r.person?.some(p => p.id === selectedStudent.id)) 
+    : null;
 
   if (isLoading) {
     return (
@@ -268,17 +426,16 @@ export default function CastingClient({
   return (
     <div className="flex h-[calc(100vh-4rem)] relative">
       
-      {/* 1. LEFT SIDEBAR: ROSTER */}
+      {/* 1. ROSTER */}
       <RosterSidebar 
         students={roster} 
         onSelect={setSelectedStudent} 
         assignedCounts={assignedCounts} 
       />
 
-      {/* 2. MAIN CONTENT */}
+      {/* 2. CONTENT */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
         
-        {/* TOOLBAR */}
         <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
           <div className="flex items-center gap-6">
             <div>
@@ -288,7 +445,6 @@ export default function CastingClient({
                 </p>
             </div>
             
-            {/* VIEW TOGGLE */}
             <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
                 <button 
                     onClick={() => setViewMode("matrix")}
@@ -322,7 +478,6 @@ export default function CastingClient({
           </div>
         </div>
 
-        {/* CONTENT */}
         {viewMode === "matrix" ? (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
                 <div className="border border-zinc-800 rounded-lg overflow-hidden">
@@ -345,7 +500,22 @@ export default function CastingClient({
                             <td className="p-3 text-sm font-medium text-zinc-200 sticky left-0 bg-zinc-950 group-hover:bg-zinc-900 transition-colors z-10 border-r border-zinc-800/50">
                                 {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
                             </td>
-                            <td className="p-3 text-sm text-zinc-400">
+                            
+                            {/* ✅ DROP ZONE CELL */}
+                            <td 
+                                className="p-3 text-sm text-zinc-400 transition-colors"
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.add('bg-blue-500/20');
+                                }}
+                                onDragLeave={(e) => {
+                                    e.currentTarget.classList.remove('bg-blue-500/20');
+                                }}
+                                onDrop={(e) => {
+                                    e.currentTarget.classList.remove('bg-blue-500/20');
+                                    handleDropAssignment(e, row.id);
+                                }}
+                            >
                                 {row.person?.[0] ? (
                                 <button 
                                     onClick={() => {
@@ -357,9 +527,12 @@ export default function CastingClient({
                                     {row.person[0].value}
                                 </button>
                                 ) : (
-                                <span className="text-zinc-600 italic">Unassigned</span>
+                                <span className="text-zinc-600 italic border-dashed border border-zinc-700 px-2 py-1 rounded text-xs block text-center">
+                                    Drop Actor Here
+                                </span>
                                 )}
                             </td>
+
                             <td className="p-3">
                                 <div className="flex items-center gap-[2px]">
                                 {allScenes.map(scene => {
@@ -368,7 +541,13 @@ export default function CastingClient({
                                     <div 
                                         key={scene.id}
                                         title={`${scene.name} (${isActive ? 'Active' : 'Out'})`}
-                                        className={`w-2.5 h-4 rounded-[1px] transition-all duration-300 ${isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-emerald-500/80') : 'bg-zinc-800/50 hover:bg-zinc-700'}`}
+                                        className={`
+                                        w-2.5 h-4 rounded-[1px] transition-all duration-300
+                                        ${isActive 
+                                            ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-emerald-500/80') 
+                                            : 'bg-zinc-800/50 hover:bg-zinc-700'
+                                        }
+                                        `}
                                     />
                                     );
                                 })}
@@ -382,12 +561,16 @@ export default function CastingClient({
                 </div>
             </div>
         ) : (
-            // Insert Chemistry Workspace Logic Here
-            <div className="flex items-center justify-center h-full text-zinc-500">Chemistry View Placeholder</div>
+            // ✅ CHEMISTRY VIEW (With Drop Support)
+            <ChemistryWorkspace 
+                roles={getChemistryData()} 
+                onRemoveActor={handleRemoveActor}
+                onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))}
+            />
         )}
       </div>
 
-      {/* 3. MODAL: GLOBAL (Works for Roster Click OR Grid Click) */}
+      {/* 3. GLOBAL MODAL */}
       {selectedStudent && (
         <CallbackActorModal
           actor={{
