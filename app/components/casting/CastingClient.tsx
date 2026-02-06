@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { generateCastingRows } from '@/app/lib/actions';
+import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
 
 // --- TYPES ---
 type BaserowLink = { id: number; value: string };
@@ -12,7 +12,8 @@ type AssignmentRow = {
   role: BaserowLink[];   
   person: BaserowLink[];
   production: { id: number }[];
-  _pendingScenes?: BaserowLink[]; 
+  savedScenes?: BaserowLink[];   // Existing DB Data
+  _pendingScenes?: BaserowLink[]; // Draft Data
 };
 
 type BlueprintRole = {
@@ -34,67 +35,85 @@ export default function CastingClient({
 }: CastingClientProps) {
   const router = useRouter();
   
-  // State
   const [rows, setRows] = useState<AssignmentRow[]>(assignments);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const hasInitialized = useRef(false);
 
-  // Sync Props
+  // Sync Props to State (Reset on Refresh)
   useEffect(() => {
     setRows(assignments);
   }, [assignments]);
 
-  // 🟢 AUTO-INIT
+  // 🟢 AUTO-INIT GRID
   useEffect(() => {
     const initGrid = async () => {
       if (assignments.length > 0 || hasInitialized.current) return;
-      
       hasInitialized.current = true;
       setIsLoading(true);
-
       try {
         const result = await generateCastingRows(activeId);
-        if (result.success) {
-           router.refresh(); 
-        } else {
-           setIsLoading(false);
-        }
-      } catch (e) {
-        setIsLoading(false);
-      }
+        if (result.success) router.refresh(); 
+        else setIsLoading(false);
+      } catch (e) { setIsLoading(false); }
     };
     initGrid();
   }, [assignments.length, activeId, router]);
 
-  // Stop loading
   useEffect(() => {
     if (assignments.length > 0 && isLoading) setIsLoading(false);
   }, [assignments.length, isLoading]);
 
 
-  // 🔵 DRAFT BUTTON (The Chiclet Fix)
+  // 🔵 DRAFT BUTTON (Applies Blueprint -> Pending)
   const handleDraftAutoFill = () => {
     const draftState = rows.map((row) => {
       const roleId = row.role?.[0]?.id;
       const blueprint = blueprintRoles.find(bp => bp.id === roleId);
 
       if (blueprint && blueprint.activeScenes?.length > 0) {
-        return {
-          ...row,
-          _pendingScenes: blueprint.activeScenes 
-        };
+        return { ...row, _pendingScenes: blueprint.activeScenes };
       }
       return row;
     });
-
     setRows(draftState);
   };
 
+  // 💾 SAVE BUTTON (Calculates Diff -> Server Action)
   const handleSave = async () => {
-    alert("This will save the Blue Chiclets to the database tomorrow!");
-  };
+    setIsSaving(true);
+    
+    const changes = rows
+      .filter(row => row._pendingScenes) // Only process rows with draft changes
+      .map(row => {
+        const studentId = row.person?.[0]?.id;
+        if (!studentId) return null;
 
-  // --- RENDER ---
+        // Calculate IDs
+        const pendingIds = row._pendingScenes!.map(s => s.id);
+        const savedIds = row.savedScenes?.map(s => s.id) || [];
+
+        // Find Diff
+        const added = pendingIds.filter(id => !savedIds.includes(id));
+        const removed = savedIds.filter(id => !pendingIds.includes(id));
+
+        if (added.length === 0 && removed.length === 0) return null;
+
+        return {
+          studentId,
+          addedSceneIds: added,
+          removedSceneIds: removed
+        };
+      })
+      .filter(Boolean); // Remove nulls
+
+    if (changes.length > 0) {
+      await syncCastingChanges(activeId, changes);
+      router.refresh(); // Reloads page, clearing _pendingScenes and updating savedScenes
+    }
+    
+    setIsSaving(false);
+  };
 
   if (isLoading) {
     return (
@@ -106,9 +125,8 @@ export default function CastingClient({
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]"> {/* Full height minus header */}
-      
-      {/* LEFT: THE GRID */}
+    <div className="flex h-[calc(100vh-4rem)]">
+      {/* GRID CONTAINER */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
         
         {/* Toolbar */}
@@ -128,9 +146,10 @@ export default function CastingClient({
             </button>
             <button 
               onClick={handleSave}
-              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all"
+              disabled={isSaving}
+              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50"
             >
-              Save Changes
+              {isSaving ? "Saving..." : "Save Changes"}
             </button>
           </div>
         </div>
@@ -147,61 +166,68 @@ export default function CastingClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
-                {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
-                    {/* ROLE */}
-                    <td className="p-3 text-sm font-medium text-zinc-200">
-                      {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
-                    </td>
+                {rows.map((row) => {
+                  // Determine what to show: Pending (Blue) or Saved (Gray)
+                  const displayScenes = row._pendingScenes || row.savedScenes || [];
+                  const isDraft = !!row._pendingScenes;
 
-                    {/* ACTOR */}
-                    <td className="p-3 text-sm text-zinc-400">
-                      {row.person?.[0]?.value ? (
-                        <span className="text-emerald-400">{row.person[0].value}</span>
-                      ) : (
-                        <span className="text-zinc-600 italic">Unassigned</span>
-                      )}
-                    </td>
+                  return (
+                    <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
+                      {/* ROLE */}
+                      <td className="p-3 text-sm font-medium text-zinc-200">
+                        {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
+                      </td>
 
-                    {/* CHICLETS */}
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        {row._pendingScenes && row._pendingScenes.length > 0 ? (
-                          row._pendingScenes.map(scene => (
-                            <span 
-                              key={scene.id}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
-                            >
-                              {scene.value.split(" -")[0]} {/* Strip the show name for cleaner UI */}
-                            </span>
-                          ))
+                      {/* ACTOR */}
+                      <td className="p-3 text-sm text-zinc-400">
+                        {row.person?.[0]?.value ? (
+                          <span className="text-emerald-400">{row.person[0].value}</span>
                         ) : (
-                          <span className="text-zinc-700 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                            Click &quot;Draft Defaults&quot; to load
-                          </span>
+                          <span className="text-zinc-600 italic">Unassigned</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* CHICLETS */}
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {displayScenes.length > 0 ? (
+                            displayScenes.map(scene => (
+                              <span 
+                                key={scene.id}
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm transition-all
+                                  ${isDraft 
+                                    ? "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.1)]" // Blue for Draft
+                                    : "bg-zinc-700/30 text-zinc-400 border-zinc-700/50" // Gray for Saved
+                                  }`}
+                              >
+                                {scene.value.split(" -")[0]}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-zinc-700 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                              No scenes assigned
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      {/* RIGHT: SIDEBAR (Placeholder for tomorrow) */}
+      {/* SIDEBAR PLACEHOLDER */}
       <div className="w-80 border-l border-zinc-800 bg-zinc-900 flex flex-col">
         <div className="p-4 border-b border-zinc-800">
           <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">Actor Bank</h3>
         </div>
         <div className="flex-1 p-4 flex flex-col items-center justify-center text-zinc-600 text-center space-y-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-users opacity-50"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <p className="text-sm">Audition Data Loading...</p>
-          <p className="text-xs opacity-50">(We will wire this up tomorrow!)</p>
+           <p className="text-sm">Audition Data Loading...</p>
         </div>
       </div>
-
     </div>
   );
 }
