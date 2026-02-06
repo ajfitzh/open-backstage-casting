@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
+import CallbackActorModal from './CallbackActorModal';
 
 // --- TYPES ---
 type BaserowLink = { id: number; value: string };
@@ -14,6 +15,9 @@ type AssignmentRow = {
   production: { id: number }[];
   savedScenes?: BaserowLink[];   
   _pendingScenes?: BaserowLink[]; 
+  // Added to support the Profile Modal
+  auditionInfo?: any; 
+  auditionGrades?: any;
 };
 
 type BlueprintRole = {
@@ -31,7 +35,7 @@ type Scene = {
 interface CastingClientProps {
   assignments: AssignmentRow[];
   blueprintRoles: BlueprintRole[];
-  allScenes: Scene[]; // <--- NEW PROP
+  allScenes: Scene[];
   activeId: number; 
 }
 
@@ -43,12 +47,14 @@ export default function CastingClient({
 }: CastingClientProps) {
   const router = useRouter();
   
+  // State
   const [rows, setRows] = useState<AssignmentRow[]>(assignments);
   const [selectedStudent, setSelectedStudent] = useState<{ id: number; name: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const hasInitialized = useRef(false);
 
+  // Sync Props
   useEffect(() => { setRows(assignments); }, [assignments]);
 
   // 🟢 AUTO-INIT
@@ -66,11 +72,12 @@ export default function CastingClient({
     initGrid();
   }, [assignments.length, activeId, router]);
 
+  // Stop loading when data arrives
   useEffect(() => {
     if (assignments.length > 0 && isLoading) setIsLoading(false);
   }, [assignments.length, isLoading]);
 
-  // 🔵 DRAFT & SAVE ACTIONS
+  // 🔵 DRAFT BUTTON
   const handleDraftAutoFill = () => {
     const draftState = rows.map((row) => {
       const roleId = row.role?.[0]?.id;
@@ -83,6 +90,7 @@ export default function CastingClient({
     setRows(draftState);
   };
 
+  // 💾 SAVE BUTTON
   const handleSave = async () => {
     setIsSaving(true);
     const changes = rows
@@ -109,9 +117,9 @@ export default function CastingClient({
     setIsSaving(false);
   };
 
-  // --- MERGED TIMELINE LOGIC ---
+  // --- MERGED TIMELINE HELPER ---
   const getStudentTimeline = (studentId: number) => {
-    // 1. Find all roles this student has
+    // 1. Find all roles this student has in the current grid
     const studentRoles = rows.filter(r => r.person?.[0]?.id === studentId);
     
     // 2. Map every scene in the show to a role (if they are in it)
@@ -124,13 +132,18 @@ export default function CastingClient({
       return {
         scene,
         roleName: activeRoleRow ? activeRoleRow.role?.[0]?.value : null,
-        // Generate a deterministic color based on Role Name length/charcode for demo
+        // Deterministic color based on Role Name length for consistent UI
         color: activeRoleRow 
           ? `hsl(${(activeRoleRow.role?.[0]?.value.length * 40) % 360}, 70%, 50%)` 
           : 'transparent'
       };
     });
   };
+
+  // Helper to get data for selected student
+  const activeStudentRow = selectedStudent 
+    ? rows.find(r => r.person?.[0]?.id === selectedStudent.id) 
+    : null;
 
   if (isLoading) {
     return (
@@ -241,88 +254,42 @@ export default function CastingClient({
         </div>
       </div>
 
-      {/* STUDENT MODAL (The Merged View) */}
-      {selectedStudent && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[80vh]">
-            
-            {/* Header */}
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-start">
-              <div>
-                <h3 className="text-2xl font-bold text-white">{selectedStudent.name}</h3>
-                <p className="text-zinc-400 text-sm mt-1">Full Production Track Analysis</p>
-              </div>
-              <button 
-                onClick={() => setSelectedStudent(null)}
-                className="text-zinc-500 hover:text-white"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-8 overflow-y-auto">
-              
-              {/* THE MERGED TIMELINE BAR */}
-              <div className="mb-8">
-                <h4 className="text-xs uppercase tracking-widest text-zinc-500 mb-4 font-bold">Merged Timeline</h4>
-                <div className="h-16 w-full flex rounded-lg overflow-hidden border border-zinc-700">
-                  {getStudentTimeline(selectedStudent.id).map((slot, i) => (
-                    <div 
-                      key={i}
-                      className="flex-1 h-full flex items-center justify-center group relative border-r border-black/10 last:border-0 hover:brightness-110 transition-all"
-                      style={{ backgroundColor: slot.roleName ? slot.color : '#18181b' }}
-                    >
-                      {/* Label only if role exists and space permits (simple heuristic) */}
-                      {slot.roleName && (
-                        <span className="text-[10px] font-bold text-white/90 -rotate-90 whitespace-nowrap opacity-50 group-hover:opacity-100">
-                          {slot.roleName}
-                        </span>
-                      )}
-                      
-                      {/* Tooltip */}
-                      <div className="absolute bottom-full mb-2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-20">
-                         {slot.scene.name}: {slot.roleName || "Offstage"}
-                      </div>
-                    </div>
-                  ))}
+      {/* MODAL: CALLBACK ACTOR PROFILE */}
+      {selectedStudent && activeStudentRow && (
+        <CallbackActorModal
+          actor={{
+            name: selectedStudent.name,
+            ...activeStudentRow.auditionInfo 
+          }}
+          grades={activeStudentRow.auditionGrades}
+          onClose={() => setSelectedStudent(null)}
+          timeline={
+            <div className="h-16 w-full flex rounded-lg overflow-hidden border border-zinc-700 mt-2">
+              {getStudentTimeline(selectedStudent.id).map((slot, i) => (
+                <div 
+                  key={i}
+                  className="flex-1 h-full flex items-center justify-center group relative border-r border-black/10 last:border-0 hover:brightness-110 transition-all"
+                  style={{ backgroundColor: slot.roleName ? slot.color : '#18181b' }}
+                >
+                  {/* Label only if role exists */}
+                  {slot.roleName && (
+                    <span className="text-[10px] font-bold text-white/90 -rotate-90 whitespace-nowrap opacity-50 group-hover:opacity-100">
+                      {slot.roleName}
+                    </span>
+                  )}
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full mb-2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-20">
+                     {slot.scene.name}: {slot.roleName || "Offstage"}
+                  </div>
                 </div>
-                
-                {/* Time Axis Labels */}
-                <div className="flex justify-between mt-2 text-[10px] text-zinc-600 font-mono">
-                  <span>Start of Show</span>
-                  <span>End of Show</span>
-                </div>
-              </div>
-
-              {/* Roles List */}
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="bg-zinc-950 p-4 rounded border border-zinc-800">
-                    <h5 className="text-zinc-400 text-xs uppercase mb-2">Assigned Roles</h5>
-                    <ul className="space-y-1">
-                      {rows.filter(r => r.person?.[0]?.id === selectedStudent.id).map(r => (
-                        <li key={r.id} className="text-sm text-white font-medium">• {r.role?.[0]?.value}</li>
-                      ))}
-                    </ul>
-                 </div>
-                 <div className="bg-zinc-950 p-4 rounded border border-zinc-800">
-                    <h5 className="text-zinc-400 text-xs uppercase mb-2">Metrics</h5>
-                    <div className="text-sm text-zinc-500">
-                      Total Active Scenes: <span className="text-white font-mono">
-                        {getStudentTimeline(selectedStudent.id).filter(s => s.roleName).length}
-                      </span> / {allScenes.length}
-                    </div>
-                 </div>
-              </div>
-
+              ))}
             </div>
-          </div>
-        </div>
+          }
+        />
       )}
 
-      {/* RIGHT SIDEBAR (Kept as placeholder) */}
+      {/* RIGHT SIDEBAR (Placeholder) */}
       <div className="w-80 border-l border-zinc-800 bg-zinc-900 hidden lg:flex flex-col">
-         {/* ... Sidebar content ... */}
          <div className="flex-1 p-8 flex items-center justify-center text-zinc-600">
             <p>Actor Bank</p>
          </div>
