@@ -591,12 +591,13 @@ return (
             onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])}
           />
 
+          {/* MAIN CONTENT COLUMN (Right Side) */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
             
             {/* TOOLBAR */}
             <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
               <div className="flex items-center gap-6">
-                {/* ... Title & View Toggles (Unchanged) ... */}
+                {/* ... Title & View Toggles ... */}
                 <div>
                     <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
                     <p className="text-xs text-zinc-500 font-mono mt-1">
@@ -610,9 +611,10 @@ return (
                 </div>
               </div>
 
+              {/* ACTION BUTTONS */}
               <div className="flex gap-2">
                 
-                {/* 2. PRINT BUTTON (Add this here) */}
+                {/* PRINT BUTTON */}
                 <button 
                   onClick={handlePrint}
                   className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors"
@@ -623,15 +625,14 @@ return (
 
                 <div className="w-px h-6 bg-zinc-800 mx-1"></div>
 
-<div className="flex gap-2">
-            {/* ✨ UPDATED AUTO-CAST BUTTON ✨ */}
-            <AutoCastButton 
-              rows={rows} 
-              roster={roster} 
-              blueprintRoles={blueprintRoles} // 👈 Added
-              releasedIds={releasedIds}       // 👈 Added
-              onUpdateRows={setRows} 
-            />
+                {/* AUTO-CAST BUTTON */}
+                <AutoCastButton 
+                  rows={rows} 
+                  roster={roster} 
+                  blueprintRoles={blueprintRoles} 
+                  releasedIds={releasedIds}       
+                  onUpdateRows={setRows} 
+                />
 
                 <div className="w-px h-6 bg-zinc-800 mx-1"></div>
 
@@ -651,11 +652,9 @@ return (
               </div>
             </div>
 
-            {/* MAIN CONTENT AREA (Unchanged) */}
+            {/* MAIN CONTENT AREA */}
             {viewMode === "matrix" ? (
-                // ... Matrix Table Code ...
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                    {/* ... table ... */}
                      <div className="border border-zinc-800 rounded-lg overflow-hidden">
                         <table className="w-full text-left border-collapse">
                         <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
@@ -751,7 +750,7 @@ return (
       {/* 3. INVISIBLE PRINT VIEW */}
       <CastingPrintView rows={rows} />
 
-      {/* 4. MODALS (Unchanged) */}
+      {/* 4. MODALS */}
       {selectedStudent && (
         <CallbackActorModal
           actor={{
@@ -783,5 +782,4 @@ return (
         />
       )}
     </div>
-  );
-}
+  );}
