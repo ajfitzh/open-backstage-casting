@@ -50,25 +50,27 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
 
 // app/lib/baserow.ts
 
+// app/lib/baserow.ts
+
 function safeGet(field: any, fallback: string | number = ""): any {
   if (field === null || field === undefined) return fallback;
   
-  // 1. If it's a primitive, return it
+  // 1. If it's a primitive (string/number), return it
   if (typeof field === 'string' || typeof field === 'number' || typeof field === 'boolean') return field;
   
-  // 2. If it's an array (Common for Lookups & Links)
+  // 2. If it's an ARRAY (Common for Lookups like Gender & Links)
   if (Array.isArray(field)) {
     if (field.length === 0) return fallback;
     const first = field[0];
     
-    // If the array contains strings (e.g. ["Male"]), return the string
+    // If the array contains raw strings (e.g. ["Male"]), return it
     if (typeof first === 'string') return first;
     
-    // If it's an object, try common keys
+    // If it's an object inside array (e.g. [{id: 1, value: "Male"}]), return value
     return first.value || first.name || first.url || fallback;
   }
   
-  // 3. If it's a single object (Select fields)
+  // 3. If it's a single OBJECT (Select fields)
   if (typeof field === 'object') {
     return field.value || field.name || fallback;
   }
