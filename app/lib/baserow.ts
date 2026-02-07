@@ -48,17 +48,31 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
   }
 }
 
+// app/lib/baserow.ts
+
 function safeGet(field: any, fallback: string | number = ""): any {
   if (field === null || field === undefined) return fallback;
+  
+  // 1. If it's a primitive, return it
   if (typeof field === 'string' || typeof field === 'number' || typeof field === 'boolean') return field;
+  
+  // 2. If it's an array (Common for Lookups & Links)
   if (Array.isArray(field)) {
     if (field.length === 0) return fallback;
     const first = field[0];
+    
+    // If the array contains strings (e.g. ["Male"]), return the string
+    if (typeof first === 'string') return first;
+    
+    // If it's an object, try common keys
     return first.value || first.name || first.url || fallback;
   }
+  
+  // 3. If it's a single object (Select fields)
   if (typeof field === 'object') {
     return field.value || field.name || fallback;
   }
+  
   return fallback;
 }
 
@@ -680,8 +694,14 @@ export async function getComplianceData(productionId?: number) {
 // 🎤 AUDITIONS (READ & WRITE)
 // ==============================================================================
 
+// app/lib/baserow.ts
+
 export async function getAuditionees(productionId?: number) {
-  const params: any = { size: "200" };
+  // We use user_field_names: "true" if you want to use names, 
+  // BUT since we are using DB.SCHEMA mappings, we usually stick to raw IDs.
+  // The fix is ensuring we read the right field with the new safeGet.
+  
+  const params: any = { size: "200" }; 
   const F = DB.AUDITIONS.FIELDS;
   
   if(productionId) params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
@@ -703,7 +723,10 @@ export async function getAuditionees(productionId?: number) {
       age: safeGet(row[F.AGE], "?"),
       height: safeGet(row[F.HEIGHT], ""),
       conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
+      
+      // ✅ FIX: This now uses the new safeGet on field_6080 (Lookup)
       gender: safeGet(row[F.GENDER], "Unknown"),
+      
       actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
       musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
       choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
