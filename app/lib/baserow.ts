@@ -699,10 +699,6 @@ export async function getComplianceData(productionId?: number) {
 // app/lib/baserow.ts
 
 export async function getAuditionees(productionId?: number) {
-  // We use user_field_names: "true" if you want to use names, 
-  // BUT since we are using DB.SCHEMA mappings, we usually stick to raw IDs.
-  // The fix is ensuring we read the right field with the new safeGet.
-  
   const params: any = { size: "200" }; 
   const F = DB.AUDITIONS.FIELDS;
   
@@ -718,21 +714,31 @@ export async function getAuditionees(productionId?: number) {
       date: row[F.DATE] || null, 
       headshot: row[F.HEADSHOT]?.[0]?.url || null,
       video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
+      
+      // Scores
       vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
       actingScore: safeGet(row[F.ACTING_SCORE], 0),
       danceScore: safeGet(row[F.DANCE_SCORE], 0),
       presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
+      
+      // Info
       age: safeGet(row[F.AGE], "?"),
       height: safeGet(row[F.HEIGHT], ""),
       conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
+
+      // 👇 THIS IS THE FIX. ENSURE THIS LINE EXISTS:
+      gender: safeGet(row[F.GENDER], "Unknown"), 
       
-      // ✅ FIX: This now uses the new safeGet on field_6080 (Lookup)
-      gender: safeGet(row[F.GENDER], "Unknown"),
-      
+      // Notes
       actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
       musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
       choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
       status: !row[F.DATE] ? "Walk-In" : "Scheduled",
+      
+      // Extra info for the sidebar
+      vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
+      song: safeGet(row[F.SONG], ""),
+      monologue: safeGet(row[F.MONOLOGUE], ""),
   }));
 }
 
