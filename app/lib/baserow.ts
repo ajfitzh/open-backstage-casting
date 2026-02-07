@@ -342,16 +342,28 @@ export async function getAllShows() {
     const typeObj = row[DB.PRODUCTIONS.FIELDS.TYPE];
     const typeValue = typeObj?.value || "Other"; 
 
+    // 3. STATUS EXTRACTION (Vital for Client Bucketing)
+    const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
+
     return {
       id: row.id,
       title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled"),
       season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"),
       type: typeValue,
+
+      // ✅ FIX 1: Add Status & Active State
+      // The client uses these to sort into "Current" vs "History"
+      status: rawStatus,
+      isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === 'Active',
+
+      // ✅ FIX 2: Add Location 
+      // The client uses this for the color dot (Emerald for Fredericksburg, Zinc for others)
+      location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"),
+
       venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
       workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [],
 
-      // ✅ FIX: Pass the legacy JSON field so page.tsx can access it.
-      // We look for 'field_6177' (your legacy Performances field ID)
+      // Legacy field support
       Performances: row['field_6177'] || row['Performances'] || null
     };
   }).sort((a: any, b: any) => b.id - a.id);
