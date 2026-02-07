@@ -525,7 +525,23 @@ export async function getScheduleSlots(productionId: number) {
       };
     });
 }
+// inside app/lib/baserow.ts
 
+export async function getSceneAssignments(productionId: number) {
+  // Table 628: SCENE_ASSIGNMENTS
+  const F = DB.SCENE_ASSIGNMENTS.FIELDS; 
+  
+  const params = {
+    size: "200", 
+    [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
+    "user_field_names": "true" // 🟢 Crucial: Allows the Client "washing machine" to read "Person" and "Scene" keys
+  };
+
+  const data = await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {}, params);
+  
+  if (!Array.isArray(data)) return [];
+  return data;
+}
 export async function getScenes(productionId?: number) {
   const params: any = { size: "200" };
   const F = DB.SCENES.FIELDS;

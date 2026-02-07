@@ -1,14 +1,16 @@
-import { cookies } from 'next/headers';
+// inside app/education/planning/page.tsx (or your Scheduler page)
+
 import { 
     getShowById, 
     getActiveProduction,
     getScenes,
     getRoles,
-    getAssignments,
+    getSceneAssignments, // 🟢 1. Update Import
     getPeople,
-    getScheduleSlots // 🟢 NEW IMPORT
+    getScheduleSlots 
 } from '@/app/lib/baserow';
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
+import { cookies } from 'next/dist/server/request/cookies';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,24 +19,15 @@ export default async function SchedulerPage() {
   let activeId = Number(cookieStore.get('active_production_id')?.value);
   let showTitle = "Select a Production";
 
-  if (activeId) {
-    const showData = await getShowById(activeId);
-    if (showData && !Array.isArray(showData)) showTitle = showData.title;
-  } else {
-    const defaultShow = await getActiveProduction();
-    if (defaultShow) {
-      activeId = defaultShow.id;
-      showTitle = defaultShow.title;
-    }
-  }
+  // ... (Keep your show title logic) ...
 
-  // Fetch ALL necessary data
-  const [scenes, roles, assignments, people, existingSlots] = await Promise.all([
+  // 🟢 2. Fetch getSceneAssignments instead of getAssignments
+  const [scenes, roles, sceneAssignments, people, existingSlots] = await Promise.all([
       getScenes(activeId),      
       getRoles(),               
-      getAssignments(activeId), 
+      getSceneAssignments(activeId), // <--- CHANGE THIS LINE
       getPeople(),
-      getScheduleSlots(activeId) // 🟢 Fetch the saved slots
+      getScheduleSlots(activeId) 
   ]);
 
   return (
@@ -42,11 +35,11 @@ export default async function SchedulerPage() {
       <SchedulerClient 
         scenes={scenes || []}
         roles={roles || []}
-        assignments={assignments || []}
+        assignments={sceneAssignments || []} // <--- Pass the correct data here
         people={people || []}
         productionTitle={showTitle}
         productionId={activeId}
-        initialSchedule={existingSlots || []} // 🟢 Pass them to Client
+        initialSchedule={existingSlots || []} 
       />
     </main>
   );
