@@ -119,7 +119,7 @@ function RosterSidebar({
   const [activeTab, setActiveTab] = useState<"to-cast" | "in-progress" | "done">("to-cast");
   const [showReleased, setShowReleased] = useState(false);
   
-  // NEW: Sort & Filter State
+  // Sort & Filter State
   const [sortBy, setSortBy] = useState<"name" | "vocal" | "acting" | "dance">("name");
   const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
 
@@ -149,11 +149,26 @@ function RosterSidebar({
         else if (activeTab === "in-progress") { if (stats.status !== "at-risk") return false; }
         else if (activeTab === "done") { if (stats.status !== "compliant") return false; }
 
-        // D. Gender Filter (Assuming auditionInfo has a 'gender' or 'sex' field)
+        // D. Gender Filter (More Robust Check)
         if (genderFilter !== "all") {
-            const g = (s.auditionInfo?.gender || s.auditionInfo?.sex || "").toLowerCase();
-            if (genderFilter === "F" && !g.startsWith("f")) return false;
-            if (genderFilter === "M" && !g.startsWith("m")) return false;
+            // Check common keys for gender data
+            const rawGender = 
+                s.auditionInfo?.gender || 
+                s.auditionInfo?.Gender || 
+                s.auditionInfo?.sex || 
+                s.auditionInfo?.Sex || 
+                "";
+            
+            const g = String(rawGender).toLowerCase().trim();
+
+            if (genderFilter === "F") {
+                // Check for "f", "female", "girl", "woman"
+                if (!g.startsWith("f") && g !== "girl" && g !== "woman") return false;
+            }
+            if (genderFilter === "M") {
+                // Check for "m", "male", "boy", "man"
+                if (!g.startsWith("m") && g !== "boy" && g !== "man") return false;
+            }
         }
         
         return true;
@@ -227,32 +242,45 @@ function RosterSidebar({
 
         {/* Sort/Filter Toolbar */}
         <div className="px-3 pb-3 flex items-center justify-between gap-2">
+            
             {/* Sort Group */}
-            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5">
-                <button onClick={() => setSortBy("name")} title="Sort by Name" className={`p-1.5 rounded ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
+                <button onClick={() => setSortBy("name")} title="Sort by Name" className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
                     <ArrowDownAZ size={12} />
                 </button>
-                <button onClick={() => setSortBy("vocal")} title="Sort by Vocal Score" className={`p-1.5 rounded ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                <button onClick={() => setSortBy("vocal")} title="Sort by Vocal Score" className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
                     <Mic2 size={12} />
                 </button>
-                <button onClick={() => setSortBy("acting")} title="Sort by Acting Score" className={`p-1.5 rounded ${sortBy === 'acting' ? 'bg-purple-500/20 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                <button onClick={() => setSortBy("acting")} title="Sort by Acting Score" className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'acting' ? 'bg-purple-500/20 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
                     <Theater size={12} />
                 </button>
-                <button onClick={() => setSortBy("dance")} title="Sort by Dance Score" className={`p-1.5 rounded ${sortBy === 'dance' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                <button onClick={() => setSortBy("dance")} title="Sort by Dance Score" className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'dance' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
                     <Music size={12} />
                 </button>
             </div>
 
-            {/* Gender Group */}
-            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5">
-                <button onClick={() => setGenderFilter("all")} title="All Genders" className={`px-2 py-1.5 rounded text-[10px] font-bold ${genderFilter === 'all' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            {/* Gender Group - Now using Text Labels */}
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
+                <button 
+                    onClick={() => setGenderFilter("all")} 
+                    title="All Genders" 
+                    className={`px-2 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'all' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
                     ALL
                 </button>
-                <button onClick={() => setGenderFilter("F")} title="Female" className={`p-1.5 rounded ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                    <User size={12} />
+                <button 
+                    onClick={() => setGenderFilter("F")} 
+                    title="Female" 
+                    className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    F
                 </button>
-                <button onClick={() => setGenderFilter("M")} title="Male" className={`p-1.5 rounded ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                    <User size={12} className="fill-current" />
+                <button 
+                    onClick={() => setGenderFilter("M")} 
+                    title="Male" 
+                    className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    M
                 </button>
             </div>
         </div>
@@ -290,7 +318,7 @@ function RosterSidebar({
                         alt={student.name} 
                         className="w-full h-full rounded-full object-cover border border-white/10"
                     />
-                    {/* Tiny Score Indicator based on active sort */}
+                    {/* Score Indicator Badge */}
                     {sortBy !== 'name' && (
                         <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border border-zinc-900 text-white ${
                             sortBy === 'vocal' ? 'bg-blue-500' : 
@@ -305,7 +333,6 @@ function RosterSidebar({
                     <div className="flex justify-between items-start">
                         <div className="text-xs font-bold text-zinc-200 truncate">{student.name}</div>
                         
-                        {/* THE RELEASE BUTTON */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); onToggleRelease(student.id); }}
                             className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
