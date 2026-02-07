@@ -10,6 +10,9 @@ import {
 import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
 import CallbackActorModal from './CallbackActorModal';
 import AutoCastButton from './AutoCastButton';
+import { saveCastingGrid } from '@/app/lib/actions'; // Import the new action
+import { Printer } from "lucide-react"; // Add Printer icon
+import CastingPrintView from './CastingPrintView'; // Import the new component
 // ============================================================================
 // 1. TYPES & CONFIG
 // ============================================================================
@@ -441,26 +444,46 @@ export default function CastingClient({
     setRows(draftState);
   };
 
-  const handleSave = async () => {
+const handleSave = async () => {
     setIsSaving(true);
-    const changes = rows
+
+    // 1. CALCULATE ACTOR DIFFS
+    // We compare the current 'rows' state vs the initial 'assignments' prop
+    const actorChanges = rows.filter(row => {
+      const original = assignments.find(a => a.id === row.id);
+      const currentId = row.person?.[0]?.id;
+      const originalId = original?.person?.[0]?.id;
+      // It's changed if IDs don't match
+      return currentId !== originalId;
+    }).map(row => ({
+      assignmentId: row.id,
+      studentId: row.person?.[0]?.id || null // null means "Unassigned"
+    }));
+
+    // 2. CALCULATE SCENE DIFFS (The "Chiclets")
+    const sceneChanges = rows
       .filter(row => row._pendingScenes) 
       .map(row => {
         const studentId = row.person?.[0]?.id;
-        if (!studentId) return null;
+        if (!studentId) return null; // Can't assign scenes to nobody
+
         const pendingIds = row._pendingScenes!.map(s => s.id);
         const savedIds = row.savedScenes?.map(s => s.id) || [];
+
         const added = pendingIds.filter(id => !savedIds.includes(id));
         const removed = savedIds.filter(id => !pendingIds.includes(id));
+
         if (added.length === 0 && removed.length === 0) return null;
         return { studentId, addedSceneIds: added, removedSceneIds: removed };
       })
       .filter(Boolean);
 
-    if (changes.length > 0) {
-      await syncCastingChanges(activeId, changes);
-      router.refresh(); 
+    // 3. FIRE & REFRESH
+    if (actorChanges.length > 0 || sceneChanges.length > 0) {
+      await saveCastingGrid(activeId, actorChanges, sceneChanges);
+      router.refresh(); // This re-fetches data, making your new cast "Official"
     }
+
     setIsSaving(false);
   };
 
@@ -541,7 +564,9 @@ export default function CastingClient({
   const activeStudentRow = selectedStudent 
     ? rows.find(r => r.person?.some(p => p.id === selectedStudent.id)) 
     : null;
-
+const handlePrint = () => {
+    window.print();
+  };
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4 text-zinc-400">
@@ -551,169 +576,178 @@ export default function CastingClient({
     );
   }
 
-  return (
+return (
     <div className="flex h-[calc(100vh-4rem)] relative">
       
-      {/* LEFT SIDEBAR */}
-      <RosterSidebar 
-        students={roster} 
-        rows={rows}
-        allScenes={allScenes}
-        onSelect={setSelectedStudent} 
-        releasedIds={releasedIds}
-        onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])}
-      />
+      {/* 1. WRAPPER: Hides the interactive UI during print */}
+      <div className="contents print:hidden">
+      
+          <RosterSidebar 
+            students={roster} 
+            rows={rows}
+            allScenes={allScenes}
+            onSelect={setSelectedStudent} 
+            releasedIds={releasedIds}
+            onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])}
+          />
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
-        
-        {/* TOOLBAR */}
-        <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
-          <div className="flex items-center gap-6">
-            <div>
-                <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
-                <p className="text-xs text-zinc-500 font-mono mt-1">
-                {rows.length} ROLES • {allScenes.length} SCENES
-                </p>
-            </div>
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
             
-            <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
-                <button 
-                    onClick={() => setViewMode("matrix")}
-                    className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    <LayoutGrid size={14} /> <span className="hidden md:inline">Matrix</span>
-                </button>
-                <button 
-                    onClick={() => setViewMode("chemistry")}
-                    className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-                >
-                    <Scale size={14} /> <span className="hidden md:inline">Chemistry</span>
-                </button>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            {/* ✨ NEW AUTO-CAST COMPONENT ✨ */}
-            <AutoCastButton 
-              rows={rows} 
-              roster={roster} 
-              onUpdateRows={setRows} 
-            />
-
-            <div className="w-px h-6 bg-zinc-800 mx-1"></div> {/* Divider */}
-            <button 
-              onClick={handleDraftAutoFill}
-              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all"
-            >
-              Draft Defaults
-            </button>
-            <button 
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50"
-            >
-              {isSaving ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </div>
-
-        {viewMode === "matrix" ? (
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                    <table className="w-full text-left border-collapse">
-                    <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
-                        <tr>
-                        <th className="p-3 border-b border-zinc-800 w-1/4 sticky left-0 bg-zinc-900 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">Role Identity</th>
-                        <th className="p-3 border-b border-zinc-800 w-1/4">Actor</th>
-                        <th className="p-3 border-b border-zinc-800">Scene Map ({allScenes.length})</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
-                        {rows.map((row) => {
-                        const assignedScenes = row._pendingScenes || row.savedScenes || [];
-                        const isDraft = !!row._pendingScenes;
-                        const assignedIds = new Set(assignedScenes.map(s => s.id));
-
-                        return (
-                            <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
-                            <td className="p-3 text-sm font-medium text-zinc-200 sticky left-0 bg-zinc-950 group-hover:bg-zinc-900 transition-colors z-10 border-r border-zinc-800/50">
-                                {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
-                            </td>
-                            
-                            {/* DROP ZONE / ACTOR CELL */}
-                            <td 
-                                className="p-3 text-sm text-zinc-400 transition-colors relative"
-                                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
-                                onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
-                                onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
-                            >
-                                {row.person?.[0] ? (
-                                    <div className="flex items-center justify-between gap-2 group/cell">
-                                        <button 
-                                            onClick={() => {
-                                                const s = roster.find(x => x.id === row.person[0].id);
-                                                if(s) setSelectedStudent(s);
-                                            }}
-                                            className="flex items-center gap-3 text-left"
-                                        >
-                                            <img 
-                                              src={row.auditionInfo?.avatar || "/placeholder.png"} 
-                                              className="w-8 h-8 rounded-full object-cover border border-white/10" 
-                                              alt="" 
-                                            />
-                                            <span className="text-emerald-400 hover:text-emerald-300 font-bold text-xs truncate">
-                                              {row.person[0].value}
-                                            </span>
-                                        </button>
-                                        
-                                        {/* UNASSIGN BUTTON */}
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, row.person[0].id); }}
-                                            className="text-zinc-600 hover:text-red-400 opacity-0 group-hover/cell:opacity-100 transition-opacity p-1.5"
-                                            title="Unassign"
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
-                                        Drop Actor
-                                    </div>
-                                )}
-                            </td>
-
-                            <td className="p-3">
-                                <div className="flex items-center gap-[2px]">
-                                {allScenes.map(scene => {
-                                    const isActive = assignedIds.has(scene.id);
-                                    return (
-                                    <div 
-                                        key={scene.id}
-                                        title={`${scene.name} (${isActive ? 'Active' : 'Out'})`}
-                                        className={`w-2.5 h-4 rounded-[1px] transition-all duration-300 ${isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-emerald-500/80') : 'bg-zinc-800/50 hover:bg-zinc-700'}`}
-                                    />
-                                    );
-                                })}
-                                </div>
-                            </td>
-                            </tr>
-                        );
-                        })}
-                    </tbody>
-                    </table>
+            {/* TOOLBAR */}
+            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
+              <div className="flex items-center gap-6">
+                {/* ... Title & View Toggles (Unchanged) ... */}
+                <div>
+                    <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
+                    <p className="text-xs text-zinc-500 font-mono mt-1">
+                    {rows.length} ROLES • {allScenes.length} SCENES
+                    </p>
                 </div>
+                {/* ... View Mode Buttons ... */}
+                 <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
+                    <button onClick={() => setViewMode("matrix")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={14} /> <span className="hidden md:inline">Matrix</span></button>
+                    <button onClick={() => setViewMode("chemistry")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Scale size={14} /> <span className="hidden md:inline">Chemistry</span></button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                
+                {/* 2. PRINT BUTTON (Add this here) */}
+                <button 
+                  onClick={handlePrint}
+                  className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors"
+                  title="Print Cast List"
+                >
+                  <Printer size={16} />
+                </button>
+
+                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
+
+                <AutoCastButton 
+                  rows={rows} 
+                  roster={roster} 
+                  onUpdateRows={setRows} 
+                />
+
+                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
+
+                <button 
+                  onClick={handleDraftAutoFill}
+                  className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all"
+                >
+                  Draft Defaults
+                </button>
+                <button 
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
             </div>
-        ) : (
-            <ChemistryWorkspace 
-                roles={getChemistryData()} 
-                onRemoveActor={handleRemoveActor} 
-                onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))}
-            />
-        )}
+
+            {/* MAIN CONTENT AREA (Unchanged) */}
+            {viewMode === "matrix" ? (
+                // ... Matrix Table Code ...
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+                    {/* ... table ... */}
+                     <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                        <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                            <tr>
+                            <th className="p-3 border-b border-zinc-800 w-1/4 sticky left-0 bg-zinc-900 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">Role Identity</th>
+                            <th className="p-3 border-b border-zinc-800 w-1/4">Actor</th>
+                            <th className="p-3 border-b border-zinc-800">Scene Map ({allScenes.length})</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+                            {rows.map((row) => {
+                            const assignedScenes = row._pendingScenes || row.savedScenes || [];
+                            const isDraft = !!row._pendingScenes;
+                            const assignedIds = new Set(assignedScenes.map(s => s.id));
+
+                            return (
+                                <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
+                                <td className="p-3 text-sm font-medium text-zinc-200 sticky left-0 bg-zinc-950 group-hover:bg-zinc-900 transition-colors z-10 border-r border-zinc-800/50">
+                                    {row.role?.[0]?.value || <span className="text-red-500">No Role</span>}
+                                </td>
+                                
+                                <td 
+                                    className="p-3 text-sm text-zinc-400 transition-colors relative"
+                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
+                                    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
+                                    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
+                                >
+                                    {row.person?.[0] ? (
+                                        <div className="flex items-center justify-between gap-2 group/cell">
+                                            <button 
+                                                onClick={() => {
+                                                    const s = roster.find(x => x.id === row.person[0].id);
+                                                    if(s) setSelectedStudent(s);
+                                                }}
+                                                className="flex items-center gap-3 text-left"
+                                            >
+                                                <img 
+                                                src={row.auditionInfo?.avatar || "/placeholder.png"} 
+                                                className="w-8 h-8 rounded-full object-cover border border-white/10" 
+                                                alt="" 
+                                                />
+                                                <span className="text-emerald-400 hover:text-emerald-300 font-bold text-xs truncate">
+                                                {row.person[0].value}
+                                                </span>
+                                            </button>
+                                            
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, row.person[0].id); }}
+                                                className="text-zinc-600 hover:text-red-400 opacity-0 group-hover/cell:opacity-100 transition-opacity p-1.5"
+                                                title="Unassign"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
+                                            Drop Actor
+                                        </div>
+                                    )}
+                                </td>
+
+                                <td className="p-3">
+                                    <div className="flex items-center gap-[2px]">
+                                    {allScenes.map(scene => {
+                                        const isActive = assignedIds.has(scene.id);
+                                        return (
+                                        <div 
+                                            key={scene.id}
+                                            title={`${scene.name} (${isActive ? 'Active' : 'Out'})`}
+                                            className={`w-2.5 h-4 rounded-[1px] transition-all duration-300 ${isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-emerald-500/80') : 'bg-zinc-800/50 hover:bg-zinc-700'}`}
+                                        />
+                                        );
+                                    })}
+                                    </div>
+                                </td>
+                                </tr>
+                            );
+                            })}
+                        </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <ChemistryWorkspace 
+                    roles={getChemistryData()} 
+                    onRemoveActor={handleRemoveActor} 
+                    onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))}
+                />
+            )}
+          </div>
       </div>
 
-      {/* GLOBAL MODAL */}
+      {/* 3. INVISIBLE PRINT VIEW */}
+      <CastingPrintView rows={rows} />
+
+      {/* 4. MODALS (Unchanged) */}
       {selectedStudent && (
         <CallbackActorModal
           actor={{
