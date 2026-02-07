@@ -58,13 +58,13 @@ export default function CallbackActorModal({ actor, grades, timeline, onClose }:
         {/* --- LEFT SIDEBAR (Sticky/Scrollable) --- */}
         <div className="p-6 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900/50 w-full md:w-[320px] flex flex-row md:flex-col items-center md:items-start gap-6 shrink-0 md:overflow-y-auto custom-scrollbar">
           
-          {/* Avatar */}
-          <div className="relative w-20 h-20 md:w-full md:aspect-square shrink-0 rounded-xl overflow-hidden border-2 border-white/10 shadow-lg bg-zinc-900">
+{/* Avatar */}
+          <div className="relative w-20 h-20 md:w-full md:h-auto md:aspect-square shrink-0 rounded-xl overflow-hidden border-2 border-white/10 shadow-lg bg-zinc-900">
             {actor.avatar ? (
               <img 
                 src={actor.avatar} 
                 alt={actor.name} 
-                // ✅ FIX: Added object-top to anchor image to the top edge
+                // object-top is correct for headshots, but only if the container is actually a square!
                 className="w-full h-full object-cover object-top" 
               />
             ) : (
