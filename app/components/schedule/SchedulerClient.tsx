@@ -81,27 +81,27 @@ export default function SchedulerClient({
     // 🛡️ HELPER: Safely extract IDs
     const getIds = (field: any) => {
         if (!field) return [];
+        // If it's a Baserow link array: [{id: 669, value: "..."}]
         if (Array.isArray(field)) {
             return field.map((item: any) => item.id || item).filter((x:any) => typeof x === 'number');
         }
+        // If it's a single number
         return typeof field === 'number' ? [field] : [];
     };
 
     (assignments || []).forEach((a: any) => {
-        // 1. Try to grab the Person Name from various common keys
-        const actorName = a.personName 
-                       || getValue(a.Person) 
+        // 1. Try to grab the Person Name from the keys seen in your debug report
+        const actorName = getValue(a.Person)       // matches your debug JSON
                        || getValue(a['Person']) 
-                       || getValue(a['Student']); // Fallback
+                       || a.personName;            // fallback
 
         if (!actorName) return;
 
-        // 2. Grab Linked Scenes (Handling 'Scene' link row vs 'sceneIds' prop)
+        // 2. Grab Linked Scenes (matches your debug JSON key "Scene")
         const ids = [
-            ...(a.sceneIds || []),
-            ...getIds(a.Scene),      // Baserow Field Name (Singular)
-            ...getIds(a['Scene']),   // Bracket notation
-            ...getIds(a.Scenes)      // Common Pluralization
+            ...getIds(a.Scene),      // Matches debug key: "Scene"
+            ...getIds(a['Scene']),   
+            ...getIds(a.sceneIds)    // Fallback
         ];
 
         // 3. Map them
@@ -116,10 +116,10 @@ export default function SchedulerClient({
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
 
-        // Ensure we handle raw Baserow scene data too
-        const sceneType = getValue(s.Type) || getValue(s['Type']) || s.type || "Scene";
-        const sceneAct = getValue(s.Act) || getValue(s['Act']) || s.act || "1";
-        const sceneName = getValue(s['Scene Name']) || s.name || "Untitled";
+        // Handle raw Baserow scene fields if necessary
+        const sceneName = getValue(s['Scene Name']) || getValue(s.Name) || s.name || "Untitled";
+        const sceneAct = getValue(s.Act) || s.act || "1";
+        const sceneType = getValue(s.Type) || s.type || "Scene";
 
         return {
             id: s.id,

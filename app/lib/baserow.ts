@@ -472,21 +472,43 @@ export async function updateCastAssignment(assignmentId: number, personId: numbe
 // ==============================================================================
 
 export async function getScheduleSlots(productionId: number) {
-  // FIXED: Mapped to SCHEDULE_SLOTS
   const F = DB.SCHEDULE_SLOTS.FIELDS;
+  
+  // 1. Get the Event IDs for this production
   const events = await getProductionEvents(productionId);
   if (events.length === 0) return [];
-  const eventIds = events.map((e: any) => e.id);
+  const eventIds = new Set(events.map((e: any) => e.id)); // Use Set for O(1) lookup
 
-  const slotsData = await fetchBaserow(`/database/rows/table/${DB.SCHEDULE_SLOTS.ID}/`, {}, { size: "200", user_field_names: "true" });
-  if (!Array.isArray(slotsData)) return [];
+  // 2. Fetch ALL slots (Pagination Loop)
+  let allSlots: any[] = [];
+  let page = 1;
+  let hasMore = true;
 
-  return slotsData
-    .filter((row: any) => {
-        const linkedEventId = row[F.EVENT_LINK]?.[0]?.id;
-        return eventIds.includes(linkedEventId);
-    })
-    .map((row: any) => {
+  while (hasMore) {
+    const data = await fetchBaserow(
+      `/database/rows/table/${DB.SCHEDULE_SLOTS.ID}/`, 
+      {}, 
+      { page: page.toString(), size: "200", user_field_names: "true" }
+    );
+
+    if (!Array.isArray(data) || data.length === 0) {
+      hasMore = false;
+    } else {
+      // Optimization: Only keep slots that match our events to save memory
+      const relevantSlots = data.filter((row: any) => {
+         const linkedEventId = row[F.EVENT_LINK]?.[0]?.id;
+         return eventIds.has(linkedEventId);
+      });
+      
+      allSlots = [...allSlots, ...relevantSlots];
+      
+      // If we got less than 200, we reached the end
+      if (data.length < 200) hasMore = false;
+      else page++;
+    }
+  }
+
+  return allSlots.map((row: any) => {
       const dateDate = new Date(row[F.START_TIME]);
       const hours = dateDate.getHours() + (dateDate.getMinutes() / 60);
       const dayName = dateDate.getDay() === 5 ? 'Fri' : 'Sat';
@@ -510,7 +532,9 @@ export async function getScenes(productionId?: number) {
 
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
-    params['order_by'] = `field_${F.ORDER}`; 
+    // 🔴 WAS: params['order_by'] = `field_${F.ORDER}`;
+    // 🟢 FIXED: F.ORDER is already "field_XXXX"
+    params['order_by'] = F.ORDER; 
   }
 
   const data = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, params);
@@ -540,7 +564,9 @@ export async function getProductionEvents(productionId: number) {
   const params = {
     size: "200",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    order_by: `field_${F.EVENT_DATE}`
+    // 🔴 WAS: order_by: `field_${F.EVENT_DATE}`
+    // 🟢 FIXED:
+    order_by: F.EVENT_DATE
   };
 
   const data = await fetchBaserow(`/database/rows/table/${DB.EVENTS.ID}/`, {}, params);
