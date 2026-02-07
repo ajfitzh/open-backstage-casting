@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { 
   Users, Filter, X, Check, Ruler, Scale, AlertOctagon, 
   LayoutGrid, Search, ArrowUpDown, MoreHorizontal,
-  Archive, Undo, AlertCircle, Printer, Trash2, Plus
+  Archive, Undo, AlertCircle, Printer, Trash2, Plus,
+  ArrowDownAZ, Music, Mic2, Theater, User, Users2
 } from "lucide-react";
 import { generateCastingRows, saveCastingGrid } from '@/app/lib/actions';
 import CallbackActorModal from './CallbackActorModal';
@@ -97,7 +98,7 @@ function getStudentCompliance(studentId: number, rows: AssignmentRow[], allScene
 }
 
 // ============================================================================
-// 2. SUB-COMPONENT: ROSTER SIDEBAR
+// 2. SUB-COMPONENT: ROSTER SIDEBAR (Enhanced)
 // ============================================================================
 function RosterSidebar({ 
   students, 
@@ -117,6 +118,10 @@ function RosterSidebar({
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"to-cast" | "in-progress" | "done">("to-cast");
   const [showReleased, setShowReleased] = useState(false);
+  
+  // NEW: Sort & Filter State
+  const [sortBy, setSortBy] = useState<"name" | "vocal" | "acting" | "dance">("name");
+  const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
 
   // 1. Calculate Compliance Map
   const complianceMap = useMemo(() => {
@@ -127,21 +132,40 @@ function RosterSidebar({
     return map;
   }, [students, rows, allScenes]);
 
-  // 2. Filter Logic
-  const filtered = students.filter(s => {
-    if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
-    
-    const isReleased = releasedIds.includes(s.id);
-    if (showReleased) return isReleased; 
-    if (isReleased) return false;        
+  // 2. Filter & Sort Logic
+  const filtered = useMemo(() => {
+    return students.filter(s => {
+        // A. Search
+        if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+        
+        // B. Released Status
+        const isReleased = releasedIds.includes(s.id);
+        if (showReleased) return isReleased; 
+        if (isReleased) return false;        
 
-    const stats = complianceMap.get(s.id);
-    if (activeTab === "to-cast") return stats.status === "uncast";
-    if (activeTab === "in-progress") return stats.status === "at-risk";
-    if (activeTab === "done") return stats.status === "compliant";
-    
-    return true;
-  }).sort((a, b) => a.name.localeCompare(b.name));
+        // C. Tab Status
+        const stats = complianceMap.get(s.id);
+        if (activeTab === "to-cast") { if (stats.status !== "uncast") return false; }
+        else if (activeTab === "in-progress") { if (stats.status !== "at-risk") return false; }
+        else if (activeTab === "done") { if (stats.status !== "compliant") return false; }
+
+        // D. Gender Filter (Assuming auditionInfo has a 'gender' or 'sex' field)
+        if (genderFilter !== "all") {
+            const g = (s.auditionInfo?.gender || s.auditionInfo?.sex || "").toLowerCase();
+            if (genderFilter === "F" && !g.startsWith("f")) return false;
+            if (genderFilter === "M" && !g.startsWith("m")) return false;
+        }
+        
+        return true;
+    }).sort((a, b) => {
+        // E. Sorting
+        if (sortBy === "name") return a.name.localeCompare(b.name);
+        if (sortBy === "vocal") return (b.vocalScore || 0) - (a.vocalScore || 0);
+        if (sortBy === "acting") return (b.actingScore || 0) - (a.actingScore || 0);
+        if (sortBy === "dance") return (b.danceScore || 0) - (a.danceScore || 0);
+        return 0;
+    });
+  }, [students, search, showReleased, releasedIds, activeTab, complianceMap, genderFilter, sortBy]);
 
   // 3. Tab Counts
   const counts = useMemo(() => {
@@ -184,17 +208,53 @@ function RosterSidebar({
          </button>
       </div>
 
-      {/* SEARCH */}
-      <div className="p-3 border-b border-zinc-800">
-        <div className="relative">
-            <Search size={12} className="absolute left-2 top-2 text-zinc-600" />
-            <input 
-                type="text" 
-                placeholder="Search..." 
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded text-xs pl-7 py-1.5 text-white focus:outline-none focus:border-zinc-700 placeholder:text-zinc-600"
-            />
+      {/* SEARCH & FILTERS CONTAINER */}
+      <div className="border-b border-zinc-800 bg-zinc-900/30">
+        
+        {/* Search Bar */}
+        <div className="p-3 pb-2">
+            <div className="relative">
+                <Search size={12} className="absolute left-2 top-2 text-zinc-600" />
+                <input 
+                    type="text" 
+                    placeholder="Search..." 
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs pl-7 py-1.5 text-white focus:outline-none focus:border-zinc-700 placeholder:text-zinc-600"
+                />
+            </div>
+        </div>
+
+        {/* Sort/Filter Toolbar */}
+        <div className="px-3 pb-3 flex items-center justify-between gap-2">
+            {/* Sort Group */}
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5">
+                <button onClick={() => setSortBy("name")} title="Sort by Name" className={`p-1.5 rounded ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <ArrowDownAZ size={12} />
+                </button>
+                <button onClick={() => setSortBy("vocal")} title="Sort by Vocal Score" className={`p-1.5 rounded ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <Mic2 size={12} />
+                </button>
+                <button onClick={() => setSortBy("acting")} title="Sort by Acting Score" className={`p-1.5 rounded ${sortBy === 'acting' ? 'bg-purple-500/20 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <Theater size={12} />
+                </button>
+                <button onClick={() => setSortBy("dance")} title="Sort by Dance Score" className={`p-1.5 rounded ${sortBy === 'dance' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <Music size={12} />
+                </button>
+            </div>
+
+            {/* Gender Group */}
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5">
+                <button onClick={() => setGenderFilter("all")} title="All Genders" className={`px-2 py-1.5 rounded text-[10px] font-bold ${genderFilter === 'all' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    ALL
+                </button>
+                <button onClick={() => setGenderFilter("F")} title="Female" className={`p-1.5 rounded ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <User size={12} />
+                </button>
+                <button onClick={() => setGenderFilter("M")} title="Male" className={`p-1.5 rounded ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <User size={12} className="fill-current" />
+                </button>
+            </div>
         </div>
       </div>
 
@@ -202,7 +262,7 @@ function RosterSidebar({
       <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-zinc-950/50">
         {filtered.length === 0 && (
             <div className="text-center py-10 text-zinc-600 text-xs italic">
-                {showReleased ? "No released students" : "List empty. Good job!"}
+                {showReleased ? "No released students" : "No students match filter."}
             </div>
         )}
 
@@ -230,6 +290,15 @@ function RosterSidebar({
                         alt={student.name} 
                         className="w-full h-full rounded-full object-cover border border-white/10"
                     />
+                    {/* Tiny Score Indicator based on active sort */}
+                    {sortBy !== 'name' && (
+                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border border-zinc-900 text-white ${
+                            sortBy === 'vocal' ? 'bg-blue-500' : 
+                            sortBy === 'acting' ? 'bg-purple-500' : 'bg-pink-500'
+                        }`}>
+                            {Math.round(student[`${sortBy}Score` as keyof RosterStudent] as number || 0)}
+                        </div>
+                    )}
                 </div>
                 
                 <div className="flex-1 min-w-0">
@@ -283,7 +352,6 @@ function RosterSidebar({
     </aside>
   );
 }
-
 // ============================================================================
 // 4. MAIN CLIENT
 // ============================================================================
