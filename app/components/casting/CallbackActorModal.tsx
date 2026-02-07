@@ -64,7 +64,7 @@ export default function CallbackActorModal({ actor, grades, timeline, onClose }:
               <img 
                 src={actor.avatar} 
                 alt={actor.name} 
-                // ✅ FIX: Added object-top to prevent "scalping" portrait photos
+                // ✅ FIX: Added object-top to anchor image to the top edge
                 className="w-full h-full object-cover object-top" 
               />
             ) : (
