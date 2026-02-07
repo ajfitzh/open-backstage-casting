@@ -57,38 +57,58 @@ export default function SchedulerClient({
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   const [isSaving, setIsSaving] = useState(false); // 🟢 Loading State
   
-  // --- SHARED DATA PREP ---
+// --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
-    if (!scenes || !assignments) return [];
+    if (!scenes) return [];
 
     // 1. Create a Map: SceneID -> Set of Actor Names
     const sceneCastMap = new Map<number, Set<string>>();
-    const normalize = (s: string) => s?.toLowerCase().replace(/[^a-z0-9]/g, "") || "";
 
-    assignments.forEach((a: any) => {
-        const actorName = a.personName;
+    // 🛡️ HELPER: Safely extract Baserow Data
+    // Handles: [{id:1, value:"Name"}] OR ["Name"] OR "Name"
+    const getValue = (field: any) => {
+        if (!field) return null;
+        if (Array.isArray(field)) {
+            // Check for Baserow Link Object { id, value }
+            if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) {
+                return field[0].value;
+            }
+            return field[0]; // Simple array
+        }
+        return field; // Raw string
+    };
+
+    // 🛡️ HELPER: Safely extract IDs
+    const getIds = (field: any) => {
+        if (!field) return [];
+        if (Array.isArray(field)) {
+            return field.map((item: any) => item.id || item).filter((x:any) => typeof x === 'number');
+        }
+        return typeof field === 'number' ? [field] : [];
+    };
+
+    (assignments || []).forEach((a: any) => {
+        // 1. Try to grab the Person Name from various common keys
+        const actorName = a.personName 
+                       || getValue(a.Person) 
+                       || getValue(a['Person']) 
+                       || getValue(a['Student']); // Fallback
+
         if (!actorName) return;
 
-        // STRATEGY A: Direct ID Match (Fastest)
-        if (a.sceneIds && a.sceneIds.length > 0) {
-            a.sceneIds.forEach((sid: number) => {
-                if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
-                sceneCastMap.get(sid)?.add(actorName);
-            });
-            return;
-        }
+        // 2. Grab Linked Scenes (Handling 'Scene' link row vs 'sceneIds' prop)
+        const ids = [
+            ...(a.sceneIds || []),
+            ...getIds(a.Scene),      // Baserow Field Name (Singular)
+            ...getIds(a['Scene']),   // Bracket notation
+            ...getIds(a.Scenes)      // Common Pluralization
+        ];
 
-        // STRATEGY B: Text Fuzzy Match (Backup)
-        if (a.scenes && typeof a.scenes === 'string') {
-            const sceneNames = a.scenes.split(',').map(normalize);
-            scenes.forEach((s: any) => {
-                const sName = normalize(s.name);
-                if (sceneNames.some((n:string) => n.includes(sName) || sName.includes(n))) {
-                    if (!sceneCastMap.has(s.id)) sceneCastMap.set(s.id, new Set());
-                    sceneCastMap.get(s.id)?.add(actorName);
-                }
-            });
-        }
+        // 3. Map them
+        ids.forEach(sid => {
+            if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
+            sceneCastMap.get(sid)?.add(actorName);
+        });
     });
 
     // 2. Hydrate Scenes
@@ -96,18 +116,22 @@ export default function SchedulerClient({
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
 
+        // Ensure we handle raw Baserow scene data too
+        const sceneType = getValue(s.Type) || getValue(s['Type']) || s.type || "Scene";
+        const sceneAct = getValue(s.Act) || getValue(s['Act']) || s.act || "1";
+        const sceneName = getValue(s['Scene Name']) || s.name || "Untitled";
+
         return {
             id: s.id,
-            name: s.name || "Untitled Scene",
-            act: s.act || "1",
-            type: s.type || "Scene",
+            name: sceneName,
+            act: sceneAct,
+            type: sceneType,
             cast: castNames.map(name => ({ name })),
             castNames: castNames, 
             status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
   }, [scenes, assignments]);
-
   // --- DERIVED DATA FOR CALLBOARD ---
   const callboardSchedule = useMemo(() => {
       return schedule.map(slot => {
