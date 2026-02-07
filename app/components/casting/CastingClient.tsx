@@ -496,7 +496,27 @@ const handleSave = async () => {
 
     setIsSaving(false);
   };
+const handleToggleScene = (rowId: number, scene: Scene) => {
+    setRows(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
 
+      // 1. Get the current list of scenes (preferring the Draft list if it exists)
+      const currentList = row._pendingScenes || row.savedScenes || [];
+      const isPresent = currentList.some(s => s.id === scene.id);
+
+      let newList;
+      if (isPresent) {
+        // REMOVE: Filter out the clicked scene
+        newList = currentList.filter(s => s.id !== scene.id);
+      } else {
+        // ADD: Push the new scene (formatted as a BaserowLink)
+        newList = [...currentList, { id: scene.id, value: scene.name }];
+      }
+
+      // 2. Update the row with the new _pendingScenes array
+      return { ...row, _pendingScenes: newList };
+    }));
+  };
   const handleDropAssignment = (e: React.DragEvent, roleId: number) => {
     e.preventDefault();
     const actorIdStr = e.dataTransfer.getData("actorId");
@@ -738,20 +758,38 @@ return (
                                     )}
                                 </td>
 
-                                <td className="p-3">
-                                    <div className="flex items-center gap-[2px]">
-                                    {allScenes.map(scene => {
-                                        const isActive = assignedIds.has(scene.id);
-                                        return (
-                                        <div 
-                                            key={scene.id}
-                                            title={`${scene.name} (${isActive ? 'Active' : 'Out'})`}
-                                            className={`w-2.5 h-4 rounded-[1px] transition-all duration-300 ${isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-emerald-500/80') : 'bg-zinc-800/50 hover:bg-zinc-700'}`}
-                                        />
-                                        );
-                                    })}
-                                    </div>
-                                </td>
+<td className="p-3">
+    <div className="flex items-center gap-[2px]">
+    {allScenes.map(scene => {
+        const isActive = assignedIds.has(scene.id);
+        
+        // Visual Logic: 
+        // If it's active AND part of a draft (_pendingScenes exists), it's Blue.
+        // If it's active and Saved, it's Green.
+        // If it's inactive, it's dark gray.
+        let colorClass = 'bg-zinc-800/50 hover:bg-zinc-600'; // Default inactive
+        
+        if (isActive) {
+            if (isDraft) {
+                // If the row is in draft mode, we highlight modifications differently if we want, 
+                // but for now, let's keep all active draft items Blue.
+                colorClass = 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'; 
+            } else {
+                colorClass = 'bg-emerald-500/80 hover:bg-emerald-400';
+            }
+        }
+
+        return (
+        <button 
+            key={scene.id}
+            onClick={() => handleToggleScene(row.id, scene)}
+            title={`${scene.name} (${isActive ? 'Active' : 'Inactive'}) - Click to Toggle`}
+            className={`w-2.5 h-4 rounded-[1px] transition-all duration-100 ${colorClass}`}
+        />
+        );
+    })}
+    </div>
+</td>
                                 </tr>
                             );
                             })}
