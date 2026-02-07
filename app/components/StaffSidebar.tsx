@@ -16,12 +16,27 @@ export default function StaffSidebar() {
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
-  const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
-  const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
+  // Accordion State for Expanded Mode
+  // We track which groups are open by their label
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
+  // Auto-expand the group if we are on a child route
   useEffect(() => {
-    if (isCastingRoute) setCastingOpen(true);
-  }, [pathname, isCastingRoute]);
+    NAV_CONFIG.forEach(section => {
+        section.items.forEach((item: any) => {
+            if (item.children) {
+                const isChildActive = item.children.some((child: any) => pathname.includes(child.href));
+                if (isChildActive) {
+                    setOpenGroups(prev => ({ ...prev, [item.label]: true }));
+                }
+            }
+        });
+    });
+  }, [pathname]);
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
   return (
     <nav className={`w-full flex flex-col h-full bg-zinc-900 transition-all duration-300 ${isSimulating ? 'border-r-4 border-red-500/30' : ''}`}>
@@ -77,47 +92,65 @@ export default function StaffSidebar() {
                     {section.items.map((item: any) => {
                         if (item.permission && !hasPermission(globalRole, productionRole, item.permission as Permission)) return null;
 
-                        // Collapsible Group
+                        // ------------------------------------------------
+                        // COLLAPSIBLE GROUP LOGIC
+                        // ------------------------------------------------
                         if (item.isCollapsible && item.children) {
+                            const isGroupOpen = openGroups[item.label] || false;
+                            const isGroupActive = item.children.some((child: any) => pathname.includes(child.href));
+
+                            // FILTER CHILDREN PERMISSIONS
+                            const validChildren = item.children.filter((child: any) => 
+                                !child.permission || hasPermission(globalRole, productionRole, child.permission as Permission)
+                            );
+
+                            if (validChildren.length === 0) return null;
+
+                            // IF COLLAPSED: Use the Flyout Menu
+                            if (isCollapsed) {
+                                return (
+                                    <FlyoutMenu 
+                                        key={item.label}
+                                        label={item.label}
+                                        icon={item.icon}
+                                        active={isGroupActive}
+                                        items={validChildren}
+                                        pathname={pathname}
+                                    />
+                                );
+                            }
+
+                            // IF EXPANDED: Use Standard Accordion
                             return (
                                 <div key={item.label}>
-                                    <SidebarTooltip text={item.label} isCollapsed={isCollapsed}>
-                                        <button 
-                                            onClick={() => setCastingOpen(!isCastingOpen)}
-                                            className={`
-                                                w-full flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all
-                                                ${isCollapsed ? 'justify-center' : 'justify-between'}
-                                                ${isCastingRoute ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
-                                            `}
-                                        >
-                                            <div className="flex items-center">
-                                                <item.icon size={18} className={`shrink-0 ${isCastingRoute ? "text-purple-400" : "text-zinc-500"}`}/>
-                                                <span className={`overflow-hidden transition-all duration-300 ease-in-out whitespace-nowrap ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}`}>
-                                                    {item.label}
-                                                </span>
-                                            </div>
-                                            {!isCollapsed && (
-                                                isCastingOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>
-                                            )}
-                                        </button>
-                                    </SidebarTooltip>
+                                    <button 
+                                        onClick={() => toggleGroup(item.label)}
+                                        className={`
+                                            w-full flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all
+                                            justify-between
+                                            ${isGroupActive ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
+                                        `}
+                                    >
+                                        <div className="flex items-center">
+                                            <item.icon size={18} className={`shrink-0 ${isGroupActive ? "text-purple-400" : "text-zinc-500"}`}/>
+                                            <span className="ml-3 whitespace-nowrap overflow-hidden transition-all duration-300">
+                                                {item.label}
+                                            </span>
+                                        </div>
+                                        {isGroupOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                                    </button>
                                     
-                                    {isCastingOpen && (
-                                        <div className={`
-                                            mt-1 space-y-1 animate-in slide-in-from-left-2 duration-200
-                                            ${isCollapsed ? 'ml-0 flex flex-col items-center' : 'ml-4 pl-4 border-l border-white/10'}
-                                        `}>
-                                            {item.children.map((child: any) => (
-                                                (!child.permission || hasPermission(globalRole, productionRole, child.permission as Permission)) && (
-                                                    <SubNavItem 
-                                                        key={child.href}
-                                                        href={child.href} 
-                                                        icon={<child.icon size={14}/>} 
-                                                        label={child.label} 
-                                                        active={pathname === child.href} 
-                                                        isCollapsed={isCollapsed}
-                                                    />
-                                                )
+                                    {isGroupOpen && (
+                                        <div className="mt-1 space-y-1 ml-4 pl-4 border-l border-white/10 animate-in slide-in-from-left-2 duration-200">
+                                            {validChildren.map((child: any) => (
+                                                <SubNavItem 
+                                                    key={child.href}
+                                                    href={child.href} 
+                                                    icon={<child.icon size={14}/>} 
+                                                    label={child.label} 
+                                                    active={pathname === child.href} 
+                                                    isCollapsed={false}
+                                                />
                                             ))}
                                         </div>
                                     )}
@@ -125,7 +158,9 @@ export default function StaffSidebar() {
                             );
                         }
 
-                        // Standard Item
+                        // ------------------------------------------------
+                        // STANDARD ITEM
+                        // ------------------------------------------------
                         return (
                             <NavItem 
                                 key={item.href}
@@ -158,7 +193,87 @@ export default function StaffSidebar() {
 }
 
 // ----------------------------------------------------------------------
-// COMPONENT: NAV ITEM (Wrapped in Tooltip)
+// COMPONENT: FLYOUT MENU (The "Industry Standard" Fix)
+// ----------------------------------------------------------------------
+
+function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [coords, setCoords] = useState({ x: 0, y: 0 });
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleMouseEnter = (e: React.MouseEvent) => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const rect = e.currentTarget.getBoundingClientRect();
+        setCoords({ x: rect.right + 8, y: rect.top }); // Position to the right
+        setIsOpen(true);
+    };
+
+    const handleMouseLeave = () => {
+        // Add a small delay so user can bridge the gap between button and menu
+        timeoutRef.current = setTimeout(() => setIsOpen(false), 100); 
+    };
+
+    return (
+        <>
+            <button 
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                className={`
+                    w-full flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-all
+                    ${active ? 'text-white bg-white/5' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
+                `}
+            >
+                <Icon size={18} className={active ? "text-purple-400" : "text-zinc-500"}/>
+            </button>
+
+            {isOpen && createPortal(
+                <div 
+                    onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }}
+                    onMouseLeave={() => setIsOpen(false)}
+                    style={{ top: coords.y, left: coords.x }}
+                    className="fixed z-[9999] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-2 w-48 animate-in fade-in zoom-in-95 duration-100"
+                >
+                    {/* Header */}
+                    <div className="px-3 py-2 text-xs font-black text-zinc-500 uppercase tracking-widest border-b border-white/5 mb-1">
+                        {label}
+                    </div>
+                    {/* Links */}
+                    <div className="flex flex-col gap-1">
+                        {items.map((child: any) => {
+                            const isActive = pathname === child.href;
+                            const ChildIcon = child.icon;
+                            return (
+                                <Link 
+                                    key={child.href}
+                                    href={child.href}
+                                    onClick={() => setIsOpen(false)}
+                                    className={`
+                                        flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors
+                                        ${isActive 
+                                            ? 'bg-zinc-800 text-white' 
+                                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}
+                                    `}
+                                >
+                                    <ChildIcon size={14} />
+                                    {child.label}
+                                </Link>
+                            )
+                        })}
+                    </div>
+                    
+                    {/* Left Arrow to point at sidebar */}
+                    <div 
+                        className="absolute top-4 -left-1 w-2 h-2 bg-zinc-900 border-l border-b border-zinc-700 rotate-45" 
+                    />
+                </div>,
+                document.body
+            )}
+        </>
+    );
+}
+
+// ----------------------------------------------------------------------
+// STANDARD COMPONENTS
 // ----------------------------------------------------------------------
 
 function NavItem({ href, icon, label, active, isCollapsed }: any) {
@@ -188,71 +303,45 @@ function NavItem({ href, icon, label, active, isCollapsed }: any) {
 
 function SubNavItem({ href, icon, label, active, isCollapsed }: any) {
     return (
-        <SidebarTooltip text={label} isCollapsed={isCollapsed}>
-            <Link 
-                href={href} 
-                className={`
-                    flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all relative
-                    ${isCollapsed ? 'justify-center w-full' : ''}
-                    ${active 
-                        ? 'text-white bg-white/5' 
-                        : 'text-zinc-500 hover:text-zinc-300'}
-                `}
-            >
-                <div className="shrink-0">{icon}</div>
-                <span className={`
-                    overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out
-                    ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}
-                `}>
-                    {label}
-                </span>
-            </Link>
-        </SidebarTooltip>
+        <Link 
+            href={href} 
+            className={`
+                flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all relative
+                ${isCollapsed ? 'justify-center w-full' : ''}
+                ${active 
+                    ? 'text-white bg-white/5' 
+                    : 'text-zinc-500 hover:text-zinc-300'}
+            `}
+        >
+            <div className="shrink-0">{icon}</div>
+            <span className="ml-3 truncate">{label}</span>
+        </Link>
     )
 }
-
-// ----------------------------------------------------------------------
-// HELPER: FLOATING TOOLTIP PORTAL
-// ----------------------------------------------------------------------
 
 function SidebarTooltip({ children, text, isCollapsed }: { children: React.ReactElement, text: string, isCollapsed: boolean }) {
     const [coords, setCoords] = useState<{ x: number, y: number } | null>(null);
     const [isHovered, setIsHovered] = useState(false);
 
-    // Only enable if collapsed
     if (!isCollapsed) return children;
-
-    const handleMouseEnter = (e: React.MouseEvent) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setCoords({
-            x: rect.right + 10, // 10px offset from right of sidebar
-            y: rect.top + (rect.height / 2) // Centered vertically
-        });
-        setIsHovered(true);
-    };
-
-    const handleMouseLeave = () => {
-        setIsHovered(false);
-    };
 
     return (
         <>
             {React.cloneElement(children, {
-                onMouseEnter: handleMouseEnter,
-                onMouseLeave: handleMouseLeave
+                onMouseEnter: (e: React.MouseEvent) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setCoords({ x: rect.right + 10, y: rect.top + (rect.height / 2) });
+                    setIsHovered(true);
+                },
+                onMouseLeave: () => setIsHovered(false)
             })}
             
             {isHovered && coords && createPortal(
                 <div 
                     className="fixed z-[9999] px-2 py-1 bg-zinc-900 text-white text-[10px] font-bold rounded border border-white/10 shadow-xl animate-in fade-in zoom-in-95 duration-100 whitespace-nowrap pointer-events-none"
-                    style={{
-                        top: coords.y,
-                        left: coords.x,
-                        transform: 'translateY(-50%)'
-                    }}
+                    style={{ top: coords.y, left: coords.x, transform: 'translateY(-50%)' }}
                 >
                     {text}
-                    {/* Tiny Arrow pointing left */}
                     <div className="absolute top-1/2 -left-1 w-2 h-2 bg-zinc-900 border-l border-b border-white/10 -translate-y-1/2 rotate-45" />
                 </div>,
                 document.body
