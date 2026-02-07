@@ -1,76 +1,71 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react";
-import { Users, Filter, X, Check, Ruler, Scale, AlertOctagon } from "lucide-react";
+import React, { useState } from "react";
+import { 
+  Users, Filter, X, Check, Ruler, Scale, AlertOctagon, Crown 
+} from "lucide-react";
 
-// --- 🛠️ UTILITIES ---
-const safeVal = (val: any, fallback: string | number = "-") => {
-  if (val === undefined || val === null) return fallback;
-  if (Array.isArray(val)) return val[0]?.value ?? val[0] ?? fallback;
-  if (typeof val === "object") return val.value ?? val.id ?? fallback;
-  return val;
-};
-// 🛡️ REFACTORED HELPERS
-const getSceneName = (scene: any) => {
-  const val = scene.name || scene["Scene Name"];
-  return typeof val === 'object' ? val.value : (val || "Untitled Scene");
-};
+// ============================================================================
+// 1. CONFIGURATION & TYPES
+// ============================================================================
 
-const getSceneType = (scene: any) => {
-  const val = scene.type || scene["Scene Type"];
-  // If Baserow returns a Select object, grab the .value
-  return typeof val === 'object' ? val.value : (val || "Scene");
-};
-
-const getSceneAct = (scene: any) => {
-  const val = scene.act || scene.Act;
-  return typeof val === 'object' ? val.value : (val || "");
-};
-// --- 📊 METRICS CONFIGURATION ---
-// 🚨 REFACTORED: Now uses lowercase clean keys from your baserow.ts getAuditionees()
 const METRICS = [
   { 
     label: "Vocal", 
-    getValue: (a: any) => a.vocalScore, // matched to F.VOCAL_SCORE
+    getValue: (a: any) => a.vocalScore, 
     format: (v: any) => (
-      <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-emerald-500/20 text-emerald-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>
+      <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-emerald-500/20 text-emerald-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-600'}`}>
         {Number(v || 0).toFixed(1)}
       </span>
     )
   },
   { 
     label: "Acting", 
-    getValue: (a: any) => a.actingScore, // matched to F.ACTING_SCORE
+    getValue: (a: any) => a.actingScore, 
     format: (v: any) => (
-      <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-purple-500/20 text-purple-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>
+      <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-purple-500/20 text-purple-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-600'}`}>
         {Number(v || 0).toFixed(1)}
       </span>
     )
   },
   { 
     label: "Height", 
-    getValue: (a: any) => a.height || "-", 
-    format: (v: any) => <div className="flex justify-center items-center gap-1 font-mono text-zinc-400 text-xs"><Ruler size={10} className="opacity-50" /> {v}</div> 
+    getValue: (a: any) => a.height, 
+    format: (v: any) => (
+      <div className="flex justify-center items-center gap-1 font-mono text-zinc-400 text-xs">
+        <Ruler size={10} className="opacity-50" /> {v || "-"}
+      </div>
+    )
   },
   { 
     label: "Age", 
-    getValue: (a: any) => a.age || "?", 
-    format: (v: any) => <span className="text-zinc-400 text-xs">{v}</span> 
+    getValue: (a: any) => a.age, 
+    format: (v: any) => <span className="text-zinc-500 text-xs">{v || "?"}</span> 
   }
 ];
 
-// --- 🧩 SUB-COMPONENT: The Role Card ---
+interface ChemistryProps {
+  roles: any[];
+  onRemoveActor: (roleId: number, actorId: number) => void;
+  onPromoteActor: (roleId: number, actorId: number) => void;
+  onDropActor: (e: React.DragEvent, roleIdStr: string) => void;
+}
+
+// ============================================================================
+// 2. SUB-COMPONENT: COMPARISON CARD
+// ============================================================================
+
 function RoleComparisonCard({ 
   role, 
   onDropActor, 
   onRemoveActor, 
-  onConfirmRole 
+  onPromoteActor 
 }: { 
   role: any; 
   onDropActor: (e: React.DragEvent, id: string) => void;
-  onRemoveActor: (roleId: string, actorId: number) => void;
-  onConfirmRole: (roleId: string, actorId: number) => void;
+  onRemoveActor: (roleId: number, actorId: number) => void;
+  onPromoteActor: (roleId: number, actorId: number) => void;
 }) {
   
   const handleDragOver = (e: React.DragEvent) => {
@@ -78,23 +73,27 @@ function RoleComparisonCard({
     e.dataTransfer.dropEffect = "move";
   };
 
+  const hasCandidates = role.actors && role.actors.length > 0;
+
   return (
     <div 
       onDragOver={handleDragOver}
       onDrop={(e) => onDropActor(e, String(role.id))}
       className="group relative"
     >
-      {/* ROLE HEADER */}
+      {/* HEADER */}
       <div className="flex items-center gap-3 mb-4 pl-2 border-l-2 border-purple-500/50">
          <h2 className="text-xl font-black uppercase text-white tracking-tighter italic">{role.name}</h2>
          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-white/5">{role.type || "Role"}</span>
-         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-white/5">{role.actors?.length || 0} Candidates</span>
+         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border border-white/5 ${hasCandidates ? 'bg-purple-500/20 text-purple-300' : 'bg-zinc-800 text-zinc-500'}`}>
+            {role.actors?.length || 0} Candidates
+         </span>
       </div>
 
-      {/* TABLE CONTAINER */}
-      <div className={`rounded-xl border border-white/5 bg-zinc-900/20 overflow-hidden transition-all ${(!role.actors || role.actors.length === 0) ? 'border-dashed border-zinc-800 h-32 flex items-center justify-center' : ''}`}>
+      {/* BODY */}
+      <div className={`rounded-xl border border-white/5 bg-zinc-900/20 overflow-hidden transition-all ${!hasCandidates ? 'border-dashed border-zinc-800 h-32 flex items-center justify-center' : ''}`}>
         
-        {(!role.actors || role.actors.length === 0) ? (
+        {!hasCandidates ? (
              <div className="text-zinc-600 flex items-center gap-2">
                 <Users size={20} />
                 <span className="text-xs font-bold uppercase tracking-wider">Drag candidates here</span>
@@ -104,46 +103,56 @@ function RoleComparisonCard({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="p-4 w-24 md:w-32 bg-zinc-900/50 border-b border-r border-white/5 text-[10px] font-black uppercase text-zinc-500 tracking-wider text-right align-bottom sticky left-0 z-10 backdrop-blur-sm">
+                  <th className="p-4 w-24 bg-zinc-900/50 border-b border-r border-white/5 text-[10px] font-black uppercase text-zinc-500 tracking-wider text-right align-bottom sticky left-0 z-10 backdrop-blur-sm">
                     Candidate
                   </th>
                   
-                  {role.actors.map((actor: any) => {
-                    const isSelected = role.selectedActorIds?.includes(actor.id);
-                    return (
-                      <th key={actor.id} className={`p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col ${isSelected ? 'bg-purple-900/10' : ''}`}>
-                         <div className={`relative aspect-[3/4] rounded-lg overflow-hidden border shadow-lg mb-2 transition-all ${isSelected ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-white/10'}`}>
-                            {/* 🚨 FIX: Using actor.headshot */}
+                  {role.actors.map((actor: any) => (
+                      <th key={actor.id} className="p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col">
+                         
+                         {/* AVATAR + ACTIONS */}
+                         <div className="relative aspect-[3/4] rounded-lg overflow-hidden border border-white/10 shadow-lg mb-2 group/image">
                             <img 
-                                title={actor.name} 
                                 src={actor.headshot || "https://placehold.co/400x600/111/444?text=No+Img"} 
                                 className="w-full h-full object-cover" 
-                                alt=""
+                                alt={actor.name}
                             />
                             
-                            <button onClick={() => onRemoveActor(String(role.id), actor.id)} className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/col:opacity-100 transition-opacity z-20">
+                            {/* REMOVE BUTTON (Top Right) */}
+                            <button 
+                                onClick={() => onRemoveActor(role.id, actor.id)} 
+                                className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity z-20"
+                                title="Remove Candidate"
+                            >
                                 <X size={14} />
                             </button>
-                            
-                            <div className={`absolute inset-x-0 bottom-0 p-2 flex justify-center bg-gradient-to-t from-black/90 to-transparent transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/col:opacity-100'}`}>
-                                <button onClick={() => onConfirmRole(String(role.id), actor.id)} className={`rounded-full shadow-xl flex items-center justify-center gap-1 px-3 py-1.5 transition-all text-xs font-bold ${isSelected ? 'bg-purple-600 text-white' : 'bg-white text-black hover:bg-emerald-400'}`}>
-                                    {isSelected ? <><Check size={12} /> CAST</> : "SELECT"}
-                                </button>
-                            </div>
+
+                            {/* CROWN BUTTON (Center Overlay) */}
+                            {role.actors.length > 1 && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover/image:opacity-100 transition-opacity z-10">
+                                    <button 
+                                        onClick={() => onPromoteActor(role.id, actor.id)}
+                                        className="bg-emerald-500 text-black p-3 rounded-full transform scale-90 hover:scale-110 transition-transform shadow-xl hover:bg-emerald-400"
+                                        title="Cast this actor (Removes others)"
+                                    >
+                                        <Crown size={20} fill="currentColor" />
+                                    </button>
+                                </div>
+                            )}
                          </div>
                          
                          <div className="text-center px-1">
-                            {/* 🚨 FIX: Using actor.name */}
-                            <p className={`text-sm font-black leading-tight line-clamp-2 ${isSelected ? 'text-purple-300' : 'text-white'}`}>
+                            <p className="text-sm font-black leading-tight line-clamp-2 text-white">
                                 {actor.name || "Unknown"} 
                             </p>
                          </div>
                       </th>
-                    )})}
+                    ))}
                   <th className="p-4 border-b border-white/5 min-w-[50px] bg-zinc-900/30 border-dashed border-l border-white/10"></th>
                 </tr>
               </thead>
               <tbody className="text-xs font-bold text-zinc-300">
+                  {/* METRICS ROWS */}
                   {METRICS.map((metric, i) => (
                       <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
                           <td className="p-3 border-b border-r border-white/5 text-right text-zinc-500 uppercase text-[10px] sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">
@@ -158,26 +167,30 @@ function RoleComparisonCard({
                       </tr>
                   ))}
                   
+                  {/* CONFLICTS ROW */}
                   <tr className="bg-red-900/5">
                       <td className="p-3 border-r border-white/5 text-right text-red-500/70 font-black uppercase text-[10px] align-top pt-4 sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">
                         Conflicts
                       </td>
                       {role.actors.map((actor: any) => {
-                          const conflictStr = actor.conflicts || "";
-                          const conflicts = typeof conflictStr === 'string' 
-                            ? conflictStr.split(',').filter((c: string) => c && !c.includes("No known")) 
-                            : [];
+                          const conflictData = actor.conflicts; 
+                          // Handle string "A, B" or array ["A", "B"]
+                          const conflicts = Array.isArray(conflictData) 
+                            ? conflictData 
+                            : (typeof conflictData === 'string' ? conflictData.split(',') : []);
+
+                          const cleanConflicts = conflicts.filter((c: string) => c && !c.includes("No known"));
 
                           return (
                               <td key={actor.id} className="p-3 border-r border-white/5 text-center align-top">
-                                  {conflicts.length > 0 ? (
+                                  {cleanConflicts.length > 0 ? (
                                       <div className="flex flex-col gap-1 items-center">
-                                          {conflicts.slice(0, 3).map((c: string, i: number) => (
+                                          {cleanConflicts.slice(0, 3).map((c: string, i: number) => (
                                               <div key={i} className="flex items-center gap-1 text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded w-fit max-w-[140px] truncate">
                                                   <AlertOctagon size={8} className="shrink-0" /> {c}
                                               </div>
                                           ))}
-                                          {conflicts.length > 3 && <span className="text-[9px] text-red-500/50">+{conflicts.length - 3} more</span>}
+                                          {cleanConflicts.length > 3 && <span className="text-[9px] text-red-500/50">+{cleanConflicts.length - 3} more</span>}
                                       </div>
                                   ) : <span className="text-[10px] text-emerald-500/50 flex items-center justify-center gap-1"><Check size={10}/> Clear</span>}
                               </td>
@@ -194,10 +207,12 @@ function RoleComparisonCard({
   );
 }
 
-// --- 🚀 MAIN COMPONENT ---
-// (Remains largely the same, but ensure props match CastingClient)
-export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveActor, onConfirmRole }: Props) {
-  const [activeFilter, setActiveFilter] = useState("Lead");
+// ============================================================================
+// 3. MAIN COMPONENT
+// ============================================================================
+
+export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveActor, onPromoteActor }: ChemistryProps) {
+  const [activeFilter, setActiveFilter] = useState("All");
 
   const visibleRoles = roles.filter((r: { type: any; }) => 
     activeFilter === "All" || (r.type && String(r.type).includes(activeFilter))
@@ -205,14 +220,16 @@ export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveAc
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 relative overflow-hidden">
-      <header className="p-4 border-b border-white/5 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 backdrop-blur-md z-30">
-         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
-            <h1 className="text-xl font-black italic uppercase flex items-center gap-2 text-white">
-                <Scale className="text-purple-500" /> Head-to-Head
+      {/* HEADER & FILTERS */}
+      <header className="px-4 py-3 border-b border-white/5 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 backdrop-blur-md z-30">
+         <div className="flex items-center gap-4 w-full md:w-auto">
+            <h1 className="text-sm font-black italic uppercase flex items-center gap-2 text-zinc-400">
+                <Scale className="text-purple-500" size={16} /> Head-to-Head
             </h1>
+            <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
             
-            <div className="flex bg-zinc-900 p-1 rounded-lg border border-white/5 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
-                {["Lead", "Supporting", "Featured", "Ensemble", "All"].map(filter => (
+            <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-white/5 overflow-x-auto max-w-[250px] md:max-w-none scrollbar-hide">
+                {["All", "Lead", "Supporting", "Featured", "Ensemble"].map(filter => (
                     <button
                         key={filter}
                         onClick={() => setActiveFilter(filter)}
@@ -225,6 +242,7 @@ export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveAc
          </div>
       </header>
 
+      {/* CANVAS */}
       <div className="flex-1 overflow-x-auto overflow-y-auto p-4 md:p-8 custom-scrollbar bg-zinc-950 space-y-12 pb-24 md:pb-8">
             {visibleRoles.length === 0 && (
                 <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 opacity-50 min-h-[300px]">
@@ -233,13 +251,13 @@ export default function ChemistryWorkspace({ roles = [], onDropActor, onRemoveAc
                 </div>
             )}
 
-            {visibleRoles.map((role: unknown) => (
+            {visibleRoles.map((role: any) => (
                <RoleComparisonCard 
                   key={role.id}
                   role={role}
                   onDropActor={onDropActor}
                   onRemoveActor={onRemoveActor}
-                  onConfirmRole={onConfirmRole}
+                  onPromoteActor={onPromoteActor}
                />
             ))}
       </div>

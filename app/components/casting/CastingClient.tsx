@@ -11,6 +11,7 @@ import { generateCastingRows, saveCastingGrid } from '@/app/lib/actions';
 import CallbackActorModal from './CallbackActorModal';
 import AutoCastButton from './AutoCastButton';
 import CastingPrintView from './CastingPrintView';
+import ChemistryWorkspace from './ChemistryWorkspace'; // 👈 NEW IMPORT
 
 // ============================================================================
 // 1. TYPES & CONFIG
@@ -284,113 +285,6 @@ function RosterSidebar({
 }
 
 // ============================================================================
-// 3. SUB-COMPONENT: CHEMISTRY WORKSPACE
-// ============================================================================
-// ... (Kept largely the same, logic works fine)
-const METRICS = [
-    { label: "Vocal", getValue: (a: any) => a.vocalScore, format: (v: any) => <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-emerald-500/20 text-emerald-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>{Number(v || 0).toFixed(1)}</span> },
-    { label: "Acting", getValue: (a: any) => a.actingScore, format: (v: any) => <span className={`px-2 py-1 rounded font-mono text-xs ${v >= 4 ? 'bg-purple-500/20 text-purple-400' : v >= 3 ? 'bg-blue-500/20 text-blue-400' : 'text-zinc-500'}`}>{Number(v || 0).toFixed(1)}</span> },
-    { label: "Height", getValue: (a: any) => a.height || "-", format: (v: any) => <div className="flex justify-center items-center gap-1 font-mono text-zinc-400 text-xs"><Ruler size={10} className="opacity-50" /> {v}</div> },
-    { label: "Age", getValue: (a: any) => a.age || "?", format: (v: any) => <span className="text-zinc-400 text-xs">{v}</span> }
-  ];
-  
-function ChemistryWorkspace({ roles = [], onRemoveActor, onDropActor }: { roles: any[], onRemoveActor: any, onDropActor: any }) {
-    const [activeFilter, setActiveFilter] = useState("All");
-    const visibleRoles = roles.filter((r) => activeFilter === "All" || (r.type && String(r.type).includes(activeFilter)));
-  
-    return (
-      <div className="h-full flex flex-col bg-zinc-950 relative overflow-hidden">
-        <header className="px-4 py-3 border-b border-white/5 bg-zinc-900/50 flex flex-row justify-between items-center gap-4 shrink-0 backdrop-blur-md z-30">
-           <div className="flex items-center gap-4 w-full">
-              <h1 className="text-sm font-black italic uppercase flex items-center gap-2 text-zinc-400">
-                  <Scale className="text-purple-500" size={16} /> Head-to-Head
-              </h1>
-              <div className="h-6 w-px bg-white/10 mx-2"></div>
-              <div className="flex bg-zinc-900 p-0.5 rounded-lg border border-white/5">
-                  {["All", "Lead", "Supporting", "Featured", "Ensemble"].map(filter => (
-                      <button key={filter} onClick={() => setActiveFilter(filter)} className={`px-3 py-1 text-[10px] font-bold uppercase rounded transition-all ${activeFilter === filter ? 'bg-purple-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>{filter}</button>
-                  ))}
-              </div>
-           </div>
-        </header>
-  
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-zinc-950 space-y-12 pb-24 md:pb-8">
-              {visibleRoles.length === 0 && (
-                  <div className="flex flex-col items-center justify-center text-zinc-600 opacity-50 min-h-[300px]"><Filter size={48} className="mb-4" /><p>No roles match this filter.</p></div>
-              )}
-  
-              {visibleRoles.map((role) => (
-                 <div key={role.id} 
-                      className="group relative"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => onDropActor(e, String(role.id))}
-                 >
-                    <div className="flex items-center gap-3 mb-4 pl-2 border-l-2 border-purple-500/50">
-                      <h2 className="text-xl font-black uppercase text-white tracking-tighter italic">{role.name}</h2>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-white/5">{role.type || "Role"}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-white/5">{role.actors?.length || 0} Candidates</span>
-                    </div>
-  
-                    <div className={`rounded-xl border border-white/5 bg-zinc-900/20 overflow-hidden transition-all ${(!role.actors || role.actors.length === 0) ? 'border-dashed border-zinc-800 h-32 flex items-center justify-center' : ''}`}>
-                      {(!role.actors || role.actors.length === 0) ? (
-                          <div className="text-zinc-600 flex items-center gap-2">
-                              <Users size={20} />
-                              <span className="text-xs font-bold uppercase tracking-wider">Drag candidates here</span>
-                          </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr>
-                                <th className="p-4 w-24 bg-zinc-900/50 border-b border-r border-white/5 text-[10px] font-black uppercase text-zinc-500 tracking-wider text-right align-bottom sticky left-0 z-10 backdrop-blur-sm">Candidate</th>
-                                {role.actors.map((actor: any) => (
-                                    <th key={actor.id} className="p-4 border-b border-r border-white/5 min-w-[140px] w-[160px] relative group/col">
-                                      <div className="relative aspect-[3/4] rounded-lg overflow-hidden border border-white/10 shadow-lg mb-2">
-                                          <img src={actor.headshot || "https://placehold.co/100x100/333/999?text=?"} className="w-full h-full object-cover" alt="" />
-                                          <button onClick={() => onRemoveActor(role.id, actor.id)} className="absolute top-1 right-1 p-1.5 bg-black/60 text-zinc-400 hover:text-red-400 rounded-full opacity-0 group-hover/col:opacity-100 transition-opacity z-20"><X size={14} /></button>
-                                      </div>
-                                      <div className="text-center px-1"><p className="text-sm font-black leading-tight line-clamp-2 text-white">{actor.name}</p></div>
-                                    </th>
-                                ))}
-                                <th className="p-4 border-b border-white/5 min-w-[50px] bg-zinc-900/30 border-dashed border-l border-white/10"></th>
-                              </tr>
-                            </thead>
-                            <tbody className="text-xs font-bold text-zinc-300">
-                                {METRICS.map((metric, i) => (
-                                    <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
-                                        <td className="p-3 border-b border-r border-white/5 text-right text-zinc-500 uppercase text-[10px] sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">{metric.label}</td>
-                                        {role.actors.map((actor: any) => (<td key={actor.id} className="p-3 border-b border-r border-white/5 text-center">{metric.format(metric.getValue(actor))}</td>))}
-                                        <td className="border-b border-white/5 bg-zinc-900/30 border-l border-dashed border-white/10"></td>
-                                    </tr>
-                                ))}
-                                <tr className="bg-red-900/5">
-                                    <td className="p-3 border-r border-white/5 text-right text-red-500/70 font-black uppercase text-[10px] align-top pt-4 sticky left-0 bg-zinc-900/90 backdrop-blur-sm z-10">Conflicts</td>
-                                    {role.actors.map((actor: any) => (
-                                        <td key={actor.id} className="p-3 border-r border-white/5 text-center align-top">
-                                            {(actor.conflicts?.length > 0) ? (
-                                                <div className="flex flex-col gap-1 items-center">
-                                                    {actor.conflicts.slice(0, 3).map((c: string, i: number) => (
-                                                        <div key={i} className="flex items-center gap-1 text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded w-fit max-w-[140px] truncate"><AlertOctagon size={8} className="shrink-0" /> {c}</div>
-                                                    ))}
-                                                </div>
-                                            ) : <span className="text-[10px] text-emerald-500/50 flex items-center justify-center gap-1"><Check size={10}/> Clear</span>}
-                                        </td>
-                                    ))}
-                                    <td className="bg-zinc-900/30 border-l border-dashed border-white/10"></td>
-                                </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                 </div>
-              ))}
-        </div>
-      </div>
-    );
-}
-
-// ============================================================================
 // 4. MAIN CLIENT
 // ============================================================================
 export default function CastingClient({ 
@@ -562,6 +456,21 @@ export default function CastingClient({
     setRows(prev => prev.map(r => {
       if (r.id === roleId) {
          return { ...r, person: r.person.filter(p => p.id !== actorId) };
+      }
+      return r;
+    }));
+  };
+
+  // NEW: "Pick the Winner" - Removes all other actors from this role
+  const handlePromoteActor = (roleId: number, actorId: number) => {
+    setRows(prev => prev.map(r => {
+      if (r.id === roleId) {
+         // Find the winner's full data from the current list
+         const winner = r.person?.find(p => p.id === actorId);
+         if (!winner) return r;
+         
+         // Nuke everyone else, keep only the winner
+         return { ...r, person: [winner] };
       }
       return r;
     }));
@@ -760,57 +669,54 @@ export default function CastingClient({
                                     </div>
                                 </td>
                                 
-<td 
-    className="p-3 text-sm text-zinc-400 transition-colors relative"
-    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
-    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
-    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
->
-    {row.person && row.person.length > 0 ? (
-        <div className="flex items-center pl-2">
-            {row.person.map((p) => {
-                const actorData = roster.find(r => r.id === p.id);
-                const avatarUrl = actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png";
-
-                return (
-                    <div 
-                        key={p.id} 
-                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
-                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
-                    >
-                        <img 
-                            src={avatarUrl} 
-                            alt={p.value}
-                            className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm"
-                            title={p.value}
-                        />
-                        
-                        {/* FIX: The outer div now has 'pb-2' (padding-bottom) instead of 'mb-2' (margin-bottom).
-                           This extends the invisible container down to touch the avatar, creating a bridge for the mouse.
-                        */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/avatar:flex flex-col items-center z-30">
-                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
-                                <span className="font-bold">{p.value}</span>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }}
-                                    className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full transition-colors"
+                                <td 
+                                    className="p-3 text-sm text-zinc-400 transition-colors relative"
+                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
+                                    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
+                                    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
                                 >
-                                    <X size={10} />
-                                </button>
-                            </div>
-                            {/* Optional: Tiny triangle arrow pointing down */}
-                            <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-800 rotate-45 -mt-1 transform translate-y-[-3px]"></div>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    ) : (
-        <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
-            Drop Actor
-        </div>
-    )}
-</td>
+                                    {row.person && row.person.length > 0 ? (
+                                        <div className="flex items-center pl-2">
+                                            {row.person.map((p) => {
+                                                const actorData = roster.find(r => r.id === p.id);
+                                                const avatarUrl = actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png";
+
+                                                return (
+                                                    <div 
+                                                        key={p.id} 
+                                                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
+                                                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
+                                                    >
+                                                        <img 
+                                                            src={avatarUrl} 
+                                                            alt={p.value}
+                                                            className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm"
+                                                            title={p.value}
+                                                        />
+                                                        
+                                                        {/* HOVER TOOLTIP FIX: pb-2 added for safe bridge */}
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/avatar:flex flex-col items-center z-30">
+                                                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                                                                <span className="font-bold">{p.value}</span>
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }}
+                                                                    className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full transition-colors"
+                                                                >
+                                                                    <X size={10} />
+                                                                </button>
+                                                            </div>
+                                                            <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-800 rotate-45 -mt-1 transform translate-y-[-3px]"></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
+                                            Drop Actor
+                                        </div>
+                                    )}
+                                </td>
 
                                 <td className="p-3">
                                     <div className="flex items-center gap-[2px]">
@@ -846,6 +752,7 @@ export default function CastingClient({
                 <ChemistryWorkspace 
                     roles={getChemistryData()} 
                     onRemoveActor={handleRemoveActor} 
+                    onPromoteActor={handlePromoteActor} // 👈 NEW PROP PASSED
                     onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))}
                 />
             )}
