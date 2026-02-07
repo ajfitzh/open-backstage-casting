@@ -4,16 +4,16 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react'; // Added Layers for mini logo
+import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react';
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
 import { NAV_CONFIG } from '@/app/lib/nav-config'; 
-import { useSidebar } from '@/app/components/SidebarShell'; // 👈 Import Hook
+import { useSidebar } from '@/app/components/SidebarShell';
 
 export default function StaffSidebar() {
   const pathname = usePathname();
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
-  const { isCollapsed } = useSidebar(); // 👈 Get State
+  const { isCollapsed } = useSidebar(); 
 
   const isCastingRoute = pathname.includes('/auditions') || pathname.includes('/callbacks') || pathname.includes('/casting');
   const [isCastingOpen, setCastingOpen] = useState(isCastingRoute);
@@ -48,6 +48,7 @@ export default function StaffSidebar() {
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
         
         {NAV_CONFIG.map((section, idx) => {
+           // FIX 1: Cast permission to strict type
            if (section.permission && !hasPermission(globalRole, productionRole, section.permission as Permission)) return null;
 
            // Dashboard Special Case
@@ -78,7 +79,8 @@ export default function StaffSidebar() {
 
                 <div className="space-y-1">
                     {section.items.map((item: any) => {
-                        if (item.permission && !hasPermission(globalRole, productionRole, item.permission)) return null;
+                        // FIX 1: Cast permission
+                        if (item.permission && !hasPermission(globalRole, productionRole, item.permission as Permission)) return null;
 
                         // Collapsible Group (e.g. Casting)
                         if (item.isCollapsible && item.children) {
@@ -93,9 +95,12 @@ export default function StaffSidebar() {
                                         `}
                                         title={isCollapsed ? item.label : undefined}
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <item.icon size={18} className={isCastingRoute ? "text-purple-400" : "text-zinc-500"}/>
-                                            {!isCollapsed && <span>{item.label}</span>}
+                                        <div className="flex items-center">
+                                            <item.icon size={18} className={`shrink-0 ${isCastingRoute ? "text-purple-400" : "text-zinc-500"}`}/>
+                                            {/* FIX 2: Better Text Animation Logic */}
+                                            <span className={`overflow-hidden transition-all duration-300 ease-in-out whitespace-nowrap ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}`}>
+                                                {item.label}
+                                            </span>
                                         </div>
                                         {/* Hide Chevron if collapsed */}
                                         {!isCollapsed && (
@@ -110,7 +115,7 @@ export default function StaffSidebar() {
                                             ${isCollapsed ? 'ml-0 flex flex-col items-center' : 'ml-4 pl-4 border-l border-white/10'}
                                         `}>
                                             {item.children.map((child: any) => (
-                                                (!child.permission || hasPermission(globalRole, productionRole, child.permission)) && (
+                                                (!child.permission || hasPermission(globalRole, productionRole, child.permission as Permission)) && (
                                                     <SubNavItem 
                                                         key={child.href}
                                                         href={child.href} 
@@ -160,7 +165,7 @@ export default function StaffSidebar() {
 }
 
 // ----------------------------------------------------------------------
-// HELPER COMPONENTS
+// HELPER COMPONENTS (FIXED ANIMATIONS)
 // ----------------------------------------------------------------------
 
 function NavItem({ href, icon, label, active, isCollapsed }: any) {
@@ -169,7 +174,7 @@ function NavItem({ href, icon, label, active, isCollapsed }: any) {
             href={href} 
             title={isCollapsed ? label : undefined}
             className={`
-                flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition-all
+                flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all
                 ${isCollapsed ? 'justify-center' : ''}
                 ${active 
                     ? 'bg-zinc-800 text-white border border-white/5 shadow-sm' 
@@ -178,11 +183,13 @@ function NavItem({ href, icon, label, active, isCollapsed }: any) {
         >
             <div className="shrink-0">{icon}</div>
             
-            {!isCollapsed && (
-                <span className="truncate opacity-0 animate-in fade-in duration-200 fill-mode-forwards">
-                    {label}
-                </span>
-            )}
+            {/* FIX 2: Use CSS transitions instead of unmounting */}
+            <span className={`
+                overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out
+                ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}
+            `}>
+                {label}
+            </span>
         </Link>
     )
 }
@@ -193,7 +200,7 @@ function SubNavItem({ href, icon, label, active, isCollapsed }: any) {
             href={href} 
             title={isCollapsed ? label : undefined}
             className={`
-                flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all
+                flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all
                 ${isCollapsed ? 'justify-center w-full' : ''}
                 ${active 
                     ? 'text-white bg-white/5' 
@@ -202,11 +209,13 @@ function SubNavItem({ href, icon, label, active, isCollapsed }: any) {
         >
             <div className="shrink-0">{icon}</div>
             
-            {!isCollapsed && (
-                <span className="truncate opacity-0 animate-in fade-in duration-200 fill-mode-forwards">
-                    {label}
-                </span>
-            )}
+            {/* FIX 2: Use CSS transitions instead of unmounting */}
+            <span className={`
+                overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out
+                ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}
+            `}>
+                {label}
+            </span>
         </Link>
     )
 }

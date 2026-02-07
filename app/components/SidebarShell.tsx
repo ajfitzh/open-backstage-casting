@@ -28,7 +28,7 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
         {/* Toggle Button */}
         <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute -right-3 top-8 z-50 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full shadow-xl transition-transform hover:scale-110"
+            className="absolute -right-3 top-20 z-50 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full shadow-xl transition-transform hover:scale-110"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
             {isCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
