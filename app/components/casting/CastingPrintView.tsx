@@ -5,55 +5,56 @@ interface PrintViewProps {
   productionName?: string;
 }
 
-export default function CastingPrintView({ rows, productionName = "Production Cast List" }: PrintViewProps) {
-  // Filter out empty rows if you only want assigned roles
-  // Or keep them to show vacancies. Let's keep them but mark as "OPEN".
+export default function CastingPrintView({ rows, productionName = "Cast List" }: PrintViewProps) {
   
+  // Sort by Role Name for the print view (optional, but looks nicer)
+  const sortedRows = [...rows].sort((a, b) => {
+      const roleA = a.role?.[0]?.value || "";
+      const roleB = b.role?.[0]?.value || "";
+      return roleA.localeCompare(roleB);
+  });
+
   return (
-    <div className="hidden print:block fixed inset-0 z-[9999] bg-white text-black p-8 overflow-y-auto">
+    <div className="hidden print:block fixed inset-0 z-[9999] bg-white text-black p-12 overflow-y-auto">
       
       {/* HEADER */}
-      <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-6">
+      <div className="flex justify-between items-end border-b-4 border-black pb-4 mb-8">
         <div>
-            <h1 className="text-3xl font-bold uppercase tracking-wider">{productionName}</h1>
-            <p className="text-sm text-gray-500 mt-1">Generated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
+            <h1 className="text-4xl font-black uppercase tracking-widest">{productionName}</h1>
+            <p className="text-sm text-gray-500 mt-2 font-medium uppercase tracking-wide">
+                Official Cast List
+            </p>
         </div>
         <div className="text-right">
-            <p className="font-bold text-lg">{rows.filter(r => r.person && r.person.length > 0).length} Roles Cast</p>
-            <p className="text-sm text-gray-500">{rows.length} Total Roles</p>
+            <p className="font-bold text-xl">{rows.filter(r => r.person && r.person.length > 0).length} Roles Cast</p>
+            <p className="text-sm text-gray-500">{new Date().toLocaleDateString()}</p>
         </div>
       </div>
 
       {/* TABLE */}
       <table className="w-full text-left text-sm border-collapse">
         <thead>
-          <tr className="bg-gray-100 border-b border-black">
-            <th className="py-2 px-4 font-black uppercase w-1/3">Role</th>
-            <th className="py-2 px-4 font-black uppercase w-1/3">Actor</th>
-            <th className="py-2 px-4 font-black uppercase w-1/3">Notes / Conflicts</th>
+          <tr className="border-b-2 border-black">
+            <th className="py-2 px-4 font-black uppercase text-lg w-1/2">Role</th>
+            <th className="py-2 px-4 font-black uppercase text-lg w-1/2 text-right">Cast Member</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {sortedRows.map((row, index) => {
             const isAssigned = row.person && row.person.length > 0;
-            const actorName = isAssigned ? row.person[0].value : "OPEN";
-            const conflictCount = row.auditionInfo?.conflicts?.split(',').filter(Boolean).length || 0;
+            
+            // Handle multiple actors (Double Casting) nicely
+            const actorNames = isAssigned 
+                ? row.person.map((p: any) => p.value).join(" / ") 
+                : "OPEN";
 
             return (
-              <tr key={row.id} className="border-b border-gray-300 break-inside-avoid">
-                <td className="py-3 px-4 font-bold align-top">
+              <tr key={row.id} className={`border-b border-gray-200 break-inside-avoid ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}`}>
+                <td className="py-4 px-4 font-bold text-base align-middle">
                     {row.role?.[0]?.value || "Unknown Role"}
                 </td>
-                <td className={`py-3 px-4 font-medium align-top ${!isAssigned ? 'text-gray-400 italic' : ''}`}>
-                    {actorName}
-                </td>
-                <td className="py-3 px-4 text-gray-600 align-top">
-                    {/* Add any relevant printable notes here */}
-                    {conflictCount > 0 && (
-                        <span className="text-xs font-bold border border-gray-400 px-1 rounded">
-                            {conflictCount} Conflict{conflictCount > 1 ? 's' : ''}
-                        </span>
-                    )}
+                <td className={`py-4 px-4 font-medium text-base align-middle text-right ${!isAssigned ? 'text-gray-300 italic' : ''}`}>
+                    {actorNames}
                 </td>
               </tr>
             );
@@ -62,8 +63,8 @@ export default function CastingPrintView({ rows, productionName = "Production Ca
       </table>
 
       {/* FOOTER */}
-      <div className="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-400">
-        Internal Use Only • Do Not Distribute Without Approval
+      <div className="mt-12 pt-6 border-t border-gray-300 text-center text-xs text-gray-400 font-mono">
+        Generated by Open Backstage • {new Date().toLocaleDateString()}
       </div>
 
     </div>
