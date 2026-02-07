@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-// 1. Create a Context so the children (StaffSidebar) can know the state
+// 1. Create Context
 const SidebarContext = createContext<{ isCollapsed: boolean } | undefined>(undefined);
 
 export function useSidebar() {
@@ -13,9 +13,30 @@ export function useSidebar() {
 }
 
 export default function SidebarShell({ children }: { children: React.ReactNode }) {
-  // Default to false, or read from localStorage if you want persistence
+  // Default to FALSE (Expanded) to match server-side rendering
   const [isCollapsed, setIsCollapsed] = useState(false);
+  // Add a generic "mounted" flag to prevent hydration mismatches
+  const [isMounted, setIsMounted] = useState(false);
 
+  // 2. Load preference from localStorage on client mount
+  useEffect(() => {
+    setIsMounted(true);
+    const savedState = localStorage.getItem('sidebar-collapsed');
+    if (savedState !== null) {
+      setIsCollapsed(JSON.parse(savedState));
+    }
+  }, []);
+
+  // 3. Save preference whenever it changes (but only after mounting)
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+  };
+
+  // Prevent flash of incorrect state if possible, or just render default
+  // Ideally, you just render the default state and let it snap into place.
+  
   return (
     <SidebarContext.Provider value={{ isCollapsed }}>
       <aside 
@@ -26,16 +47,17 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
           ${isCollapsed ? "w-[72px]" : "w-72"} 
         `}
       >
-        {/* Toggle Button - Now clearly visible due to overflow-visible on parent */}
+        {/* Toggle Button */}
         <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggleSidebar}
             className="absolute -right-3 top-20 z-50 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full shadow-xl transition-transform hover:scale-110 flex items-center justify-center"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
+            {/* Show icon based on state */}
             {isCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
         </button>
 
-        {/* Content Container - Keeps inner scrollbar tidy */}
+        {/* Content Container */}
         <div className="h-full w-full overflow-hidden bg-zinc-950 border-r border-zinc-800">
             {children}
         </div>
