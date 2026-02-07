@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { generateCastingRows, syncCastingChanges } from '@/app/lib/actions';
 import CallbackActorModal from './CallbackActorModal';
-
+import AutoCastButton from './AutoCastButton';
 // ============================================================================
 // 1. TYPES & CONFIG
 // ============================================================================
@@ -594,6 +594,14 @@ export default function CastingClient({
           </div>
 
           <div className="flex gap-2">
+            {/* ✨ NEW AUTO-CAST COMPONENT ✨ */}
+            <AutoCastButton 
+              rows={rows} 
+              roster={roster} 
+              onUpdateRows={setRows} 
+            />
+
+            <div className="w-px h-6 bg-zinc-800 mx-1"></div> {/* Divider */}
             <button 
               onClick={handleDraftAutoFill}
               className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all"
