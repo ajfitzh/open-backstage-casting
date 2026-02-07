@@ -61,7 +61,12 @@ export default function CallbackActorModal({ actor, grades, timeline, onClose }:
           {/* Avatar */}
           <div className="relative w-20 h-20 md:w-full md:aspect-square shrink-0 rounded-xl overflow-hidden border-2 border-white/10 shadow-lg bg-zinc-900">
             {actor.avatar ? (
-              <img src={actor.avatar} alt={actor.name} className="w-full h-full object-cover" />
+              <img 
+                src={actor.avatar} 
+                alt={actor.name} 
+                // ✅ FIX: Added object-top to prevent "scalping" portrait photos
+                className="w-full h-full object-cover object-top" 
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center"><User size={48} className="text-zinc-700"/></div>
             )}
