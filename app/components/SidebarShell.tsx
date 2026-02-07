@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, createContext, useContext } from 'react';
-import { ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // 1. Create a Context so the children (StaffSidebar) can know the state
 const SidebarContext = createContext<{ isCollapsed: boolean } | undefined>(undefined);
@@ -20,21 +20,22 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
     <SidebarContext.Provider value={{ isCollapsed }}>
       <aside 
         className={`
-          hidden md:flex h-full shrink-0 z-20 flex-col relative
+          hidden md:flex h-full shrink-0 z-50 flex-col relative
           transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]
+          overflow-visible 
           ${isCollapsed ? "w-[72px]" : "w-72"} 
         `}
       >
-        {/* Toggle Button */}
+        {/* Toggle Button - Now clearly visible due to overflow-visible on parent */}
         <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute -right-3 top-20 z-50 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full shadow-xl transition-transform hover:scale-110"
+            className="absolute -right-3 top-20 z-50 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white p-1 rounded-full shadow-xl transition-transform hover:scale-110 flex items-center justify-center"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
             {isCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
         </button>
 
-        {/* Content Container */}
+        {/* Content Container - Keeps inner scrollbar tidy */}
         <div className="h-full w-full overflow-hidden bg-zinc-950 border-r border-zinc-800">
             {children}
         </div>

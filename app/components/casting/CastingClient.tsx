@@ -662,7 +662,8 @@ return (
                 <div className="w-px h-6 bg-zinc-800 mx-1"></div>
 
                 {/* AUTO-CAST BUTTON */}
-                <AutoCastButton 
+                <AutoCastButton
+                  allScenes={allScenes}
                   rows={rows} 
                   roster={roster} 
                   blueprintRoles={blueprintRoles} 
