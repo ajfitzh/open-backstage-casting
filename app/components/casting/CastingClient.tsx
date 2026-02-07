@@ -134,6 +134,20 @@ function RosterSidebar({
 
   // 2. Filter & Sort Logic
   const filtered = useMemo(() => {
+    // 🔍 DEBUGGING START: Log the first student to see the structure
+    if (students.length > 0) {
+       const s = students[0];
+       console.log("--- 🕵️ DEBUGGING STUDENT DATA ---");
+       console.log("Name:", s.name);
+       console.log("Root Gender:", (s as any).gender);
+       console.log("AuditionInfo Object:", s.auditionInfo);
+       console.log("AuditionInfo.gender:", s.auditionInfo?.gender);
+       console.log("AuditionInfo.Gender:", s.auditionInfo?.Gender);
+       // Check if it's nested in a generic 'fields' object or similar
+       console.log("Full Object:", s); 
+       console.log("---------------------------------");
+    }
+    // 🔍 DEBUGGING END
     return students.filter(s => {
         // A. Search
         if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
