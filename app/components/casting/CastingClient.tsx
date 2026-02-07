@@ -760,49 +760,57 @@ export default function CastingClient({
                                     </div>
                                 </td>
                                 
-                                <td 
-                                    className="p-3 text-sm text-zinc-400 transition-colors relative"
-                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
-                                    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
-                                    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
-                                >
-                                    {row.person && row.person.length > 0 ? (
-                                        <div className="flex items-center pl-2">
-                                            {row.person.map((p) => {
-                                                const actorData = roster.find(r => r.id === p.id);
-                                                const avatarUrl = actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png";
+<td 
+    className="p-3 text-sm text-zinc-400 transition-colors relative"
+    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
+    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
+    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
+>
+    {row.person && row.person.length > 0 ? (
+        <div className="flex items-center pl-2">
+            {row.person.map((p) => {
+                const actorData = roster.find(r => r.id === p.id);
+                const avatarUrl = actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png";
 
-                                                return (
-                                                    <div 
-                                                        key={p.id} 
-                                                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
-                                                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
-                                                    >
-                                                        <img 
-                                                            src={avatarUrl} 
-                                                            alt={p.value}
-                                                            className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm"
-                                                            title={p.value}
-                                                        />
-                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/avatar:flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap z-30">
-                                                            <span className="font-bold">{p.value}</span>
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }}
-                                                                className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full"
-                                                            >
-                                                                <X size={10} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
-                                            Drop Actor
-                                        </div>
-                                    )}
-                                </td>
+                return (
+                    <div 
+                        key={p.id} 
+                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
+                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
+                    >
+                        <img 
+                            src={avatarUrl} 
+                            alt={p.value}
+                            className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm"
+                            title={p.value}
+                        />
+                        
+                        {/* FIX: The outer div now has 'pb-2' (padding-bottom) instead of 'mb-2' (margin-bottom).
+                           This extends the invisible container down to touch the avatar, creating a bridge for the mouse.
+                        */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/avatar:flex flex-col items-center z-30">
+                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                                <span className="font-bold">{p.value}</span>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }}
+                                    className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full transition-colors"
+                                >
+                                    <X size={10} />
+                                </button>
+                            </div>
+                            {/* Optional: Tiny triangle arrow pointing down */}
+                            <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-800 rotate-45 -mt-1 transform translate-y-[-3px]"></div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    ) : (
+        <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">
+            Drop Actor
+        </div>
+    )}
+</td>
 
                                 <td className="p-3">
                                     <div className="flex items-center gap-[2px]">
