@@ -696,7 +696,10 @@ export async function getComplianceData(productionId?: number) {
 // 🎤 AUDITIONS (READ & WRITE)
 // ==============================================================================
 
+// app/lib/baserow.ts
+
 export async function getAuditionees(productionId?: number) {
+  // 1. Fetch RAW data (fast, robust, standard)
   const params: any = { size: "200" }; 
   const F = DB.AUDITIONS.FIELDS;
   
@@ -707,39 +710,34 @@ export async function getAuditionees(productionId?: number) {
 
   return data.map((row: any) => ({
       id: row.id,
-      name: extractName(row[F.PERFORMER], "Unknown Actor"),
+      name: extractName(row[F.PERFORMER], "Unknown Actor"), // Uses field_6052
       studentId: safeId(row[F.PERFORMER]),
+      
+      // ✅ This now works. 
+      // F.GENDER maps to "field_6080" (from your schema).
+      // Baserow returns { "field_6080": ["Male"], ... }
+      gender: safeGet(row[F.GENDER], "Unknown"), 
+      
+      // ... (rest of your mapping)
       date: row[F.DATE] || null, 
       headshot: row[F.HEADSHOT]?.[0]?.url || null,
       video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
-      
-      // Scores
       vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
       actingScore: safeGet(row[F.ACTING_SCORE], 0),
       danceScore: safeGet(row[F.DANCE_SCORE], 0),
       presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
-      
-      // Info
       age: safeGet(row[F.AGE], "?"),
       height: safeGet(row[F.HEIGHT], ""),
       conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
-
-      // 👇 THIS IS THE FIX. ENSURE THIS LINE EXISTS:
-      gender: safeGet(row[F.GENDER], "Unknown"), 
-      
-      // Notes
       actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
       musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
       choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
       status: !row[F.DATE] ? "Walk-In" : "Scheduled",
-      
-      // Extra info for the sidebar
       vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
       song: safeGet(row[F.SONG], ""),
       monologue: safeGet(row[F.MONOLOGUE], ""),
   }));
 }
-
 export async function submitAudition(studentId: number, productionId: number, extraData: any) {
     const F = DB.AUDITIONS.FIELDS;
     
