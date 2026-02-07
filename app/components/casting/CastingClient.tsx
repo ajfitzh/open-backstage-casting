@@ -149,25 +149,41 @@ function RosterSidebar({
         else if (activeTab === "in-progress") { if (stats.status !== "at-risk") return false; }
         else if (activeTab === "done") { if (stats.status !== "compliant") return false; }
 
-        // D. Gender Filter (More Robust Check)
+// D. Gender Filter (Robust Fix)
         if (genderFilter !== "all") {
-            // Check common keys for gender data
-            const rawGender = 
+            // 1. Get the raw value from likely keys
+            let rawVal = 
                 s.auditionInfo?.gender || 
                 s.auditionInfo?.Gender || 
                 s.auditionInfo?.sex || 
                 s.auditionInfo?.Sex || 
-                "";
-            
-            const g = String(rawGender).toLowerCase().trim();
+                s.auditionInfo?.["Student Gender"] || 
+                (s as any).gender; 
 
-            if (genderFilter === "F") {
-                // Check for "f", "female", "girl", "woman"
-                if (!g.startsWith("f") && g !== "girl" && g !== "woman") return false;
+            // 2. UNWRAP OBJECTS/ARRAYS (This is the missing piece in your file)
+            // If data is [{id:1, value:"Male"}] or {value:"Male"}, extract "Male"
+            if (rawVal && typeof rawVal === 'object') {
+                if (Array.isArray(rawVal) && rawVal.length > 0) {
+                    // It's an array: check .value or just the first item
+                    rawVal = rawVal[0].value || rawVal[0];
+                } else if (rawVal.value) {
+                    // It's a single object
+                    rawVal = rawVal.value;
+                }
             }
+
+            // 3. Clean it up
+            const g = String(rawVal || "").toLowerCase().trim();
+
+            // 4. Check matches
+            if (genderFilter === "F") {
+                const isFemale = g.startsWith("f") || g === "girl" || g === "woman" || g.includes("she");
+                if (!isFemale) return false;
+            }
+            
             if (genderFilter === "M") {
-                // Check for "m", "male", "boy", "man"
-                if (!g.startsWith("m") && g !== "boy" && g !== "man") return false;
+                const isMale = g.startsWith("m") || g === "boy" || g === "man" || g.includes("he");
+                if (!isMale) return false;
             }
         }
         
