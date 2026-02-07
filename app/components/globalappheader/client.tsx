@@ -7,11 +7,11 @@ import { usePathname } from 'next/navigation';
 import { signOut } from "next-auth/react";
 import { switchProduction } from '@/app/actions';
 import { useSimulation } from '@/app/context/SimulationContext'; 
+import { hasPermission } from '@/app/lib/permissions';
+import { NAV_CONFIG } from '@/app/lib/nav-config';
 import { 
   Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
-  Sparkles, Clock, Rocket, Bug, Wrench, Settings, LogOut,
-  UserSquare2, BarChart3, GraduationCap, LayoutGrid, Mic2, Megaphone,
-  User2Icon, FilePlus, Theater, VenetianMask, AlertOctagon
+  Sparkles, Clock, Rocket, Bug, Wrench, Settings, LogOut
 } from 'lucide-react';
 
 export default function GlobalHeaderClient({ 
@@ -30,7 +30,7 @@ export default function GlobalHeaderClient({
   const [showDebug, setShowDebug] = useState(false);
 
   // 🚀 CONNECT TO THE MATRIX
-  const { role: effectiveRole, isSimulating } = useSimulation();
+  const { role: effectiveRole, productionRole, isSimulating } = useSimulation();
 
   const navRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<HTMLDivElement>(null);
@@ -59,17 +59,14 @@ export default function GlobalHeaderClient({
       const season = show.season || 'Other';
       allSeasons.add(season);
 
-      // Prioritize explicit Active flag
       if (show.isActive) {
         if (!active[season]) active[season] = [];
         active[season].push(show);
       } 
-      // Then check for Upcoming/Pre-Production status
       else if (show.status === 'Upcoming' || show.status === 'Pre-Production') {
         if (!upcoming[season]) upcoming[season] = [];
         upcoming[season].push(show);
       } 
-      // Everything else belongs in the history bin
       else {
         if (!archive[season]) archive[season] = [];
         archive[season].push(show);
@@ -130,7 +127,7 @@ export default function GlobalHeaderClient({
                 </div>
 
                 <div className="p-2 overflow-y-auto flex-1 custom-scrollbar">
-                  {/* TAB: CURRENT (Active & Upcoming) */}
+                  {/* TAB: CURRENT */}
                   {viewMode === 'current' && (
                     <div className="space-y-6">
                       {groupedData.seasons.map(season => {
@@ -172,7 +169,7 @@ export default function GlobalHeaderClient({
                     </div>
                   )}
 
-                  {/* TAB: HISTORY (Archived) */}
+                  {/* TAB: HISTORY */}
                   {viewMode === 'archive' && (
                     <div className="space-y-2">
                       {groupedData.seasons.map(season => (
@@ -241,54 +238,66 @@ export default function GlobalHeaderClient({
         </div>
       </header>
 
-      {/* MOBILE NAV DRAWER */}
+      {/* MOBILE NAV DRAWER (Dynamically generated) */}
       {isNavOpen && (
         <div className="fixed inset-0 z-[100] flex md:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsNavOpen(false)} />
           <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
             <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10">
               
-              {/* 🎭 CREATIVE TEAM */}
-              <div>
-                <SectionHeader label="Creative Team" />
-                <div className="space-y-1">
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/production" icon={<Theater size={18}/>} label="Show Hub" active={pathname === '/production'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/schedule" icon={<Calendar size={18}/>} label="Scheduler" active={pathname === '/schedule'} />
-                </div>
-              </div>
+              {NAV_CONFIG.map((section) => {
+                // 1. Check Section Permission
+                if (section.permission && !hasPermission(effectiveRole, productionRole, section.permission)) return null;
+                // Skip Dashboard group in mobile drawer to save space if desired (optional)
+                if (section.title === "Dashboard") return null;
 
-              {/* 🎤 CASTING SUITE */}
-              <div>
-                <SectionHeader label="Casting Suite" />
-                <div className="space-y-1">
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/auditions" icon={<Mic2 size={18}/>} label="Auditions" active={pathname === '/auditions'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/callbacks" icon={<Megaphone size={18}/>} label="Callbacks" active={pathname === '/callbacks'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/casting" icon={<LayoutGrid size={18}/>} label="Cast Grid" active={pathname === '/casting'} />
-                </div>
-              </div>
+                return (
+                  <div key={section.title}>
+                    <div className={`px-3 mb-2 text-[10px] font-black uppercase tracking-widest mt-2 ${section.color || 'text-zinc-600'}`}>
+                      {section.title}
+                    </div>
+                    <div className="space-y-1">
+                      {section.items.map((item: any) => {
+                        // 2. Check Item Permission
+                        if (item.permission && !hasPermission(effectiveRole, productionRole, item.permission)) return null;
 
-              {/* 🚛 LOGISTICS */}
-              <div>
-                <SectionHeader label="Logistics & Ops" />
-                <div className="space-y-1">
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/roster" icon={<UserSquare2 size={18}/>} label="Master Roster" active={pathname === '/roster'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/conflicts" icon={<AlertOctagon size={18}/>} label="Conflict Matrix" active={pathname === '/conflicts'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/committees" icon={<VenetianMask size={18}/>} label="Committees" active={pathname === '/committees'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/reports" icon={<BarChart3 size={18}/>} label="Reports & Fees" active={pathname === '/reports'} />
-                </div>
-              </div>
+                        // 3. Handle Nested Items (Casting Suite)
+                        if (item.isCollapsible && item.children) {
+                          return (
+                            <div key={item.label} className="pl-2 border-l border-zinc-800 ml-2 mt-2 mb-2 space-y-1">
+                                <div className="text-[9px] font-bold text-zinc-500 uppercase px-3 py-1">{item.label}</div>
+                                {item.children.map((child: any) => (
+                                    (!child.permission || hasPermission(effectiveRole, productionRole, child.permission)) && (
+                                        <MenuLink 
+                                            key={child.href}
+                                            onClick={() => setIsNavOpen(false)} 
+                                            href={child.href} 
+                                            icon={<child.icon size={16}/>} 
+                                            label={child.label} 
+                                            active={pathname === child.href} 
+                                        />
+                                    )
+                                ))}
+                            </div>
+                          );
+                        }
 
-              {/* 🎓 ACADEMY (Improved & Fixed) */}
-              <div>
-                <SectionHeader label="Academy" />
-                <div className="space-y-1">
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education" icon={<GraduationCap size={18}/>} label="Class Manager" active={pathname === '/education'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/proposals" icon={<FilePlus size={18}/>} label="Proposals & Bounties" active={pathname === '/education/proposals'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/hiring" icon={<UserSquare2 size={18}/>} label="Hiring Portal" active={pathname === '/education/hiring'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/portal" icon={<Sparkles size={18}/>} label="Faculty Portal" active={pathname === '/education/portal'} />
-                    <MenuLink onClick={() => setIsNavOpen(false)} href="/education/planning" icon={<LayoutGrid size={18}/>} label="Class Planner" active={pathname === '/education/planning'} />
-                </div>
-              </div>
+                        // Normal Item
+                        return (
+                          <MenuLink 
+                            key={item.href}
+                            onClick={() => setIsNavOpen(false)} 
+                            href={item.href} 
+                            icon={<item.icon size={18}/>} 
+                            label={item.label} 
+                            active={pathname === item.href} 
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
 
             </div>
             
@@ -329,10 +338,6 @@ function ProductionItem({ prod, activeId, pathname }: { prod: any, activeId: num
       <ContextButton prod={prod} isActive={prod.id === activeId} />
     </form>
   )
-}
-
-function SectionHeader({ label }: { label: string }) {
-  return <div className="px-3 mb-2 text-[10px] font-black text-zinc-600 uppercase tracking-widest mt-2">{label}</div>
 }
 
 function MenuLink({ href, icon, label, active, onClick }: any) {
