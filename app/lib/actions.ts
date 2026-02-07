@@ -480,57 +480,116 @@ export async function clearCastingData(productionId: number) {
   return { success: true };
 }
 
-// Add to app/lib/actions.ts
+export async function saveCastingGrid(
+  productionId: number, 
+  actorChanges: any[], 
+  sceneChanges: any[],
+  deletedRowIds: number[] = [],
+  createdRows: any[] = []
+) {
+  console.log(`[Save] Prod: ${productionId} | Actors: ${actorChanges.length} | Scenes: ${sceneChanges.length} | Del: ${deletedRowIds.length} | New: ${createdRows.length}`);
 
-export async function saveCastingGrid(productionId: number, actorChanges: any[], sceneChanges: any[]) {
-  console.log(`Saving ${actorChanges.length} actor changes and ${sceneChanges.length} scene changes...`);
+  // 1. HANDLE DELETIONS
+  if (deletedRowIds.length > 0) {
+    await Promise.all(deletedRowIds.map(id => 
+      fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${id}/`, { method: "DELETE" })
+    ));
+  }
 
-  // 1. SAVE ACTORS (PATCH the Assignment Row)
-  const actorPromises = actorChanges.map(change => 
-    fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${change.assignmentId}/`, {
+  // 2. HANDLE CREATED ROWS
+  if (createdRows.length > 0) {
+    await Promise.all(createdRows.map(row => 
+      fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
+          // Note: If you have a 'Role Name' text field for custom roles, add it here.
+          // Otherwise, we just create the row with the assigned actors.
+          [DB.ASSIGNMENTS.FIELDS.PERSON]: row.assignedStudentIds || [],
+          // If you created a link to a Blueprint Role (if ID > 0)
+          // [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: row.roleId > 0 ? [row.roleId] : []
+        })
+      })
+    ));
+  }
+
+  // 3. HANDLE ACTOR CHANGES (Assignment Row)
+  // We process these FIRST so the DB is up to date before we try to link Scenes to these people.
+  for (const change of actorChanges) {
+    await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${change.assignmentId}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        // Link to the Person ID. If studentId is null/undefined, send empty array [] to unassign.
-        [DB.ASSIGNMENTS.FIELDS.PERSON]: change.studentId ? [change.studentId] : []
+        // ✅ FIX: Send the ARRAY of IDs directly. 
+        // Client sends { studentIds: [1, 2] }, Baserow expects [1, 2]
+        [DB.ASSIGNMENTS.FIELDS.PERSON]: change.studentIds
       })
-    })
-  );
-
-  // 2. SAVE SCENES (Add/Remove Chiclets)
-  // (This logic handles the scene assignments we built earlier)
-  const scenePromises = [];
-  for (const change of sceneChanges) {
-      if (!change.studentId) continue;
-      
-      // Additions
-      for (const sceneId of change.addedSceneIds) {
-          scenePromises.push(
-            fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.PERSON]: [change.studentId],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.SCENE]: [sceneId],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId]
-              })
-            })
-          );
-      }
-      
-      // Removals (Requires lookup, so we do it sequentially or optimized later)
-      // For now, we assume this logic works from previous iterations or requires a clean delete action.
-      // A simple way is to delete by composite key if your DB supports it, otherwise we fetch-then-delete.
-      if (change.removedSceneIds.length > 0) {
-         // See Note below on optimization
-      }
+    });
   }
 
-  // Execute all Actor saves
-  await Promise.all(actorPromises);
-  
-  // Execute all Scene saves (simple Promise.all for additions)
-  await Promise.all(scenePromises);
+  // 4. HANDLE SCENE CHANGES ("Chiclets")
+  // The 'Chiclet' is a separate table (SCENE_ASSIGNMENTS) linking Person <-> Scene.
+  // We must find out WHO is in this Assignment Row to create the links for them.
+  for (const change of sceneChanges) {
+    const { assignmentId, addedSceneIds, removedSceneIds } = change;
+
+    // A. We need the current Actors in this Role. 
+    // Optimization: Check if we just updated them in step 3.
+    let studentIds: number[] = [];
+    const actorUpdate = actorChanges.find(a => a.assignmentId === assignmentId);
+    
+    if (actorUpdate) {
+      studentIds = actorUpdate.studentIds;
+    } else {
+      // If actors didn't change, we must fetch the row to see who is currently assigned
+      const row = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/?user_field_names=true`);
+      if (row && row.Person) {
+        studentIds = row.Person.map((p: any) => p.id);
+      }
+    }
+
+    if (studentIds.length === 0) continue; // No one to assign scenes to
+
+    // B. For every Actor in this Role, Add/Remove the Scene Link
+    for (const studentId of studentIds) {
+      const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
+      const F = DB.SCENE_ASSIGNMENTS.FIELDS;
+
+      // ADDITIONS
+      for (const sceneId of addedSceneIds) {
+         // check if already exists to avoid duplicates? Baserow might handle it, but safer to just post.
+         await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                [F.PERSON]: [studentId],
+                [F.SCENE]: [sceneId],
+                [F.PRODUCTION]: [productionId],
+                [F.SLOT_TYPE]: 3007 // Default ID for "Cast"
+            })
+         });
+      }
+
+      // REMOVALS
+      for (const sceneId of removedSceneIds) {
+        // We have to find the specific SCENE_ASSIGNMENT row ID to delete it.
+        const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
+            filter_type: "AND",
+            [`filter__${F.PERSON}__link_row_has`]: studentId,
+            [`filter__${F.SCENE}__link_row_has`]: sceneId,
+            [`filter__${F.PRODUCTION}__link_row_has`]: productionId
+        });
+
+        if (Array.isArray(existing) && existing.length > 0) {
+            // Delete all matches (cleanup duplicates if any)
+            for (const item of existing) {
+                await fetchBaserow(`/database/rows/table/${TABLE_ID}/${item.id}/`, { method: "DELETE" });
+            }
+        }
+      }
+    }
+  }
 
   revalidatePath("/casting");
   return { success: true };
