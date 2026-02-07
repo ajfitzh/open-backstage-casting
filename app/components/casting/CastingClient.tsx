@@ -623,11 +623,15 @@ return (
 
                 <div className="w-px h-6 bg-zinc-800 mx-1"></div>
 
-                <AutoCastButton 
-                  rows={rows} 
-                  roster={roster} 
-                  onUpdateRows={setRows} 
-                />
+<div className="flex gap-2">
+            {/* ✨ UPDATED AUTO-CAST BUTTON ✨ */}
+            <AutoCastButton 
+              rows={rows} 
+              roster={roster} 
+              blueprintRoles={blueprintRoles} // 👈 Added
+              releasedIds={releasedIds}       // 👈 Added
+              onUpdateRows={setRows} 
+            />
 
                 <div className="w-px h-6 bg-zinc-800 mx-1"></div>
 
