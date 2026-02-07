@@ -10,6 +10,7 @@ type AssignmentRow = {
   id: number; 
   role: BaserowLink[];   
   person: BaserowLink[]; 
+  production: { id: number }[]; // 👈 Fixed: Added missing property
   savedScenes?: BaserowLink[];   
   _pendingScenes?: BaserowLink[]; 
   auditionInfo?: any; 
@@ -48,7 +49,7 @@ type Proposal = {
     complianceFixes: ChangeLogItem[];
 };
 
-// Updated Helper: Checks Blueprint OR Role Name (for custom roles)
+// Helper: Checks Blueprint OR Role Name (for custom roles)
 function isEnsembleRole(row: AssignmentRow, blueprints: BlueprintRole[]) {
   // 1. Try Blueprint
   const bp = blueprints.find(b => b.id === row.role?.[0]?.id);
@@ -169,7 +170,8 @@ export default function AutoCastButton({
             const mySceneIds = new Set<number>();
             myRows.forEach(row => {
                 const bp = blueprintRoles.find(b => b.id === row.role?.[0]?.id);
-                const active = row._pendingScenes || bp?.activeScenes || []; // Supports custom roles with no blueprint
+                // Use _pendingScenes if present (for draft/custom roles), otherwise blueprint
+                const active = row._pendingScenes || bp?.activeScenes || []; 
                 active.forEach(s => mySceneIds.add(s.id));
             });
 
@@ -199,7 +201,6 @@ export default function AutoCastButton({
             // Find best fit
             const bestFit = candidateRows.find(({ row }) => {
                 const bp = blueprintRoles.find(b => b.id === row.role?.[0]?.id);
-                // For custom roles, use _pendingScenes (which user manually toggled)
                 const sceneIds = (row._pendingScenes || bp?.activeScenes || []).map(s => s.id);
                 
                 let providesAct1 = false, providesAct2 = false;
@@ -216,7 +217,7 @@ export default function AutoCastButton({
             });
 
             if (bestFit) {
-                const targetRow = newRows[bestFit.idx]; // Fixed logic here
+                const targetRow = newRows[bestFit.idx];
                 const newPersonList = [...(targetRow.person || []), { id: student.id, value: student.name }];
                 newRows[bestFit.idx] = { ...targetRow, person: newPersonList };
 
