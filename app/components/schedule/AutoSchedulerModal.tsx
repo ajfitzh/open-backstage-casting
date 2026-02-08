@@ -7,7 +7,7 @@ import {
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
     CalendarRange, BrainCircuit, Users,
-    RefreshCw
+    RefreshCw, Coffee
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -43,14 +43,19 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [trackPriority, setTrackPriority] = useState<TrackType[]>(['Music', 'Dance', 'Acting']);
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
-    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); 
     
-    // 🟢 NEW: Passes Control (Default to 3 to fill the schedule)
+    // 🟢 NEW: Default to "Concurrency" (Matches your real schedules)
+    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('concurrency'); 
+    
+    // 🟢 NEW: Default to 3 passes (Teach -> Review -> Polish)
     const [targetPasses, setTargetPasses] = useState(3); 
+    
+    // 🟢 NEW: Warmup Toggle
+    const [includeWarmups, setIncludeWarmups] = useState(true);
 
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(8); // Default 8 weeks
+    const [endWeek, setEndWeek] = useState(8); 
 
     useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
@@ -93,15 +98,18 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             
             const totalPoints = mLoad + dLoad + bLoad;
             
-            let rawDuration = 15 + (totalPoints * 5);
-            if (rawDuration > 90) rawDuration = 90;
+            // 🟢 HUMANIZED DURATION FORMULA
+            // Base 30 mins (Transitions/Talking) + 10 mins per difficulty point
+            // Level 1 = 40m. Level 3 = 60m. Level 5 = 80m.
+            let rawDuration = 30 + (totalPoints * 10);
+            
+            if (rawDuration > 90) rawDuration = 90; // Cap at 1.5 hrs
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            // 🟢 FIX: Better Regex for Cast Parsing (Handles extra quotes)
+            // Cast Parsing
             let finalCast = s.cast || [];
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
                  const raw = s["Scene Assignments"];
-                 // Matches "Name - [{" regardless of preceding quotes
                  const extracted = raw.match(/([a-zA-Z0-9\s\.\']+) - \[\{/g);
                  if (extracted) {
                      finalCast = extracted.map((str: string) => ({ 
@@ -134,6 +142,29 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             workDays.forEach(({ day, start, end }) => {
                 const trackClocks: Record<string, number> = { 'Music': start, 'Dance': start, 'Acting': start };
                 let currentTime = start;
+                
+                // 🟢 WARMUP BLOCKER
+                if (includeWarmups) {
+                    // Block first 15 mins of EVERY track
+                    trackClocks['Music'] += 0.25;
+                    trackClocks['Dance'] += 0.25;
+                    trackClocks['Acting'] += 0.25;
+                    
+                    proposedSchedule.push({
+                        id: `warmup-${w}-${day}`,
+                        sceneId: 0,
+                        sceneName: "Physical & Vocal Warmups",
+                        track: "Acting", // Gets rendered in Acting col usually
+                        day: day,
+                        weekOffset: w - 1,
+                        startTime: start,
+                        duration: 15,
+                        status: 'New',
+                        castSize: 'All',
+                        castList: [] // Don't block conflicts technically, just visual
+                    });
+                }
+
                 let loops = 0;
                 
                 while(currentTime < end && loops < 100) {
@@ -173,9 +204,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                         // Score Candidates
                         const scored = candidates.map((scene: any) => {
-                            // 🟢 FIX: Start HIGH (10,000) so penalties don't make score negative
                             let score = 10000; 
-                            
                             const key = `${scene.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
 
@@ -188,13 +217,16 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
                             } else {
-                                if (size <= 6) score += 500;       
-                                else if (size <= 12) score += 200; 
+                                // 🟢 CONCURRENCY (Human Style): 
+                                // Prioritize small/medium groups (5-20 people) heavily.
+                                // Save the "Full Cast" (35+) scenes for when nothing else fits.
+                                if (size > 0 && size <= 15) score += 500;       
+                                else if (size <= 25) score += 200; 
                                 else score -= 100;                 
                                 score += (scene.totalPoints * 2);
                             }
 
-                            score -= (currentPass * 500); // Penalty is now safe
+                            score -= (currentPass * 500); 
 
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
@@ -262,8 +294,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
-            
-            // Calculate Total Workload based on ENRICHED scenes (to use corrected loads)
             const totalWorkload = enrichedScenes.reduce((acc:number, s:any) => acc + s.totalPoints, 0) * targetPasses;
 
             setPreviewSchedule(proposedSchedule);
@@ -309,7 +339,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 <div className="p-6 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 flex items-center gap-2">
-                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v4
+                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v5
                         </h2>
                         <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Velocity & Constraint Solver</p>
                     </div>
@@ -391,7 +421,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* 4. DURATION & PRIORITY */}
+                        {/* 4. DURATION & WARMUPS */}
                         <div className="space-y-4 opacity-80 hover:opacity-100 transition-opacity">
                              <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-zinc-800/50">
                                 <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-2"><Timer size={12}/> Smart Sizing</span>
@@ -399,13 +429,13 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${useSmartDuration ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </button>
                              </div>
-                             <div className="flex items-center gap-2 p-3 rounded-xl border border-white/5 bg-zinc-800/50">
-                                {trackPriority.map((track, i) => (
-                                    <div key={track} className="text-[9px] font-mono text-zinc-500 flex items-center gap-1">
-                                        <span className="font-bold text-zinc-300">{i+1}.</span> {track}
-                                    </div>
-                                ))}
-                                <button onClick={() => movePriority(0, 'down')} className="ml-auto text-zinc-500 hover:text-white"><ArrowDown size={12}/></button>
+                             
+                             {/* WARMUP TOGGLE */}
+                             <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-zinc-800/50">
+                                <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-2"><Coffee size={12}/> Daily Warmups</span>
+                                <button onClick={() => setIncludeWarmups(!includeWarmups)} className={`w-8 h-4 rounded-full p-0.5 transition-colors ${includeWarmups ? 'bg-amber-500' : 'bg-zinc-600'}`}>
+                                    <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${includeWarmups ? 'translate-x-4' : 'translate-x-0'}`} />
+                                </button>
                              </div>
                         </div>
 
@@ -554,7 +584,8 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                                                         );
                                                                                         
                                                                                         // RENDER CARD
-                                                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                                        const color = item.sceneName.includes("Warmup") ? 'bg-amber-900/20 text-amber-200 border-amber-500/30' :
+                                                                                                    item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
                                                                                                     : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
                                                                                                     : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
                                                                                                     
