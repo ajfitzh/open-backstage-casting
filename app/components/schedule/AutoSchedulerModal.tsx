@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Wand2, X, CheckCircle2, 
     Calendar, Loader2,
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
-    CalendarRange, BrainCircuit, Users
+    CalendarRange, BrainCircuit, Users,
+    ChevronRight, ChevronLeft
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -21,8 +22,8 @@ type TrackType = "Acting" | "Music" | "Dance";
 interface ScheduleStats {
     totalSlots: number;
     uniqueActors: number;
-    castCoverage: number; // % of total cast utilized
-    concurrency: number;  // Avg rooms active at once
+    castCoverage: number; 
+    concurrency: number;  
     conflictsAvoided: number;
     pointsCleared: number;   
     velocityTarget: number;  
@@ -34,16 +35,24 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewSchedule, setPreviewSchedule] = useState<any[]>([]);
     const [stats, setStats] = useState<ScheduleStats | null>(null);
+    
+    // 🟢 NEW: Tab State for Week View
+    const [activeTabWeek, setActiveTabWeek] = useState(1);
 
     // --- CONTROLS ---
     const [trackPriority, setTrackPriority] = useState<TrackType[]>(['Music', 'Dance', 'Acting']);
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
-    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); // Strategy Toggle
+    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); 
     
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(1);
+    const [endWeek, setEndWeek] = useState(2); // Default to 2 weeks for better demo
+
+    // Update active tab when start week changes
+    useEffect(() => {
+        setActiveTabWeek(startWeek);
+    }, [startWeek]);
 
     // --- HELPER: Move items up/down ---
     const movePriority = (index: number, direction: 'up' | 'down') => {
@@ -63,41 +72,34 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP: Robust Parsing & Auto-Categorization
+        // 1. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
             const type = (s["Scene Type"] || s.type || "").toLowerCase();
             
-            // A. KEYWORD DETECTION (Fix for missing 'Type' data)
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton'];
 
             const isMusicByName = musicKeywords.some(k => name.includes(k));
             const isDanceByName = danceKeywords.some(k => name.includes(k));
 
-            // B. SMART DEFAULTS
             const defaultMusic = isMusicByName ? 1 : 0;
             const defaultDance = isDanceByName ? 1 : 0;
 
-            // C. FLEXIBLE COLUMN READING
             const mLoad = parseInt(s["Music Load"] ?? s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
             const dLoad = parseInt(s["Dance Load"] ?? s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
             const bLoad = parseInt(s["Blocking Load"] ?? s.load?.block ?? s.blocking_load ?? 1) || 1; 
 
-            // D. DETERMINE ELIGIBILITY
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
             
-            // E. DURATION CALCULATION
             const totalPoints = mLoad + dLoad + bLoad;
             let rawDuration = 15 + (totalPoints * 5);
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            // F. PARSE CAST (Fix for CSV String Format)
             let finalCast = s.cast || [];
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
-                 // Extract names before the " - [{" pattern
                  const raw = s["Scene Assignments"];
                  const extracted = raw.match(/""?([A-Za-z\s]+?) - \[\{/g);
                  if (extracted) {
@@ -108,11 +110,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             }
 
             return { 
-                ...s, 
-                cast: finalCast,
-                mLoad, dLoad, bLoad, 
-                canMusic, canDance, 
-                totalPoints, smartTime 
+                ...s, cast: finalCast, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime 
             };
         });
 
@@ -139,11 +137,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 let currentTime = start;
                 let loops = 0;
                 
-                // 15-Minute Increment Loop
                 while(currentTime < end && loops < 100) {
                     loops++;
                     
-                    // Identify Busy Actors
                     const busyActorsNow = new Set<string>();
                     proposedSchedule.forEach(item => {
                         if (item.weekOffset === (w-1) && item.day === day) {
@@ -155,52 +151,39 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                     let roomsActiveNow = 0;
 
-                    // Iterate Tracks
                     trackPriority.forEach((track) => {
-                        // Is Room Free?
                         if (trackClocks[track] > currentTime + 0.01) {
                             roomsActiveNow++;
                             return; 
                         }
 
-                        // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
                             if (completedScenes.has(`${scene.id}-${track}`)) return false; 
-                            
-                            // Track Eligibility
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
-                            
                             return true;
                         });
 
-                        // Score Candidates
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
-                            
-                            // A. CONFLICT CHECK
                             const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) return { ...scene, score: -9999 };
 
                             const size = scene.cast?.length || 0;
                             
-                            // B. STRATEGY (Velocity vs Concurrency)
                             if (strategy === 'velocity') {
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
                             } else {
-                                // MAX ROOMS: Punish large groups to keep actors free
                                 if (size <= 6) score += 500;       
                                 else if (size <= 12) score += 200; 
                                 else score -= 100;                 
                                 score += (scene.totalPoints * 2);
                             }
 
-                            // C. EQUITY
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
-                            // D. TRACK AFFINITY (The Balancer)
                             const type = (scene.type || "").toLowerCase();
                             const name = (scene.name || s["Scene Name"] || "").toLowerCase();
                             
@@ -215,11 +198,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         scored.sort((a: any, b: any) => b.score - a.score);
                         const winner = scored[0];
 
-                        // Schedule Winner
                         if (winner && winner.score > 0) {
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
-                            // Fit Check
                             if ((currentTime + (duration/60)) <= end) {
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
@@ -235,10 +216,8 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     castList: (winner.cast || []).map((c:any) => c.name)
                                 });
 
-                                // Update Busy Lists
                                 (winner.cast || []).forEach((c:any) => busyActorsNow.add(c.name)); 
                                 (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
-                                
                                 trackClocks[track] = currentTime + (duration / 60);
                                 completedScenes.add(`${winner.id}-${track}`);
                                 pointsCleared += winner.totalPoints;
@@ -274,6 +253,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 isOnTrack: pointsCleared >= velocityTarget
             });
             setIsGenerating(false);
+            setActiveTabWeek(startWeek); // 🟢 Auto-switch to first week
         }, 800);
     };
 
@@ -340,7 +320,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* 2. STRATEGY (NEW) */}
+                        {/* 2. STRATEGY */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                             <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <BrainCircuit size={14} className="text-emerald-400"/> Optimization Goal
@@ -379,25 +359,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${useSmartDuration ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </div>
                             </button>
-
-                            {useSmartDuration ? (
-                                <p className="text-[10px] text-zinc-400 italic leading-tight px-1">
-                                    Calculates time based on complexity.<br/>
-                                    <span className="text-purple-400 font-bold">Harder scenes = Longer slots.</span>
-                                </p>
-                            ) : (
-                                <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
-                                    {[45, 30, 20, 15].map(min => (
-                                        <button 
-                                            key={min}
-                                            onClick={() => setBaseDuration(min)}
-                                            className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-all ${baseDuration === min ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                                        >
-                                            {min}m
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
                         {/* 4. PRIORITY */}
@@ -436,18 +397,17 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                     </div>
 
                     {/* RIGHT: Results Preview */}
-                    <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar">
+                    <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar flex flex-col">
                         {previewSchedule.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-zinc-600 opacity-50">
+                            <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 opacity-50">
                                 <Calendar size={64} className="mb-4"/>
                                 <p className="text-sm font-bold uppercase">Ready to Schedule</p>
                                 <p className="text-xs">Select strategy, adjust priority, then click Generate.</p>
                             </div>
                         ) : (
-                            <div className="space-y-8">
-                                
+                            <>
                                 {/* SCOREBOARD */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 shrink-0">
                                     <div className={`p-5 rounded-2xl border flex items-center justify-between ${stats?.isOnTrack ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-red-900/10 border-red-500/20'}`}>
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
@@ -478,98 +438,117 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     </div>
                                 </div>
 
+                                {/* 🟢 TAB BAR: WEEKS */}
+                                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
+                                    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => (
+                                        <button 
+                                            key={week}
+                                            onClick={() => setActiveTabWeek(week)}
+                                            className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex-shrink-0 ${
+                                                activeTabWeek === week 
+                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                                                : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'
+                                            }`}
+                                        >
+                                            Week {week}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 {/* PREVIEW LIST */}
-                                <div className="space-y-12">
-                                    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
-                                        const weekItems = previewSchedule.filter(item => item.weekOffset === (week - 1));
-                                        if (weekItems.length === 0) return null;
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-12">
+                                        {/* RENDER ONLY ACTIVE WEEK */}
+                                        {(() => {
+                                            const weekItems = previewSchedule.filter(item => item.weekOffset === (activeTabWeek - 1));
+                                            if (weekItems.length === 0) return (
+                                                <div className="text-center py-20 text-zinc-500 italic">
+                                                    No items scheduled for Week {activeTabWeek}
+                                                </div>
+                                            );
 
-                                        return (
-                                            <div key={week} className="animate-in slide-in-from-bottom-4 duration-500">
-                                                <h3 className="text-lg font-black uppercase text-white mb-6 flex items-center gap-3">
-                                                    <span className="bg-blue-600 px-3 py-1 rounded text-sm shadow-lg shadow-blue-600/20">Week {week}</span>
-                                                    <div className="h-px flex-1 bg-white/10"></div>
-                                                </h3>
-                                                
-                                                <div className="space-y-8 pl-4 border-l border-white/5">
-                                                    {['Fri', 'Sat'].map(day => {
-                                                        const dayItems = weekItems.filter((i:any) => i.day === day);
-                                                        const uniqueTimes = Array.from(new Set(dayItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
+                                            return (
+                                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                                    <div className="space-y-8 pl-4 border-l border-white/5">
+                                                        {['Fri', 'Sat'].map(day => {
+                                                            const dayItems = weekItems.filter((i:any) => i.day === day);
+                                                            const uniqueTimes = Array.from(new Set(dayItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
 
-                                                        if (uniqueTimes.length === 0) return <div key={day} className="text-zinc-600 text-xs italic pl-4">No items for {day}</div>;
+                                                            if (uniqueTimes.length === 0) return <div key={day} className="text-zinc-600 text-xs italic pl-4">No items for {day}</div>;
 
-                                                        return (
-                                                            <div key={day}>
-                                                                {/* DAY HEADER & COLUMNS */}
-                                                                <div className="flex justify-between items-end mb-4">
-                                                                    <h4 className="text-xs font-black uppercase text-zinc-500 flex items-center gap-2">
-                                                                        <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
-                                                                    </h4>
-                                                                    <div className="hidden md:grid grid-cols-3 gap-2 w-full max-w-4xl pl-20">
-                                                                        {trackPriority.map(t => (
-                                                                            <div key={t} className="text-[9px] font-black uppercase text-zinc-600 tracking-wider text-center">{t}</div>
-                                                                        ))}
+                                                            return (
+                                                                <div key={day}>
+                                                                    {/* DAY HEADER & COLUMNS */}
+                                                                    <div className="flex justify-between items-end mb-4">
+                                                                        <h4 className="text-xs font-black uppercase text-zinc-500 flex items-center gap-2">
+                                                                            <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
+                                                                        </h4>
+                                                                        <div className="hidden md:grid grid-cols-3 gap-2 w-full max-w-4xl pl-20">
+                                                                            {trackPriority.map(t => (
+                                                                                <div key={t} className="text-[9px] font-black uppercase text-zinc-600 tracking-wider text-center">{t}</div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="space-y-2">
+                                                                        {uniqueTimes.map((t: any) => {
+                                                                            const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
+                                                                            
+                                                                            return (
+                                                                                <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors items-stretch">
+                                                                                    {/* TIME COLUMN */}
+                                                                                    <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 border-r border-white/5 pr-4 group-hover:text-zinc-300 transition-colors">
+                                                                                        {formatTime(t)}
+                                                                                    </div>
+                                                                                    
+                                                                                    {/* TRACK COLUMNS */}
+                                                                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                                                        {trackPriority.map((track) => {
+                                                                                            const item = slotItems.find((i:any) => i.track === track);
+
+                                                                                            // RENDER GHOST SLOT
+                                                                                            if (!item) return (
+                                                                                                <div key={track} className="h-full min-h-[3rem] rounded-lg border border-dashed border-white/5 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                                    <span className="text-[8px] uppercase font-bold text-zinc-800">Available</span>
+                                                                                                </div>
+                                                                                            );
+                                                                                            
+                                                                                            // RENDER CARD
+                                                                                            const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                                                        : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
+                                                                                                        : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
+                                                                                                        
+                                                                                            return (
+                                                                                                <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
+                                                                                                    <div>
+                                                                                                        <div className="flex justify-between items-start mb-1">
+                                                                                                            <span className="text-[9px] uppercase font-black opacity-60 flex items-center gap-1">
+                                                                                                                {getTrackIcon(item.track)} {item.track}
+                                                                                                            </span>
+                                                                                                            <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
+                                                                                                        </div>
+                                                                                                        <div className="text-xs font-bold leading-tight line-clamp-2 mt-1">{item.sceneName}</div>
+                                                                                                    </div>
+                                                                                                    <div className="mt-2 text-[9px] opacity-60 flex justify-between items-center">
+                                                                                                        <span className="flex items-center gap-1"><Users size={8}/> {item.castSize}</span>
+                                                                                                        {item.status === 'New' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            )
+                                                                                        })}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )
+                                                                        })}
                                                                     </div>
                                                                 </div>
-
-                                                                <div className="space-y-2">
-                                                                    {uniqueTimes.map((t: any) => {
-                                                                        const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
-                                                                        
-                                                                        return (
-                                                                            <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors items-stretch">
-                                                                                {/* TIME COLUMN */}
-                                                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 border-r border-white/5 pr-4 group-hover:text-zinc-300 transition-colors">
-                                                                                    {formatTime(t)}
-                                                                                </div>
-                                                                                
-                                                                                {/* TRACK COLUMNS */}
-                                                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                                                                    {trackPriority.map((track) => {
-                                                                                        const item = slotItems.find((i:any) => i.track === track);
-
-                                                                                        // RENDER GHOST SLOT
-                                                                                        if (!item) return (
-                                                                                            <div key={track} className="h-full min-h-[3rem] rounded-lg border border-dashed border-white/5 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                                <span className="text-[8px] uppercase font-bold text-zinc-800">Available</span>
-                                                                                            </div>
-                                                                                        );
-                                                                                        
-                                                                                        // RENDER CARD
-                                                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
-                                                                                                    : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
-                                                                                                    : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
-                                                                                                    
-                                                                                        return (
-                                                                                            <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
-                                                                                                <div>
-                                                                                                    <div className="flex justify-between items-start mb-1">
-                                                                                                        <span className="text-[9px] uppercase font-black opacity-60 flex items-center gap-1">
-                                                                                                            {getTrackIcon(item.track)} {item.track}
-                                                                                                        </span>
-                                                                                                        <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
-                                                                                                    </div>
-                                                                                                    <div className="text-xs font-bold leading-tight line-clamp-2 mt-1">{item.sceneName}</div>
-                                                                                                </div>
-                                                                                                <div className="mt-2 text-[9px] opacity-60 flex justify-between items-center">
-                                                                                                    <span className="flex items-center gap-1"><Users size={8}/> {item.castSize}</span>
-                                                                                                    {item.status === 'New' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        )
-                                                                                    })}
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        )
-                                                    })}
+                                                            )
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )
-                                    })}
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                                 
                                 {/* CONFIRM BUTTON */}
@@ -581,8 +560,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                         <CheckCircle2 size={18}/> Confirm & Import
                                     </button>
                                 </div>
-
-                            </div>
+                            </>
                         )}
                     </div>
                 </div>
