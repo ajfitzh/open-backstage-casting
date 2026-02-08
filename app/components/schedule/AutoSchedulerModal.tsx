@@ -424,62 +424,84 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     </div>
                                 </div>
 
-                                {/* PREVIEW LIST */}
-                                <div className="space-y-12">
-                                    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
-                                        const weekItems = previewSchedule.filter(item => item.weekOffset === (week - 1));
-                                        if (weekItems.length === 0) return null;
+{/* PREVIEW LIST */}
+<div className="space-y-12">
+    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
+        const weekItems = previewSchedule.filter(item => item.weekOffset === (week - 1));
+        if (weekItems.length === 0) return null;
 
+        return (
+            <div key={week} className="animate-in slide-in-from-bottom-4 duration-500">
+                <h3 className="text-lg font-black uppercase text-white mb-6 flex items-center gap-3">
+                    <span className="bg-blue-600 px-3 py-1 rounded text-sm shadow-lg shadow-blue-600/20">Week {week}</span>
+                    <div className="h-px flex-1 bg-white/10"></div>
+                </h3>
+                
+                <div className="space-y-8 pl-4 border-l border-white/5">
+                    {['Fri', 'Sat'].map(day => {
+                        const dayItems = weekItems.filter((i:any) => i.day === day);
+                        // Get all unique start times
+                        const uniqueTimes = Array.from(new Set(dayItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
+
+                        if (uniqueTimes.length === 0) return <div key={day} className="text-zinc-600 text-xs italic pl-4">No items scheduled for {day}</div>;
+
+                        return (
+                            <div key={day}>
+                                <div className="flex justify-between items-end mb-4">
+                                    <h4 className="text-xs font-black uppercase text-zinc-500 flex items-center gap-2">
+                                        <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
+                                    </h4>
+                                    {/* COLUMN HEADERS */}
+                                    <div className="hidden md:grid grid-cols-3 gap-2 w-full max-w-4xl pl-20">
+                                        {trackPriority.map(t => (
+                                            <div key={t} className="text-[9px] font-black uppercase text-zinc-600 tracking-wider text-center">{t}</div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {uniqueTimes.map((t: any) => {
+                                        // Find items starting roughly at this time
+                                        const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
+                                        
                                         return (
-                                            <div key={week} className="animate-in slide-in-from-bottom-4 duration-500">
-                                                <h3 className="text-lg font-black uppercase text-white mb-6 flex items-center gap-3">
-                                                    <span className="bg-blue-600 px-3 py-1 rounded text-sm shadow-lg shadow-blue-600/20">Week {week}</span>
-                                                    <div className="h-px flex-1 bg-white/10"></div>
-                                                </h3>
+                                            <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors items-stretch">
+                                                {/* TIME COLUMN */}
+                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 border-r border-white/5 pr-4 group-hover:text-zinc-300 transition-colors">
+                                                    {formatTime(t)}
+                                                </div>
                                                 
-                                                <div className="space-y-8 pl-4 border-l border-white/5">
-                                                    {['Fri', 'Sat'].map(day => {
-                                                        const dayItems = weekItems.filter((i:any) => i.day === day);
-                                                        // Sort by start time
-                                                        const sortedItems = [...dayItems].sort((a,b) => a.startTime - b.startTime);
-                                                        if (sortedItems.length === 0) return null;
-                                                        
-                                                        // Group by start time for visual row alignment (approximate)
-                                                        const uniqueTimes = Array.from(new Set(sortedItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
+                                                {/* TRACK COLUMNS */}
+                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                    {trackPriority.map((track) => {
+                                                        const item = slotItems.find((i:any) => i.track === track);
 
+                                                        // RENDER EMPTY SLOT (The "Ghost" Column)
+                                                        if (!item) return (
+                                                            <div key={track} className="h-full min-h-[3rem] rounded-lg border border-dashed border-white/5 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <span className="text-[8px] uppercase font-bold text-zinc-800">Available</span>
+                                                            </div>
+                                                        );
+                                                        
+                                                        // RENDER ITEM CARD
+                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                    : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
+                                                                    : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
+                                                                    
                                                         return (
-                                                            <div key={day}>
-                                                                <h4 className="text-xs font-black uppercase text-zinc-500 mb-4 flex items-center gap-2">
-                                                                    <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
-                                                                </h4>
-                                                                <div className="space-y-2">
-                                                                    {uniqueTimes.map((t: any) => {
-                                                                        const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
-                                                                        return (
-                                                                            <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors">
-                                                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0">{formatTime(t)}</div>
-                                                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                                                                    {slotItems.map((item:any) => {
-                                                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
-                                                                                                    : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
-                                                                                                    : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
-                                                                                        return (
-                                                                                            <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg ${color}`}>
-                                                                                                <div>
-                                                                                                    <div className="flex justify-between items-start mb-1">
-                                                                                                        <span className="text-[9px] uppercase font-black opacity-60">{item.track}</span>
-                                                                                                        <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
-                                                                                                    </div>
-                                                                                                    <div className="text-xs font-bold leading-tight line-clamp-2">{item.sceneName}</div>
-                                                                                                </div>
-                                                                                                <div className="mt-2 text-[9px] opacity-60 truncate">{item.castSize} Cast Members</div>
-                                                                                            </div>
-                                                                                        )
-                                                                                    })}
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    })}
+                                                            <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
+                                                                <div>
+                                                                    <div className="flex justify-between items-start mb-1">
+                                                                        <span className="text-[9px] uppercase font-black opacity-60 flex items-center gap-1">
+                                                                            {getTrackIcon(item.track)} {item.track}
+                                                                        </span>
+                                                                        <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
+                                                                    </div>
+                                                                    <div className="text-xs font-bold leading-tight line-clamp-2 mt-1">{item.sceneName}</div>
+                                                                </div>
+                                                                <div className="mt-2 text-[9px] opacity-60 flex justify-between items-center">
+                                                                    <span>{item.castSize} Cast</span>
+                                                                    {item.status === 'New' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>}
                                                                 </div>
                                                             </div>
                                                         )
@@ -489,6 +511,14 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                         )
                                     })}
                                 </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        )
+    })}
+</div>
                                 
                                 <div className="flex justify-end pt-6 border-t border-white/10 sticky bottom-0 bg-zinc-950 p-4 -mx-4 -mb-4">
                                     <button 
