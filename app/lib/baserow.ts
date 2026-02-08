@@ -542,6 +542,78 @@ export async function getSceneAssignments(productionId: number) {
   if (!Array.isArray(data)) return [];
   return data;
 }
+
+// app/lib/baserow.ts
+
+// ... (keep existing code) ...
+
+// ==============================================================================
+// 💾 WRITING SCHEDULES (NEW)
+// ==============================================================================
+
+export async function saveScheduleBatch(productionId: number, newSlots: any[]) {
+  // Table: SCHEDULE_SLOTS (ID: 640)
+  const TABLE_ID = DB.SCHEDULE_SLOTS.ID;
+  const F = DB.SCHEDULE_SLOTS.FIELDS;
+
+  // 1. Format Payload for Baserow Batch Create
+  // Baserow allows creating multiple rows at once if we send an array
+  const requests = newSlots.map((slot) => {
+    
+    // Convert relative "Fri/Sat" + "WeekOffset" into a real Calendar Date
+    // NOTE: You'll need to pass the actual 'startDate' of Week 1 from the client
+    // For now, we assume slot.startTime is a real ISO string or Timestamp if generated correctly, 
+    // OR we calculate it here if your AutoScheduler returns relative offsets.
+    
+    // Assuming AutoScheduler returns relative offsets, we need real dates:
+    // This logic usually happens on the Client before calling this function, 
+    // but here is the mapping schema:
+    
+    return {
+      [F.SCENE]: [slot.sceneId], // Link to Scene Table
+      [F.TRACK]: slot.track,     // Single Select: "Music", "Dance", "Acting"
+      [F.START_TIME]: new Date(slot.startTime).toISOString(), // Must be ISO format
+      [F.END_TIME]: new Date(slot.endTime).toISOString(),
+      [F.DURATION]: slot.duration,
+      [F.ACTIVE]: true,
+      // We don't have a direct 'Production' link in Schedule Slots based on your schema,
+      // instead, it links to an Event or Scene. 
+      // Ensure your SCENE links correctly to the Production.
+    };
+  });
+
+  // Baserow Batch API limit is usually 200 rows. Chunk it if needed.
+  const chunkSize = 50;
+  for (let i = 0; i < requests.length; i += chunkSize) {
+    const chunk = requests.slice(i, i + chunkSize);
+    await fetchBaserow(`/database/rows/table/${TABLE_ID}/batch/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: chunk })
+    });
+  }
+
+  return true;
+}
+
+export async function clearSchedule(productionId: number) {
+  // Optional: Helper to wipe the board before auto-scheduling
+  // 1. Get all slots for this production
+  const slots = await getScheduleSlots(productionId);
+  const ids = slots.map((s:any) => s.id);
+  
+  // 2. Batch Delete
+  const TABLE_ID = DB.SCHEDULE_SLOTS.ID;
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    await fetchBaserow(`/database/rows/table/${TABLE_ID}/batch/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: chunk.map((id:any) => id) }), // IDs to delete
+    });
+  }
+}
 export async function getScenes(productionId?: number) {
   const params: any = { size: "200" };
   const F = DB.SCENES.FIELDS;

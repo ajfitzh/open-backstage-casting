@@ -39,7 +39,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [trackPriority, setTrackPriority] = useState<TrackType[]>(['Music', 'Dance', 'Acting']);
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
-    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); // 🟢 NEW: Strategy Toggle
+    const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); // Strategy Toggle
     
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
@@ -58,52 +58,46 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setTrackPriority(newOrder);
     };
 
-// --- 🧮 THE ALGORITHM (DATA-AWARE) ---
+    // --- 🧮 THE ALGORITHM ---
     const generateSchedule = () => {
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP: robust parsing for your specific CSV structure
+        // 1. DATA PREP: Robust Parsing & Auto-Categorization
         const enrichedScenes = scenes.map((s: any) => {
-            // A. normalize names and types
-            // keys might be "Scene Name" (CSV) or "name" (App)
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
             const type = (s["Scene Type"] || s.type || "").toLowerCase();
             
-            // B. AGGRESSIVE KEYWORD DETECTION (Since 'Type' is empty)
+            // A. KEYWORD DETECTION (Fix for missing 'Type' data)
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton'];
 
             const isMusicByName = musicKeywords.some(k => name.includes(k));
             const isDanceByName = danceKeywords.some(k => name.includes(k));
 
-            // C. SMART DEFAULTS
-            // If load is 0, but name says "Song", default to 1.
+            // B. SMART DEFAULTS
             const defaultMusic = isMusicByName ? 1 : 0;
             const defaultDance = isDanceByName ? 1 : 0;
 
-            // D. FLEXIBLE COLUMN READING
-            // Check all possible casing: "Music Load", "music_load", "load.music"
+            // C. FLEXIBLE COLUMN READING
             const mLoad = parseInt(s["Music Load"] ?? s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
             const dLoad = parseInt(s["Dance Load"] ?? s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
             const bLoad = parseInt(s["Blocking Load"] ?? s.load?.block ?? s.blocking_load ?? 1) || 1; 
 
-            // E. DETERMINE ELIGIBILITY
-            // If it has load > 0, allow it in that track.
+            // D. DETERMINE ELIGIBILITY
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
             
-            // F. CALCULATE DURATION
+            // E. DURATION CALCULATION
             const totalPoints = mLoad + dLoad + bLoad;
             let rawDuration = 15 + (totalPoints * 5);
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            // G. PARSE CAST (Handle the complex CSV string if needed)
+            // F. PARSE CAST (Fix for CSV String Format)
             let finalCast = s.cast || [];
-            // If 'cast' is missing but we have that messy 'Scene Assignments' string:
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
-                 // Quick regex to extract names before the " - [{" pattern
+                 // Extract names before the " - [{" pattern
                  const raw = s["Scene Assignments"];
                  const extracted = raw.match(/""?([A-Za-z\s]+?) - \[\{/g);
                  if (extracted) {
@@ -161,7 +155,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                     let roomsActiveNow = 0;
 
+                    // Iterate Tracks
                     trackPriority.forEach((track) => {
+                        // Is Room Free?
                         if (trackClocks[track] > currentTime + 0.01) {
                             roomsActiveNow++;
                             return; 
@@ -170,8 +166,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
                             if (completedScenes.has(`${scene.id}-${track}`)) return false; 
+                            
+                            // Track Eligibility
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
+                            
                             return true;
                         });
 
@@ -179,29 +178,34 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
                             
-                            // Conflict Check
+                            // A. CONFLICT CHECK
                             const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) return { ...scene, score: -9999 };
 
                             const size = scene.cast?.length || 0;
                             
-                            // Strategy & Equity
+                            // B. STRATEGY (Velocity vs Concurrency)
                             if (strategy === 'velocity') {
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
                             } else {
-                                if (size <= 6) score += 500;
-                                else if (size <= 12) score += 200;
-                                else score -= 100;
+                                // MAX ROOMS: Punish large groups to keep actors free
+                                if (size <= 6) score += 500;       
+                                else if (size <= 12) score += 200; 
+                                else score -= 100;                 
                                 score += (scene.totalPoints * 2);
                             }
 
+                            // C. EQUITY
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
-                            // 🚀 TRACK AFFINITY (The Fix for "Only Acting")
-                            if (track === 'Music' && (scene.mLoad > scene.bLoad || scene.name.toLowerCase().includes('song'))) score += 100;
-                            if (track === 'Dance' && (scene.dLoad > scene.bLoad || scene.name.toLowerCase().includes('dance'))) score += 100;
+                            // D. TRACK AFFINITY (The Balancer)
+                            const type = (scene.type || "").toLowerCase();
+                            const name = (scene.name || s["Scene Name"] || "").toLowerCase();
+                            
+                            if (track === 'Music' && (name.includes('song') || name.includes('finale') || type.includes('music'))) score += 100;
+                            if (track === 'Dance' && (name.includes('dance') || name.includes('tango'))) score += 100;
 
                             if (scene.status === 'New') score += 50; 
 
@@ -211,14 +215,16 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         scored.sort((a: any, b: any) => b.score - a.score);
                         const winner = scored[0];
 
+                        // Schedule Winner
                         if (winner && winner.score > 0) {
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
+                            // Fit Check
                             if ((currentTime + (duration/60)) <= end) {
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
                                     sceneId: winner.id,
-                                    sceneName: winner["Scene Name"] || winner.name, // Use correct name field
+                                    sceneName: winner["Scene Name"] || winner.name, 
                                     track: track,
                                     day: day,
                                     weekOffset: w - 1,
@@ -229,7 +235,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     castList: (winner.cast || []).map((c:any) => c.name)
                                 });
 
+                                // Update Busy Lists
+                                (winner.cast || []).forEach((c:any) => busyActorsNow.add(c.name)); 
                                 (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
+                                
                                 trackClocks[track] = currentTime + (duration / 60);
                                 completedScenes.add(`${winner.id}-${track}`);
                                 pointsCleared += winner.totalPoints;
