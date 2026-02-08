@@ -55,33 +55,33 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setTrackPriority(newOrder);
     };
 
-// --- 🧮 THE ALGORITHM (CORRECTED) ---
+// --- 🧮 THE ALGORITHM (BALANCED & ROBUST) ---
     const generateSchedule = () => {
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP: Enforce Numbers to prevent "1"+"1" = "11" errors
+        // 1. DATA PREP: Robust Defaults
         const enrichedScenes = scenes.map((s: any) => {
-            // Force parseInt to ensure we don't do string concatenation
-            const mLoad = parseInt(s.load?.music ?? s.music_load ?? 0) || 0; 
-            const dLoad = parseInt(s.load?.dance ?? s.dance_load ?? 0) || 0;
-            const bLoad = parseInt(s.load?.block ?? s.blocking_load ?? 1) || 1; // Default to 1 if missing
+            const type = (s.type || "").toLowerCase();
+            
+            // 🧠 SMART DEFAULTS: If loads are 0/missing, guess based on Scene Type
+            const defaultMusic = (type.includes('song') || type.includes('mixed')) ? 1 : 0;
+            const defaultDance = (type.includes('dance') || type.includes('mixed')) ? 1 : 0;
+
+            // Priority: Manual Slider > DB Value > Smart Default > 0
+            const mLoad = parseInt(s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
+            const dLoad = parseInt(s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
+            const bLoad = parseInt(s.load?.block ?? s.blocking_load ?? 1) || 1; // Always blocking
 
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
             
+            // Points Calculation
             const totalPoints = mLoad + dLoad + bLoad;
 
-            // 🟢 SMART DURATION FORMULA
-            // Base 15m + (5m per point). 
-            // Ex: Low (3pts) = 30m. High (10pts) = 65m.
+            // Duration Calculation (Clamped 15m - 90m)
             let rawDuration = 15 + (totalPoints * 5);
-            
-            // Safety Clamp: Don't let a scene exceed 90 mins automatically
-            // or it will never fit in a Fri night slot
             if (rawDuration > 90) rawDuration = 90;
-
-            // Round to nearest 5
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
             return { ...s, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime };
@@ -89,7 +89,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         const proposedSchedule: any[] = [];
         const scheduledCast = new Set<string>(); 
-        const completedScenes = new Set<string>(); 
+        const completedScenes = new Set<string>(); // Format: "ID-Track"
         let conflictsAvoided = 0;
         let totalActiveRooms = 0;
         let pointsCleared = 0;
@@ -99,33 +99,31 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         for (let w = startWeek; w <= endWeek; w++) {
             
             const workDays = [
-                { day: 'Fri', start: FRI_START, end: FRI_END }, // 3 Hours
-                { day: 'Sat', start: SAT_START, end: SAT_END }  // 7 Hours
+                { day: 'Fri', start: FRI_START, end: FRI_END }, 
+                { day: 'Sat', start: SAT_START, end: SAT_END }  
             ];
 
             workDays.forEach(({ day, start, end }) => {
+                // Independent Clocks for Concurrency
                 const trackClocks: Record<string, number> = {
                     'Music': start,
                     'Dance': start,
                     'Acting': start
                 };
 
-                // March forward in 15-min increments
                 let currentTime = start;
-                
-                // Safety break to prevent infinite loops
                 let loops = 0;
+                
+                // 15-Minute Increment Loop
                 while(currentTime < end && loops < 100) {
                     loops++;
                     
+                    // Who is busy at this specific moment?
                     const busyActorsNow = new Set<string>();
-                    
-                    // Populate Busy Actors from overlapping items
                     proposedSchedule.forEach(item => {
                         if (item.weekOffset === (w-1) && item.day === day) {
-                            const itemEnd = item.startTime + (item.duration / 60);
-                            // If item overlaps the current 15-min block
-                            if (item.startTime < currentTime + 0.25 && itemEnd > currentTime) {
+                            // Check overlap with current 15-min block
+                            if (item.startTime < currentTime + 0.25 && (item.startTime + item.duration/60) > currentTime) {
                                 (item.castList || []).forEach((c:string) => busyActorsNow.add(c));
                             }
                         }
@@ -133,40 +131,50 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                     let roomsActiveNow = 0;
 
+                    // ⚡️ ITERATE TRACKS (Priority Order)
                     trackPriority.forEach((track) => {
-                        // Skip if this track is already busy with a previous long scene
+                        // 1. Is this room free?
                         if (trackClocks[track] > currentTime + 0.01) {
-                            roomsActiveNow++;
+                            roomsActiveNow++; // Room is busy with previous scene
                             return; 
                         }
 
-                        // Filter Candidates
+                        // 2. Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
                             if (completedScenes.has(`${scene.id}-${track}`)) return false; 
-                            
-                            // Load-based filtering
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
-                            
                             return true;
                         });
 
-                        // Score Candidates
+                        // 3. Score Candidates
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
                             
-                            // Conflict Check
+                            // A. CONFLICT CHECK
                             const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) {
                                 conflictsAvoided++;
                                 return { ...scene, score: -9999 };
                             }
 
+                            // B. SCORING WEIGHTS
+                            // Prioritize "New" scenes
                             if (scene.status === 'New') score += 50; 
+                            
+                            // Prioritize Harder Scenes (Get them done early)
                             score += (scene.totalPoints * 5); 
 
+                            // Prioritize scenes with currently IDLE cast members (Equity)
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
+                            
+                            // ⚖️ BALANCE BOOSTER (The fix for your question)
+                            // If this scene type matches the track name, give it a massive bonus.
+                            // This prevents "Acting" from stealing a "Musical" scene just because the points are high.
+                            const type = (scene.type || "").toLowerCase();
+                            if (track === 'Music' && (type.includes('song') || type.includes('mixed'))) score += 100;
+                            if (track === 'Dance' && (type.includes('dance') || type.includes('mixed'))) score += 100;
 
                             return { ...scene, score };
                         });
@@ -174,10 +182,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         scored.sort((a: any, b: any) => b.score - a.score);
                         const winner = scored[0];
 
+                        // 4. Schedule Winner
                         if (winner && winner.score > 0) {
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
-                            // Does it fit in remaining day?
+                            // Fit check
                             if ((currentTime + (duration/60)) <= end) {
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
@@ -193,39 +202,33 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     castList: (winner.cast || []).map((c:any) => c.name)
                                 });
 
+                                // Mark as busy
                                 (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
                                 trackClocks[track] = currentTime + (duration / 60);
                                 completedScenes.add(`${winner.id}-${track}`);
                                 pointsCleared += winner.totalPoints;
                                 roomsActiveNow++;
                             } else {
-                                // Scene too long for remaining day, try next loop
-                                // Advance clock slightly to allow small scenes to fill gap
+                                // Won't fit, wait 15 mins
                                 trackClocks[track] = currentTime + 0.25;
                             }
                         } else {
-                            // No valid scene, advance clock
+                            // No candidate, wait 15 mins
                             trackClocks[track] = currentTime + 0.25; 
                         }
                     });
 
                     if (roomsActiveNow > 0) totalActiveRooms++;
                     totalSlotsIterated++;
-                    
-                    currentTime += 0.25; // Advance 15 mins
+                    currentTime += 0.25; 
                 }
             });
         }
 
-        // 3. STATS
+        // 3. FINALIZE
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
             const velocityTarget = 50 * (endWeek - startWeek + 1); 
-
-            if (proposedSchedule.length === 0) {
-                console.warn("Auto-Scheduler produced 0 items. Check 'enrichedScenes' logs for data issues.");
-                console.log("Sample Scene Data:", enrichedScenes[0]);
-            }
 
             setPreviewSchedule(proposedSchedule);
             setStats({
@@ -241,7 +244,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             setIsGenerating(false);
         }, 800);
     };
-
     // --- RENDER HELPERS ---
     const getTrackIcon = (t: string) => {
         if (t === 'Music') return <Mic2 size={14} className="text-pink-400"/>;
