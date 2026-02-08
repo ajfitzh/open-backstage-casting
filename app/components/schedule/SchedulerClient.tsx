@@ -55,48 +55,68 @@ export default function SchedulerClient({
   const [isSaving, setIsSaving] = useState(false); 
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  // --- 🟢 DYNAMIC WEEK CALCULATOR ---
+// --- 🟢 SMART WEEK CALCULATOR ---
   const weekStats = useMemo(() => {
-    // 1. If no events, return defaults
+    // 1. Safety Checks
     if (!events || events.length === 0) {
         return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
     }
 
-    // 2. Find Start & End Dates of the Production
+    // 2. Math: Start & End Dates
     const dates = events.map((e: any) => new Date(e.date).getTime()).filter((d: number) => !isNaN(d));
     if (dates.length === 0) return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
 
     const minDate = new Date(Math.min(...dates));
     const maxDate = new Date(Math.max(...dates));
 
-    // 3. Calculate Total Weeks Duration
+    // 3. Math: Duration
     const msPerWeek = 1000 * 60 * 60 * 24 * 7;
     const totalWeeks = Math.ceil((maxDate.getTime() - minDate.getTime()) / msPerWeek) || 1;
 
-    // 4. Calculate "Viewed" Date (based on offset from Today)
+    // 4. Math: Current View Offset
     const today = new Date();
-    // Align "Today" to the nearest Friday for consistent math
     const nextFri = new Date(today);
     nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (currentWeekOffset * 7));
 
-    // 5. Calculate Difference between "Viewed Date" and "Start Date"
+    // 5. Math: Current Week Number
     const diffTime = nextFri.getTime() - minDate.getTime();
-    // Add 1 so the first week is "Week 1", not "Week 0"
     const currentWeekNum = Math.floor(diffTime / msPerWeek) + 1;
 
-    // 6. Formatting
+    // 6. 🧠 SMART LOGIC: Check events in this specific week
+    const weekStart = new Date(minDate.getTime() + (currentWeekNum - 1) * msPerWeek);
+    const weekEnd = new Date(weekStart.getTime() + msPerWeek);
+    
+    // Find all events happening in this slice of time
+    const currentEvents = events.filter((e: any) => {
+        const d = new Date(e.date).getTime();
+        return d >= weekStart.getTime() && d < weekEnd.getTime();
+    });
+
+    // Check for Tags
+    const isPerformance = currentEvents.some((e: any) => e.type === "Performance");
+    const isTech = currentEvents.some((e: any) => e.type === "Tech");
+
+    // 7. Generate Label
     let label = `Week ${currentWeekNum} of ${totalWeeks}`;
-    if (currentWeekNum < 1) label = `Pre-Production (${Math.abs(currentWeekNum)} wks out)`;
-    if (currentWeekNum > totalWeeks) label = `Post-Production (+${currentWeekNum - totalWeeks})`;
+    
+    if (isPerformance) {
+        label = `🎭 SHOW WEEK (${currentWeekNum}/${totalWeeks})`;
+    } else if (isTech) {
+        label = `🔦 TECH WEEK (${currentWeekNum}/${totalWeeks})`;
+    } else if (currentWeekNum < 1) {
+        label = `Pre-Production (${Math.abs(currentWeekNum)} wks out)`;
+    } else if (currentWeekNum > totalWeeks) {
+        label = `Post-Production (+${currentWeekNum - totalWeeks})`;
+    }
 
     return { 
         current: currentWeekNum, 
         total: totalWeeks, 
         label: label,
-        viewedDate: nextFri 
+        viewedDate: nextFri,
+        isSpecial: isPerformance || isTech // You can use this to color the text red/gold if you want!
     };
   }, [events, currentWeekOffset]);
-
   // --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
     if (!scenes) return [];
