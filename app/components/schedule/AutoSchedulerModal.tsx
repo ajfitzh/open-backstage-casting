@@ -6,7 +6,8 @@ import {
     Calendar, Loader2,
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
-    CalendarRange, BrainCircuit, Users
+    CalendarRange, BrainCircuit, Users,
+    RefreshCw
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -25,8 +26,8 @@ interface ScheduleStats {
     concurrency: number;  
     conflictsAvoided: number;
     pointsCleared: number;   
-    velocityTarget: number;  
-    isOnTrack: boolean;
+    totalWorkload: number;  
+    completion: number;
 }
 
 export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, onCommit }: any) {
@@ -34,8 +35,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewSchedule, setPreviewSchedule] = useState<any[]>([]);
     const [stats, setStats] = useState<ScheduleStats | null>(null);
-    
-    // 🟢 NEW: Tab State
     const [activeTabWeek, setActiveTabWeek] = useState(1);
 
     // --- CONTROLS ---
@@ -44,16 +43,15 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [baseDuration, setBaseDuration] = useState(30); 
     const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); 
     
+    // 🟢 NEW: Passes Control
+    const [targetPasses, setTargetPasses] = useState(1); // 1 = Teach only, 3 = Teach/Review/Polish
+
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(4); // 🟢 Bumped default to 4 weeks
+    const [endWeek, setEndWeek] = useState(6); // Default 6 weeks to show off the "Passes" feature
 
-    // Reset tab when start week changes
-    useEffect(() => {
-        setActiveTabWeek(startWeek);
-    }, [startWeek]);
+    useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
-    // --- HELPER: Move items up/down ---
     const movePriority = (index: number, direction: 'up' | 'down') => {
         const newOrder = [...trackPriority];
         if (direction === 'up') {
@@ -71,13 +69,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP: Robust Parsing
+        // 1. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
-            const type = (s["Scene Type"] || s.type || "").toLowerCase();
             
-            // Keyword Detectives
-            const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons', 'les poissons'];
+            const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
 
             const isMusicByName = musicKeywords.some(k => name.includes(k));
@@ -94,10 +90,13 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             const canDance = dLoad > 0;
             
             const totalPoints = mLoad + dLoad + bLoad;
+            
+            // Smart Duration
             let rawDuration = 15 + (totalPoints * 5);
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
+            // Cast Parsing
             let finalCast = s.cast || [];
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
                  const raw = s["Scene Assignments"];
@@ -116,7 +115,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         const proposedSchedule: any[] = [];
         const scheduledCast = new Set<string>(); 
-        const completedScenes = new Set<string>(); 
+        
+        // 🟢 NEW: Track completions per scene-track combination
+        // Format: "SceneID-Track" -> Count (0, 1, 2...)
+        const completionCounts: Record<string, number> = {}; 
+
         let conflictsAvoided = 0;
         let totalActiveRooms = 0;
         let pointsCleared = 0;
@@ -130,17 +133,14 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             ];
 
             workDays.forEach(({ day, start, end }) => {
-                const trackClocks: Record<string, number> = {
-                    'Music': start, 'Dance': start, 'Acting': start
-                };
-
+                const trackClocks: Record<string, number> = { 'Music': start, 'Dance': start, 'Acting': start };
                 let currentTime = start;
                 let loops = 0;
                 
                 while(currentTime < end && loops < 100) {
                     loops++;
-                    
                     const busyActorsNow = new Set<string>();
+                    
                     proposedSchedule.forEach(item => {
                         if (item.weekOffset === (w-1) && item.day === day) {
                             if (item.startTime < currentTime + 0.25 && (item.startTime + item.duration/60) > currentTime) {
@@ -157,20 +157,36 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             return; 
                         }
 
+                        // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
-                            if (completedScenes.has(`${scene.id}-${track}`)) return false; 
+                            const key = `${scene.id}-${track}`;
+                            const currentPass = completionCounts[key] || 0;
+                            
+                            // 🟢 CHECK: Have we reached target passes?
+                            if (currentPass >= targetPasses) return false;
+                            
+                            // 🟢 CHECK: Don't schedule the same scene twice in one WEEKEND (Give them time to practice)
+                            // We check if this scene was already scheduled in the current week 'w'
+                            const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
+                            if (alreadyScheduledThisWeek) return false;
+
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
                             return true;
                         });
 
+                        // Score Candidates
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
+                            const key = `${scene.id}-${track}`;
+                            const currentPass = completionCounts[key] || 0;
+
                             const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) return { ...scene, score: -9999 };
 
                             const size = scene.cast?.length || 0;
                             
+                            // STRATEGY
                             if (strategy === 'velocity') {
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
@@ -180,6 +196,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 else score -= 100;                 
                                 score += (scene.totalPoints * 2);
                             }
+
+                            // 🟢 PASS PRIORITY: Finish Pass 1 before starting Pass 2
+                            // Higher pass number = Lower score penalty
+                            score -= (currentPass * 500); 
 
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
@@ -202,16 +222,24 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
                             if ((currentTime + (duration/60)) <= end) {
+                                // 🟢 Determine Label based on Pass
+                                const key = `${winner.id}-${track}`;
+                                const pass = (completionCounts[key] || 0) + 1;
+                                let labelPrefix = "";
+                                if (pass === 1) labelPrefix = "New: ";
+                                if (pass === 2) labelPrefix = "Review: ";
+                                if (pass === 3) labelPrefix = "Polish: ";
+
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
                                     sceneId: winner.id,
-                                    sceneName: winner["Scene Name"] || winner.name, 
+                                    sceneName: `${labelPrefix}${winner["Scene Name"] || winner.name}`, 
                                     track: track,
                                     day: day,
                                     weekOffset: w - 1,
                                     startTime: currentTime,
                                     duration: duration,
-                                    status: 'New',
+                                    status: pass === 1 ? 'New' : pass === 2 ? 'Worked' : 'Polished', // Update Status
                                     castSize: winner.cast?.length || 0,
                                     castList: (winner.cast || []).map((c:any) => c.name)
                                 });
@@ -219,7 +247,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 (winner.cast || []).forEach((c:any) => busyActorsNow.add(c.name)); 
                                 (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
                                 trackClocks[track] = currentTime + (duration / 60);
-                                completedScenes.add(`${winner.id}-${track}`);
+                                
+                                // Increment Completion
+                                completionCounts[key] = pass;
                                 pointsCleared += winner.totalPoints;
                                 roomsActiveNow++;
                             } else {
@@ -239,7 +269,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
-            const velocityTarget = 50 * (endWeek - startWeek + 1); 
+            
+            // Total Work = Points * Passes
+            const totalWorkload = scenes.reduce((acc:number, s:any) => acc + (s.mLoad + s.dLoad + s.bLoad), 0) * targetPasses;
 
             setPreviewSchedule(proposedSchedule);
             setStats({
@@ -249,14 +281,17 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 concurrency: totalSlotsIterated > 0 ? parseFloat((totalActiveRooms / totalSlotsIterated).toFixed(1)) : 0,
                 conflictsAvoided,
                 pointsCleared,
-                velocityTarget,
-                isOnTrack: pointsCleared >= velocityTarget
+                totalWorkload,
+                velocityTarget: totalWorkload, 
+                isOnTrack: pointsCleared >= (totalWorkload * 0.9),
+                completion: totalWorkload > 0 ? Math.round((pointsCleared / totalWorkload) * 100) : 0
             });
             setIsGenerating(false);
-            setActiveTabWeek(startWeek); // Auto-switch to start
+            setActiveTabWeek(startWeek);
         }, 800);
     };
 
+    // --- RENDER HELPERS ---
     const getTrackIcon = (t: string) => {
         if (t === 'Music') return <Mic2 size={14} className="text-pink-400"/>;
         if (t === 'Dance') return <Music size={14} className="text-emerald-400"/>;
@@ -281,7 +316,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 <div className="p-6 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 flex items-center gap-2">
-                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v3
+                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v4
                         </h2>
                         <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Velocity & Constraint Solver</p>
                     </div>
@@ -319,22 +354,43 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* 2. STRATEGY */}
+                        {/* 2. REHEARSAL PASSES (NEW) */}
+                        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
+                             <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
+                                <RefreshCw size={14} className="text-emerald-400"/> Rehearsal Passes
+                            </h3>
+                            <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
+                                {[1, 2, 3, 4].map(num => (
+                                    <button 
+                                        key={num}
+                                        onClick={() => setTargetPasses(num)}
+                                        className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-all ${targetPasses === num ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                                    >
+                                        {num}x
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-zinc-500 italic leading-tight px-1">
+                                1 = Teach Only. 3 = Teach, Review, Polish.
+                            </p>
+                        </div>
+
+                        {/* 3. STRATEGY */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                             <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
-                                <BrainCircuit size={14} className="text-emerald-400"/> Optimization Goal
+                                <BrainCircuit size={14} className="text-purple-400"/> Optimization Goal
                             </h3>
                             <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
                                 <button 
                                     onClick={() => setStrategy('velocity')}
-                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'velocity' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'velocity' ? 'bg-purple-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
                                 >
                                     <span>🚀 Max Speed</span>
                                     <span className="text-[8px] opacity-60 font-normal lowercase">Big scenes first</span>
                                 </button>
                                 <button 
                                     onClick={() => setStrategy('concurrency')}
-                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'concurrency' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'concurrency' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
                                 >
                                     <span>🧩 Max Rooms</span>
                                     <span className="text-[8px] opacity-60 font-normal lowercase">Small scenes first</span>
@@ -342,44 +398,22 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* 3. DURATION LOGIC */}
-                        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
-                             <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
-                                <Timer size={14}/> Slot Duration
-                            </h3>
-                            <button 
-                                onClick={() => setUseSmartDuration(!useSmartDuration)}
-                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${useSmartDuration ? 'bg-purple-600/20 border-purple-500/50 text-purple-200' : 'bg-zinc-800 border-white/5 text-zinc-400'}`}
-                            >
-                                <span className="text-xs font-bold flex items-center gap-2">
-                                    <BrainCircuit size={14} /> Smart Sizing
-                                </span>
-                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSmartDuration ? 'bg-purple-500' : 'bg-zinc-600'}`}>
+                        {/* 4. DURATION & PRIORITY */}
+                        <div className="space-y-4 opacity-80 hover:opacity-100 transition-opacity">
+                             <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-zinc-800/50">
+                                <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-2"><Timer size={12}/> Smart Sizing</span>
+                                <button onClick={() => setUseSmartDuration(!useSmartDuration)} className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSmartDuration ? 'bg-purple-500' : 'bg-zinc-600'}`}>
                                     <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${useSmartDuration ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </div>
-                            </button>
-                        </div>
-
-                        {/* 4. PRIORITY */}
-                        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
-                            <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
-                                <Layers size={14}/> Priority Order
-                            </h3>
-                            <div className="space-y-2">
+                                </button>
+                             </div>
+                             <div className="flex items-center gap-2 p-3 rounded-xl border border-white/5 bg-zinc-800/50">
                                 {trackPriority.map((track, i) => (
-                                    <div key={track} className="flex items-center gap-3 p-2 bg-zinc-800/50 rounded-lg border border-white/5 group">
-                                        <div className="text-[10px] font-mono text-zinc-600 w-4">{i + 1}</div>
-                                        <div className="flex-1 flex items-center gap-2">
-                                            <div className="p-1.5 bg-black/40 rounded">{getTrackIcon(track)}</div>
-                                            <span className="text-xs font-bold text-zinc-300">{track}</span>
-                                        </div>
-                                        <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => movePriority(i, 'up')} disabled={i === 0} className="hover:text-white text-zinc-500 disabled:opacity-0"><ArrowUp size={10}/></button>
-                                            <button onClick={() => movePriority(i, 'down')} disabled={i === trackPriority.length - 1} className="hover:text-white text-zinc-500 disabled:opacity-0"><ArrowDown size={10}/></button>
-                                        </div>
+                                    <div key={track} className="text-[9px] font-mono text-zinc-500 flex items-center gap-1">
+                                        <span className="font-bold text-zinc-300">{i+1}.</span> {track}
                                     </div>
                                 ))}
-                            </div>
+                                <button onClick={() => movePriority(0, 'down')} className="ml-auto text-zinc-500 hover:text-white"><ArrowDown size={12}/></button>
+                             </div>
                         </div>
 
                         {/* GENERATE */}
@@ -407,18 +441,18 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             <>
                                 {/* SCOREBOARD */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 shrink-0">
-                                    <div className={`p-5 rounded-2xl border flex items-center justify-between ${stats?.isOnTrack ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-red-900/10 border-red-500/20'}`}>
+                                    <div className={`p-5 rounded-2xl border flex items-center justify-between ${stats?.completion === 100 ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-blue-900/10 border-blue-500/20'}`}>
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <Gauge size={16} className={stats?.isOnTrack ? "text-emerald-500" : "text-red-500"}/>
-                                                <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Burn Velocity</span>
+                                                <Gauge size={16} className={stats?.completion === 100 ? "text-emerald-500" : "text-blue-500"}/>
+                                                <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Total Progress</span>
                                             </div>
                                             <div className="text-3xl font-black text-white">
-                                                {stats?.pointsCleared} <span className="text-sm text-zinc-500 font-bold">/ {stats?.velocityTarget} Pts</span>
+                                                {stats?.completion}% <span className="text-sm text-zinc-500 font-bold">Scheduled</span>
                                             </div>
                                         </div>
-                                        <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stats?.isOnTrack ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                            {stats?.isOnTrack ? "On Target" : "Under Target"}
+                                        <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stats?.completion === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                            {stats?.pointsCleared} / {stats?.totalWorkload} Pts
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
@@ -441,6 +475,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
                                     {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
                                         const count = previewSchedule.filter(i => i.weekOffset === (week - 1)).length;
+                                        const isFull = count > 15; // Arbitrary "busy" threshold
                                         return (
                                             <button 
                                                 key={week}
@@ -452,7 +487,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                 }`}
                                             >
                                                 Week {week}
-                                                {count > 0 && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                                                {count > 0 && <div className={`w-1.5 h-1.5 rounded-full ${isFull ? 'bg-emerald-400' : 'bg-amber-400'}`} />}
                                             </button>
                                         );
                                     })}
@@ -467,7 +502,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                 <Calendar size={32} className="opacity-20"/>
                                                 No items scheduled for Week {activeTabWeek}.
                                                 <br/>
-                                                <span className="text-[10px]">Try changing the Strategy or Duration logic.</span>
+                                                {stats?.completion === 100 ? (
+                                                    <span className="text-emerald-500 font-bold">Show is fully scheduled! You can relax.</span>
+                                                ) : (
+                                                    <span className="text-[10px]">Try increasing 'Passes' or changing Strategy.</span>
+                                                )}
                                             </div>
                                         );
 
