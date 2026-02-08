@@ -7,7 +7,8 @@ import {
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
     CalendarRange, BrainCircuit, Users,
-    RefreshCw, Coffee, AlertTriangle
+    RefreshCw, Coffee, AlertTriangle,
+    Ban, UserCog, CalendarSearch
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -59,44 +60,41 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
     const [targetPasses, setTargetPasses] = useState(3); 
     const [includeWarmups, setIncludeWarmups] = useState(true);
 
+    // --- CONSTRAINTS & STAFF ---
+    const [blackoutWeeks, setBlackoutWeeks] = useState("10, 11, 12");
+    const [staffRoles, setStaffRoles] = useState({
+        director: "", 
+        music: "",    
+        dance: ""     
+    });
+
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(8); 
+    const [endWeek, setEndWeek] = useState(12);
+    // Default to today, but DO NOT auto-change it unless requested
     const [projectStartDate, setProjectStartDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // 🟢 AUTO-DETECT START DATE FROM CONFLICTS
-    useEffect(() => {
-        if (isOpen && conflicts.length > 0) {
-            // Find earliest conflict date
+    useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
+
+    // 🟢 MANUAL TRIGGER: Detect Start Date
+    const autoDetectStartDate = () => {
+        if (conflicts.length > 0) {
             const dates = conflicts
                 .map((c: any) => normalizeDate(c.Date || c.date))
                 .filter((d: string) => d.length > 0)
                 .sort();
             
             if (dates.length > 0) {
-                // Set start date to the Friday of that week to align nicely
                 const first = new Date(dates[0]);
-                // Adjust to previous Friday to ensure we capture the weekend
-                const day = first.getDay();
-                const diff = first.getDate() - day + (day === 6 ? -1 : 5 - 7); 
-                // Simple fallback: just use the conflict date
-                setProjectStartDate(dates[0]);
+                const day = first.getDay(); // 0=Sun, 5=Fri, 6=Sat
+                // Snap to the Friday of that week
+                // If it's Saturday (6), go back 1 day. If it's Sunday (0), go back 2 days? 
+                // Let's just find the previous Friday.
+                const dist = (day + 7 - 5) % 7;
+                first.setDate(first.getDate() - dist);
+                setProjectStartDate(first.toISOString().split('T')[0]);
             }
         }
-    }, [isOpen, conflicts]);
-
-    useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
-
-    const movePriority = (index: number, direction: 'up' | 'down') => {
-        const newOrder = [...trackPriority];
-        if (direction === 'up') {
-            if (index === 0) return;
-            [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-        } else {
-            if (index === newOrder.length - 1) return;
-            [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
-        }
-        setTrackPriority(newOrder);
     };
 
     // --- 🧮 THE ALGORITHM ---
@@ -104,13 +102,16 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
+        // 0. PARSE BLACKOUT WEEKS
+        const blockedWeeksList = blackoutWeeks.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+
         // 1. CONFLICT PRE-PROCESSING
         const conflictMap: Record<string, Record<string, {start: number, end: number}[]>> = {};
         
         (conflicts || []).forEach((c: any) => {
             const rawDate = c.Date || c.date || "";
             const dateKey = normalizeDate(rawDate);
-            const personName = c.Person || c.personName || c.name;
+            const personName = (c.Person || c.personName || c.name || "").trim().toLowerCase();
             const type = c["Conflict Type"] || c.conflictType || "Absent";
             const mins = parseInt(c["Minutes Late / Early"] || c.minutes || 0);
             
@@ -135,13 +136,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         // 2. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
-            
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
-
             const isMusicByName = musicKeywords.some(k => name.includes(k));
             const isDanceByName = danceKeywords.some(k => name.includes(k));
-
             const defaultMusic = isMusicByName ? 1 : 0;
             const defaultDance = isDanceByName ? 1 : 0;
 
@@ -182,28 +180,45 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         let totalActiveRooms = 0;
         let pointsCleared = 0;
         let totalSlotsIterated = 0;
+        
+        // Safety: Ensure we don't accidentally schedule before the project start
+        const projectStartObj = new Date(projectStartDate);
 
         for (let w = startWeek; w <= endWeek; w++) {
+            
+            // 🟢 CONSTRAINT 1: Blackout Weeks (Tech/Show)
+            if (blockedWeeksList.includes(w)) continue;
+
+            // 🟢 CONSTRAINT 2: Pre-Weeks (Before Week 1)
+            // Implicitly handled by w starting at startWeek (min 1), but let's be safe:
+            if (w < 1) continue; 
+
             const workDays = [
                 { day: 'Fri', start: FRI_START, end: FRI_END }, 
                 { day: 'Sat', start: SAT_START, end: SAT_END }  
             ];
 
+            // Calculate the Friday of this specific Week number
             const weekStartObj = new Date(projectStartDate);
-            // Move weekStartObj to the correct week offset (w-1)
             weekStartObj.setDate(weekStartObj.getDate() + ((w - 1) * 7));
 
             workDays.forEach(({ day, start, end }) => {
                 const trackClocks: Record<string, number> = { 'Music': start, 'Dance': start, 'Acting': start };
                 let currentTime = start;
                 
-                // 🟢 ALIGN DATE FOR CONFLICT LOOKUP
+                // Align Date
                 const dayOffset = day === 'Fri' ? (5 - weekStartObj.getDay()) : (6 - weekStartObj.getDay());
                 const specificDate = new Date(weekStartObj);
                 specificDate.setDate(specificDate.getDate() + dayOffset);
                 const dateKey = specificDate.toISOString().split('T')[0];
+
+                // 🟢 CONSTRAINT 3: Hard Date Safety
+                // If the math pushed us before project start (e.g. bad offsets), skip
+                if (specificDate < projectStartObj) return;
+
                 const daysConflicts = conflictMap[dateKey] || {};
 
+                // Warmups
                 if (includeWarmups) {
                     trackClocks['Music'] += 0.25;
                     trackClocks['Dance'] += 0.25;
@@ -236,6 +251,27 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             return; 
                         }
 
+                        // 🟢 CONSTRAINT 4: Staff Availability
+                        let isStaffBlocked = false;
+                        let staffName = "";
+                        if (track === 'Acting') staffName = staffRoles.director;
+                        if (track === 'Music') staffName = staffRoles.music;
+                        if (track === 'Dance') staffName = staffRoles.dance;
+
+                        if (staffName) {
+                            const staffConflicts = daysConflicts[staffName.toLowerCase()];
+                            if (staffConflicts) {
+                                isStaffBlocked = staffConflicts.some(range => 
+                                    currentTime >= range.start && currentTime < range.end
+                                );
+                            }
+                        }
+
+                        if (isStaffBlocked) {
+                            trackClocks[track] = currentTime + 0.25;
+                            return; 
+                        }
+
                         // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
                             const key = `${scene.id}-${track}`;
@@ -245,11 +281,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
                             if (alreadyScheduledThisWeek) return false;
 
-                            // 🟢 HARD CHECK: Is the ENTIRE cast missing? (e.g. holiday)
                             const totalCast = scene.cast.length || 1;
                             let missingCount = 0;
                             (scene.cast || []).forEach((c:any) => {
-                                if (daysConflicts[c.name]) missingCount++;
+                                if (daysConflicts[c.name.toLowerCase()]) missingCount++;
                             });
                             if (missingCount === totalCast) return false;
 
@@ -267,16 +302,15 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const durationHrs = (useSmartDuration ? scene.smartTime : baseDuration) / 60;
                             const proposedEnd = currentTime + durationHrs;
 
-                            // 1. Internal Conflicts (Fatal)
+                            // Internal Conflicts
                             const internalConflict = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (internalConflict) return { ...scene, score: -9999 };
 
-                            // 2. External Conflicts (Tolerance)
+                            // External Conflicts
                             let missingActors = 0;
                             (scene.cast || []).forEach((c:any) => {
-                                const actorConflicts = daysConflicts[c.name];
+                                const actorConflicts = daysConflicts[c.name.toLowerCase()];
                                 if (actorConflicts) {
-                                    // Check if conflict overlaps with this specific timeslot
                                     const hasOverlap = actorConflicts.some(range => 
                                         currentTime < range.end && proposedEnd > range.start
                                     );
@@ -288,7 +322,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const missingRatio = missingActors / totalCast;
 
                             if (missingActors > 0) {
-                                // Rule: If > 20% missing, skip it. If < 20%, allow it with penalty.
                                 if (totalCast < 5 || missingRatio > 0.20) {
                                     conflictsAvoided++; 
                                     return { ...scene, score: -9999 };
@@ -435,19 +468,24 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             
                             {/* START DATE PICKER */}
                             <div>
-                                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Week 1 Start Date</label>
-                                <input 
-                                    type="date" 
-                                    value={projectStartDate}
-                                    onChange={(e) => setProjectStartDate(e.target.value)}
-                                    className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white focus:border-blue-500 outline-none"
-                                />
-                                {conflicts.length > 0 && (
-                                    <div className="mt-2 text-[9px] text-zinc-500 flex items-center gap-1">
-                                        <AlertTriangle size={10} className="text-amber-500" />
-                                        <span>{conflicts.length} Conflicts Loaded</span>
-                                    </div>
-                                )}
+                                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Week 1 Start Date (Friday)</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="date" 
+                                        value={projectStartDate}
+                                        onChange={(e) => setProjectStartDate(e.target.value)}
+                                        className="flex-1 bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white focus:border-blue-500 outline-none"
+                                    />
+                                    {conflicts.length > 0 && (
+                                        <button 
+                                            onClick={autoDetectStartDate}
+                                            title="Auto-Detect from Conflicts"
+                                            className="p-2 bg-zinc-800 hover:bg-blue-600 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                                        >
+                                            <CalendarSearch size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -471,7 +509,53 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             </div>
                         </div>
 
-                        {/* 2. REHEARSAL PASSES */}
+                        {/* 2. CONSTRAINTS & STAFF */}
+                        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
+                            <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
+                                <Ban size={14} className="text-red-400"/> Constraints & Staff
+                            </h3>
+                            
+                            {/* Blackout Weeks */}
+                            <div>
+                                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Blackout Weeks (Tech/Show)</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="10, 11, 12"
+                                    value={blackoutWeeks}
+                                    onChange={(e) => setBlackoutWeeks(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white focus:border-red-500 outline-none"
+                                />
+                                <p className="text-[9px] text-zinc-600 mt-1 italic">Comma separated week numbers.</p>
+                            </div>
+
+                            {/* Staff Mapping */}
+                            <div className="pt-2 border-t border-white/5">
+                                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-2 block flex items-center gap-1"><UserCog size={10}/> Staff Availability Map</label>
+                                <div className="space-y-2">
+                                    <input 
+                                        type="text" placeholder="Director Name"
+                                        value={staffRoles.director}
+                                        onChange={(e) => setStaffRoles({...staffRoles, director: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-blue-900/30 rounded p-1.5 text-xs text-blue-200 placeholder:text-zinc-700 focus:border-blue-500 outline-none"
+                                    />
+                                    <input 
+                                        type="text" placeholder="Music Dir Name"
+                                        value={staffRoles.music}
+                                        onChange={(e) => setStaffRoles({...staffRoles, music: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-pink-900/30 rounded p-1.5 text-xs text-pink-200 placeholder:text-zinc-700 focus:border-pink-500 outline-none"
+                                    />
+                                    <input 
+                                        type="text" placeholder="Choreographer Name"
+                                        value={staffRoles.dance}
+                                        onChange={(e) => setStaffRoles({...staffRoles, dance: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-emerald-900/30 rounded p-1.5 text-xs text-emerald-200 placeholder:text-zinc-700 focus:border-emerald-500 outline-none"
+                                    />
+                                    <p className="text-[9px] text-zinc-600 italic">Enter names exactly as they appear in Conflicts.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. REHEARSAL PASSES */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <RefreshCw size={14} className="text-emerald-400"/> Rehearsal Passes
@@ -487,49 +571,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     </button>
                                 ))}
                             </div>
-                            <p className="text-[10px] text-zinc-500 italic leading-tight px-1">
-                                1 = Teach Only. 3 = Teach, Review, Polish.
-                            </p>
-                        </div>
-
-                        {/* 3. STRATEGY */}
-                        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
-                            <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
-                                <BrainCircuit size={14} className="text-purple-400"/> Optimization Goal
-                            </h3>
-                            <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
-                                <button 
-                                    onClick={() => setStrategy('velocity')}
-                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'velocity' ? 'bg-purple-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                                >
-                                    <span>🚀 Max Speed</span>
-                                    <span className="text-[8px] opacity-60 font-normal lowercase">Big scenes first</span>
-                                </button>
-                                <button 
-                                    onClick={() => setStrategy('concurrency')}
-                                    className={`flex-1 py-2 text-[10px] font-bold rounded transition-all flex flex-col items-center gap-1 ${strategy === 'concurrency' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                                >
-                                    <span>🧩 Max Rooms</span>
-                                    <span className="text-[8px] opacity-60 font-normal lowercase">Small scenes first</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* 4. DURATION & WARMUPS */}
-                        <div className="space-y-4 opacity-80 hover:opacity-100 transition-opacity">
-                             <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-zinc-800/50">
-                                <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-2"><Timer size={12}/> Smart Sizing</span>
-                                <button onClick={() => setUseSmartDuration(!useSmartDuration)} className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSmartDuration ? 'bg-purple-500' : 'bg-zinc-600'}`}>
-                                    <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${useSmartDuration ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </button>
-                             </div>
-                             
-                             <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-zinc-800/50">
-                                <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-2"><Coffee size={12}/> Daily Warmups</span>
-                                <button onClick={() => setIncludeWarmups(!includeWarmups)} className={`w-8 h-4 rounded-full p-0.5 transition-colors ${includeWarmups ? 'bg-amber-500' : 'bg-zinc-600'}`}>
-                                    <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${includeWarmups ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </button>
-                             </div>
                         </div>
 
                         {/* GENERATE */}
@@ -551,7 +592,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 opacity-50">
                                 <Calendar size={64} className="mb-4"/>
                                 <p className="text-sm font-bold uppercase">Ready to Schedule</p>
-                                <p className="text-xs">Select strategy, adjust priority, then click Generate.</p>
+                                <p className="text-xs">Set staff names, blocked weeks, then click Generate.</p>
                             </div>
                         ) : (
                             <>
@@ -594,6 +635,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                 {/* 🟢 TAB BAR: WEEKS */}
                                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
                                     {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
+                                        const isBlackout = blackoutWeeks.split(',').map(s=>parseInt(s.trim())).includes(week);
                                         const count = previewSchedule.filter(i => i.weekOffset === (week - 1)).length;
                                         const isFull = count > 15; 
                                         return (
@@ -604,10 +646,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                                     activeTabWeek === week 
                                                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
                                                     : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'
-                                                }`}
+                                                } ${isBlackout ? 'opacity-50' : ''}`}
                                             >
                                                 Week {week}
                                                 {count > 0 && <div className={`w-1.5 h-1.5 rounded-full ${isFull ? 'bg-emerald-400' : 'bg-amber-400'}`} />}
+                                                {isBlackout && <Ban size={10} className="text-red-500" />}
                                             </button>
                                         );
                                     })}
@@ -617,6 +660,18 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                                     {(() => {
                                         const weekItems = previewSchedule.filter(item => item.weekOffset === (activeTabWeek - 1));
+                                        
+                                        // 🟢 BLACKOUT MESSAGE
+                                        if (blackoutWeeks.split(',').map(s=>parseInt(s.trim())).includes(activeTabWeek)) {
+                                            return (
+                                                <div className="text-center py-20 text-zinc-500 italic flex flex-col items-center gap-4">
+                                                    <Ban size={32} className="text-red-500/50"/>
+                                                    <p className="text-sm font-bold uppercase text-red-500">Blackout Week</p>
+                                                    <p className="text-xs">No rehearsals scheduled during Tech/Show week.</p>
+                                                </div>
+                                            );
+                                        }
+
                                         if (weekItems.length === 0) return (
                                             <div className="text-center py-20 text-zinc-500 italic flex flex-col items-center gap-4">
                                                 <Calendar size={32} className="opacity-20"/>
