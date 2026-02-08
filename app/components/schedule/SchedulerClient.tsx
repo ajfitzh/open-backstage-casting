@@ -440,12 +440,13 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
 }
 
 // ============================================================================
-// SUB-COMPONENT: AGILE BURN-UP VIEW (Final)
+// SUB-COMPONENT: BURN-UP VIEW (Complete & Integrated)
 // ============================================================================
 function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
-  // --- STATE ---
-  // Tracks status locally for the view: 0=New, 1=Worked, 2=Polished
-  // In a real app, you'd likely pass 'progress' in as a prop or fetch it.
+  
+  // --- STATE: TRACKING ---
+  // Tracks status locally: 0=New, 1=Worked, 2=Polished
+  // In a real app, you might sync this to a DB, but local state works for simulation.
   const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
     const initial: any = {};
     sceneData.forEach((s: any) => {
@@ -454,44 +455,76 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
     return initial;
   });
 
-  // Simulators (Local state only - does not save to DB)
+  // --- STATE: SIMULATORS ---
   const [simVelocityMod, setSimVelocityMod] = useState(1.0); // 1.0 = 100% speed
-  const [simWeeksLost, setSimWeeksLost] = useState(0);       // Blackout weeks
+  const [simWeeksLost, setSimWeeksLost] = useState(0);       // 0 = No delays
 
-  // --- CALCULATIONS ---
+  // --- STATE: QUICK EDIT MODAL ---
+  // Stores the scene currently being edited in the modal
+  const [editingScene, setEditingScene] = useState<any>(null);
+  
+  // Stores local overrides for scene loads so the graph updates instantly 
+  // without needing a full database refresh.
+  const [loadOverrides, setLoadOverrides] = useState<Record<number, { music: number, dance: number, block: number }>>({});
+
+  // --- HELPER: SAVE MODAL CHANGES ---
+  const handleQuickSave = (sceneId: number, newLoads: any) => {
+    // 1. Update local overrides to reflect change immediately
+    setLoadOverrides(prev => ({ ...prev, [sceneId]: newLoads }));
+    // 2. Close Modal
+    setEditingScene(null);
+    // 3. (Optional) Here you would call your Server Action: await updateSceneLoads(...)
+  };
+
+  // --- HELPER: TOGGLE STATUS ---
+  const toggleStatus = (id: string, track: 'music' | 'dance' | 'block') => {
+    setProgress(prev => ({
+        ...prev,
+        [id]: { ...prev[id], [track]: (prev[id][track] + 1) % 3 }
+    }));
+  };
+
+  // --- HELPER: COLORS ---
+  const getStatusColor = (val: number) => {
+    if (val === 2) return 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)] border-emerald-400';
+    if (val === 1) return 'bg-amber-500 text-black border-amber-400';
+    return 'bg-zinc-800 text-zinc-600 border-zinc-700 hover:border-zinc-500';
+  };
+
+  // --- CORE LOGIC: THE CALCULATIONS ---
   const stats = useMemo(() => {
     let totalPointsScope = 0;
     let earnedPoints = 0;
     
     // 1. Calculate Points based on Complexity (Load)
     const weightedScenes = sceneData.map((s: any) => {
-      // 🟢 ROBUST DATA FETCHING
-      // Checks for nested 'load' object (SceneAnalysisClient) OR flat keys (Baserow)
-      const mLoad = s.load?.music ?? s.music_load ?? 1; 
-      const dLoad = s.load?.dance ?? s.dance_load ?? 1;
-      const bLoad = s.load?.block ?? s.blocking_load ?? 1;
+      // PRIORITY: Local Override > Nested Load Object > Flat DB Field > Default (1)
+      const override = loadOverrides[s.id];
+      
+      const mLoad = override?.music ?? s.load?.music ?? s.music_load ?? 1; 
+      const dLoad = override?.dance ?? s.load?.dance ?? s.dance_load ?? 1;
+      const bLoad = override?.block ?? s.load?.block ?? s.blocking_load ?? 1;
 
       const type = (s.type || "").toLowerCase();
       // Logic: Does this scene TYPE actually require this track?
+      // (e.g. A purely dialogue scene shouldn't count 5 points for Dance just because the slider was left up)
       const hasMusic = (type.includes('song') || type.includes('mixed')) && mLoad > 0;
       const hasDance = (type.includes('dance') || type.includes('mixed')) && dLoad > 0;
       const hasBlock = true; 
 
-      // Max points possible (Load * 2 because max status is 2)
-      // Example: A complex dance (Load 5) is worth 10 points.
+      // Max points possible (Load * 2 because max status is 2 [Polished])
       let sceneMaxPoints = 0;
       if (hasMusic) sceneMaxPoints += (mLoad * 2);
       if (hasDance) sceneMaxPoints += (dLoad * 2);
       if (hasBlock) sceneMaxPoints += (bLoad * 2);
 
-      // Current points earned based on progress
+      // Current points earned based on progress status (0, 1, or 2)
       const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
       let sceneEarned = 0;
       if (hasMusic) sceneEarned += (p.music * mLoad); 
       if (hasDance) sceneEarned += (p.dance * dLoad);
       if (hasBlock) sceneEarned += (p.block * bLoad);
 
-      // eslint-disable-next-line react-hooks/immutability
       totalPointsScope += sceneMaxPoints;
       earnedPoints += sceneEarned;
 
@@ -507,103 +540,97 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
     
     // 4. Projections
     const remainingPoints = totalPointsScope - earnedPoints;
-    const weeksNeeded = simulatedVelocity > 0 ? remainingPoints / simulatedVelocity : 99;
-    const projectedEndWeek = currentWeek + weeksNeeded + simWeeksLost;
-    
-    const isOverSchedule = projectedEndWeek > totalWeeks;
-    const percentComplete = totalPointsScope > 0 ? Math.round((earnedPoints / totalPointsScope) * 100) : 0;
+    const weeksNeeded = simulatedVelocity > 0 ? remainingPoints / simulatedVelocity : 0;
+    // If we are done, weeks needed is 0. If velocity is 0, projection is infinite (99).
+    const safeWeeksNeeded = weeksNeeded === Infinity ? 99 : weeksNeeded;
 
+    const projectedEndWeek = currentWeek + safeWeeksNeeded + simWeeksLost;
+    const isOverSchedule = projectedEndWeek > totalWeeks;
+    
     return {
       totalPointsScope,
       earnedPoints,
-      percentComplete,
       actualVelocity,
       simulatedVelocity,
       projectedEndWeek,
       isOverSchedule,
       weightedScenes
     };
-  }, [sceneData, progress, currentWeek, totalWeeks, simVelocityMod, simWeeksLost]);
-
-  // --- ACTIONS ---
-  const toggleStatus = (id: string, track: 'music' | 'dance' | 'block') => {
-    setProgress(prev => ({
-        ...prev,
-        [id]: { ...prev[id], [track]: (prev[id][track] + 1) % 3 }
-    }));
-  };
-
-  const getStatusColor = (val: number) => {
-    if (val === 2) return 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)] border-emerald-400';
-    if (val === 1) return 'bg-amber-500 text-black border-amber-400';
-    return 'bg-zinc-800 text-zinc-600 border-zinc-700 hover:border-zinc-500';
-  };
+  }, [sceneData, progress, currentWeek, totalWeeks, simVelocityMod, simWeeksLost, loadOverrides]);
 
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar bg-zinc-950 p-6">
+    <div className="h-full overflow-y-auto custom-scrollbar bg-zinc-950 p-6 pb-32">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* TOP ROW: KPI CARDS */}
+        {/* --- TOP ROW: KPI CARDS --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             
-            {/* CARD 1: Scope (Linked to Analysis) */}
-            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={48}/></div>
-                <div className="flex justify-between items-start">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Total Scope</div>
-                    {/* 🟢 LINK TO ANALYSIS PAGE */}
+            {/* CARD 1: Scope */}
+            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-colors">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500">Total Scope</div>
                     <Link href="/analysis" className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/5 transition-colors text-zinc-400 hover:text-white flex items-center gap-1">
-                        Recalibrate <ArrowRight size={10} />
+                        Analysis <ArrowRight size={10} />
                     </Link>
                 </div>
-                <div className="text-2xl font-black text-white">{stats.totalPointsScope} <span className="text-sm font-medium text-zinc-500">Pts</span></div>
-                <div className="text-xs text-zinc-500 mt-2">Weighted Complexity</div>
+                <div className="text-3xl font-black text-white">{stats.totalPointsScope} <span className="text-sm font-medium text-zinc-600">Pts</span></div>
+                <div className="text-xs text-zinc-500 mt-2 flex items-center gap-2">
+                    <Target size={14} className="text-zinc-600"/> Weighted Complexity
+                </div>
             </div>
 
             {/* CARD 2: Velocity */}
-            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp size={48}/></div>
-                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Velocity</div>
-                <div className="text-2xl font-black text-blue-400">{stats.actualVelocity.toFixed(1)} <span className="text-sm font-medium text-zinc-500">pts/wk</span></div>
-                <div className="text-xs text-zinc-500 mt-2">Avg Performance</div>
+            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden">
+                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-2">Current Velocity</div>
+                <div className="text-3xl font-black text-blue-400">{stats.actualVelocity.toFixed(1)} <span className="text-sm font-medium text-zinc-600">pts/wk</span></div>
+                <div className="text-xs text-zinc-500 mt-2 flex items-center gap-2">
+                    <TrendingUp size={14} className="text-zinc-600"/> Avg Performance
+                </div>
             </div>
 
             {/* CARD 3: Projection */}
-            <div className={`border p-5 rounded-2xl relative overflow-hidden transition-colors ${stats.isOverSchedule ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
-                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Projected Finish</div>
-                <div className={`text-2xl font-black ${stats.isOverSchedule ? 'text-red-400' : 'text-emerald-400'}`}>Week {stats.projectedEndWeek.toFixed(1)}</div>
-                <div className="text-xs text-zinc-400 mt-2">Target: Week {totalWeeks}</div>
-                {stats.isOverSchedule && <AlertTriangle size={16} className="absolute top-5 right-5 text-red-500 animate-pulse"/>}
+            <div className={`border p-5 rounded-2xl relative overflow-hidden transition-colors ${stats.isOverSchedule ? 'bg-red-950/10 border-red-500/20' : 'bg-emerald-950/10 border-emerald-500/20'}`}>
+                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-2">Projected Finish</div>
+                <div className={`text-3xl font-black ${stats.isOverSchedule ? 'text-red-400' : 'text-emerald-400'}`}>Wk {stats.projectedEndWeek.toFixed(1)}</div>
+                <div className="text-xs text-zinc-500 mt-2 flex items-center gap-2">
+                    {stats.isOverSchedule ? <AlertTriangle size={14} className="text-red-500"/> : <Target size={14} className="text-emerald-500"/>}
+                    Target: Week {totalWeeks}
+                </div>
             </div>
 
             {/* CARD 4: Simulator Controls */}
             <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center gap-3">
-                <div className="flex justify-between items-center text-xs">
-                    <span className="text-zinc-400 font-bold uppercase text-[10px]">Pace Modifier</span>
-                    <span className="font-mono font-bold text-blue-300">{Math.round(simVelocityMod * 100)}%</span>
+                {/* Velocity Slider */}
+                <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-500">
+                        <span>Pace Modifier</span>
+                        <span className="text-blue-400">{Math.round(simVelocityMod * 100)}%</span>
+                    </div>
+                    <input type="range" min="0.5" max="2.0" step="0.1" value={simVelocityMod} onChange={(e) => setSimVelocityMod(parseFloat(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
                 </div>
-                <input type="range" min="0.5" max="2.0" step="0.1" value={simVelocityMod} onChange={(e) => setSimVelocityMod(parseFloat(e.target.value))} className="h-1 w-full bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
-                
-                <div className="flex justify-between items-center text-xs">
-                    <span className="text-zinc-400 font-bold uppercase text-[10px]">Lost Weeks</span>
-                    <span className="font-mono font-bold text-red-300">{simWeeksLost} wks</span>
+                {/* Delay Slider */}
+                <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold text-zinc-500">
+                        <span>Blackout Weeks</span>
+                        <span className="text-red-400">{simWeeksLost} wks</span>
+                    </div>
+                     <input type="range" min="0" max="5" step="0.5" value={simWeeksLost} onChange={(e) => setSimWeeksLost(parseFloat(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500"/>
                 </div>
-                 <input type="range" min="0" max="5" step="0.5" value={simWeeksLost} onChange={(e) => setSimWeeksLost(parseFloat(e.target.value))} className="h-1 w-full bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500"/>
             </div>
         </div>
 
-        {/* MIDDLE ROW: CHART & BREAKDOWN */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
+        {/* --- MIDDLE ROW: CHART & BREAKDOWN --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[600px]">
             
             {/* THE CHART (SVG) */}
-            <div className="col-span-2 bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col">
+            <div className="col-span-2 bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col shadow-xl">
                 <div className="flex justify-between items-end mb-6">
                     <div>
                         <h3 className="text-lg font-bold text-white">Burn-Up Chart</h3>
                         <p className="text-xs text-zinc-500">Ideal Pace vs. Actual Points Earned</p>
                     </div>
                     {/* Legend */}
-                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider">
+                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider text-zinc-400">
                          <div className="flex items-center gap-2"><div className="w-2 h-2 bg-zinc-600 rounded-full"></div> Scope</div>
                          <div className="flex items-center gap-2"><div className="w-2 h-2 bg-emerald-500 rounded-full"></div> Actual</div>
                          <div className="flex items-center gap-2"><div className="w-2 h-2 border border-dashed border-emerald-500 rounded-full"></div> Projected</div>
@@ -623,91 +650,125 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
             </div>
 
             {/* THE BREAKDOWN LIST */}
-            <div className="bg-zinc-900 border border-white/5 rounded-3xl flex flex-col overflow-hidden">
+            <div className="bg-zinc-900 border border-white/5 rounded-3xl flex flex-col overflow-hidden shadow-xl">
                 <div className="p-4 border-b border-white/5 bg-black/20 flex justify-between items-center">
                     <div className="text-xs font-black uppercase tracking-widest text-zinc-400">Scene Points</div>
-                    <div className="text-[10px] text-zinc-500">{stats.earnedPoints} / {stats.totalPointsScope}</div>
+                    <div className="text-[10px] font-mono text-zinc-500">{stats.earnedPoints} / {stats.totalPointsScope}</div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
                     {stats.weightedScenes.sort((a: any, b: any) => b.sceneMaxPoints - a.sceneMaxPoints).map((s: any) => (
-                        <div key={s.id} className="p-3 rounded-xl bg-black/20 border border-white/5 hover:bg-white/5 transition-colors group">
-                            <div className="flex justify-between items-start mb-3">
+                        <div key={s.id} className="p-3 rounded-xl bg-black/20 border border-white/5 hover:bg-white/5 transition-colors group relative">
+                            
+                            {/* Header Row */}
+                            <div className="flex justify-between items-start mb-3 pr-6">
                                 <div className="overflow-hidden">
-                                    <div className="font-bold text-sm text-zinc-200 truncate pr-2">{s.name}</div>
+                                    <div className="font-bold text-sm text-zinc-200 truncate">{s.name}</div>
                                     <div className="text-[10px] text-zinc-500 font-mono flex gap-2">
-                                        <span className="bg-white/5 px-1 rounded">Difficulty: {s.sceneMaxPoints/2}</span>
-                                        <span className="text-emerald-500">Max Pts: {s.sceneMaxPoints}</span>
+                                        <span className="bg-white/5 px-1 rounded">Diff: {s.sceneMaxPoints/2}</span>
+                                        <span className="text-emerald-600">Max: {s.sceneMaxPoints}</span>
                                     </div>
                                 </div>
                                 <div className="text-right shrink-0">
-                                    {/* Mini Pie Chart or % */}
-                                    <div className={`text-xs font-black ${s.sceneEarned === s.sceneMaxPoints ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                        {Math.round((s.sceneEarned / s.sceneMaxPoints) * 100)}%
+                                    <div className={`text-xs font-black ${s.sceneEarned === s.sceneMaxPoints ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                                        {s.sceneMaxPoints > 0 ? Math.round((s.sceneEarned / s.sceneMaxPoints) * 100) : 0}%
                                     </div>
                                 </div>
                             </div>
                             
-                            {/* PROGRESS DOTS */}
-                            <div className="flex gap-2 items-center">
-                                {s.hasMusic ? (
-                                    <button onClick={() => toggleStatus(s.id, 'music')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.music || 0)}`}/>
-                                ) : <div className="flex-1 h-2 bg-transparent"/>}
-                                
-                                {s.hasDance ? (
-                                    <button onClick={() => toggleStatus(s.id, 'dance')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.dance || 0)}`}/>
-                                ) : <div className="flex-1 h-2 bg-transparent"/>}
-                                
-                                {s.hasBlock ? (
-                                    <button onClick={() => toggleStatus(s.id, 'block')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.block || 0)}`}/>
-                                ) : <div className="flex-1 h-2 bg-transparent"/>}
-                            </div>
+                            {/* Quick Edit Button (Visible on Hover) */}
+                            <button 
+                                onClick={() => setEditingScene(s)}
+                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-zinc-500 hover:text-white hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-all border border-white/5"
+                                title="Adjust Complexity"
+                            >
+                                <Settings size={12} />
+                            </button>
                             
-                            {/* LABELS */}
-                            <div className="flex gap-2 mt-1 text-[8px] text-zinc-600 font-black uppercase tracking-wider text-center">
-                                <div className="flex-1">{s.hasMusic ? `Music (${s.mLoad})` : ''}</div>
-                                <div className="flex-1">{s.hasDance ? `Dance (${s.dLoad})` : ''}</div>
-                                <div className="flex-1">{s.hasBlock ? `Block (${s.bLoad})` : ''}</div>
+                            {/* Progress Toggles */}
+                            <div className="flex gap-1.5 items-center">
+                                {/* Music Toggle */}
+                                <div className="flex-1 flex flex-col gap-1">
+                                    {s.hasMusic ? (
+                                        <button onClick={() => toggleStatus(s.id, 'music')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.music || 0)}`}/>
+                                    ) : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasMusic && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Music ({s.mLoad})</span>}
+                                </div>
+
+                                {/* Dance Toggle */}
+                                <div className="flex-1 flex flex-col gap-1">
+                                    {s.hasDance ? (
+                                        <button onClick={() => toggleStatus(s.id, 'dance')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.dance || 0)}`}/>
+                                    ) : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasDance && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Dance ({s.dLoad})</span>}
+                                </div>
+
+                                {/* Blocking Toggle */}
+                                <div className="flex-1 flex flex-col gap-1">
+                                    {s.hasBlock ? (
+                                        <button onClick={() => toggleStatus(s.id, 'block')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.block || 0)}`}/>
+                                    ) : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasBlock && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Block ({s.bLoad})</span>}
+                                </div>
                             </div>
+
                         </div>
                     ))}
                 </div>
             </div>
         </div>
+
+        {/* --- MODAL RENDERING --- */}
+        {editingScene && (
+           <QuickEditModal 
+              scene={editingScene} 
+              onClose={() => setEditingScene(null)} 
+              onSave={handleQuickSave} 
+           />
+        )}
       </div>
     </div>
   );
 }
 
-// Reuse the same SVG Graph component from the previous response...
+// ============================================================================
+// SUB-COMPONENT: SVG GRAPH
+// ============================================================================
 const BurnUpGraph = ({ totalWeeks, targetWeeks, currentWeek, totalPoints, earnedPoints, projectedEndWeek }: any) => {
     // Coordinate System: 0-100%
-    const getX = (week: number) => (week / totalWeeks) * 100;
-    const getY = (points: number) => 100 - ((points / totalPoints) * 100);
+    // Guard against divide by zero if no points exist yet
+    const safeTotalPoints = totalPoints || 100;
+    const safeTotalWeeks = totalWeeks || 10;
+
+    const getX = (week: number) => (week / safeTotalWeeks) * 100;
+    const getY = (points: number) => 100 - ((points / safeTotalPoints) * 100);
 
     const curX = getX(currentWeek);
     const curY = getY(earnedPoints);
     const projX = getX(projectedEndWeek);
-    const projY = getY(totalPoints); // Top (100% points)
+    const projY = getY(safeTotalPoints); // Top (100% points)
     const idealX = getX(targetWeeks);
 
     return (
         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
             {/* Grid Lines (Vertical Weeks) */}
-            {Array.from({ length: Math.ceil(totalWeeks) + 1 }).map((_, i) => (
+            {Array.from({ length: Math.ceil(safeTotalWeeks) + 1 }).map((_, i) => (
                 <line key={i} x1={getX(i)} y1="0" x2={getX(i)} y2="100" stroke="#333" strokeWidth="0.2" />
             ))}
             
             {/* Total Scope Line (Top) */}
             <line x1="0" y1="0" x2="100" y2="0" stroke="#555" strokeWidth="0.5" strokeDasharray="2" />
-            <text x="1" y="5" fontSize="3" fill="#555" fontWeight="bold">TOTAL SCOPE ({totalPoints} pts)</text>
+            <text x="1" y="5" fontSize="3" fill="#555" fontWeight="bold">TOTAL SCOPE ({safeTotalPoints} pts)</text>
 
             {/* Ideal Velocity (Gray) */}
             <line x1="0" y1="100" x2={idealX} y2="0" stroke="#333" strokeWidth="0.5" strokeDasharray="1" />
 
             {/* Projection Line (Dashed Color) */}
-            <line x1={curX} y1={curY} x2={projX} y2={projY} 
-                  stroke={projectedEndWeek > targetWeeks ? "#ef4444" : "#10b981"} 
-                  strokeWidth="0.5" strokeDasharray="2" />
+            {/* Only draw if we have started earning points */}
+            {earnedPoints > 0 && (
+                <line x1={curX} y1={curY} x2={projX} y2={projY} 
+                      stroke={projectedEndWeek > targetWeeks ? "#ef4444" : "#10b981"} 
+                      strokeWidth="0.5" strokeDasharray="2" />
+            )}
 
             {/* Actual Progress (Solid Color) */}
             <polyline points={`0,100 ${curX},${curY}`} fill="none" stroke="#10b981" strokeWidth="1" />
@@ -718,4 +779,62 @@ const BurnUpGraph = ({ totalWeeks, targetWeeks, currentWeek, totalPoints, earned
             <text x={idealX} y="98" fontSize="3" fill="#fbbf24" textAnchor="middle" fontWeight="bold">OPENING NIGHT</text>
         </svg>
     )
+}
+
+// ============================================================================
+// SUB-COMPONENT: QUICK EDIT MODAL
+// ============================================================================
+function QuickEditModal({ scene, onClose, onSave }: any) {
+  const [loads, setLoads] = useState({
+    music: scene.mLoad,
+    dance: scene.dLoad,
+    block: scene.bLoad
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-zinc-900 border border-white/10 p-6 rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+        <div className="flex justify-between items-start mb-6">
+            <div>
+                <h3 className="text-lg font-bold text-white">Adjust Scope</h3>
+                <p className="text-zinc-500 text-xs">{scene.name}</p>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white"><X size={18}/></button>
+        </div>
+        
+        <div className="space-y-6">
+           {['music', 'dance', 'block'].map((type) => (
+             <div key={type}>
+               <div className="flex justify-between text-xs font-bold uppercase text-zinc-400 mb-2">
+                 <span>{type} Load</span>
+                 <span className="text-white bg-zinc-800 px-2 py-0.5 rounded">{loads[type as keyof typeof loads]}</span>
+               </div>
+               <input 
+                 type="range" min="0" max="5" step="1"
+                 value={loads[type as keyof typeof loads]}
+                 onChange={(e) => setLoads(prev => ({ ...prev, [type]: parseInt(e.target.value) }))}
+                 className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
+                    type === 'music' ? 'accent-blue-500' : type === 'dance' ? 'accent-purple-500' : 'accent-emerald-500'
+                 } bg-zinc-800`}
+               />
+               <div className="flex justify-between text-[10px] text-zinc-600 font-mono mt-1">
+                   <span>None</span>
+                   <span>Complex</span>
+               </div>
+             </div>
+           ))}
+        </div>
+
+        <div className="flex gap-3 mt-8 pt-6 border-t border-white/5">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl font-bold text-zinc-400 hover:bg-white/5 transition-colors text-sm">Cancel</button>
+          <button 
+            onClick={() => onSave(scene.id, loads)}
+            className="flex-1 py-3 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 text-sm"
+          >
+            Update Graph
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
