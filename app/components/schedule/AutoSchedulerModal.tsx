@@ -21,6 +21,7 @@ type TrackType = "Acting" | "Music" | "Dance";
 interface ScheduleStats {
     totalSlots: number;
     uniqueActors: number;
+    castCoverage: number; // <--- ADD THIS LINE
     concurrency: number; 
     conflictsAvoided: number;
     pointsCleared: number;   
