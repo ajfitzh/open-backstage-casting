@@ -58,33 +58,68 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setTrackPriority(newOrder);
     };
 
-    // --- 🧮 THE ALGORITHM ---
+// --- 🧮 THE ALGORITHM (DATA-AWARE) ---
     const generateSchedule = () => {
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP: Enforce Numbers & Defaults
+        // 1. DATA PREP: robust parsing for your specific CSV structure
         const enrichedScenes = scenes.map((s: any) => {
-            const type = (s.type || "").toLowerCase();
+            // A. normalize names and types
+            // keys might be "Scene Name" (CSV) or "name" (App)
+            const name = (s["Scene Name"] || s.name || "").toLowerCase();
+            const type = (s["Scene Type"] || s.type || "").toLowerCase();
             
-            // Smart Defaults if data is missing
-            const defaultMusic = (type.includes('song') || type.includes('mixed')) ? 1 : 0;
-            const defaultDance = (type.includes('dance') || type.includes('mixed')) ? 1 : 0;
+            // B. AGGRESSIVE KEYWORD DETECTION (Since 'Type' is empty)
+            const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms'];
+            const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton'];
 
-            const mLoad = parseInt(s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
-            const dLoad = parseInt(s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
-            const bLoad = parseInt(s.load?.block ?? s.blocking_load ?? 1) || 1; 
+            const isMusicByName = musicKeywords.some(k => name.includes(k));
+            const isDanceByName = danceKeywords.some(k => name.includes(k));
 
+            // C. SMART DEFAULTS
+            // If load is 0, but name says "Song", default to 1.
+            const defaultMusic = isMusicByName ? 1 : 0;
+            const defaultDance = isDanceByName ? 1 : 0;
+
+            // D. FLEXIBLE COLUMN READING
+            // Check all possible casing: "Music Load", "music_load", "load.music"
+            const mLoad = parseInt(s["Music Load"] ?? s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
+            const dLoad = parseInt(s["Dance Load"] ?? s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
+            const bLoad = parseInt(s["Blocking Load"] ?? s.load?.block ?? s.blocking_load ?? 1) || 1; 
+
+            // E. DETERMINE ELIGIBILITY
+            // If it has load > 0, allow it in that track.
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
+            
+            // F. CALCULATE DURATION
             const totalPoints = mLoad + dLoad + bLoad;
-
-            // Smart Duration Formula
             let rawDuration = 15 + (totalPoints * 5);
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            return { ...s, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime };
+            // G. PARSE CAST (Handle the complex CSV string if needed)
+            let finalCast = s.cast || [];
+            // If 'cast' is missing but we have that messy 'Scene Assignments' string:
+            if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
+                 // Quick regex to extract names before the " - [{" pattern
+                 const raw = s["Scene Assignments"];
+                 const extracted = raw.match(/""?([A-Za-z\s]+?) - \[\{/g);
+                 if (extracted) {
+                     finalCast = extracted.map((str: string) => ({ 
+                         name: str.split(' - ')[0].replace(/['"]+/g, '').trim() 
+                     }));
+                 }
+            }
+
+            return { 
+                ...s, 
+                cast: finalCast,
+                mLoad, dLoad, bLoad, 
+                canMusic, canDance, 
+                totalPoints, smartTime 
+            };
         });
 
         const proposedSchedule: any[] = [];
@@ -97,14 +132,12 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         // Loop Weeks
         for (let w = startWeek; w <= endWeek; w++) {
-            
             const workDays = [
                 { day: 'Fri', start: FRI_START, end: FRI_END }, 
                 { day: 'Sat', start: SAT_START, end: SAT_END }  
             ];
 
             workDays.forEach(({ day, start, end }) => {
-                // Independent Clocks
                 const trackClocks: Record<string, number> = {
                     'Music': start, 'Dance': start, 'Acting': start
                 };
@@ -128,9 +161,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                     let roomsActiveNow = 0;
 
-                    // Iterate Tracks (Priority Order)
                     trackPriority.forEach((track) => {
-                        // Is Room Free?
                         if (trackClocks[track] > currentTime + 0.01) {
                             roomsActiveNow++;
                             return; 
@@ -148,33 +179,29 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
                             
-                            // A. CONFLICT CHECK
+                            // Conflict Check
                             const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) return { ...scene, score: -9999 };
 
-                            // B. STRATEGY ADJUSTMENT
                             const size = scene.cast?.length || 0;
                             
+                            // Strategy & Equity
                             if (strategy === 'velocity') {
-                                // "Eat the Biggest Frog" -> Prioritize large groups to clear hours
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
                             } else {
-                                // "Tetris Mode" -> Prioritize small groups to allow concurrency
-                                if (size < 10) score += 200;
-                                else if (size < 20) score += 100;
-                                else score -= 50; // Penalty for huge cast
+                                if (size <= 6) score += 500;
+                                else if (size <= 12) score += 200;
+                                else score -= 100;
                                 score += (scene.totalPoints * 2);
                             }
 
-                            // C. EQUITY (Give work to idle kids)
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
-                            // D. BALANCE BOOSTER
-                            const type = (scene.type || "").toLowerCase();
-                            if (track === 'Music' && (type.includes('song') || type.includes('mixed'))) score += 50;
-                            if (track === 'Dance' && (type.includes('dance') || type.includes('mixed'))) score += 50;
+                            // 🚀 TRACK AFFINITY (The Fix for "Only Acting")
+                            if (track === 'Music' && (scene.mLoad > scene.bLoad || scene.name.toLowerCase().includes('song'))) score += 100;
+                            if (track === 'Dance' && (scene.dLoad > scene.bLoad || scene.name.toLowerCase().includes('dance'))) score += 100;
 
                             if (scene.status === 'New') score += 50; 
 
@@ -184,7 +211,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         scored.sort((a: any, b: any) => b.score - a.score);
                         const winner = scored[0];
 
-                        // Schedule Winner
                         if (winner && winner.score > 0) {
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
@@ -192,7 +218,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
                                     sceneId: winner.id,
-                                    sceneName: winner.name,
+                                    sceneName: winner["Scene Name"] || winner.name, // Use correct name field
                                     track: track,
                                     day: day,
                                     weekOffset: w - 1,
@@ -223,7 +249,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             });
         }
 
-        // 3. FINALIZE & STATS
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
             const velocityTarget = 50 * (endWeek - startWeek + 1); 
