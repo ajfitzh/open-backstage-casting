@@ -27,6 +27,8 @@ interface ScheduleStats {
     conflictsAvoided: number;
     pointsCleared: number;   
     totalWorkload: number;  
+    velocityTarget: number;  
+    isOnTrack: boolean;
     completion: number;
 }
 
@@ -42,13 +44,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
     const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); 
-    
-    // 🟢 NEW: Passes Control
-    const [targetPasses, setTargetPasses] = useState(1); // 1 = Teach only, 3 = Teach/Review/Polish
+    const [targetPasses, setTargetPasses] = useState(1); 
 
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(6); // Default 6 weeks to show off the "Passes" feature
+    const [endWeek, setEndWeek] = useState(8); // Default 8 weeks for a full production cycle
 
     useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
@@ -72,7 +72,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         // 1. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
-            
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
 
@@ -91,12 +90,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             
             const totalPoints = mLoad + dLoad + bLoad;
             
-            // Smart Duration
             let rawDuration = 15 + (totalPoints * 5);
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            // Cast Parsing
             let finalCast = s.cast || [];
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
                  const raw = s["Scene Assignments"];
@@ -115,9 +112,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         const proposedSchedule: any[] = [];
         const scheduledCast = new Set<string>(); 
-        
-        // 🟢 NEW: Track completions per scene-track combination
-        // Format: "SceneID-Track" -> Count (0, 1, 2...)
         const completionCounts: Record<string, number> = {}; 
 
         let conflictsAvoided = 0;
@@ -162,11 +156,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             const key = `${scene.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
                             
-                            // 🟢 CHECK: Have we reached target passes?
                             if (currentPass >= targetPasses) return false;
                             
-                            // 🟢 CHECK: Don't schedule the same scene twice in one WEEKEND (Give them time to practice)
-                            // We check if this scene was already scheduled in the current week 'w'
+                            // Don't repeat same scene in same week
                             const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
                             if (alreadyScheduledThisWeek) return false;
 
@@ -177,7 +169,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                         // Score Candidates
                         const scored = candidates.map((scene: any) => {
-                            let score = 0;
+                            // 🟢 FIX: Start high so penalties don't create negative (invalid) scores
+                            let score = 10000; 
+                            
                             const key = `${scene.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
 
@@ -186,7 +180,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                             const size = scene.cast?.length || 0;
                             
-                            // STRATEGY
                             if (strategy === 'velocity') {
                                 score += size * 2; 
                                 score += (scene.totalPoints * 5); 
@@ -197,8 +190,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 score += (scene.totalPoints * 2);
                             }
 
-                            // 🟢 PASS PRIORITY: Finish Pass 1 before starting Pass 2
-                            // Higher pass number = Lower score penalty
+                            // Pass Penalty (Prioritize Pass 1 over Pass 2)
                             score -= (currentPass * 500); 
 
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
@@ -222,7 +214,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
                             if ((currentTime + (duration/60)) <= end) {
-                                // 🟢 Determine Label based on Pass
                                 const key = `${winner.id}-${track}`;
                                 const pass = (completionCounts[key] || 0) + 1;
                                 let labelPrefix = "";
@@ -239,7 +230,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     weekOffset: w - 1,
                                     startTime: currentTime,
                                     duration: duration,
-                                    status: pass === 1 ? 'New' : pass === 2 ? 'Worked' : 'Polished', // Update Status
+                                    status: pass === 1 ? 'New' : pass === 2 ? 'Worked' : 'Polished',
                                     castSize: winner.cast?.length || 0,
                                     castList: (winner.cast || []).map((c:any) => c.name)
                                 });
@@ -248,7 +239,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
                                 trackClocks[track] = currentTime + (duration / 60);
                                 
-                                // Increment Completion
                                 completionCounts[key] = pass;
                                 pointsCleared += winner.totalPoints;
                                 roomsActiveNow++;
@@ -269,8 +259,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
-            
-            // Total Work = Points * Passes
             const totalWorkload = scenes.reduce((acc:number, s:any) => acc + (s.mLoad + s.dLoad + s.bLoad), 0) * targetPasses;
 
             setPreviewSchedule(proposedSchedule);
@@ -354,7 +342,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* 2. REHEARSAL PASSES (NEW) */}
+                        {/* 2. REHEARSAL PASSES */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <RefreshCw size={14} className="text-emerald-400"/> Rehearsal Passes
