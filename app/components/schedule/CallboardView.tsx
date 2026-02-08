@@ -3,7 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import { 
     Printer, Info, AlertTriangle, MapPin, 
-    Car, ChevronDown, RefreshCw, Users, Eraser, Edit3
+    Car, ChevronDown, RefreshCw, Users, Eraser, Edit3,
+    Plus, Minus 
 } from 'lucide-react';
 
 // --- CONSTANTS ---
@@ -22,6 +23,11 @@ export default function CallboardView({
     // --- STATE: CLEANUP CREW ---
     const [friCrew, setFriCrew] = useState<string[]>([]);
     const [satCrew, setSatCrew] = useState<string[]>([]);
+    
+    // New: Crew Size Counters (Default to 4)
+    const [friCount, setFriCount] = useState(4);
+    const [satCount, setSatCount] = useState(4);
+
     const [expandedActor, setExpandedActor] = useState<string | null>(null);
 
     // --- 🧠 1. SCHEDULE PROCESSING (THE MERGE ENGINE) ---
@@ -71,8 +77,8 @@ export default function CallboardView({
         })).sort((a, b) => a.name.localeCompare(b.name));
     }, [schedule]);
 
-    // --- 🧠 2. CLEANUP CREW GENERATOR ---
-    const generateCrew = (day: 'Fri' | 'Sat') => {
+    // --- 🧠 2. CLEANUP CREW GENERATOR (UPDATED) ---
+    const generateCrew = (day: 'Fri' | 'Sat', limit: number) => {
         // A. Find the "End of the Night" time
         const dayItems = schedule.filter((s:any) => s.day === day);
         if (dayItems.length === 0) return [];
@@ -93,22 +99,24 @@ export default function CallboardView({
         const pool = Array.from(candidates);
         if (pool.length === 0) return ["No one called till end"];
 
-        // C. Gender Logic (Attempt Balance)
-        // If we have people data, prioritize Boys (scarce resource) then Girls
+        // C. Gender Logic (Attempt Balance based on Limit)
         const boys = pool.filter(name => people.find((p:any) => p.name === name && p.gender === 'Male'));
         const girls = pool.filter(name => people.find((p:any) => p.name === name && p.gender === 'Female'));
         const unknown = pool.filter(name => !people.find((p:any) => p.name === name));
 
         const crew: string[] = [];
         
-        // Pick 2 Boys (or max available)
+        // Pick Boys (Aim for 50% of the total limit)
+        const targetBoys = Math.ceil(limit / 2);
         const shuffledBoys = boys.sort(() => 0.5 - Math.random());
-        crew.push(...shuffledBoys.slice(0, 2));
+        crew.push(...shuffledBoys.slice(0, targetBoys));
 
-        // Fill remaining spots (up to 4 total) with Girls/Unknown
-        const remainingSpots = 4 - crew.length;
-        const others = [...girls, ...unknown].sort(() => 0.5 - Math.random());
-        crew.push(...others.slice(0, remainingSpots));
+        // Fill remaining spots (up to limit) with Girls/Unknown
+        const remainingSpots = limit - crew.length;
+        if (remainingSpots > 0) {
+            const others = [...girls, ...unknown].sort(() => 0.5 - Math.random());
+            crew.push(...others.slice(0, remainingSpots));
+        }
 
         return crew;
     };
@@ -204,27 +212,45 @@ export default function CallboardView({
                                 <Users size={12}/> Cleanup Crew (End of Night)
                              </h4>
                              <div className="space-y-2">
+                                
                                 {/* FRIDAY CREW */}
                                 <div className="flex items-center gap-2 text-xs">
                                     <span className="font-bold w-8 text-zinc-400 print:text-black">FRI:</span>
+                                    
+                                    {/* TOGGLE CONTROL (Hidden on Print) */}
+                                    <div className="flex items-center bg-black/30 rounded border border-white/5 print:hidden">
+                                        <button onClick={() => setFriCount(c => Math.max(1, c-1))} className="p-1 hover:text-white text-zinc-500"><Minus size={10}/></button>
+                                        <span className="w-5 text-center font-mono text-[10px]">{friCount}</span>
+                                        <button onClick={() => setFriCount(c => c+1)} className="p-1 hover:text-white text-zinc-500"><Plus size={10}/></button>
+                                    </div>
+
                                     {friCrew.length > 0 ? (
-                                        <span className="text-zinc-200 print:text-black flex-1">{friCrew.join(", ")}</span>
+                                        <span className="text-zinc-200 print:text-black flex-1 ml-1">{friCrew.join(", ")}</span>
                                     ) : (
-                                        <span className="text-zinc-600 italic flex-1">Not assigned</span>
+                                        <span className="text-zinc-600 italic flex-1 ml-1">Not assigned</span>
                                     )}
-                                    <button onClick={() => setFriCrew(generateCrew('Fri'))} className="p-1 hover:bg-white/10 rounded text-blue-400 print:hidden" title="Auto-Assign Friday">
+                                    <button onClick={() => setFriCrew(generateCrew('Fri', friCount))} className="p-1 hover:bg-white/10 rounded text-blue-400 print:hidden" title="Auto-Assign Friday">
                                         <RefreshCw size={12}/>
                                     </button>
                                 </div>
+                                
                                 {/* SATURDAY CREW */}
                                 <div className="flex items-center gap-2 text-xs">
                                     <span className="font-bold w-8 text-zinc-400 print:text-black">SAT:</span>
+                                    
+                                    {/* TOGGLE CONTROL (Hidden on Print) */}
+                                    <div className="flex items-center bg-black/30 rounded border border-white/5 print:hidden">
+                                        <button onClick={() => setSatCount(c => Math.max(1, c-1))} className="p-1 hover:text-white text-zinc-500"><Minus size={10}/></button>
+                                        <span className="w-5 text-center font-mono text-[10px]">{satCount}</span>
+                                        <button onClick={() => setSatCount(c => c+1)} className="p-1 hover:text-white text-zinc-500"><Plus size={10}/></button>
+                                    </div>
+
                                     {satCrew.length > 0 ? (
-                                        <span className="text-zinc-200 print:text-black flex-1">{satCrew.join(", ")}</span>
+                                        <span className="text-zinc-200 print:text-black flex-1 ml-1">{satCrew.join(", ")}</span>
                                     ) : (
-                                        <span className="text-zinc-600 italic flex-1">Not assigned</span>
+                                        <span className="text-zinc-600 italic flex-1 ml-1">Not assigned</span>
                                     )}
-                                    <button onClick={() => setSatCrew(generateCrew('Sat'))} className="p-1 hover:bg-white/10 rounded text-blue-400 print:hidden" title="Auto-Assign Saturday">
+                                    <button onClick={() => setSatCrew(generateCrew('Sat', satCount))} className="p-1 hover:bg-white/10 rounded text-blue-400 print:hidden" title="Auto-Assign Saturday">
                                         <RefreshCw size={12}/>
                                     </button>
                                 </div>
