@@ -6,7 +6,8 @@ import {
     getRoles,
     getSceneAssignments,
     getPeople,
-    getScheduleSlots 
+    getScheduleSlots, 
+    getProductionEvents
 } from '@/app/lib/baserow';
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
 
@@ -38,12 +39,13 @@ export default async function SchedulerPage() {
   }
 
   // 🟢 2. FETCH DATA
-  const [scenes, roles, sceneAssignments, people, existingSlots] = await Promise.all([
+  const [scenes, roles, sceneAssignments, people, existingSlots, events] = await Promise.all([
       getScenes(activeId),      
       getRoles(),               
       getSceneAssignments(activeId),
       getPeople(),
-      getScheduleSlots(activeId) 
+      getScheduleSlots(activeId),
+      getProductionEvents(activeId) // ✅ Fetching production events for the active production
   ]);
 
   return (
@@ -56,6 +58,7 @@ export default async function SchedulerPage() {
         productionTitle={showTitle} // ✅ Passed correctly
         productionId={activeId}
         initialSchedule={existingSlots || []} 
+        events={events || []}
       />
     </main>
   );

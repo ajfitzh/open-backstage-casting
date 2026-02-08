@@ -11,7 +11,6 @@ import {
   Save, Loader2, Maximize2, X
 } from 'lucide-react';
 
-// --- IMPORTS ---
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
 import { saveScheduleBatch } from '@/app/lib/actions'; 
@@ -37,9 +36,6 @@ const FRI_START = 18;
 const FRI_END = 21;   
 const SAT_START = 10; 
 const SAT_END = 17;   
-const TOTAL_WEEKS = 10;
-const CURRENT_WEEK = 4;
-const TARGET_WEEK = 8; 
 
 // ============================================================================
 // MAIN COMPONENT
@@ -48,6 +44,7 @@ export default function SchedulerClient({
     scenes = [], 
     assignments = [], 
     people = [], 
+    events = [], // 🟢 NEW: Receive the list of rehearsal dates
     productionTitle = "Untitled Production",
     productionId 
 }: any) {
@@ -55,28 +52,64 @@ export default function SchedulerClient({
   // --- STATE ---
   const [activeTab, setActiveTab] = useState<'calendar' | 'progress' | 'callboard'>('calendar');
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
-  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); // Initialize with prop if needed
+  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   const [isSaving, setIsSaving] = useState(false); 
-  
-  // --- SHARED DATA PREP ---
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+
+  // --- 🟢 DYNAMIC WEEK CALCULATOR ---
+  const weekStats = useMemo(() => {
+    // 1. If no events, return defaults
+    if (!events || events.length === 0) {
+        return { current: 1, total: 10, label: "Week 1 of 10" };
+    }
+
+    // 2. Find Start & End Dates of the Production
+    const dates = events.map((e: any) => new Date(e.date).getTime()).filter((d: number) => !isNaN(d));
+    if (dates.length === 0) return { current: 1, total: 10, label: "Week 1 of 10" };
+
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
+
+    // 3. Calculate Total Weeks Duration
+    const msPerWeek = 1000 * 60 * 60 * 24 * 7;
+    const totalWeeks = Math.ceil((maxDate.getTime() - minDate.getTime()) / msPerWeek) || 1;
+
+    // 4. Calculate "Viewed" Date (based on offset from Today)
+    const today = new Date();
+    // Align "Today" to the nearest Friday for consistent math
+    const nextFri = new Date(today);
+    nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (currentWeekOffset * 7));
+
+    // 5. Calculate Difference between "Viewed Date" and "Start Date"
+    const diffTime = nextFri.getTime() - minDate.getTime();
+    // Add 1 so the first week is "Week 1", not "Week 0"
+    const currentWeekNum = Math.floor(diffTime / msPerWeek) + 1;
+
+    // 6. Formatting
+    let label = `Week ${currentWeekNum} of ${totalWeeks}`;
+    if (currentWeekNum < 1) label = `Pre-Production (${Math.abs(currentWeekNum)} wks out)`;
+    if (currentWeekNum > totalWeeks) label = `Post-Production (+${currentWeekNum - totalWeeks})`;
+
+    return { 
+        current: currentWeekNum, 
+        total: totalWeeks, 
+        label: label,
+        viewedDate: nextFri 
+    };
+  }, [events, currentWeekOffset]);
+
+  // --- SHARED DATA PREP (Existing Logic) ---
   const sceneData = useMemo(() => {
     if (!scenes) return [];
-
-    // 1. Create a Map: SceneID -> Set of Actor Names
     const sceneCastMap = new Map<number, Set<string>>();
-
-    // 🛡️ HELPER: Safely extract Baserow Data
     const getValue = (field: any) => {
         if (!field) return null;
         if (Array.isArray(field)) {
-            if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) {
-                return field[0].value;
-            }
+            if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) return field[0].value;
             return field[0]; 
         }
         return field; 
     };
-
     const getIds = (field: any) => {
         if (!field) return [];
         if (Array.isArray(field)) {
@@ -84,150 +117,92 @@ export default function SchedulerClient({
         }
         return typeof field === 'number' ? [field] : [];
     };
-
     (assignments || []).forEach((a: any) => {
         const actorName = getValue(a.Person) || getValue(a['Person']) || a.personName;            
-
         if (!actorName) return;
-
-        const ids = [
-            ...getIds(a.Scene),
-            ...getIds(a['Scene']),   
-            ...getIds(a.sceneIds)
-        ];
-
+        const ids = [...getIds(a.Scene), ...getIds(a['Scene']), ...getIds(a.sceneIds)];
         ids.forEach(sid => {
             if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
             sceneCastMap.get(sid)?.add(actorName);
         });
     });
-
-    // 2. Hydrate Scenes
     return scenes.map((s: any) => {
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
-
         const sceneName = getValue(s['Scene Name']) || getValue(s.Name) || s.name || "Untitled";
         const sceneAct = getValue(s.Act) || s.act || "1";
         const sceneType = getValue(s.Type) || s.type || "Scene";
-
         return {
-            id: s.id,
-            name: sceneName,
-            act: sceneAct,
-            type: sceneType,
-            cast: castNames.map(name => ({ name })),
-            castNames: castNames, 
-            status: 'New'
+            id: s.id, name: sceneName, act: sceneAct, type: sceneType,
+            cast: castNames.map(name => ({ name })), castNames: castNames, status: 'New'
         };
     }).sort((a: any, b: any) => a.id - b.id);
   }, [scenes, assignments]);
 
-  // --- DERIVED DATA FOR CALLBOARD ---
   const callboardSchedule = useMemo(() => {
       return schedule.map(slot => {
           const scene = sceneData.find((s: { id: number; }) => s.id === slot.sceneId);
-          return {
-              ...slot,
-              sceneName: scene?.name || "Unknown",
-              castList: scene?.castNames || []
-          };
+          return { ...slot, sceneName: scene?.name || "Unknown", castList: scene?.castNames || [] };
       });
   }, [schedule, sceneData]);
 
-
-  // 🟢 SAVE LOGIC
   const handleSaveChanges = async () => {
     setIsSaving(true);
-    const newItems = schedule.filter(item => item.id.length > 10); // Assume long string IDs are new
-
-    if (newItems.length === 0) {
-        setIsSaving(false);
-        return;
-    }
-
+    const newItems = schedule.filter(item => item.id.length > 10);
+    if (newItems.length === 0) { setIsSaving(false); return; }
     const getRealDate = (day: 'Fri' | 'Sat', weekOffset: number) => {
         const today = new Date();
         const nextFri = new Date(today);
         nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (weekOffset * 7));
-        
         if (day === 'Fri') return nextFri.toISOString().split('T')[0];
-        
         const nextSat = new Date(nextFri);
         nextSat.setDate(nextFri.getDate() + 1);
         return nextSat.toISOString().split('T')[0];
     };
-
-    const batch = newItems.map(item => ({
-        ...item,
-        date: getRealDate(item.day, item.weekOffset),
-    }));
-
+    const batch = newItems.map(item => ({ ...item, date: getRealDate(item.day, item.weekOffset) }));
     await saveScheduleBatch(productionId, batch);
     setIsSaving(false);
     window.location.reload(); 
   };
 
-
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-        
         {/* HEADER */}
         <header className="h-16 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-30">
             <div className="flex items-center gap-6">
                 <div>
                     <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Production Schedule</div>
-                    {/* ✅ FIX: Displays the Production Title correctly */}
                     <h1 className="text-lg font-bold text-white">{productionTitle}</h1>
                 </div>
-
                 <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
-                    <button 
-                        onClick={() => setActiveTab('calendar')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                    >
+                    <button onClick={() => setActiveTab('calendar')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <CalendarIcon size={14}/> Calendar
                     </button>
-                    <button 
-                        onClick={() => setActiveTab('progress')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                    >
+                    <button onClick={() => setActiveTab('progress')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <TrendingUp size={14}/> Burn-Up
                     </button>
-                     <button 
-                        onClick={() => setActiveTab('callboard')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'callboard' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                    >
+                     <button onClick={() => setActiveTab('callboard')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'callboard' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <FileText size={14}/> Callboard
                     </button>
                 </div>
             </div>
             
             <div className="flex items-center gap-4">
-                 
-                 {/* SAVE BUTTON */}
                  {schedule.some(i => i.id.length > 10) && (
                      <div className="animate-in fade-in slide-in-from-top-2">
-                        <button 
-                            onClick={handleSaveChanges}
-                            disabled={isSaving}
-                            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                        <button onClick={handleSaveChanges} disabled={isSaving} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                             {isSaving ? "Syncing..." : `Save ${schedule.filter(i => i.id.length > 10).length} Changes`}
                         </button>
                      </div>
                  )}
-
+                 {/* 🟢 DYNAMIC WEEK DISPLAY */}
                  <div className="text-right hidden md:block border-l border-white/10 pl-4">
-                    <div className="text-[10px] text-zinc-500 font-mono">Current Week</div>
-                    <div className="text-sm font-black text-emerald-400">Week {CURRENT_WEEK} of {TOTAL_WEEKS}</div>
+                    <div className="text-[10px] text-zinc-500 font-mono">Current View</div>
+                    <div className="text-sm font-black text-emerald-400">{weekStats.label}</div>
                  </div>
                  
-                 <button 
-                    onClick={() => setIsAutoSchedulerOpen(true)}
-                    className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
-                 >
+                 <button onClick={() => setIsAutoSchedulerOpen(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all">
                     <Wand2 size={14} /> Auto
                  </button>
             </div>
@@ -239,46 +214,27 @@ export default function SchedulerClient({
                 <CalendarView 
                     sceneData={sceneData} 
                     schedule={schedule} 
-                    setSchedule={setSchedule} 
+                    setSchedule={setSchedule}
+                    currentWeekOffset={currentWeekOffset}
+                    setCurrentWeekOffset={setCurrentWeekOffset}
+                    weekLabel={`Week of ${weekStats.viewedDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                 />
             )}
-            
-            {activeTab === 'progress' && (
-                <BurnUpView sceneData={sceneData} />
-            )}
-
-            {activeTab === 'callboard' && (
-                <CallboardView 
-                    schedule={callboardSchedule}
-                    productionTitle={productionTitle}
-                />
-            )}
+            {activeTab === 'progress' && <BurnUpView sceneData={sceneData} />}
+            {activeTab === 'callboard' && <CallboardView schedule={callboardSchedule} productionTitle={productionTitle} />}
         </div>
-
-        <AutoSchedulerModal 
-            isOpen={isAutoSchedulerOpen} 
-            onClose={() => setIsAutoSchedulerOpen(false)}
-            scenes={sceneData}
-            people={people}
-            onCommit={(newItems: any[]) => {
-                setSchedule(prev => [...prev, ...newItems]);
-            }}
-        />
-
+        <AutoSchedulerModal isOpen={isAutoSchedulerOpen} onClose={() => setIsAutoSchedulerOpen(false)} scenes={sceneData} people={people} onCommit={(newItems: any[]) => { setSchedule(prev => [...prev, ...newItems]); }} />
     </div>
   );
 }
 
-// ============================================================================
-// SUB-COMPONENT: CALENDAR VIEW (Fixed UI & Logic)
-// ============================================================================
-function CalendarView({ sceneData, schedule, setSchedule }: any) {
+// ... (CalendarView, BurnUpView, etc. remain below - no major logic changes needed there besides passing the offset props)
+
+function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, setCurrentWeekOffset, weekLabel }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🎨 THEMATIC COLOR ENGINE
   const getTrackStyles = (track: TrackType) => {
     switch (track) {
       case 'Music': return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.15)]';
@@ -288,53 +244,30 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
     }
   };
 
-  // 🚀 GRID INTERACTION HELPERS
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
       const dropTime = hour + (min / 60);
-
-      // 🟢 CASE 1: MOVING AN EXISTING ITEM
       const movedItemId = e.dataTransfer.getData("itemId");
       if (movedItemId) {
           setSchedule((prev: any) => prev.map((item: any) => {
               if (item.id === movedItemId) {
-                  return {
-                      ...item,
-                      day: day,
-                      track: track,
-                      startTime: dropTime, 
-                      weekOffset: currentWeekOffset
-                  };
+                  return { ...item, day, track, startTime: dropTime, weekOffset: currentWeekOffset };
               }
               return item;
           }));
           setDraggedItemId(null);
           return;
       }
-
-      // 🔵 CASE 2: DROPPING A NEW SCENE
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
       if (sceneId) {
-          const newBlock: any = {
-              id: Date.now().toString(),
-              sceneId, track, day, weekOffset: currentWeekOffset, startTime: dropTime, duration: 30, status: 'New',
-              span: 1 
-          };
+          const newBlock: any = { id: Date.now().toString(), sceneId, track, day, weekOffset: currentWeekOffset, startTime: dropTime, duration: 30, status: 'New', span: 1 };
           setSchedule((prev: any) => [...prev, newBlock]);
           setDraggedSceneId(null);
       }
   };
 
-  const deleteItem = (itemId: string) => {
-      setSchedule((prev: any) => prev.filter((item: any) => item.id !== itemId));
-  };
-
-  const updateDuration = (itemId: string, change: number) => {
-      setSchedule((prev: any) => prev.map((item: any) => 
-        item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item
-      ));
-  };
-
+  const deleteItem = (itemId: string) => setSchedule((prev: any) => prev.filter((item: any) => item.id !== itemId));
+  const updateDuration = (itemId: string, change: number) => setSchedule((prev: any) => prev.map((item: any) => item.id === itemId ? { ...item, duration: Math.max(15, item.duration + change) } : item));
   const switchTrack = (itemId: string, direction: 'left' | 'right') => {
       const tracks: TrackType[] = ['Acting', 'Music', 'Dance'];
       setSchedule((prev: any) => prev.map((item: any) => {
@@ -345,7 +278,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
           return { ...item, track: tracks[newIndex] };
       }));
   };
-
   const updateSpan = (itemId: string, direction: 'more' | 'less') => {
       setSchedule((prev: any) => prev.map((item: any) => {
           if (item.id !== itemId) return item;
@@ -359,13 +291,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       }));
   };
 
-  const weekLabel = useMemo(() => {
-      const today = new Date();
-      const nextFri = new Date(today);
-      nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (currentWeekOffset * 7));
-      return `Week of ${nextFri.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-  }, [currentWeekOffset]);
-
   const generateSlots = (start: number, end: number) => {
       const s: { h: number; m: number; val: number; }[] = [];
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
@@ -376,142 +301,66 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
 
   return (
     <div className="flex h-full">
-         {/* SIDEBAR SCENE LIST */}
          <aside className="w-72 border-r border-white/10 flex flex-col bg-zinc-900 shrink-0 z-20 shadow-xl">
              <div className="p-4 border-b border-white/10">
                 <div className="relative">
                     <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"/>
-                    <input 
-                        value={searchQuery} 
-                        onChange={(e) => setSearchQuery(e.target.value)} 
-                        placeholder="Filter scenes..." 
-                        className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none text-white"
-                    />
+                    <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Filter scenes..." className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-blue-500 outline-none text-white"/>
                 </div>
              </div>
              <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar pt-2">
                  {sceneData.filter((s:any) => (s.name || "").toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
-                     <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)}
-                         className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all group">
-                         <div className="flex justify-between items-center mb-1">
-                             <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
-                         </div>
-                         <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                              {/* ✅ FIX: Removed double "Act" */}
-                              <span className="bg-black/30 px-1 rounded px-1.5 py-0.5">{scene.act}</span>
-                              <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>
-                                  {scene.cast.length} Actors
-                              </span>
-                         </div>
+                     <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)} className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all group">
+                         <div className="flex justify-between items-center mb-1"><span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span></div>
+                         <div className="flex items-center gap-2 text-[10px] text-zinc-500"><span className="bg-black/30 px-1 rounded px-1.5 py-0.5">{scene.act}</span><span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>{scene.cast.length} Actors</span></div>
                      </div>
                  ))}
              </div>
          </aside>
-
-         {/* MAIN CALENDAR WORKSPACE */}
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
                  <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronLeft size={18}/></button>
                  <span className="text-xs font-black uppercase tracking-widest text-zinc-300 w-48 text-center">{weekLabel}</span>
                  <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronRight size={18}/></button>
              </div>
-             
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[850px]">
-                     {[
-                         { day: 'Fri', slots: friSlots, start: FRI_START }, 
-                         { day: 'Sat', slots: satSlots, start: SAT_START }
-                     ].map((col: any) => (
+                     {[{ day: 'Fri', slots: friSlots, start: FRI_START }, { day: 'Sat', slots: satSlots, start: SAT_START }].map((col: any) => (
                          <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/30 border border-white/10 rounded-2xl overflow-hidden">
                              <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">{col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}</div>
                              <div className="flex-1 relative flex">
-                                 {/* Time Labels */}
                                  <div className="w-14 bg-black/20 border-r border-white/5 text-[10px] text-zinc-600 font-mono text-right py-2 shrink-0">
-                                     {col.slots.filter((s:any) => s.m === 0).map((s:any) => (
-                                         <div key={s.val} style={{ height: '128px' }} className="pr-3 pt-1">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>
-                                     ))}
+                                     {col.slots.filter((s:any) => s.m === 0).map((s:any) => (<div key={s.val} style={{ height: '128px' }} className="pr-3 pt-1">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>))}
                                  </div>
-                                 
-                                 {/* Track Matrix */}
                                  <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
                                      {['Acting', 'Music', 'Dance'].map((track) => (
                                          <div key={track} className="relative group/lane">
                                               <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10 pointer-events-none">{track}</div>
-                                              
-                                              {/* DROP ZONES */}
                                               {col.slots.map((slot:any) => (
-                                                  <div key={slot.val} 
-                                                       className={`h-8 border-b border-white/[0.02] transition-colors ${draggedSceneId || draggedItemId ? 'hover:bg-blue-500/10' : ''}`}
-                                                       onDragOver={(e) => e.preventDefault()} 
-                                                       onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}
-                                                  />
+                                                  <div key={slot.val} className={`h-8 border-b border-white/[0.02] transition-colors ${draggedSceneId || draggedItemId ? 'hover:bg-blue-500/10' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
                                               ))}
-                                              
-                                              {/* RENDER BLOCKS */}
                                               {schedule.filter((i: any) => i.day === col.day && i.track === track && i.weekOffset === currentWeekOffset).map((item: any) => {
                                                   const top = (item.startTime - col.start) * 128;
                                                   const height = (item.duration / 60) * 128;
                                                   const scene = sceneData.find((s:any) => s.id === item.sceneId);
                                                   const span = item.span || 1;
                                                   const isDraggingThis = draggedItemId === item.id;
-                                                  
                                                   return (
-                                                      <div 
-                                                        key={item.id}
-                                                        draggable
-                                                        onDragStart={(e) => {
-                                                            e.dataTransfer.setData("itemId", item.id);
-                                                            setDraggedItemId(item.id);
-                                                        }}
-                                                        onDragEnd={() => setDraggedItemId(null)}
+                                                      <div key={item.id} draggable onDragStart={(e) => { e.dataTransfer.setData("itemId", item.id); setDraggedItemId(item.id); }} onDragEnd={() => setDraggedItemId(null)}
                                                         className={`absolute rounded-xl border-l-[6px] shadow-2xl text-xs transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
                                                           ${getTrackStyles(item.track)}
                                                           ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}
-                                                          ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''} 
-                                                        `}
-                                                        style={{ 
-                                                            top: `${top}px`, 
-                                                            height: `${height}px`,
-                                                            // Calculate width to span columns
-                                                            width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' 
-                                                        }}
-                                                      >
-                                                           {/* HEADER / DRAG HANDLE (Clip Content Here, NOT Parent) */}
-                                                           <div className="w-full h-full p-3 overflow-hidden">
-                                                               <div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">
-                                                                  {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
-                                                               </div>
-                                                           </div>
-
-                                                           {/* --- CONTROLS OVERLAY (ABSOLUTE) --- */}
-                                                           
-                                                           {/* 1. DELETE (Top Right) */}
-                                                           <button 
-                                                               onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} 
-                                                               className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all z-50 transform hover:scale-110"
-                                                           >
-                                                               <X size={10} />
-                                                           </button>
-
-                                                           {/* 2. TRACK CONTROLS (Center Floating) */}
-                                                           {/* ✅ FIX: Centered & Floating so it works on small 30m blocks */}
+                                                          ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''}`}
+                                                        style={{ top: `${top}px`, height: `${height}px`, width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' }}>
+                                                           <div className="w-full h-full p-3 overflow-hidden"><div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">{span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}</div></div>
+                                                           <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all z-50 transform hover:scale-110"><X size={10} /></button>
                                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-50">
                                                                 <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'left'); }} disabled={item.track === 'Acting'} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronLeft size={10}/></button>
-                                                                
-                                                                <div className="flex items-center bg-black/60 backdrop-blur-sm rounded overflow-hidden border border-white/10 shadow-lg">
-                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-1.5 py-0.5 hover:bg-white/10 border-r border-white/10 transition-colors"><Minus size={10}/></button>
-                                                                    <span className="px-1.5 py-0.5 text-[8px] font-black tracking-widest text-white/90">{span}x</span>
-                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-1.5 py-0.5 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
-                                                                </div>
-
+                                                                <div className="flex items-center bg-black/60 backdrop-blur-sm rounded overflow-hidden border border-white/10 shadow-lg"><button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-1.5 py-0.5 hover:bg-white/10 border-r border-white/10 transition-colors"><Minus size={10}/></button><span className="px-1.5 py-0.5 text-[8px] font-black tracking-widest text-white/90">{span}x</span><button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-1.5 py-0.5 hover:bg-white/10 transition-colors"><Plus size={10}/></button></div>
                                                                 <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'right'); }} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronRight size={10}/></button>
                                                            </div>
-
-                                                           {/* 3. TIME RESIZE (Bottom Right) */}
                                                            <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-black/60 backdrop-blur-md rounded p-0.5 transition-all border border-white/10 z-50">
-                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
-                                                               <span className="text-[8px] font-mono font-bold text-white px-1">{item.duration}m</span>
-                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
+                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button><span className="text-[8px] font-mono font-bold text-white px-1">{item.duration}m</span><button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
                                                            </div>
                                                       </div>
                                                   )
