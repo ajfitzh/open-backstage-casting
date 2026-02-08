@@ -55,41 +55,41 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setTrackPriority(newOrder);
     };
 
-    // --- 🧮 THE ALGORITHM ---
+// --- 🧮 THE ALGORITHM (CORRECTED) ---
     const generateSchedule = () => {
         setIsGenerating(true);
-        setPreviewSchedule([]); // Clear previous
+        setPreviewSchedule([]); 
         
-        // 1. HELPER: Calculate Scene Points & Duration
-        // This unifies the logic with your Burn-Up chart
+        // 1. DATA PREP: Enforce Numbers to prevent "1"+"1" = "11" errors
         const enrichedScenes = scenes.map((s: any) => {
-            const mLoad = s.load?.music ?? s.music_load ?? 0; // Default 0 if missing
-            const dLoad = s.load?.dance ?? s.dance_load ?? 0;
-            const bLoad = s.load?.block ?? s.blocking_load ?? 1; // Always need blocking
+            // Force parseInt to ensure we don't do string concatenation
+            const mLoad = parseInt(s.load?.music ?? s.music_load ?? 0) || 0; 
+            const dLoad = parseInt(s.load?.dance ?? s.dance_load ?? 0) || 0;
+            const bLoad = parseInt(s.load?.block ?? s.blocking_load ?? 1) || 1; // Default to 1 if missing
 
-            // Determine eligibility based on Load, not Name
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
             
-            // Calculate Total Complexity Points (Max 15)
             const totalPoints = mLoad + dLoad + bLoad;
 
-            // 🟢 SMART DURATION LOGIC
-            // Formula: 15 mins base + (5 mins per point). 
-            // Ex: Easy (1pt) = 20m. Hard (5pts) = 40m. Complex (10pts) = 65m.
-            // Round to nearest 5 minutes
-            const smartTime = Math.ceil((15 + (totalPoints * 5)) / 5) * 5;
+            // 🟢 SMART DURATION FORMULA
+            // Base 15m + (5m per point). 
+            // Ex: Low (3pts) = 30m. High (10pts) = 65m.
+            let rawDuration = 15 + (totalPoints * 5);
+            
+            // Safety Clamp: Don't let a scene exceed 90 mins automatically
+            // or it will never fit in a Fri night slot
+            if (rawDuration > 90) rawDuration = 90;
+
+            // Round to nearest 5
+            const smartTime = Math.ceil(rawDuration / 5) * 5;
             
             return { ...s, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime };
         });
 
-        // 2. Setup Base Grid (We iterate by 15-minute chunks for granular placement)
-        // We will "fill" these chunks as we schedule items.
-        // For simplicity in this v2, we will still iterate slot-by-slot but skip time if a long scene is placed.
-        
         const proposedSchedule: any[] = [];
         const scheduledCast = new Set<string>(); 
-        const completedScenes = new Set<string>(); // Format: "ID-Track"
+        const completedScenes = new Set<string>(); 
         let conflictsAvoided = 0;
         let totalActiveRooms = 0;
         let pointsCleared = 0;
@@ -98,53 +98,53 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         // Loop Weeks
         for (let w = startWeek; w <= endWeek; w++) {
             
-            // Define the time ranges for this week's Fri/Sat
             const workDays = [
-                { day: 'Fri', start: FRI_START, end: FRI_END },
-                { day: 'Sat', start: SAT_START, end: SAT_END }
+                { day: 'Fri', start: FRI_START, end: FRI_END }, // 3 Hours
+                { day: 'Sat', start: SAT_START, end: SAT_END }  // 7 Hours
             ];
 
             workDays.forEach(({ day, start, end }) => {
-                // We track the "Next Available Time" for each track independently
-                // This allows concurrent tracks to have different length scenes!
-                const trackClocks = {
+                const trackClocks: Record<string, number> = {
                     'Music': start,
                     'Dance': start,
                     'Acting': start
                 };
 
-                // We march forward in 5-minute increments until the day ends
-                // We only try to schedule a track if its clock is behind the others or ready
+                // March forward in 15-min increments
                 let currentTime = start;
-                while(currentTime < end) {
+                
+                // Safety break to prevent infinite loops
+                let loops = 0;
+                while(currentTime < end && loops < 100) {
+                    loops++;
                     
                     const busyActorsNow = new Set<string>();
                     
-                    // 1. Populate Busy Actors from ALREADY scheduled items overlapping this moment
+                    // Populate Busy Actors from overlapping items
                     proposedSchedule.forEach(item => {
                         if (item.weekOffset === (w-1) && item.day === day) {
                             const itemEnd = item.startTime + (item.duration / 60);
-                            if (item.startTime <= currentTime && itemEnd > currentTime) {
-                                item.castList.forEach((c:string) => busyActorsNow.add(c));
+                            // If item overlaps the current 15-min block
+                            if (item.startTime < currentTime + 0.25 && itemEnd > currentTime) {
+                                (item.castList || []).forEach((c:string) => busyActorsNow.add(c));
                             }
                         }
                     });
 
-                    // 2. Try to schedule each track if it's ready (clock <= currentTime)
                     let roomsActiveNow = 0;
 
                     trackPriority.forEach((track) => {
-                        // If this track is busy (it scheduled a long scene earlier), skip it
+                        // Skip if this track is already busy with a previous long scene
                         if (trackClocks[track] > currentTime + 0.01) {
-                            roomsActiveNow++; // It's active, just with an old item
+                            roomsActiveNow++;
                             return; 
                         }
 
                         // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
-                            if (completedScenes.has(`${scene.id}-${track}`)) return false; // Already done this track
+                            if (completedScenes.has(`${scene.id}-${track}`)) return false; 
                             
-                            // 🟢 FIX 1: LOAD-BASED FILTERING
+                            // Load-based filtering
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
                             
@@ -155,25 +155,17 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         const scored = candidates.map((scene: any) => {
                             let score = 0;
                             
-                            // CONFLICT CHECK
-                            // Check if ANY cast member is busy right now
-                            const hasConflict = scene.cast.some((c: any) => busyActorsNow.add(c.name)); // Note: this logic is tricky in a loop, simplified below:
-                            const actuallyBusy = scene.cast.some((c:any) => {
-                                // Check against the master busy list for this exact time
-                                return Array.from(busyActorsNow).includes(c.name);
-                            });
-
+                            // Conflict Check
+                            const actuallyBusy = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (actuallyBusy) {
                                 conflictsAvoided++;
                                 return { ...scene, score: -9999 };
                             }
 
-                            // Prioritize "New" & High Complexity
                             if (scene.status === 'New') score += 50; 
-                            score += (scene.totalPoints * 5); // Do hard stuff first
+                            score += (scene.totalPoints * 5); 
 
-                            // Cast Equity (Give work to idle kids)
-                            const idleKids = scene.cast.filter((c:any) => !scheduledCast.has(c.name)).length;
+                            const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
 
                             return { ...scene, score };
@@ -182,40 +174,37 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                         scored.sort((a: any, b: any) => b.score - a.score);
                         const winner = scored[0];
 
-                        // SCHEDULE WINNER
                         if (winner && winner.score > 0) {
-                            // Determine Duration
                             const duration = useSmartDuration ? winner.smartTime : baseDuration;
                             
-                            // Check if it fits in the day
+                            // Does it fit in remaining day?
                             if ((currentTime + (duration/60)) <= end) {
                                 proposedSchedule.push({
                                     id: Math.random().toString(),
                                     sceneId: winner.id,
                                     sceneName: winner.name,
                                     track: track,
-                                    day: day, // 'Fri' or 'Sat'
+                                    day: day,
                                     weekOffset: w - 1,
                                     startTime: currentTime,
                                     duration: duration,
                                     status: 'New',
-                                    castSize: winner.cast.length,
-                                    castList: winner.cast.map((c:any) => c.name) // Save names for conflict checking
+                                    castSize: winner.cast?.length || 0,
+                                    castList: (winner.cast || []).map((c:any) => c.name)
                                 });
 
-                                // Mark actors busy for the duration of this scene
-                                winner.cast.forEach((c:any) => scheduledCast.add(c.name));
-                                
-                                // Advance this track's clock
+                                (winner.cast || []).forEach((c:any) => scheduledCast.add(c.name));
                                 trackClocks[track] = currentTime + (duration / 60);
-                                
                                 completedScenes.add(`${winner.id}-${track}`);
                                 pointsCleared += winner.totalPoints;
                                 roomsActiveNow++;
+                            } else {
+                                // Scene too long for remaining day, try next loop
+                                // Advance clock slightly to allow small scenes to fill gap
+                                trackClocks[track] = currentTime + 0.25;
                             }
                         } else {
-                            // No valid scene found, advance clock slightly to try again later
-                            // (Maybe actors free up in 15 mins)
+                            // No valid scene, advance clock
                             trackClocks[track] = currentTime + 0.25; 
                         }
                     });
@@ -223,17 +212,20 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                     if (roomsActiveNow > 0) totalActiveRooms++;
                     totalSlotsIterated++;
                     
-                    // Advance Master Clock by 15 mins (0.25 hours)
-                    currentTime += 0.25;
+                    currentTime += 0.25; // Advance 15 mins
                 }
             });
         }
 
         // 3. STATS
         setTimeout(() => {
-            const allCastCount = new Set(scenes.flatMap((s:any) => s.cast.map((c:any) => c.name))).size;
-            // Target = 50 points per week roughly
+            const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
             const velocityTarget = 50 * (endWeek - startWeek + 1); 
+
+            if (proposedSchedule.length === 0) {
+                console.warn("Auto-Scheduler produced 0 items. Check 'enrichedScenes' logs for data issues.");
+                console.log("Sample Scene Data:", enrichedScenes[0]);
+            }
 
             setPreviewSchedule(proposedSchedule);
             setStats({
