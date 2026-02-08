@@ -5,10 +5,8 @@ import {
   Users, ChevronRight, ChevronLeft, Search,
   CheckCircle2, Plus, Minus,
   TrendingUp, Calendar as CalendarIcon, 
-  LayoutGrid, Coffee, Umbrella, Wand2,
-  FileText, Mic2, Music, Theater,
-  Target, AlertTriangle, Clock,
-  Save, Loader2, Maximize2, X
+  FileText, Wand2, Coffee, AlertTriangle, 
+  Target, Umbrella, LayoutGrid, X, Save, Loader2
 } from 'lucide-react';
 
 import AutoSchedulerModal from './AutoSchedulerModal'; 
@@ -36,6 +34,7 @@ const FRI_START = 18;
 const FRI_END = 21;   
 const SAT_START = 10; 
 const SAT_END = 17;   
+const TOTAL_WEEKS = 10; // Default fallback
 
 // ============================================================================
 // MAIN COMPONENT
@@ -44,7 +43,7 @@ export default function SchedulerClient({
     scenes = [], 
     assignments = [], 
     people = [], 
-    events = [], // 🟢 NEW: Receive the list of rehearsal dates
+    events = [], // 🟢 Received from page.tsx
     productionTitle = "Untitled Production",
     productionId 
 }: any) {
@@ -60,12 +59,12 @@ export default function SchedulerClient({
   const weekStats = useMemo(() => {
     // 1. If no events, return defaults
     if (!events || events.length === 0) {
-        return { current: 1, total: 10, label: "Week 1 of 10" };
+        return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
     }
 
     // 2. Find Start & End Dates of the Production
     const dates = events.map((e: any) => new Date(e.date).getTime()).filter((d: number) => !isNaN(d));
-    if (dates.length === 0) return { current: 1, total: 10, label: "Week 1 of 10" };
+    if (dates.length === 0) return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
 
     const minDate = new Date(Math.min(...dates));
     const maxDate = new Date(Math.max(...dates));
@@ -98,18 +97,23 @@ export default function SchedulerClient({
     };
   }, [events, currentWeekOffset]);
 
-  // --- SHARED DATA PREP (Existing Logic) ---
+  // --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
     if (!scenes) return [];
     const sceneCastMap = new Map<number, Set<string>>();
+    
+    // Helper to safely extract Baserow Data
     const getValue = (field: any) => {
         if (!field) return null;
         if (Array.isArray(field)) {
-            if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) return field[0].value;
+            if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) {
+                return field[0].value;
+            }
             return field[0]; 
         }
         return field; 
     };
+
     const getIds = (field: any) => {
         if (!field) return [];
         if (Array.isArray(field)) {
@@ -117,6 +121,7 @@ export default function SchedulerClient({
         }
         return typeof field === 'number' ? [field] : [];
     };
+
     (assignments || []).forEach((a: any) => {
         const actorName = getValue(a.Person) || getValue(a['Person']) || a.personName;            
         if (!actorName) return;
@@ -126,12 +131,14 @@ export default function SchedulerClient({
             sceneCastMap.get(sid)?.add(actorName);
         });
     });
+
     return scenes.map((s: any) => {
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
         const sceneName = getValue(s['Scene Name']) || getValue(s.Name) || s.name || "Untitled";
         const sceneAct = getValue(s.Act) || s.act || "1";
         const sceneType = getValue(s.Type) || s.type || "Scene";
+
         return {
             id: s.id, name: sceneName, act: sceneAct, type: sceneType,
             cast: castNames.map(name => ({ name })), castNames: castNames, status: 'New'
@@ -146,10 +153,12 @@ export default function SchedulerClient({
       });
   }, [schedule, sceneData]);
 
+  // 🟢 SAVE LOGIC
   const handleSaveChanges = async () => {
     setIsSaving(true);
     const newItems = schedule.filter(item => item.id.length > 10);
     if (newItems.length === 0) { setIsSaving(false); return; }
+
     const getRealDate = (day: 'Fri' | 'Sat', weekOffset: number) => {
         const today = new Date();
         const nextFri = new Date(today);
@@ -159,6 +168,7 @@ export default function SchedulerClient({
         nextSat.setDate(nextFri.getDate() + 1);
         return nextSat.toISOString().split('T')[0];
     };
+
     const batch = newItems.map(item => ({ ...item, date: getRealDate(item.day, item.weekOffset) }));
     await saveScheduleBatch(productionId, batch);
     setIsSaving(false);
@@ -220,7 +230,11 @@ export default function SchedulerClient({
                     weekLabel={`Week of ${weekStats.viewedDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                 />
             )}
-            {activeTab === 'progress' && <BurnUpView sceneData={sceneData} />}
+            {activeTab === 'progress' && <BurnUpView 
+        sceneData={sceneData} 
+        currentWeek={weekStats.current} // 🟢 Pass dynamic week
+        totalWeeks={weekStats.total}    // 🟢 Pass dynamic total
+    />}
             {activeTab === 'callboard' && <CallboardView schedule={callboardSchedule} productionTitle={productionTitle} />}
         </div>
         <AutoSchedulerModal isOpen={isAutoSchedulerOpen} onClose={() => setIsAutoSchedulerOpen(false)} scenes={sceneData} people={people} onCommit={(newItems: any[]) => { setSchedule(prev => [...prev, ...newItems]); }} />
@@ -228,8 +242,9 @@ export default function SchedulerClient({
   );
 }
 
-// ... (CalendarView, BurnUpView, etc. remain below - no major logic changes needed there besides passing the offset props)
-
+// ============================================================================
+// SUB-COMPONENT: CALENDAR VIEW
+// ============================================================================
 function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, setCurrentWeekOffset, weekLabel }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -312,7 +327,11 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                  {sceneData.filter((s:any) => (s.name || "").toLowerCase().includes(searchQuery.toLowerCase())).map((scene: any) => (
                      <div key={scene.id} draggable onDragStart={(e) => { e.dataTransfer.setData("sceneId", scene.id.toString()); setDraggedSceneId(scene.id); }} onDragEnd={() => setDraggedSceneId(null)} className="border border-white/5 bg-zinc-900 p-2 rounded cursor-grab active:cursor-grabbing hover:bg-white/5 transition-all group">
                          <div className="flex justify-between items-center mb-1"><span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span></div>
-                         <div className="flex items-center gap-2 text-[10px] text-zinc-500"><span className="bg-black/30 px-1 rounded px-1.5 py-0.5">{scene.act}</span><span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>{scene.cast.length} Actors</span></div>
+                         <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                             {/* ✅ Fixed: Removed double "Act" */}
+                             <span className="bg-black/30 px-1 rounded px-1.5 py-0.5">{scene.act}</span>
+                             <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>{scene.cast.length} Actors</span>
+                         </div>
                      </div>
                  ))}
              </div>
@@ -345,20 +364,36 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                                                   const scene = sceneData.find((s:any) => s.id === item.sceneId);
                                                   const span = item.span || 1;
                                                   const isDraggingThis = draggedItemId === item.id;
+                                                  
                                                   return (
                                                       <div key={item.id} draggable onDragStart={(e) => { e.dataTransfer.setData("itemId", item.id); setDraggedItemId(item.id); }} onDragEnd={() => setDraggedItemId(null)}
                                                         className={`absolute rounded-xl border-l-[6px] shadow-2xl text-xs transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
                                                           ${getTrackStyles(item.track)}
                                                           ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}
-                                                          ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''}`}
+                                                          ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''} 
+                                                        `}
                                                         style={{ top: `${top}px`, height: `${height}px`, width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' }}>
-                                                           <div className="w-full h-full p-3 overflow-hidden"><div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">{span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}</div></div>
+                                                           
+                                                           {/* HEADER (CONTENT CLIP) */}
+                                                           <div className="w-full h-full p-3 overflow-hidden">
+                                                               <div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">
+                                                                  {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
+                                                               </div>
+                                                           </div>
+
+                                                           {/* ✅ FIX: ABSOLUTE CONTROLS (Float on top of cramped content) */}
+                                                           
+                                                           {/* DELETE BUTTON */}
                                                            <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all z-50 transform hover:scale-110"><X size={10} /></button>
+                                                           
+                                                           {/* CENTERED TRACK CONTROLS */}
                                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-50">
                                                                 <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'left'); }} disabled={item.track === 'Acting'} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronLeft size={10}/></button>
                                                                 <div className="flex items-center bg-black/60 backdrop-blur-sm rounded overflow-hidden border border-white/10 shadow-lg"><button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-1.5 py-0.5 hover:bg-white/10 border-r border-white/10 transition-colors"><Minus size={10}/></button><span className="px-1.5 py-0.5 text-[8px] font-black tracking-widest text-white/90">{span}x</span><button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-1.5 py-0.5 hover:bg-white/10 transition-colors"><Plus size={10}/></button></div>
                                                                 <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'right'); }} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronRight size={10}/></button>
                                                            </div>
+                                                           
+                                                           {/* RESIZE HANDLE */}
                                                            <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-black/60 backdrop-blur-md rounded p-0.5 transition-all border border-white/10 z-50">
                                                                <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button><span className="text-[8px] font-mono font-bold text-white px-1">{item.duration}m</span><button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
                                                            </div>
@@ -381,7 +416,7 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
 // ============================================================================
 // SUB-COMPONENT: BURN-UP VIEW (Stats)
 // ============================================================================
-function BurnUpView({ sceneData }: any) {
+function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) { // 🟢 Accept props
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
         const initial: any = {};
         sceneData.forEach((s: any) => {
@@ -424,12 +459,17 @@ function BurnUpView({ sceneData }: any) {
             if (needsBlock) { totalUnits++; if (p.block === 2) completedUnits++; }
         });
 
-        const velocity = CURRENT_WEEK > 0 ? (completedUnits / CURRENT_WEEK) : 0;
+        // 🟢 FIX: Use prop 'currentWeek' instead of missing global 'CURRENT_WEEK'
+        const velocity = currentWeek > 0 ? (completedUnits / currentWeek) : 0;
         const simulatedCompleted = completedUnits + simulatedExtra;
         const remaining = totalUnits - simulatedCompleted;
         const weeksLeftNeeded = velocity > 0 ? remaining / velocity : 99;
-        const projectedEndWeek = CURRENT_WEEK + weeksLeftNeeded + blackoutWeeks;
-        const bufferWeeks = TARGET_WEEK - projectedEndWeek;
+        
+        // 🟢 FIX: Use prop 'currentWeek'
+        const projectedEndWeek = currentWeek + weeksLeftNeeded + blackoutWeeks;
+        
+        // 🟢 FIX: Use prop 'totalWeeks' (target)
+        const bufferWeeks = totalWeeks - projectedEndWeek;
         const isSafe = bufferWeeks >= 0;
 
         return { 
@@ -437,7 +477,7 @@ function BurnUpView({ sceneData }: any) {
             percent: totalUnits > 0 ? Math.round((simulatedCompleted / totalUnits) * 100) : 0, 
             velocity, projectedEndWeek, isSafe, bufferWeeks
         };
-    }, [sceneData, progress, blackoutWeeks, simulatedExtra]);
+    }, [sceneData, progress, blackoutWeeks, simulatedExtra, currentWeek, totalWeeks]);
 
     return (
         <div className="h-full overflow-y-auto custom-scrollbar p-8 bg-zinc-950">
@@ -461,14 +501,15 @@ function BurnUpView({ sceneData }: any) {
                          <div className="relative z-10 mt-8">
                              <div className="flex justify-between text-[10px] font-black uppercase text-zinc-500 mb-2">
                                  <span>Start</span>
-                                 <span className="text-white">Week {CURRENT_WEEK} (Now)</span>
+                                 <span className="text-white">Week {currentWeek} (Now)</span>
                                  <span className={stats.isSafe ? "text-emerald-400" : "text-red-400"}>Est. Finish: Wk {stats.projectedEndWeek.toFixed(1)}</span>
-                                 <span>Week {TOTAL_WEEKS}</span>
+                                 <span>Week {totalWeeks}</span>
                              </div>
                              <div className="h-4 bg-black/40 rounded-full w-full overflow-hidden relative border border-white/5">
-                                 <div className="absolute left-0 top-0 bottom-0 bg-emerald-500/10 border-r border-emerald-500/30" style={{ width: `${(TARGET_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
-                                 <div className="absolute left-0 top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${(CURRENT_WEEK / TOTAL_WEEKS) * 100}%` }}></div>
-                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} style={{ left: `${Math.min((stats.projectedEndWeek / TOTAL_WEEKS) * 100, 100)}%` }} />
+                                 {/* 🟢 FIX: Use 'totalWeeks' for math */}
+                                 <div className="absolute left-0 top-0 bottom-0 bg-emerald-500/10 border-r border-emerald-500/30" style={{ width: `100%` }}></div>
+                                 <div className="absolute left-0 top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${(currentWeek / totalWeeks) * 100}%` }}></div>
+                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} style={{ left: `${Math.min((stats.projectedEndWeek / totalWeeks) * 100, 100)}%` }} />
                              </div>
                              <p className="text-xs text-zinc-400 text-center mt-3 bg-black/20 py-2 rounded-lg border border-white/5">
                                 {stats.isSafe ? `✅ You are ${stats.bufferWeeks.toFixed(1)} weeks ahead of schedule.` : `⚠️ You are ${Math.abs(stats.bufferWeeks).toFixed(1)} weeks behind target.`}
