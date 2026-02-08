@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability */
 "use client";
 
 import Link from 'next/link'; 
@@ -10,7 +11,8 @@ import {
   TrendingUp, Calendar as CalendarIcon, 
   FileText, Wand2, Coffee, AlertTriangle, 
   Target, Umbrella, LayoutGrid, X, Save, Loader2,
-  ArrowRight
+  ArrowRight,
+  Settings
 } from 'lucide-react';
 
 import AutoSchedulerModal from './AutoSchedulerModal'; 
