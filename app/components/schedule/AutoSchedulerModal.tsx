@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Wand2, X, CheckCircle2, 
     Calendar, Loader2,
@@ -16,7 +16,6 @@ const FRI_END = 21;   // 9 PM
 const SAT_START = 10; // 10 AM
 const SAT_END = 17;   // 5 PM 
 
-// --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
 
 interface ScheduleStats {
@@ -25,7 +24,7 @@ interface ScheduleStats {
     castCoverage: number; 
     concurrency: number;  
     conflictsAvoided: number;
-    conflictsAccepted: number; // 🟢 NEW STAT
+    conflictsAccepted: number;
     pointsCleared: number;   
     totalWorkload: number;  
     velocityTarget: number;  
@@ -33,13 +32,15 @@ interface ScheduleStats {
     completion: number;
 }
 
-// Helper: Normalize Date
+// 🟢 HELPER: Robust Date Normalizer
 const normalizeDate = (dateStr: string) => {
     if (!dateStr) return "";
+    // Handle MM/DD/YYYY
     if (dateStr.includes('/')) {
         const [m, d, y] = dateStr.split('/');
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     }
+    // Handle ISO
     return dateStr.split('T')[0];
 };
 
@@ -62,6 +63,27 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
     const [startWeek, setStartWeek] = useState(1);
     const [endWeek, setEndWeek] = useState(8); 
     const [projectStartDate, setProjectStartDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // 🟢 AUTO-DETECT START DATE FROM CONFLICTS
+    useEffect(() => {
+        if (isOpen && conflicts.length > 0) {
+            // Find earliest conflict date
+            const dates = conflicts
+                .map((c: any) => normalizeDate(c.Date || c.date))
+                .filter((d: string) => d.length > 0)
+                .sort();
+            
+            if (dates.length > 0) {
+                // Set start date to the Friday of that week to align nicely
+                const first = new Date(dates[0]);
+                // Adjust to previous Friday to ensure we capture the weekend
+                const day = first.getDay();
+                const diff = first.getDate() - day + (day === 6 ? -1 : 5 - 7); 
+                // Simple fallback: just use the conflict date
+                setProjectStartDate(dates[0]);
+            }
+        }
+    }, [isOpen, conflicts]);
 
     useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
@@ -97,15 +119,15 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             if (!conflictMap[dateKey]) conflictMap[dateKey] = {};
             if (!conflictMap[dateKey][personName]) conflictMap[dateKey][personName] = [];
 
-            const isFriday = new Date(dateKey).getDay() === 5;
+            const isFriday = new Date(dateKey + "T00:00:00").getDay() === 5;
             const dayStart = isFriday ? FRI_START : SAT_START;
             const dayEnd = isFriday ? FRI_END : SAT_END;
 
             if (type === "Absent") {
                 conflictMap[dateKey][personName].push({ start: 0, end: 24 });
-            } else if (type === "Late Arrival") {
+            } else if (type.includes("Late")) {
                 conflictMap[dateKey][personName].push({ start: dayStart, end: dayStart + (mins/60) });
-            } else if (type === "Early Departure") {
+            } else if (type.includes("Early")) {
                 conflictMap[dateKey][personName].push({ start: dayEnd - (mins/60), end: dayEnd });
             }
         });
@@ -113,6 +135,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         // 2. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
+            
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
 
@@ -155,7 +178,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         const completionCounts: Record<string, number> = {}; 
 
         let conflictsAvoided = 0;
-        let conflictsAccepted = 0; // 🟢 Track minor conflicts we ignored
+        let conflictsAccepted = 0;
         let totalActiveRooms = 0;
         let pointsCleared = 0;
         let totalSlotsIterated = 0;
@@ -167,12 +190,14 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             ];
 
             const weekStartObj = new Date(projectStartDate);
+            // Move weekStartObj to the correct week offset (w-1)
             weekStartObj.setDate(weekStartObj.getDate() + ((w - 1) * 7));
 
             workDays.forEach(({ day, start, end }) => {
                 const trackClocks: Record<string, number> = { 'Music': start, 'Dance': start, 'Acting': start };
                 let currentTime = start;
                 
+                // 🟢 ALIGN DATE FOR CONFLICT LOOKUP
                 const dayOffset = day === 'Fri' ? (5 - weekStartObj.getDay()) : (6 - weekStartObj.getDay());
                 const specificDate = new Date(weekStartObj);
                 specificDate.setDate(specificDate.getDate() + dayOffset);
@@ -211,6 +236,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             return; 
                         }
 
+                        // Filter Candidates
                         const candidates = enrichedScenes.filter((scene: any) => {
                             const key = `${scene.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
@@ -219,11 +245,20 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
                             if (alreadyScheduledThisWeek) return false;
 
+                            // 🟢 HARD CHECK: Is the ENTIRE cast missing? (e.g. holiday)
+                            const totalCast = scene.cast.length || 1;
+                            let missingCount = 0;
+                            (scene.cast || []).forEach((c:any) => {
+                                if (daysConflicts[c.name]) missingCount++;
+                            });
+                            if (missingCount === totalCast) return false;
+
                             if (track === 'Music' && !scene.canMusic) return false;
                             if (track === 'Dance' && !scene.canDance) return false;
                             return true;
                         });
 
+                        // Score Candidates
                         const scored = candidates.map((scene: any) => {
                             let score = 10000; 
                             const key = `${scene.id}-${track}`;
@@ -232,16 +267,19 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const durationHrs = (useSmartDuration ? scene.smartTime : baseDuration) / 60;
                             const proposedEnd = currentTime + durationHrs;
 
-                            // 🟢 1. CHECK INTERNAL CONFLICTS (FATAL)
+                            // 1. Internal Conflicts (Fatal)
                             const internalConflict = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
                             if (internalConflict) return { ...scene, score: -9999 };
 
-                            // 🟢 2. CHECK EXTERNAL CONFLICTS (TOLERANCE)
+                            // 2. External Conflicts (Tolerance)
                             let missingActors = 0;
                             (scene.cast || []).forEach((c:any) => {
                                 const actorConflicts = daysConflicts[c.name];
                                 if (actorConflicts) {
-                                    const hasOverlap = actorConflicts.some(range => currentTime < range.end && proposedEnd > range.start);
+                                    // Check if conflict overlaps with this specific timeslot
+                                    const hasOverlap = actorConflicts.some(range => 
+                                        currentTime < range.end && proposedEnd > range.start
+                                    );
                                     if (hasOverlap) missingActors++;
                                 }
                             });
@@ -250,15 +288,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             const missingRatio = missingActors / totalCast;
 
                             if (missingActors > 0) {
-                                // TOLERANCE RULES:
-                                // 1. If small cast (<5), ANY missing person is fatal (can't rehearse a duet alone)
-                                // 2. If large cast, allow up to 20% missing
+                                // Rule: If > 20% missing, skip it. If < 20%, allow it with penalty.
                                 if (totalCast < 5 || missingRatio > 0.20) {
                                     conflictsAvoided++; 
                                     return { ...scene, score: -9999 };
                                 }
-                                
-                                // ACCEPTABLE CONFLICT: Penalize heavily, but allow
                                 conflictsAccepted++;
                                 score -= (missingActors * 2000); 
                             }
@@ -275,17 +309,14 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             }
 
                             score -= (currentPass * 500); 
-
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
+                            // Track Affinity
                             const name = (scene.name || s["Scene Name"] || "").toLowerCase();
                             const type = (scene.type || "").toLowerCase();
-                            
                             if (track === 'Music' && (name.includes('song') || name.includes('finale') || type.includes('music'))) score += 100;
                             if (track === 'Dance' && (name.includes('dance') || name.includes('tango'))) score += 100;
-
-                            if (scene.status === 'New') score += 50; 
 
                             return { ...scene, score };
                         });
@@ -360,7 +391,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         }, 800);
     };
 
-    // --- RENDER HELPERS ---
     const getTrackIcon = (t: string) => {
         if (t === 'Music') return <Mic2 size={14} className="text-pink-400"/>;
         if (t === 'Dance') return <Music size={14} className="text-emerald-400"/>;
@@ -412,6 +442,12 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     onChange={(e) => setProjectStartDate(e.target.value)}
                                     className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white focus:border-blue-500 outline-none"
                                 />
+                                {conflicts.length > 0 && (
+                                    <div className="mt-2 text-[9px] text-zinc-500 flex items-center gap-1">
+                                        <AlertTriangle size={10} className="text-amber-500" />
+                                        <span>{conflicts.length} Conflicts Loaded</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex items-center gap-2">
