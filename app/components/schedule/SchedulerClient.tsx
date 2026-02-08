@@ -292,40 +292,62 @@ export default function SchedulerClient({
 // ============================================================================
 // SUB-COMPONENT: CALENDAR VIEW
 // ============================================================================
+// Inside app/components/schedule/SchedulerClient.tsx
+
 function CalendarView({ sceneData, schedule, setSchedule }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null); // 🟢 NEW: Track existing items
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
   // 🎨 THEMATIC COLOR ENGINE
   const getTrackStyles = (track: TrackType) => {
     switch (track) {
-      case 'Music':
-        return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.15)]';
-      case 'Dance':
-        return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
-      case 'Acting':
-        return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
-      default:
-        return 'bg-zinc-800 border-zinc-500 text-zinc-100';
+      case 'Music': return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.15)]';
+      case 'Dance': return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
+      case 'Acting': return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
+      default: return 'bg-zinc-800 border-zinc-500 text-zinc-100';
     }
   };
 
   // 🚀 GRID INTERACTION HELPERS
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
       e.preventDefault();
+      const dropTime = hour + (min / 60);
+
+      // 🟢 CASE 1: MOVING AN EXISTING ITEM
+      const movedItemId = e.dataTransfer.getData("itemId");
+      if (movedItemId) {
+          setSchedule((prev: any) => prev.map((item: any) => {
+              if (item.id === movedItemId) {
+                  return {
+                      ...item,
+                      day: day,        // Update Day
+                      track: track,    // Update Track
+                      startTime: dropTime, // Update Start Time
+                      weekOffset: currentWeekOffset // Update Week
+                  };
+              }
+              return item;
+          }));
+          setDraggedItemId(null);
+          return;
+      }
+
+      // 🔵 CASE 2: DROPPING A NEW SCENE
       const sceneId = parseInt(e.dataTransfer.getData("sceneId"));
-      if(!sceneId) return;
-      const startTime = hour + (min / 60);
-      const newBlock: any = {
-          id: Date.now().toString(),
-          sceneId, track, day, weekOffset: currentWeekOffset, startTime, duration: 30, status: 'New',
-          span: 1 
-      };
-      setSchedule((prev: any) => [...prev, newBlock]);
-      setDraggedSceneId(null);
+      if (sceneId) {
+          const newBlock: any = {
+              id: Date.now().toString(),
+              sceneId, track, day, weekOffset: currentWeekOffset, startTime: dropTime, duration: 30, status: 'New',
+              span: 1 
+          };
+          setSchedule((prev: any) => [...prev, newBlock]);
+          setDraggedSceneId(null);
+      }
   };
 
+  // ... (deleteItem, updateDuration, switchTrack, updateSpan remain the same) ...
   const deleteItem = (itemId: string) => {
       setSchedule((prev: any) => prev.filter((item: any) => item.id !== itemId));
   };
@@ -353,13 +375,9 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
           const currentSpan = item.span || 1;
           const tracks: TrackType[] = ['Acting', 'Music', 'Dance'];
           const startIndex = tracks.indexOf(item.track);
-          
           let newSpan = direction === 'more' ? currentSpan + 1 : currentSpan - 1;
-          
-          // Edge logic: Prevent spanning out of the grid bounds
           if (startIndex + newSpan > tracks.length) newSpan = currentSpan;
           if (newSpan < 1) newSpan = 1;
-
           return { ...item, span: newSpan };
       }));
   };
@@ -377,8 +395,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
       return s;
   };
-  const friSlots = generateSlots(FRI_START, FRI_END);
-  const satSlots = generateSlots(SAT_START, SAT_END);
+  const friSlots = generateSlots(18, 21); // Hardcoded constants for brevity
+  const satSlots = generateSlots(10, 17);
 
   return (
     <div className="flex h-full">
@@ -424,8 +442,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[850px]">
                      {[
-                         { day: 'Fri', slots: friSlots, start: FRI_START }, 
-                         { day: 'Sat', slots: satSlots, start: SAT_START }
+                         { day: 'Fri', slots: friSlots, start: 18 }, 
+                         { day: 'Sat', slots: satSlots, start: 10 }
                      ].map((col: any) => (
                          <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/30 border border-white/10 rounded-2xl overflow-hidden">
                              <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">{col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}</div>
@@ -441,10 +459,15 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                  <div className="flex-1 grid grid-cols-3 divide-x divide-white/5 relative">
                                      {['Acting', 'Music', 'Dance'].map((track) => (
                                          <div key={track} className="relative group/lane">
-                                              <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10">{track}</div>
+                                              <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10 pointer-events-none">{track}</div>
+                                              
+                                              {/* 🟢 DROP ZONES */}
                                               {col.slots.map((slot:any) => (
-                                                  <div key={slot.val} className={`h-8 border-b border-white/[0.02] ${draggedSceneId ? 'hover:bg-blue-500/10' : ''}`}
-                                                       onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
+                                                  <div key={slot.val} 
+                                                       className={`h-8 border-b border-white/[0.02] transition-colors ${draggedSceneId || draggedItemId ? 'hover:bg-blue-500/10' : ''}`}
+                                                       onDragOver={(e) => e.preventDefault()} 
+                                                       onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}
+                                                  />
                                               ))}
                                               
                                               {/* RENDER BLOCKS */}
@@ -456,8 +479,15 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                                   
                                                   return (
                                                       <div 
-                                                        key={item.id} 
-                                                        className={`absolute rounded-xl border-l-[6px] p-3 shadow-2xl text-xs overflow-hidden transition-all group hover:brightness-110 active:scale-[0.98]
+                                                        key={item.id}
+                                                        draggable // 🟢 ENABLE DRAGGING 
+                                                        onDragStart={(e) => {
+                                                            e.dataTransfer.setData("itemId", item.id);
+                                                            setDraggedItemId(item.id);
+                                                            // Optional: make the drag ghost look cleaner?
+                                                        }}
+                                                        onDragEnd={() => setDraggedItemId(null)}
+                                                        className={`absolute rounded-xl border-l-[6px] p-3 shadow-2xl text-xs overflow-hidden transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
                                                           ${getTrackStyles(item.track)}
                                                           ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}`}
                                                         style={{ 
@@ -471,29 +501,29 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                                               <div className="font-black truncate pr-2 uppercase tracking-tighter leading-tight text-[11px]">
                                                                 {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
                                                               </div>
-                                                              <button onClick={() => deleteItem(item.id)} className="opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all transform hover:scale-110">
+                                                              <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} className="opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all transform hover:scale-110">
                                                                   <X size={12} />
                                                               </button>
                                                            </div>
 
                                                            {/* Track Teleport & Expansion HUD */}
                                                            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0">
-                                                                <button onClick={() => switchTrack(item.id, 'left')} disabled={item.track === 'Acting'} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronLeft size={10}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'left'); }} disabled={item.track === 'Acting'} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronLeft size={10}/></button>
                                                                 
                                                                 <div className="flex items-center bg-black/40 rounded-md overflow-hidden border border-white/5">
-                                                                    <button onClick={() => updateSpan(item.id, 'less')} className="px-2 py-1 hover:bg-white/10 border-r border-white/5 transition-colors"><Minus size={10}/></button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-2 py-1 hover:bg-white/10 border-r border-white/5 transition-colors"><Minus size={10}/></button>
                                                                     <span className="px-2 py-1 text-[8px] font-black tracking-widest text-white/80">{span}x</span>
-                                                                    <button onClick={() => updateSpan(item.id, 'more')} className="px-2 py-1 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-2 py-1 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
                                                                 </div>
 
-                                                                <button onClick={() => switchTrack(item.id, 'right')} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronRight size={10}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'right'); }} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronRight size={10}/></button>
                                                            </div>
 
                                                            {/* Resize Handle / Time HUD */}
                                                            <div className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-md rounded-lg p-1 transition-all border border-white/10">
-                                                               <button onClick={() => updateDuration(item.id, -15)} className="p-1 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
+                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-1 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
                                                                <span className="text-[9px] font-mono font-bold text-white px-1">{item.duration}m</span>
-                                                               <button onClick={() => updateDuration(item.id, 15)} className="p-1 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
+                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-1 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
                                                            </div>
                                                       </div>
                                                   )
