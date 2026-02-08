@@ -227,10 +227,12 @@ export default function SchedulerClient({
                      </div>
                  )}
                  {/* 🟢 DYNAMIC WEEK DISPLAY */}
-                 <div className="text-right hidden md:block border-l border-white/10 pl-4">
-                    <div className="text-[10px] text-zinc-500 font-mono">Current View</div>
-                    <div className="text-sm font-black text-emerald-400">{weekStats.label}</div>
-                 </div>
+<div className="text-right hidden md:block border-l border-white/10 pl-4">
+    <div className="text-[10px] text-zinc-500 font-mono">Current View</div>
+    <div className={`text-sm font-black ${weekStats.isSpecial ? 'text-amber-400 animate-pulse' : 'text-emerald-400'}`}>
+        {weekStats.label}
+    </div>
+</div>
                  
                  <button onClick={() => setIsAutoSchedulerOpen(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all">
                     <Wand2 size={14} /> Auto
