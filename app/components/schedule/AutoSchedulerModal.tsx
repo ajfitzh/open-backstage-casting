@@ -6,7 +6,7 @@ import {
     Calendar, Loader2,
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
-    CalendarRange
+    CalendarRange, BrainCircuit
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -21,7 +21,7 @@ type TrackType = "Acting" | "Music" | "Dance";
 interface ScheduleStats {
     totalSlots: number;
     uniqueActors: number;
-    castCoverage: number; // ✅ Fixed: Added this property
+    castCoverage: number;
     concurrency: number; 
     conflictsAvoided: number;
     pointsCleared: number;   
@@ -36,13 +36,13 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
     // ⚡️ CONTROLS
     const [trackPriority, setTrackPriority] = useState<TrackType[]>(['Music', 'Dance', 'Acting']);
-    const [slotDuration, setSlotDuration] = useState(30); 
+    const [useSmartDuration, setUseSmartDuration] = useState(true); // 🟢 NEW: Toggle for Points-based time
+    const [baseDuration, setBaseDuration] = useState(30); // Fallback if smart duration is off
     
-    // 🆕 TIME HORIZON CONTROLS
+    // 🗓 TIME HORIZON
     const [startWeek, setStartWeek] = useState(1);
     const [endWeek, setEndWeek] = useState(1);
 
-    // --- HELPER: Move items up/down ---
     const movePriority = (index: number, direction: 'up' | 'down') => {
         const newOrder = [...trackPriority];
         if (direction === 'up') {
@@ -58,116 +58,189 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     // --- 🧮 THE ALGORITHM ---
     const generateSchedule = () => {
         setIsGenerating(true);
+        setPreviewSchedule([]); // Clear previous
         
-        // 1. Setup Time Slots (Per Weekend)
-        const slotsPerWeekend: { day: 'Fri' | 'Sat', time: number }[] = [];
-        const increment = slotDuration / 60; 
-        
-        // Fri: 6-9
-        for (let t = FRI_START; t < FRI_END; t += increment) slotsPerWeekend.push({ day: 'Fri', time: t });
-        // Sat: 10-5
-        for (let t = SAT_START; t < SAT_END; t += increment) {
-            if (t >= 13 && t < 14) continue; // Lunch
-            slotsPerWeekend.push({ day: 'Sat', time: t });
-        }
+        // 1. HELPER: Calculate Scene Points & Duration
+        // This unifies the logic with your Burn-Up chart
+        const enrichedScenes = scenes.map((s: any) => {
+            const mLoad = s.load?.music ?? s.music_load ?? 0; // Default 0 if missing
+            const dLoad = s.load?.dance ?? s.dance_load ?? 0;
+            const bLoad = s.load?.block ?? s.blocking_load ?? 1; // Always need blocking
 
+            // Determine eligibility based on Load, not Name
+            const canMusic = mLoad > 0;
+            const canDance = dLoad > 0;
+            
+            // Calculate Total Complexity Points (Max 15)
+            const totalPoints = mLoad + dLoad + bLoad;
+
+            // 🟢 SMART DURATION LOGIC
+            // Formula: 15 mins base + (5 mins per point). 
+            // Ex: Easy (1pt) = 20m. Hard (5pts) = 40m. Complex (10pts) = 65m.
+            // Round to nearest 5 minutes
+            const smartTime = Math.ceil((15 + (totalPoints * 5)) / 5) * 5;
+            
+            return { ...s, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime };
+        });
+
+        // 2. Setup Base Grid (We iterate by 15-minute chunks for granular placement)
+        // We will "fill" these chunks as we schedule items.
+        // For simplicity in this v2, we will still iterate slot-by-slot but skip time if a long scene is placed.
+        
         const proposedSchedule: any[] = [];
         const scheduledCast = new Set<string>(); 
-        const completedScenes = new Set<string>(); 
+        const completedScenes = new Set<string>(); // Format: "ID-Track"
         let conflictsAvoided = 0;
         let totalActiveRooms = 0;
         let pointsCleared = 0;
-        let totalSlotsProcessed = 0;
+        let totalSlotsIterated = 0;
 
-        // 2. THE LOOP (Iterate through SELECTED WEEKS)
+        // Loop Weeks
         for (let w = startWeek; w <= endWeek; w++) {
             
-            // For each slot in this week...
-            slotsPerWeekend.forEach((slot) => {
-                const busyActorsInThisSlot = new Set<string>(); 
-                let roomsActive = 0;
+            // Define the time ranges for this week's Fri/Sat
+            const workDays = [
+                { day: 'Fri', start: FRI_START, end: FRI_END },
+                { day: 'Sat', start: SAT_START, end: SAT_END }
+            ];
 
-                trackPriority.forEach((track) => {
-                    const candidates = scenes.filter((scene: any) => {
-                        // Rule: Don't repeat work this specific week (but okay in future weeks if needed? usually no)
-                        // For auto-scheduler, we assume "Done is Done" for now.
-                        if (completedScenes.has(`${scene.id}-${track}`)) return false;
-                        
-                        // Skill Check
-                        const type = (scene.type || "").toLowerCase();
-                        if (track === 'Music' && !type.includes('song') && !type.includes('mixed')) return false;
-                        if (track === 'Dance' && !type.includes('dance') && !type.includes('mixed')) return false;
-                        
-                        return true;
+            workDays.forEach(({ day, start, end }) => {
+                // We track the "Next Available Time" for each track independently
+                // This allows concurrent tracks to have different length scenes!
+                const trackClocks = {
+                    'Music': start,
+                    'Dance': start,
+                    'Acting': start
+                };
+
+                // We march forward in 5-minute increments until the day ends
+                // We only try to schedule a track if its clock is behind the others or ready
+                let currentTime = start;
+                while(currentTime < end) {
+                    
+                    const busyActorsNow = new Set<string>();
+                    
+                    // 1. Populate Busy Actors from ALREADY scheduled items overlapping this moment
+                    proposedSchedule.forEach(item => {
+                        if (item.weekOffset === (w-1) && item.day === day) {
+                            const itemEnd = item.startTime + (item.duration / 60);
+                            if (item.startTime <= currentTime && itemEnd > currentTime) {
+                                item.castList.forEach((c:string) => busyActorsNow.add(c));
+                            }
+                        }
                     });
 
-                    const scored = candidates.map((scene: any) => {
-                        let score = 0;
-                        
-                        // Conflict Check
-                        const hasConflict = scene.cast.some((c: any) => busyActorsInThisSlot.has(c.name));
-                        if (hasConflict) {
-                            conflictsAvoided++;
-                            return { ...scene, score: -9999 };
+                    // 2. Try to schedule each track if it's ready (clock <= currentTime)
+                    let roomsActiveNow = 0;
+
+                    trackPriority.forEach((track) => {
+                        // If this track is busy (it scheduled a long scene earlier), skip it
+                        if (trackClocks[track] > currentTime + 0.01) {
+                            roomsActiveNow++; // It's active, just with an old item
+                            return; 
                         }
 
-                        // 🚀 BURN-DOWN WEIGHT
-                        if (scene.status === 'New') score += 50; 
-                        if (scene.status === 'Worked') score += 10;
+                        // Filter Candidates
+                        const candidates = enrichedScenes.filter((scene: any) => {
+                            if (completedScenes.has(`${scene.id}-${track}`)) return false; // Already done this track
+                            
+                            // 🟢 FIX 1: LOAD-BASED FILTERING
+                            if (track === 'Music' && !scene.canMusic) return false;
+                            if (track === 'Dance' && !scene.canDance) return false;
+                            
+                            return true;
+                        });
 
-                        // Equity Weight
-                        const newFaces = scene.cast.filter((c:any) => !scheduledCast.has(c.name)).length;
-                        score += (newFaces * 15);
+                        // Score Candidates
+                        const scored = candidates.map((scene: any) => {
+                            let score = 0;
+                            
+                            // CONFLICT CHECK
+                            // Check if ANY cast member is busy right now
+                            const hasConflict = scene.cast.some((c: any) => busyActorsNow.add(c.name)); // Note: this logic is tricky in a loop, simplified below:
+                            const actuallyBusy = scene.cast.some((c:any) => {
+                                // Check against the master busy list for this exact time
+                                return Array.from(busyActorsNow).includes(c.name);
+                            });
 
-                        // Efficiency
-                        score += scene.cast.length;
+                            if (actuallyBusy) {
+                                conflictsAvoided++;
+                                return { ...scene, score: -9999 };
+                            }
 
-                        return { ...scene, score };
+                            // Prioritize "New" & High Complexity
+                            if (scene.status === 'New') score += 50; 
+                            score += (scene.totalPoints * 5); // Do hard stuff first
+
+                            // Cast Equity (Give work to idle kids)
+                            const idleKids = scene.cast.filter((c:any) => !scheduledCast.has(c.name)).length;
+                            score += (idleKids * 10);
+
+                            return { ...scene, score };
+                        });
+
+                        scored.sort((a: any, b: any) => b.score - a.score);
+                        const winner = scored[0];
+
+                        // SCHEDULE WINNER
+                        if (winner && winner.score > 0) {
+                            // Determine Duration
+                            const duration = useSmartDuration ? winner.smartTime : baseDuration;
+                            
+                            // Check if it fits in the day
+                            if ((currentTime + (duration/60)) <= end) {
+                                proposedSchedule.push({
+                                    id: Math.random().toString(),
+                                    sceneId: winner.id,
+                                    sceneName: winner.name,
+                                    track: track,
+                                    day: day, // 'Fri' or 'Sat'
+                                    weekOffset: w - 1,
+                                    startTime: currentTime,
+                                    duration: duration,
+                                    status: 'New',
+                                    castSize: winner.cast.length,
+                                    castList: winner.cast.map((c:any) => c.name) // Save names for conflict checking
+                                });
+
+                                // Mark actors busy for the duration of this scene
+                                winner.cast.forEach((c:any) => scheduledCast.add(c.name));
+                                
+                                // Advance this track's clock
+                                trackClocks[track] = currentTime + (duration / 60);
+                                
+                                completedScenes.add(`${winner.id}-${track}`);
+                                pointsCleared += winner.totalPoints;
+                                roomsActiveNow++;
+                            }
+                        } else {
+                            // No valid scene found, advance clock slightly to try again later
+                            // (Maybe actors free up in 15 mins)
+                            trackClocks[track] = currentTime + 0.25; 
+                        }
                     });
 
-                    scored.sort((a: any, b: any) => b.score - a.score);
-                    const winner = scored[0];
-
-                    if (winner && winner.score > 0) {
-                        proposedSchedule.push({
-                            id: Math.random().toString(),
-                            sceneId: winner.id,
-                            sceneName: winner.name,
-                            track: track,
-                            day: slot.day,
-                            weekOffset: w - 1, // 🟢 CORRECT OFFSET (0-based)
-                            startTime: slot.time,
-                            duration: slotDuration,
-                            status: 'New',
-                            castSize: winner.cast.length
-                        });
-
-                        winner.cast.forEach((c:any) => {
-                            busyActorsInThisSlot.add(c.name);
-                            scheduledCast.add(c.name);
-                        });
-
-                        completedScenes.add(`${winner.id}-${track}`);
-                        if (winner.status === 'New') pointsCleared++;
-                        roomsActive++;
-                    }
-                });
-                totalActiveRooms += roomsActive;
-                totalSlotsProcessed++;
+                    if (roomsActiveNow > 0) totalActiveRooms++;
+                    totalSlotsIterated++;
+                    
+                    // Advance Master Clock by 15 mins (0.25 hours)
+                    currentTime += 0.25;
+                }
             });
         }
 
-        // 3. STATS & VELOCITY CALC
+        // 3. STATS
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => s.cast.map((c:any) => c.name))).size;
-            const velocityTarget = 15 * (endWeek - startWeek + 1); // Target scales with weeks
+            // Target = 50 points per week roughly
+            const velocityTarget = 50 * (endWeek - startWeek + 1); 
 
             setPreviewSchedule(proposedSchedule);
             setStats({
                 totalSlots: proposedSchedule.length,
                 uniqueActors: scheduledCast.size,
                 castCoverage: allCastCount > 0 ? Math.round((scheduledCast.size / allCastCount) * 100) : 0,
-                concurrency: parseFloat((totalActiveRooms / totalSlotsProcessed).toFixed(1)),
+                concurrency: totalSlotsIterated > 0 ? parseFloat((totalActiveRooms / totalSlotsIterated).toFixed(1)) : 0,
                 conflictsAvoided,
                 pointsCleared,
                 velocityTarget,
@@ -202,9 +275,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 <div className="p-6 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 flex items-center gap-2">
-                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler
+                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v2
                         </h2>
-                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Velocity & Constraint Solver</p>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Load-Based Logic & Smart Sizing</p>
                     </div>
                     <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 text-zinc-400 hover:text-white"><X size={20}/></button>
                 </div>
@@ -214,7 +287,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                     {/* LEFT: Controls */}
                     <div className="w-80 bg-zinc-900/50 border-r border-white/5 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
                         
-                        {/* 1. TIME HORIZON (NEW) */}
+                        {/* 1. TIME HORIZON */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <CalendarRange size={14} className="text-blue-400"/> Schedule Scope
@@ -238,27 +311,45 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-[10px] text-zinc-500 italic leading-tight">
-                                Generating {endWeek - startWeek + 1} weeks of rehearsals.
-                            </p>
                         </div>
 
-                        {/* 2. DURATION */}
+                        {/* 2. DURATION LOGIC */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <Timer size={14}/> Slot Duration
                             </h3>
-                            <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
-                                {[45, 30, 20, 15].map(min => (
-                                    <button 
-                                        key={min}
-                                        onClick={() => setSlotDuration(min)}
-                                        className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-all ${slotDuration === min ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
-                                    >
-                                        {min}m
-                                    </button>
-                                ))}
-                            </div>
+                            
+                            {/* Toggle */}
+                            <button 
+                                onClick={() => setUseSmartDuration(!useSmartDuration)}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${useSmartDuration ? 'bg-purple-600/20 border-purple-500/50 text-purple-200' : 'bg-zinc-800 border-white/5 text-zinc-400'}`}
+                            >
+                                <span className="text-xs font-bold flex items-center gap-2">
+                                    <BrainCircuit size={14} /> Smart Sizing
+                                </span>
+                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSmartDuration ? 'bg-purple-500' : 'bg-zinc-600'}`}>
+                                    <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${useSmartDuration ? 'translate-x-4' : 'translate-x-0'}`} />
+                                </div>
+                            </button>
+
+                            {useSmartDuration ? (
+                                <p className="text-[10px] text-zinc-400 italic leading-tight px-1">
+                                    Calculates time based on complexity.<br/>
+                                    <span className="text-purple-400 font-bold">Harder scenes = Longer slots.</span>
+                                </p>
+                            ) : (
+                                <div className="flex bg-zinc-900 rounded-lg p-1 border border-white/10">
+                                    {[45, 30, 20, 15].map(min => (
+                                        <button 
+                                            key={min}
+                                            onClick={() => setBaseDuration(min)}
+                                            className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-all ${baseDuration === min ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}
+                                        >
+                                            {min}m
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* 3. PRIORITY SORTER */}
@@ -283,7 +374,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             </div>
                         </div>
 
-                        {/* GENERATE BUTTON */}
+                        {/* GENERATE */}
                         <div className="mt-auto pt-4 border-t border-white/5">
                             <button 
                                 onClick={generateSchedule} 
@@ -291,7 +382,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 className="w-full py-4 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-black uppercase tracking-widest shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isGenerating ? <Loader2 className="animate-spin"/> : <Wand2 size={18}/>}
-                                {isGenerating ? "Optimizing..." : `Fill Weeks ${startWeek}-${endWeek}`}
+                                {isGenerating ? "Processing..." : `Auto-Schedule`}
                             </button>
                         </div>
                     </div>
@@ -316,21 +407,21 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                 <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Burn Velocity</span>
                                             </div>
                                             <div className="text-3xl font-black text-white">
-                                                {stats?.pointsCleared} <span className="text-sm text-zinc-500 font-bold">/ {stats?.velocityTarget} Items</span>
+                                                {stats?.pointsCleared} <span className="text-sm text-zinc-500 font-bold">/ {stats?.velocityTarget} Pts</span>
                                             </div>
                                         </div>
                                         <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${stats?.isOnTrack ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                            {stats?.isOnTrack ? "Ahead of Schedule" : "Behind Schedule"}
+                                            {stats?.isOnTrack ? "On Target" : "Under Target"}
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="bg-zinc-900 border border-white/10 p-3 rounded-xl text-center flex flex-col justify-center">
                                             <div className="text-xl font-black text-blue-400">{stats?.concurrency}</div>
-                                            <div className="text-[8px] font-bold uppercase text-zinc-500">Rooms Active</div>
+                                            <div className="text-[8px] font-bold uppercase text-zinc-500">Avg Rooms</div>
                                         </div>
                                         <div className="bg-zinc-900 border border-white/10 p-3 rounded-xl text-center flex flex-col justify-center">
                                             <div className="text-xl font-black text-emerald-400">{stats?.castCoverage}%</div>
-                                            <div className="text-[8px] font-bold uppercase text-zinc-500">Cast Equity</div>
+                                            <div className="text-[8px] font-bold uppercase text-zinc-500">Cast Used</div>
                                         </div>
                                         <div className="bg-zinc-900 border border-white/10 p-3 rounded-xl text-center flex flex-col justify-center">
                                             <div className="text-xl font-black text-amber-500">{stats?.conflictsAvoided}</div>
@@ -339,12 +430,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                     </div>
                                 </div>
 
-                                {/* PREVIEW LIST BY WEEK */}
+                                {/* PREVIEW LIST */}
                                 <div className="space-y-12">
-                                    {/* Create an array of weeks from start to end */}
                                     {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
                                         const weekItems = previewSchedule.filter(item => item.weekOffset === (week - 1));
-                                        
                                         if (weekItems.length === 0) return null;
 
                                         return (
@@ -357,14 +446,12 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                 <div className="space-y-8 pl-4 border-l border-white/5">
                                                     {['Fri', 'Sat'].map(day => {
                                                         const dayItems = weekItems.filter((i:any) => i.day === day);
-                                                        const timeMap: Record<number, any[]> = {};
-                                                        dayItems.forEach((i:any) => {
-                                                            if(!timeMap[i.startTime]) timeMap[i.startTime] = [];
-                                                            timeMap[i.startTime].push(i);
-                                                        });
-                                                        const times = Object.keys(timeMap).sort((a,b) => Number(a) - Number(b));
-
-                                                        if (times.length === 0) return null;
+                                                        // Sort by start time
+                                                        const sortedItems = [...dayItems].sort((a,b) => a.startTime - b.startTime);
+                                                        if (sortedItems.length === 0) return null;
+                                                        
+                                                        // Group by start time for visual row alignment (approximate)
+                                                        const uniqueTimes = Array.from(new Set(sortedItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
 
                                                         return (
                                                             <div key={day}>
@@ -372,28 +459,26 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                                                     <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
                                                                 </h4>
                                                                 <div className="space-y-2">
-                                                                    {times.map((t: any) => {
-                                                                        const timeNum = Number(t);
-                                                                        const slotItems = timeMap[timeNum];
+                                                                    {uniqueTimes.map((t: any) => {
+                                                                        const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
                                                                         return (
-                                                                            <div key={t} className="flex gap-4 group">
-                                                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 group-hover:text-zinc-300 transition-colors">{formatTime(timeNum)}</div>
+                                                                            <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors">
+                                                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0">{formatTime(t)}</div>
                                                                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                                                                    {trackPriority.map(track => {
-                                                                                        const item = slotItems.find((i:any) => i.track === track);
-                                                                                        if (!item) return <div key={track} className="h-12 rounded-lg border border-dashed border-white/5 bg-transparent" />;
-                                                                                        
-                                                                                        const color = track === 'Acting' ? 'bg-blue-900/10 text-blue-200 border-blue-500/30' 
-                                                                                                    : track === 'Music' ? 'bg-pink-900/10 text-pink-200 border-pink-500/30' 
-                                                                                                    : 'bg-emerald-900/10 text-emerald-200 border-emerald-500/30';
-                                                                                        
+                                                                                    {slotItems.map((item:any) => {
+                                                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                                                    : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
+                                                                                                    : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
                                                                                         return (
-                                                                                            <div key={track} className={`h-12 rounded-lg border px-3 flex flex-col justify-center shadow-lg transition-transform hover:scale-[1.02] ${color}`}>
-                                                                                                <div className="text-[10px] font-bold truncate">{item.sceneName}</div>
-                                                                                                <div className="flex justify-between items-center mt-0.5">
-                                                                                                    <div className="text-[8px] opacity-60 uppercase font-black">{track}</div>
-                                                                                                    <div className="text-[8px] font-mono opacity-80 bg-black/20 px-1 rounded">{item.castSize}</div>
+                                                                                            <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg ${color}`}>
+                                                                                                <div>
+                                                                                                    <div className="flex justify-between items-start mb-1">
+                                                                                                        <span className="text-[9px] uppercase font-black opacity-60">{item.track}</span>
+                                                                                                        <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
+                                                                                                    </div>
+                                                                                                    <div className="text-xs font-bold leading-tight line-clamp-2">{item.sceneName}</div>
                                                                                                 </div>
+                                                                                                <div className="mt-2 text-[9px] opacity-60 truncate">{item.castSize} Cast Members</div>
                                                                                             </div>
                                                                                         )
                                                                                     })}
