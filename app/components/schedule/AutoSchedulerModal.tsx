@@ -6,8 +6,7 @@ import {
     Calendar, Loader2,
     Layers, Music, Mic2, Theater,
     ArrowUp, ArrowDown, Timer, Gauge,
-    CalendarRange, BrainCircuit, Users,
-    ChevronRight, ChevronLeft
+    CalendarRange, BrainCircuit, Users
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -36,7 +35,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [previewSchedule, setPreviewSchedule] = useState<any[]>([]);
     const [stats, setStats] = useState<ScheduleStats | null>(null);
     
-    // 🟢 NEW: Tab State for Week View
+    // 🟢 NEW: Tab State
     const [activeTabWeek, setActiveTabWeek] = useState(1);
 
     // --- CONTROLS ---
@@ -47,9 +46,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(2); // Default to 2 weeks for better demo
+    const [endWeek, setEndWeek] = useState(4); // 🟢 Bumped default to 4 weeks
 
-    // Update active tab when start week changes
+    // Reset tab when start week changes
     useEffect(() => {
         setActiveTabWeek(startWeek);
     }, [startWeek]);
@@ -72,13 +71,14 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 1. DATA PREP
+        // 1. DATA PREP: Robust Parsing
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
             const type = (s["Scene Type"] || s.type || "").toLowerCase();
             
-            const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms'];
-            const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton'];
+            // Keyword Detectives
+            const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons', 'les poissons'];
+            const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
 
             const isMusicByName = musicKeywords.some(k => name.includes(k));
             const isDanceByName = danceKeywords.some(k => name.includes(k));
@@ -184,8 +184,8 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
-                            const type = (scene.type || "").toLowerCase();
                             const name = (scene.name || s["Scene Name"] || "").toLowerCase();
+                            const type = (scene.type || "").toLowerCase();
                             
                             if (track === 'Music' && (name.includes('song') || name.includes('finale') || type.includes('music'))) score += 100;
                             if (track === 'Dance' && (name.includes('dance') || name.includes('tango'))) score += 100;
@@ -253,11 +253,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 isOnTrack: pointsCleared >= velocityTarget
             });
             setIsGenerating(false);
-            setActiveTabWeek(startWeek); // 🟢 Auto-switch to first week
+            setActiveTabWeek(startWeek); // Auto-switch to start
         }, 800);
     };
 
-    // --- RENDER HELPERS ---
     const getTrackIcon = (t: string) => {
         if (t === 'Music') return <Mic2 size={14} className="text-pink-400"/>;
         if (t === 'Dance') return <Music size={14} className="text-emerald-400"/>;
@@ -282,7 +281,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                 <div className="p-6 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 flex items-center gap-2">
-                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v2
+                            <Wand2 size={24} className="text-purple-400" /> Multi-Track Auto-Scheduler v3
                         </h2>
                         <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Velocity & Constraint Solver</p>
                     </div>
@@ -440,115 +439,123 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                                 {/* 🟢 TAB BAR: WEEKS */}
                                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
-                                    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => (
-                                        <button 
-                                            key={week}
-                                            onClick={() => setActiveTabWeek(week)}
-                                            className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex-shrink-0 ${
-                                                activeTabWeek === week 
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-                                                : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'
-                                            }`}
-                                        >
-                                            Week {week}
-                                        </button>
-                                    ))}
+                                    {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
+                                        const count = previewSchedule.filter(i => i.weekOffset === (week - 1)).length;
+                                        return (
+                                            <button 
+                                                key={week}
+                                                onClick={() => setActiveTabWeek(week)}
+                                                className={`px-6 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex-shrink-0 flex items-center gap-2 ${
+                                                    activeTabWeek === week 
+                                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                                                    : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'
+                                                }`}
+                                            >
+                                                Week {week}
+                                                {count > 0 && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
 
-                                {/* PREVIEW LIST */}
+                                {/* PREVIEW LIST (ACTIVE TAB ONLY) */}
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                    <div className="space-y-12">
-                                        {/* RENDER ONLY ACTIVE WEEK */}
-                                        {(() => {
-                                            const weekItems = previewSchedule.filter(item => item.weekOffset === (activeTabWeek - 1));
-                                            if (weekItems.length === 0) return (
-                                                <div className="text-center py-20 text-zinc-500 italic">
-                                                    No items scheduled for Week {activeTabWeek}
-                                                </div>
-                                            );
+                                    {(() => {
+                                        const weekItems = previewSchedule.filter(item => item.weekOffset === (activeTabWeek - 1));
+                                        if (weekItems.length === 0) return (
+                                            <div className="text-center py-20 text-zinc-500 italic flex flex-col items-center gap-4">
+                                                <Calendar size={32} className="opacity-20"/>
+                                                No items scheduled for Week {activeTabWeek}.
+                                                <br/>
+                                                <span className="text-[10px]">Try changing the Strategy or Duration logic.</span>
+                                            </div>
+                                        );
 
-                                            return (
-                                                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                                    <div className="space-y-8 pl-4 border-l border-white/5">
-                                                        {['Fri', 'Sat'].map(day => {
-                                                            const dayItems = weekItems.filter((i:any) => i.day === day);
-                                                            const uniqueTimes = Array.from(new Set(dayItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
+                                        return (
+                                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                                <div className="space-y-8 pl-4 border-l border-white/5">
+                                                    {['Fri', 'Sat'].map(day => {
+                                                        const dayItems = weekItems.filter((i:any) => i.day === day);
+                                                        const uniqueTimes = Array.from(new Set(dayItems.map((i:any) => i.startTime))).sort((a:any,b:any) => a-b);
 
-                                                            if (uniqueTimes.length === 0) return <div key={day} className="text-zinc-600 text-xs italic pl-4">No items for {day}</div>;
+                                                        if (uniqueTimes.length === 0) return (
+                                                            <div key={day} className="text-zinc-700 text-xs italic pl-4 border-l-2 border-zinc-800/50 py-2">
+                                                                No items for {day === 'Fri' ? 'Friday' : 'Saturday'}
+                                                            </div>
+                                                        );
 
-                                                            return (
-                                                                <div key={day}>
-                                                                    {/* DAY HEADER & COLUMNS */}
-                                                                    <div className="flex justify-between items-end mb-4">
-                                                                        <h4 className="text-xs font-black uppercase text-zinc-500 flex items-center gap-2">
-                                                                            <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
-                                                                        </h4>
-                                                                        <div className="hidden md:grid grid-cols-3 gap-2 w-full max-w-4xl pl-20">
-                                                                            {trackPriority.map(t => (
-                                                                                <div key={t} className="text-[9px] font-black uppercase text-zinc-600 tracking-wider text-center">{t}</div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <div className="space-y-2">
-                                                                        {uniqueTimes.map((t: any) => {
-                                                                            const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
-                                                                            
-                                                                            return (
-                                                                                <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors items-stretch">
-                                                                                    {/* TIME COLUMN */}
-                                                                                    <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 border-r border-white/5 pr-4 group-hover:text-zinc-300 transition-colors">
-                                                                                        {formatTime(t)}
-                                                                                    </div>
-                                                                                    
-                                                                                    {/* TRACK COLUMNS */}
-                                                                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                                                                        {trackPriority.map((track) => {
-                                                                                            const item = slotItems.find((i:any) => i.track === track);
-
-                                                                                            // RENDER GHOST SLOT
-                                                                                            if (!item) return (
-                                                                                                <div key={track} className="h-full min-h-[3rem] rounded-lg border border-dashed border-white/5 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                                    <span className="text-[8px] uppercase font-bold text-zinc-800">Available</span>
-                                                                                                </div>
-                                                                                            );
-                                                                                            
-                                                                                            // RENDER CARD
-                                                                                            const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
-                                                                                                        : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
-                                                                                                        : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
-                                                                                                        
-                                                                                            return (
-                                                                                                <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
-                                                                                                    <div>
-                                                                                                        <div className="flex justify-between items-start mb-1">
-                                                                                                            <span className="text-[9px] uppercase font-black opacity-60 flex items-center gap-1">
-                                                                                                                {getTrackIcon(item.track)} {item.track}
-                                                                                                            </span>
-                                                                                                            <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
-                                                                                                        </div>
-                                                                                                        <div className="text-xs font-bold leading-tight line-clamp-2 mt-1">{item.sceneName}</div>
-                                                                                                    </div>
-                                                                                                    <div className="mt-2 text-[9px] opacity-60 flex justify-between items-center">
-                                                                                                        <span className="flex items-center gap-1"><Users size={8}/> {item.castSize}</span>
-                                                                                                        {item.status === 'New' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>}
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            )
-                                                                                        })}
-                                                                                    </div>
-                                                                                </div>
-                                                                            )
-                                                                        })}
+                                                        return (
+                                                            <div key={day}>
+                                                                {/* DAY HEADER & COLUMNS */}
+                                                                <div className="flex justify-between items-end mb-4">
+                                                                    <h4 className="text-xs font-black uppercase text-zinc-500 flex items-center gap-2">
+                                                                        <Calendar size={12}/> {day === 'Fri' ? 'Friday Evening' : 'Saturday Day'}
+                                                                    </h4>
+                                                                    <div className="hidden md:grid grid-cols-3 gap-2 w-full max-w-4xl pl-20">
+                                                                        {trackPriority.map(t => (
+                                                                            <div key={t} className="text-[9px] font-black uppercase text-zinc-600 tracking-wider text-center">{t}</div>
+                                                                        ))}
                                                                     </div>
                                                                 </div>
-                                                            )
-                                                        })}
-                                                    </div>
+
+                                                                <div className="space-y-2">
+                                                                    {uniqueTimes.map((t: any) => {
+                                                                        const slotItems = dayItems.filter((i:any) => Math.abs(i.startTime - t) < 0.1);
+                                                                        
+                                                                        return (
+                                                                            <div key={t} className="flex gap-4 group hover:bg-white/5 p-2 rounded-lg transition-colors items-stretch">
+                                                                                {/* TIME COLUMN */}
+                                                                                <div className="w-16 pt-3 text-right text-xs font-mono text-zinc-500 shrink-0 border-r border-white/5 pr-4 group-hover:text-zinc-300 transition-colors">
+                                                                                    {formatTime(t)}
+                                                                                </div>
+                                                                                
+                                                                                {/* TRACK COLUMNS */}
+                                                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                                                    {trackPriority.map((track) => {
+                                                                                        const item = slotItems.find((i:any) => i.track === track);
+
+                                                                                        // RENDER GHOST SLOT
+                                                                                        if (!item) return (
+                                                                                            <div key={track} className="h-full min-h-[3rem] rounded-lg border border-dashed border-white/5 bg-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                                <span className="text-[8px] uppercase font-bold text-zinc-800">Available</span>
+                                                                                            </div>
+                                                                                        );
+                                                                                        
+                                                                                        // RENDER CARD
+                                                                                        const color = item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                                                    : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
+                                                                                                    : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
+                                                                                                    
+                                                                                        return (
+                                                                                            <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
+                                                                                                <div>
+                                                                                                    <div className="flex justify-between items-start mb-1">
+                                                                                                        <span className="text-[9px] uppercase font-black opacity-60 flex items-center gap-1">
+                                                                                                            {getTrackIcon(item.track)} {item.track}
+                                                                                                        </span>
+                                                                                                        <span className="text-[9px] font-mono opacity-80 bg-black/30 px-1 rounded text-white">{item.duration}m</span>
+                                                                                                    </div>
+                                                                                                    <div className="text-xs font-bold leading-tight line-clamp-2 mt-1">{item.sceneName}</div>
+                                                                                                </div>
+                                                                                                <div className="mt-2 text-[9px] opacity-60 flex justify-between items-center">
+                                                                                                    <span className="flex items-center gap-1"><Users size={8}/> {item.castSize}</span>
+                                                                                                    {item.status === 'New' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"/>}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        )
+                                                                                    })}
+                                                                                </div>
+                                                                            </div>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
-                                            );
-                                        })()}
-                                    </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 
                                 {/* CONFIRM BUTTON */}
