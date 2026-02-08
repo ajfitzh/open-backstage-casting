@@ -44,11 +44,13 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
     const [strategy, setStrategy] = useState<'velocity' | 'concurrency'>('velocity'); 
-    const [targetPasses, setTargetPasses] = useState(1); 
+    
+    // 🟢 NEW: Passes Control (Default to 3 to fill the schedule)
+    const [targetPasses, setTargetPasses] = useState(3); 
 
     // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
-    const [endWeek, setEndWeek] = useState(8); // Default 8 weeks for a full production cycle
+    const [endWeek, setEndWeek] = useState(8); // Default 8 weeks
 
     useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
@@ -72,6 +74,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
         // 1. DATA PREP
         const enrichedScenes = scenes.map((s: any) => {
             const name = (s["Scene Name"] || s.name || "").toLowerCase();
+            
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
 
@@ -94,10 +97,12 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
+            // 🟢 FIX: Better Regex for Cast Parsing (Handles extra quotes)
             let finalCast = s.cast || [];
             if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
                  const raw = s["Scene Assignments"];
-                 const extracted = raw.match(/""?([A-Za-z\s]+?) - \[\{/g);
+                 // Matches "Name - [{" regardless of preceding quotes
+                 const extracted = raw.match(/([a-zA-Z0-9\s\.\']+) - \[\{/g);
                  if (extracted) {
                      finalCast = extracted.map((str: string) => ({ 
                          name: str.split(' - ')[0].replace(/['"]+/g, '').trim() 
@@ -158,7 +163,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                             
                             if (currentPass >= targetPasses) return false;
                             
-                            // Don't repeat same scene in same week
                             const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
                             if (alreadyScheduledThisWeek) return false;
 
@@ -169,7 +173,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
                         // Score Candidates
                         const scored = candidates.map((scene: any) => {
-                            // 🟢 FIX: Start high so penalties don't create negative (invalid) scores
+                            // 🟢 FIX: Start HIGH (10,000) so penalties don't make score negative
                             let score = 10000; 
                             
                             const key = `${scene.id}-${track}`;
@@ -190,8 +194,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
                                 score += (scene.totalPoints * 2);
                             }
 
-                            // Pass Penalty (Prioritize Pass 1 over Pass 2)
-                            score -= (currentPass * 500); 
+                            score -= (currentPass * 500); // Penalty is now safe
 
                             const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
@@ -259,7 +262,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, on
 
         setTimeout(() => {
             const allCastCount = new Set(scenes.flatMap((s:any) => (s.cast||[]).map((c:any) => c.name))).size;
-            const totalWorkload = scenes.reduce((acc:number, s:any) => acc + (s.mLoad + s.dLoad + s.bLoad), 0) * targetPasses;
+            
+            // Calculate Total Workload based on ENRICHED scenes (to use corrected loads)
+            const totalWorkload = enrichedScenes.reduce((acc:number, s:any) => acc + s.totalPoints, 0) * targetPasses;
 
             setPreviewSchedule(proposedSchedule);
             setStats({
