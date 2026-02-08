@@ -14,7 +14,7 @@ import {
 // --- IMPORTS ---
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
-import { saveScheduleBatch } from '@/app/lib/actions'; // 🟢 The new Action
+import { saveScheduleBatch } from '@/app/lib/actions'; 
 
 // --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
@@ -29,6 +29,7 @@ interface ScheduledItem {
   startTime: number;
   duration: number;
   status: SceneStatus;
+  span?: number;
 }
 
 // --- CONFIG ---
@@ -48,16 +49,16 @@ export default function SchedulerClient({
     assignments = [], 
     people = [], 
     productionTitle = "Untitled Production",
-    productionId // 🟢 Needed for the Save Action
+    productionId 
 }: any) {
   
   // --- STATE ---
   const [activeTab, setActiveTab] = useState<'calendar' | 'progress' | 'callboard'>('calendar');
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
-  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
-  const [isSaving, setIsSaving] = useState(false); // 🟢 Loading State
+  const [schedule, setSchedule] = useState<ScheduledItem[]>([]); // Initialize with prop if needed
+  const [isSaving, setIsSaving] = useState(false); 
   
-// --- SHARED DATA PREP ---
+  // --- SHARED DATA PREP ---
   const sceneData = useMemo(() => {
     if (!scenes) return [];
 
@@ -65,46 +66,36 @@ export default function SchedulerClient({
     const sceneCastMap = new Map<number, Set<string>>();
 
     // 🛡️ HELPER: Safely extract Baserow Data
-    // Handles: [{id:1, value:"Name"}] OR ["Name"] OR "Name"
     const getValue = (field: any) => {
         if (!field) return null;
         if (Array.isArray(field)) {
-            // Check for Baserow Link Object { id, value }
             if (field[0] && typeof field[0] === 'object' && 'value' in field[0]) {
                 return field[0].value;
             }
-            return field[0]; // Simple array
+            return field[0]; 
         }
-        return field; // Raw string
+        return field; 
     };
 
-    // 🛡️ HELPER: Safely extract IDs
     const getIds = (field: any) => {
         if (!field) return [];
-        // If it's a Baserow link array: [{id: 669, value: "..."}]
         if (Array.isArray(field)) {
             return field.map((item: any) => item.id || item).filter((x:any) => typeof x === 'number');
         }
-        // If it's a single number
         return typeof field === 'number' ? [field] : [];
     };
 
     (assignments || []).forEach((a: any) => {
-        // 1. Try to grab the Person Name from the keys seen in your debug report
-        const actorName = getValue(a.Person)       // matches your debug JSON
-                       || getValue(a['Person']) 
-                       || a.personName;            // fallback
+        const actorName = getValue(a.Person) || getValue(a['Person']) || a.personName;            
 
         if (!actorName) return;
 
-        // 2. Grab Linked Scenes (matches your debug JSON key "Scene")
         const ids = [
-            ...getIds(a.Scene),      // Matches debug key: "Scene"
+            ...getIds(a.Scene),
             ...getIds(a['Scene']),   
-            ...getIds(a.sceneIds)    // Fallback
+            ...getIds(a.sceneIds)
         ];
 
-        // 3. Map them
         ids.forEach(sid => {
             if (!sceneCastMap.has(sid)) sceneCastMap.set(sid, new Set());
             sceneCastMap.get(sid)?.add(actorName);
@@ -116,7 +107,6 @@ export default function SchedulerClient({
         const castSet = sceneCastMap.get(s.id) || new Set();
         const castNames = Array.from(castSet);
 
-        // Handle raw Baserow scene fields if necessary
         const sceneName = getValue(s['Scene Name']) || getValue(s.Name) || s.name || "Untitled";
         const sceneAct = getValue(s.Act) || s.act || "1";
         const sceneType = getValue(s.Type) || s.type || "Scene";
@@ -132,6 +122,7 @@ export default function SchedulerClient({
         };
     }).sort((a: any, b: any) => a.id - b.id);
   }, [scenes, assignments]);
+
   // --- DERIVED DATA FOR CALLBOARD ---
   const callboardSchedule = useMemo(() => {
       return schedule.map(slot => {
@@ -145,48 +136,36 @@ export default function SchedulerClient({
   }, [schedule, sceneData]);
 
 
-  // 🟢 SAVE LOGIC 🟢
+  // 🟢 SAVE LOGIC
   const handleSaveChanges = async () => {
     setIsSaving(true);
-
-    // 1. Identify Unsaved Items
-    // Client-side items have long Date.now() IDs (string length > 10)
-    // Database items usually have shorter numeric IDs (though in Baserow row IDs are numbers)
-    // We assume anything with a string ID > 10 chars is a "Draft"
-    const newItems = schedule.filter(item => item.id.length > 10);
+    const newItems = schedule.filter(item => item.id.length > 10); // Assume long string IDs are new
 
     if (newItems.length === 0) {
         setIsSaving(false);
         return;
     }
 
-    // 2. Calculate Real Dates based on Week Offset
     const getRealDate = (day: 'Fri' | 'Sat', weekOffset: number) => {
         const today = new Date();
-        // Find "Next Friday" from today
         const nextFri = new Date(today);
         nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (weekOffset * 7));
         
         if (day === 'Fri') return nextFri.toISOString().split('T')[0];
         
-        // If Saturday, add 1 day
         const nextSat = new Date(nextFri);
         nextSat.setDate(nextFri.getDate() + 1);
         return nextSat.toISOString().split('T')[0];
     };
 
-    // 3. Prepare Batch
     const batch = newItems.map(item => ({
         ...item,
         date: getRealDate(item.day, item.weekOffset),
     }));
 
-    // 4. Send to Server
     await saveScheduleBatch(productionId, batch);
-
-    // 5. Reset / Reload
     setIsSaving(false);
-    window.location.reload(); // Hard reload to fetch the persisted data
+    window.location.reload(); 
   };
 
 
@@ -198,6 +177,7 @@ export default function SchedulerClient({
             <div className="flex items-center gap-6">
                 <div>
                     <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Production Schedule</div>
+                    {/* ✅ FIX: Displays the Production Title correctly */}
                     <h1 className="text-lg font-bold text-white">{productionTitle}</h1>
                 </div>
 
@@ -225,7 +205,7 @@ export default function SchedulerClient({
             
             <div className="flex items-center gap-4">
                  
-                 {/* 🟢 SAVE BUTTON (Appears when changes exist) */}
+                 {/* SAVE BUTTON */}
                  {schedule.some(i => i.id.length > 10) && (
                      <div className="animate-in fade-in slide-in-from-top-2">
                         <button 
@@ -290,13 +270,11 @@ export default function SchedulerClient({
 }
 
 // ============================================================================
-// SUB-COMPONENT: CALENDAR VIEW
+// SUB-COMPONENT: CALENDAR VIEW (Fixed UI & Logic)
 // ============================================================================
-// Inside app/components/schedule/SchedulerClient.tsx
-
 function CalendarView({ sceneData, schedule, setSchedule }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
-  const [draggedItemId, setDraggedItemId] = useState<string | null>(null); // 🟢 NEW: Track existing items
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -322,10 +300,10 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
               if (item.id === movedItemId) {
                   return {
                       ...item,
-                      day: day,        // Update Day
-                      track: track,    // Update Track
-                      startTime: dropTime, // Update Start Time
-                      weekOffset: currentWeekOffset // Update Week
+                      day: day,
+                      track: track,
+                      startTime: dropTime, 
+                      weekOffset: currentWeekOffset
                   };
               }
               return item;
@@ -347,7 +325,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       }
   };
 
-  // ... (deleteItem, updateDuration, switchTrack, updateSpan remain the same) ...
   const deleteItem = (itemId: string) => {
       setSchedule((prev: any) => prev.filter((item: any) => item.id !== itemId));
   };
@@ -382,7 +359,6 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       }));
   };
 
-  // 📅 CALENDAR DATE LOGIC
   const weekLabel = useMemo(() => {
       const today = new Date();
       const nextFri = new Date(today);
@@ -395,8 +371,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
       for (let h = start; h < end; h++) { [0, 15, 30, 45].forEach(m => s.push({ h, m, val: h + m/60 })); }
       return s;
   };
-  const friSlots = generateSlots(18, 21); // Hardcoded constants for brevity
-  const satSlots = generateSlots(10, 17);
+  const friSlots = generateSlots(FRI_START, FRI_END);
+  const satSlots = generateSlots(SAT_START, SAT_END);
 
   return (
     <div className="flex h-full">
@@ -421,7 +397,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                              <span className="font-bold text-xs text-zinc-200 truncate">{scene.name}</span>
                          </div>
                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                              <span className="bg-black/30 px-1 rounded px-1.5 py-0.5">Act {scene.act}</span>
+                              {/* ✅ FIX: Removed double "Act" */}
+                              <span className="bg-black/30 px-1 rounded px-1.5 py-0.5">{scene.act}</span>
                               <span className={scene.cast.length === 0 ? "text-red-500 font-bold" : "font-medium"}>
                                   {scene.cast.length} Actors
                               </span>
@@ -442,8 +419,8 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[850px]">
                      {[
-                         { day: 'Fri', slots: friSlots, start: 18 }, 
-                         { day: 'Sat', slots: satSlots, start: 10 }
+                         { day: 'Fri', slots: friSlots, start: FRI_START }, 
+                         { day: 'Sat', slots: satSlots, start: SAT_START }
                      ].map((col: any) => (
                          <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/30 border border-white/10 rounded-2xl overflow-hidden">
                              <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">{col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}</div>
@@ -461,7 +438,7 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                          <div key={track} className="relative group/lane">
                                               <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10 pointer-events-none">{track}</div>
                                               
-                                              {/* 🟢 DROP ZONES */}
+                                              {/* DROP ZONES */}
                                               {col.slots.map((slot:any) => (
                                                   <div key={slot.val} 
                                                        className={`h-8 border-b border-white/[0.02] transition-colors ${draggedSceneId || draggedItemId ? 'hover:bg-blue-500/10' : ''}`}
@@ -476,54 +453,65 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
                                                   const height = (item.duration / 60) * 128;
                                                   const scene = sceneData.find((s:any) => s.id === item.sceneId);
                                                   const span = item.span || 1;
+                                                  const isDraggingThis = draggedItemId === item.id;
                                                   
                                                   return (
                                                       <div 
                                                         key={item.id}
-                                                        draggable // 🟢 ENABLE DRAGGING 
+                                                        draggable
                                                         onDragStart={(e) => {
                                                             e.dataTransfer.setData("itemId", item.id);
                                                             setDraggedItemId(item.id);
-                                                            // Optional: make the drag ghost look cleaner?
                                                         }}
                                                         onDragEnd={() => setDraggedItemId(null)}
-                                                        className={`absolute rounded-xl border-l-[6px] p-3 shadow-2xl text-xs overflow-hidden transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
+                                                        className={`absolute rounded-xl border-l-[6px] shadow-2xl text-xs transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
                                                           ${getTrackStyles(item.track)}
-                                                          ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}`}
+                                                          ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}
+                                                          ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''} 
+                                                        `}
                                                         style={{ 
                                                             top: `${top}px`, 
                                                             height: `${height}px`,
+                                                            // Calculate width to span columns
                                                             width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' 
                                                         }}
                                                       >
-                                                           {/* Block Header */}
-                                                           <div className="flex justify-between items-start mb-2">
-                                                              <div className="font-black truncate pr-2 uppercase tracking-tighter leading-tight text-[11px]">
-                                                                {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
-                                                              </div>
-                                                              <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} className="opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all transform hover:scale-110">
-                                                                  <X size={12} />
-                                                              </button>
+                                                           {/* HEADER / DRAG HANDLE (Clip Content Here, NOT Parent) */}
+                                                           <div className="w-full h-full p-3 overflow-hidden">
+                                                               <div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">
+                                                                  {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
+                                                               </div>
                                                            </div>
 
-                                                           {/* Track Teleport & Expansion HUD */}
-                                                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0">
-                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'left'); }} disabled={item.track === 'Acting'} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronLeft size={10}/></button>
+                                                           {/* --- CONTROLS OVERLAY (ABSOLUTE) --- */}
+                                                           
+                                                           {/* 1. DELETE (Top Right) */}
+                                                           <button 
+                                                               onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} 
+                                                               className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all z-50 transform hover:scale-110"
+                                                           >
+                                                               <X size={10} />
+                                                           </button>
+
+                                                           {/* 2. TRACK CONTROLS (Center Floating) */}
+                                                           {/* ✅ FIX: Centered & Floating so it works on small 30m blocks */}
+                                                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-50">
+                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'left'); }} disabled={item.track === 'Acting'} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronLeft size={10}/></button>
                                                                 
-                                                                <div className="flex items-center bg-black/40 rounded-md overflow-hidden border border-white/5">
-                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-2 py-1 hover:bg-white/10 border-r border-white/5 transition-colors"><Minus size={10}/></button>
-                                                                    <span className="px-2 py-1 text-[8px] font-black tracking-widest text-white/80">{span}x</span>
-                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-2 py-1 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
+                                                                <div className="flex items-center bg-black/60 backdrop-blur-sm rounded overflow-hidden border border-white/10 shadow-lg">
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'less'); }} className="px-1.5 py-0.5 hover:bg-white/10 border-r border-white/10 transition-colors"><Minus size={10}/></button>
+                                                                    <span className="px-1.5 py-0.5 text-[8px] font-black tracking-widest text-white/90">{span}x</span>
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateSpan(item.id, 'more'); }} className="px-1.5 py-0.5 hover:bg-white/10 transition-colors"><Plus size={10}/></button>
                                                                 </div>
 
-                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'right'); }} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1.5 bg-black/40 hover:bg-black/60 rounded-md disabled:opacity-0 transition-colors"><ChevronRight size={10}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); switchTrack(item.id, 'right'); }} disabled={item.track === 'Dance' || (item.track === 'Music' && span === 2)} className="p-1 bg-black/60 hover:bg-black/90 rounded backdrop-blur-sm disabled:opacity-0 transition-colors border border-white/10"><ChevronRight size={10}/></button>
                                                            </div>
 
-                                                           {/* Resize Handle / Time HUD */}
-                                                           <div className="opacity-0 group-hover:opacity-100 absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-md rounded-lg p-1 transition-all border border-white/10">
-                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-1 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
-                                                               <span className="text-[9px] font-mono font-bold text-white px-1">{item.duration}m</span>
-                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-1 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
+                                                           {/* 3. TIME RESIZE (Bottom Right) */}
+                                                           <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-black/60 backdrop-blur-md rounded p-0.5 transition-all border border-white/10 z-50">
+                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, -15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Minus size={10}/></button>
+                                                               <span className="text-[8px] font-mono font-bold text-white px-1">{item.duration}m</span>
+                                                               <button onClick={(e) => { e.stopPropagation(); updateDuration(item.id, 15); }} className="p-0.5 hover:bg-white/10 rounded transition-colors"><Plus size={10}/></button>
                                                            </div>
                                                       </div>
                                                   )
@@ -540,7 +528,10 @@ function CalendarView({ sceneData, schedule, setSchedule }: any) {
     </div>
   );
 }
-// ... (BurnUpView remains same as previous step, no changes needed there)
+
+// ============================================================================
+// SUB-COMPONENT: BURN-UP VIEW (Stats)
+// ============================================================================
 function BurnUpView({ sceneData }: any) {
     const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
         const initial: any = {};

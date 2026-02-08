@@ -1,31 +1,47 @@
-// inside app/education/planning/page.tsx (or your Scheduler page)
-
+import { cookies } from 'next/headers';
 import { 
     getShowById, 
     getActiveProduction,
     getScenes,
     getRoles,
-    getSceneAssignments, // 🟢 1. Update Import
+    getSceneAssignments,
     getPeople,
     getScheduleSlots 
 } from '@/app/lib/baserow';
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
-import { cookies } from 'next/dist/server/request/cookies';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulerPage() {
   const cookieStore = await cookies();
-  let activeId = Number(cookieStore.get('active_production_id')?.value);
+  const activeId = Number(cookieStore.get('active_production_id')?.value);
+  
+  // 🟢 1. ROBUST TITLE FETCHING
   let showTitle = "Select a Production";
+  
+  if (activeId) {
+    try {
+      // Try fetching specific show first
+      const showData = await getShowById(activeId);
+      if (showData && showData.title) {
+        showTitle = showData.title;
+      } else {
+        // Fallback: Check if it matches the active production
+        const activeProd = await getActiveProduction();
+        if (activeProd && activeProd.id === activeId) {
+          showTitle = activeProd.title;
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching title:", e);
+    }
+  }
 
-  // ... (Keep your show title logic) ...
-
-  // 🟢 2. Fetch getSceneAssignments instead of getAssignments
+  // 🟢 2. FETCH DATA
   const [scenes, roles, sceneAssignments, people, existingSlots] = await Promise.all([
       getScenes(activeId),      
       getRoles(),               
-      getSceneAssignments(activeId), // <--- CHANGE THIS LINE
+      getSceneAssignments(activeId),
       getPeople(),
       getScheduleSlots(activeId) 
   ]);
@@ -35,9 +51,9 @@ export default async function SchedulerPage() {
       <SchedulerClient 
         scenes={scenes || []}
         roles={roles || []}
-        assignments={sceneAssignments || []} // <--- Pass the correct data here
+        assignments={sceneAssignments || []}
         people={people || []}
-        productionTitle={showTitle}
+        productionTitle={showTitle} // ✅ Passed correctly
         productionId={activeId}
         initialSchedule={existingSlots || []} 
       />
