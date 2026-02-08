@@ -469,13 +469,15 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
   // without needing a full database refresh.
   const [loadOverrides, setLoadOverrides] = useState<Record<number, { music: number, dance: number, block: number }>>({});
 
-  // --- HELPER: SAVE MODAL CHANGES ---
+// 🔴 FIX 1: Robust Save Handler with Logging
   const handleQuickSave = (sceneId: number, newLoads: any) => {
-    // 1. Update local overrides to reflect change immediately
-    setLoadOverrides(prev => ({ ...prev, [sceneId]: newLoads }));
-    // 2. Close Modal
+    console.log(`Updating Scope for Scene ${sceneId}:`, newLoads); // Debug log
+    
+    setLoadOverrides(prev => {
+        const updated = { ...prev, [sceneId]: newLoads };
+        return updated; // Force new object reference
+    });
     setEditingScene(null);
-    // 3. (Optional) Here you would call your Server Action: await updateSceneLoads(...)
   };
 
   // --- HELPER: TOGGLE STATUS ---
@@ -493,34 +495,31 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
     return 'bg-zinc-800 text-zinc-600 border-zinc-700 hover:border-zinc-500';
   };
 
-  // --- CORE LOGIC: THE CALCULATIONS ---
+// 🔴 FIX 2: Ensure Integers in Math
   const stats = useMemo(() => {
     let totalPointsScope = 0;
     let earnedPoints = 0;
     
-    // 1. Calculate Points based on Complexity (Load)
     const weightedScenes = sceneData.map((s: any) => {
-      // PRIORITY: Local Override > Nested Load Object > Flat DB Field > Default (1)
       const override = loadOverrides[s.id];
       
-      const mLoad = override?.music ?? s.load?.music ?? s.music_load ?? 1; 
-      const dLoad = override?.dance ?? s.load?.dance ?? s.dance_load ?? 1;
-      const bLoad = override?.block ?? s.load?.block ?? s.blocking_load ?? 1;
+      // Force parseInt to ensure we don't do string math (e.g. "5"+2 = "52")
+      const mLoad = parseInt(override?.music ?? s.load?.music ?? s.music_load ?? 1); 
+      const dLoad = parseInt(override?.dance ?? s.load?.dance ?? s.dance_load ?? 1);
+      const bLoad = parseInt(override?.block ?? s.load?.block ?? s.blocking_load ?? 1);
 
       const type = (s.type || "").toLowerCase();
-      // Logic: Does this scene TYPE actually require this track?
-      // (e.g. A purely dialogue scene shouldn't count 5 points for Dance just because the slider was left up)
+      
+      // Logic checks
       const hasMusic = (type.includes('song') || type.includes('mixed')) && mLoad > 0;
       const hasDance = (type.includes('dance') || type.includes('mixed')) && dLoad > 0;
       const hasBlock = true; 
 
-      // Max points possible (Load * 2 because max status is 2 [Polished])
       let sceneMaxPoints = 0;
       if (hasMusic) sceneMaxPoints += (mLoad * 2);
       if (hasDance) sceneMaxPoints += (dLoad * 2);
       if (hasBlock) sceneMaxPoints += (bLoad * 2);
 
-      // Current points earned based on progress status (0, 1, or 2)
       const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
       let sceneEarned = 0;
       if (hasMusic) sceneEarned += (p.music * mLoad); 
@@ -533,17 +532,12 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
       return { ...s, sceneMaxPoints, sceneEarned, hasMusic, hasDance, hasBlock, mLoad, dLoad, bLoad };
     });
 
-    // 2. Calculate Velocity (Points per Week)
     const effectiveCurrentWeek = Math.max(1, currentWeek);
     const actualVelocity = earnedPoints / effectiveCurrentWeek; 
-    
-    // 3. Apply Simulation
     const simulatedVelocity = actualVelocity * simVelocityMod;
     
-    // 4. Projections
     const remainingPoints = totalPointsScope - earnedPoints;
     const weeksNeeded = simulatedVelocity > 0 ? remainingPoints / simulatedVelocity : 0;
-    // If we are done, weeks needed is 0. If velocity is 0, projection is infinite (99).
     const safeWeeksNeeded = weeksNeeded === Infinity ? 99 : weeksNeeded;
 
     const projectedEndWeek = currentWeek + safeWeeksNeeded + simWeeksLost;
@@ -558,8 +552,7 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
       isOverSchedule,
       weightedScenes
     };
-  }, [sceneData, progress, currentWeek, totalWeeks, simVelocityMod, simWeeksLost, loadOverrides]);
-
+  }, [sceneData, progress, currentWeek, totalWeeks, simVelocityMod, simWeeksLost, loadOverrides]); // <--- loadOverrides is critical here
   return (
     <div className="h-full overflow-y-auto custom-scrollbar bg-zinc-950 p-6 pb-32">
       <div className="max-w-7xl mx-auto space-y-6">
