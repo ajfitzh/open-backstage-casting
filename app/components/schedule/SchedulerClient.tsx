@@ -1,12 +1,16 @@
 "use client";
 
+import Link from 'next/link'; 
+// Make sure to add Link to your imports at the top of SchedulerClient.tsx!
+
 import React, { useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronLeft, Search,
   CheckCircle2, Plus, Minus,
   TrendingUp, Calendar as CalendarIcon, 
   FileText, Wand2, Coffee, AlertTriangle, 
-  Target, Umbrella, LayoutGrid, X, Save, Loader2
+  Target, Umbrella, LayoutGrid, X, Save, Loader2,
+  ArrowRight
 } from 'lucide-react';
 
 import AutoSchedulerModal from './AutoSchedulerModal'; 
@@ -436,174 +440,282 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
 }
 
 // ============================================================================
-// SUB-COMPONENT: BURN-UP VIEW (Stats)
+// SUB-COMPONENT: AGILE BURN-UP VIEW (Final)
 // ============================================================================
-function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) { // 🟢 Accept props
-    const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
-        const initial: any = {};
-        sceneData.forEach((s: any) => {
-             initial[s.id] = { music: 0, dance: 0, block: 0 };
-        });
-        return initial;
+function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
+  // --- STATE ---
+  // Tracks status locally for the view: 0=New, 1=Worked, 2=Polished
+  // In a real app, you'd likely pass 'progress' in as a prop or fetch it.
+  const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
+    const initial: any = {};
+    sceneData.forEach((s: any) => {
+      initial[s.id] = { music: 0, dance: 0, block: 0 };
+    });
+    return initial;
+  });
+
+  // Simulators (Local state only - does not save to DB)
+  const [simVelocityMod, setSimVelocityMod] = useState(1.0); // 1.0 = 100% speed
+  const [simWeeksLost, setSimWeeksLost] = useState(0);       // Blackout weeks
+
+  // --- CALCULATIONS ---
+  const stats = useMemo(() => {
+    let totalPointsScope = 0;
+    let earnedPoints = 0;
+    
+    // 1. Calculate Points based on Complexity (Load)
+    const weightedScenes = sceneData.map((s: any) => {
+      // 🟢 ROBUST DATA FETCHING
+      // Checks for nested 'load' object (SceneAnalysisClient) OR flat keys (Baserow)
+      const mLoad = s.load?.music ?? s.music_load ?? 1; 
+      const dLoad = s.load?.dance ?? s.dance_load ?? 1;
+      const bLoad = s.load?.block ?? s.blocking_load ?? 1;
+
+      const type = (s.type || "").toLowerCase();
+      // Logic: Does this scene TYPE actually require this track?
+      const hasMusic = (type.includes('song') || type.includes('mixed')) && mLoad > 0;
+      const hasDance = (type.includes('dance') || type.includes('mixed')) && dLoad > 0;
+      const hasBlock = true; 
+
+      // Max points possible (Load * 2 because max status is 2)
+      // Example: A complex dance (Load 5) is worth 10 points.
+      let sceneMaxPoints = 0;
+      if (hasMusic) sceneMaxPoints += (mLoad * 2);
+      if (hasDance) sceneMaxPoints += (dLoad * 2);
+      if (hasBlock) sceneMaxPoints += (bLoad * 2);
+
+      // Current points earned based on progress
+      const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
+      let sceneEarned = 0;
+      if (hasMusic) sceneEarned += (p.music * mLoad); 
+      if (hasDance) sceneEarned += (p.dance * dLoad);
+      if (hasBlock) sceneEarned += (p.block * bLoad);
+
+      // eslint-disable-next-line react-hooks/immutability
+      totalPointsScope += sceneMaxPoints;
+      earnedPoints += sceneEarned;
+
+      return { ...s, sceneMaxPoints, sceneEarned, hasMusic, hasDance, hasBlock, mLoad, dLoad, bLoad };
     });
 
-    const [blackoutWeeks, setBlackoutWeeks] = useState(0); 
-    const [simulatedExtra, setSimulatedExtra] = useState(0); 
+    // 2. Calculate Velocity (Points per Week)
+    const effectiveCurrentWeek = Math.max(1, currentWeek);
+    const actualVelocity = earnedPoints / effectiveCurrentWeek; 
+    
+    // 3. Apply Simulation
+    const simulatedVelocity = actualVelocity * simVelocityMod;
+    
+    // 4. Projections
+    const remainingPoints = totalPointsScope - earnedPoints;
+    const weeksNeeded = simulatedVelocity > 0 ? remainingPoints / simulatedVelocity : 99;
+    const projectedEndWeek = currentWeek + weeksNeeded + simWeeksLost;
+    
+    const isOverSchedule = projectedEndWeek > totalWeeks;
+    const percentComplete = totalPointsScope > 0 ? Math.round((earnedPoints / totalPointsScope) * 100) : 0;
 
-    const toggle = (id: string, type: 'music' | 'dance' | 'block') => {
-        setProgress(prev => ({
-            ...prev,
-            [id]: { ...prev[id], [type]: (prev[id][type] + 1) % 3 }
-        }));
+    return {
+      totalPointsScope,
+      earnedPoints,
+      percentComplete,
+      actualVelocity,
+      simulatedVelocity,
+      projectedEndWeek,
+      isOverSchedule,
+      weightedScenes
     };
+  }, [sceneData, progress, currentWeek, totalWeeks, simVelocityMod, simWeeksLost]);
 
-    const getStatusColor = (val: number) => {
-        if (val === 2) return 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]';
-        if (val === 1) return 'bg-amber-500 border-amber-400 text-black';
-        return 'bg-zinc-800 border-zinc-700 text-zinc-600 hover:bg-zinc-700';
-    };
+  // --- ACTIONS ---
+  const toggleStatus = (id: string, track: 'music' | 'dance' | 'block') => {
+    setProgress(prev => ({
+        ...prev,
+        [id]: { ...prev[id], [track]: (prev[id][track] + 1) % 3 }
+    }));
+  };
 
-    const getStatusLabel = (val: number) => val === 2 ? 'Done' : val === 1 ? 'Work' : 'New';
+  const getStatusColor = (val: number) => {
+    if (val === 2) return 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)] border-emerald-400';
+    if (val === 1) return 'bg-amber-500 text-black border-amber-400';
+    return 'bg-zinc-800 text-zinc-600 border-zinc-700 hover:border-zinc-500';
+  };
 
-    const stats = useMemo(() => {
-        let totalUnits = 0;
-        let completedUnits = 0;
-
-        sceneData.forEach((s: any) => {
-            const type = (s.type || "").toLowerCase();
-            const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
-            const needsMusic = type.includes('song') || type.includes('mixed');
-            const needsDance = type.includes('dance') || type.includes('mixed');
-            const needsBlock = true; 
-
-            if (needsMusic) { totalUnits++; if (p.music === 2) completedUnits++; }
-            if (needsDance) { totalUnits++; if (p.dance === 2) completedUnits++; }
-            if (needsBlock) { totalUnits++; if (p.block === 2) completedUnits++; }
-        });
-
-        // 🟢 FIX: Use prop 'currentWeek' instead of missing global 'CURRENT_WEEK'
-        const velocity = currentWeek > 0 ? (completedUnits / currentWeek) : 0;
-        const simulatedCompleted = completedUnits + simulatedExtra;
-        const remaining = totalUnits - simulatedCompleted;
-        const weeksLeftNeeded = velocity > 0 ? remaining / velocity : 99;
+  return (
+    <div className="h-full overflow-y-auto custom-scrollbar bg-zinc-950 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         
-        // 🟢 FIX: Use prop 'currentWeek'
-        const projectedEndWeek = currentWeek + weeksLeftNeeded + blackoutWeeks;
-        
-        // 🟢 FIX: Use prop 'totalWeeks' (target)
-        const bufferWeeks = totalWeeks - projectedEndWeek;
-        const isSafe = bufferWeeks >= 0;
+        {/* TOP ROW: KPI CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            
+            {/* CARD 1: Scope (Linked to Analysis) */}
+            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target size={48}/></div>
+                <div className="flex justify-between items-start">
+                    <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Total Scope</div>
+                    {/* 🟢 LINK TO ANALYSIS PAGE */}
+                    <Link href="/analysis" className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/5 transition-colors text-zinc-400 hover:text-white flex items-center gap-1">
+                        Recalibrate <ArrowRight size={10} />
+                    </Link>
+                </div>
+                <div className="text-2xl font-black text-white">{stats.totalPointsScope} <span className="text-sm font-medium text-zinc-500">Pts</span></div>
+                <div className="text-xs text-zinc-500 mt-2">Weighted Complexity</div>
+            </div>
 
-        return { 
-            totalUnits, completedUnits, 
-            percent: totalUnits > 0 ? Math.round((simulatedCompleted / totalUnits) * 100) : 0, 
-            velocity, projectedEndWeek, isSafe, bufferWeeks
-        };
-    }, [sceneData, progress, blackoutWeeks, simulatedExtra, currentWeek, totalWeeks]);
+            {/* CARD 2: Velocity */}
+            <div className="bg-zinc-900 border border-white/5 p-5 rounded-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp size={48}/></div>
+                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Velocity</div>
+                <div className="text-2xl font-black text-blue-400">{stats.actualVelocity.toFixed(1)} <span className="text-sm font-medium text-zinc-500">pts/wk</span></div>
+                <div className="text-xs text-zinc-500 mt-2">Avg Performance</div>
+            </div>
 
-    return (
-        <div className="h-full overflow-y-auto custom-scrollbar p-8 bg-zinc-950">
-            <div className="max-w-6xl mx-auto space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className={`col-span-2 rounded-3xl p-8 border relative overflow-hidden flex flex-col justify-between transition-colors duration-500 ${stats.isSafe ? 'bg-emerald-950/10 border-emerald-500/20' : 'bg-red-950/10 border-red-500/20'}`}>
-                         <div className="relative z-10 flex justify-between items-start">
-                             <div>
-                                 <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                                     <Target size={18} className={stats.isSafe ? "text-emerald-500" : "text-red-500"}/> Pace Projection
-                                 </h2>
-                                 <div className="mt-2 text-5xl font-black text-white">
-                                     {stats.percent}% <span className="text-xl text-zinc-600">Show Ready</span>
-                                 </div>
-                             </div>
-                             <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border flex items-center gap-2 ${stats.isSafe ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                                {stats.isSafe ? <Coffee size={14}/> : <AlertTriangle size={14}/>}
-                                {stats.isSafe ? "You can Relax" : "Push Harder"}
-                             </div>
-                         </div>
-                         <div className="relative z-10 mt-8">
-                             <div className="flex justify-between text-[10px] font-black uppercase text-zinc-500 mb-2">
-                                 <span>Start</span>
-                                 <span className="text-white">Week {currentWeek} (Now)</span>
-                                 <span className={stats.isSafe ? "text-emerald-400" : "text-red-400"}>Est. Finish: Wk {stats.projectedEndWeek.toFixed(1)}</span>
-                                 <span>Week {totalWeeks}</span>
-                             </div>
-                             <div className="h-4 bg-black/40 rounded-full w-full overflow-hidden relative border border-white/5">
-                                 {/* 🟢 FIX: Use 'totalWeeks' for math */}
-                                 <div className="absolute left-0 top-0 bottom-0 bg-emerald-500/10 border-r border-emerald-500/30" style={{ width: `100%` }}></div>
-                                 <div className="absolute left-0 top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${(currentWeek / totalWeeks) * 100}%` }}></div>
-                                 <div className={`absolute top-0 bottom-0 w-1 shadow-[0_0_15px_rgba(255,255,255,0.8)] z-20 transition-all duration-500 ${stats.isSafe ? 'bg-emerald-400' : 'bg-red-500'}`} style={{ left: `${Math.min((stats.projectedEndWeek / totalWeeks) * 100, 100)}%` }} />
-                             </div>
-                             <p className="text-xs text-zinc-400 text-center mt-3 bg-black/20 py-2 rounded-lg border border-white/5">
-                                {stats.isSafe ? `✅ You are ${stats.bufferWeeks.toFixed(1)} weeks ahead of schedule.` : `⚠️ You are ${Math.abs(stats.bufferWeeks).toFixed(1)} weeks behind target.`}
-                             </p>
-                         </div>
+            {/* CARD 3: Projection */}
+            <div className={`border p-5 rounded-2xl relative overflow-hidden transition-colors ${stats.isOverSchedule ? 'bg-red-950/20 border-red-500/30' : 'bg-emerald-950/20 border-emerald-500/30'}`}>
+                <div className="text-[10px] uppercase font-black tracking-widest text-zinc-500 mb-1">Projected Finish</div>
+                <div className={`text-2xl font-black ${stats.isOverSchedule ? 'text-red-400' : 'text-emerald-400'}`}>Week {stats.projectedEndWeek.toFixed(1)}</div>
+                <div className="text-xs text-zinc-400 mt-2">Target: Week {totalWeeks}</div>
+                {stats.isOverSchedule && <AlertTriangle size={16} className="absolute top-5 right-5 text-red-500 animate-pulse"/>}
+            </div>
+
+            {/* CARD 4: Simulator Controls */}
+            <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center gap-3">
+                <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-400 font-bold uppercase text-[10px]">Pace Modifier</span>
+                    <span className="font-mono font-bold text-blue-300">{Math.round(simVelocityMod * 100)}%</span>
+                </div>
+                <input type="range" min="0.5" max="2.0" step="0.1" value={simVelocityMod} onChange={(e) => setSimVelocityMod(parseFloat(e.target.value))} className="h-1 w-full bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
+                
+                <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-400 font-bold uppercase text-[10px]">Lost Weeks</span>
+                    <span className="font-mono font-bold text-red-300">{simWeeksLost} wks</span>
+                </div>
+                 <input type="range" min="0" max="5" step="0.5" value={simWeeksLost} onChange={(e) => setSimWeeksLost(parseFloat(e.target.value))} className="h-1 w-full bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500"/>
+            </div>
+        </div>
+
+        {/* MIDDLE ROW: CHART & BREAKDOWN */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
+            
+            {/* THE CHART (SVG) */}
+            <div className="col-span-2 bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col">
+                <div className="flex justify-between items-end mb-6">
+                    <div>
+                        <h3 className="text-lg font-bold text-white">Burn-Up Chart</h3>
+                        <p className="text-xs text-zinc-500">Ideal Pace vs. Actual Points Earned</p>
                     </div>
-
-                    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col justify-center gap-6">
-                        <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-white/5 pb-2">Reality Check Simulator</div>
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"><Umbrella size={14} className="text-blue-400"/> Vacations / Breaks</span>
-                                <span className="text-xl font-black text-white">{blackoutWeeks} <span className="text-[10px] text-zinc-600">WKS</span></span>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setBlackoutWeeks(Math.max(0, blackoutWeeks - 0.5))} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Minus size={14}/></button>
-                                <button onClick={() => setBlackoutWeeks(blackoutWeeks + 0.5)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Plus size={14}/></button>
-                            </div>
-                        </div>
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"><TrendingUp size={14} className="text-emerald-400"/> If we finish...</span>
-                                <span className="text-xl font-black text-emerald-400">+{simulatedExtra} <span className="text-[10px] text-zinc-600">ITEMS</span></span>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setSimulatedExtra(Math.max(0, simulatedExtra - 1))} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2 rounded text-zinc-400 hover:text-white"><Minus size={14}/></button>
-                                <button onClick={() => setSimulatedExtra(simulatedExtra + 1)} className="flex-1 bg-emerald-900/30 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white py-2 rounded text-emerald-400 transition-all font-bold">+1 More Today</button>
-                            </div>
-                        </div>
+                    {/* Legend */}
+                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-wider">
+                         <div className="flex items-center gap-2"><div className="w-2 h-2 bg-zinc-600 rounded-full"></div> Scope</div>
+                         <div className="flex items-center gap-2"><div className="w-2 h-2 bg-emerald-500 rounded-full"></div> Actual</div>
+                         <div className="flex items-center gap-2"><div className="w-2 h-2 border border-dashed border-emerald-500 rounded-full"></div> Projected</div>
                     </div>
                 </div>
+                
+                <div className="flex-1 w-full relative border-l border-b border-white/10">
+                   <BurnUpGraph 
+                      totalWeeks={Math.max(totalWeeks, stats.projectedEndWeek)} 
+                      targetWeeks={totalWeeks}
+                      currentWeek={currentWeek}
+                      totalPoints={stats.totalPointsScope}
+                      earnedPoints={stats.earnedPoints}
+                      projectedEndWeek={stats.projectedEndWeek}
+                   />
+                </div>
+            </div>
 
-                <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden shadow-xl">
-                    <div className="p-6 border-b border-white/5 bg-zinc-900/80 backdrop-blur-xl flex justify-between items-center sticky top-0 z-20">
-                        <h3 className="text-lg font-black uppercase italic text-white flex items-center gap-2"><LayoutGrid size={18} className="text-purple-500"/> Scene Breakdown</h3>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-zinc-950 text-zinc-500 text-[10px] font-black uppercase tracking-widest border-b border-white/5">
-                                <tr>
-                                    <th className="px-6 py-4 w-16 text-center">#</th>
-                                    <th className="px-6 py-4">Scene Name</th>
-                                    <th className="px-6 py-4 w-32 text-center">Music</th>
-                                    <th className="px-6 py-4 w-32 text-center">Dance</th>
-                                    <th className="px-6 py-4 w-32 text-center">Blocking</th>
-                                    <th className="px-6 py-4 w-24 text-center">Ready?</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5 text-sm">
-                                {sceneData.map((s: any, i: number) => {
-                                    const type = (s.type || "").toLowerCase();
-                                    const needsMusic = type.includes('song') || type.includes('mixed');
-                                    const needsDance = type.includes('dance') || type.includes('mixed');
-                                    const p = progress[s.id] || { music:0, dance:0, block:0 };
-                                    const isReady = (!needsMusic || p.music===2) && (!needsDance || p.dance===2) && p.block===2;
-
-                                    return (
-                                        <tr key={s.id} className="hover:bg-white/5 transition-colors group">
-                                            <td className="px-6 py-4 text-center font-mono text-zinc-600">{i+1}</td>
-                                            <td className="px-6 py-4"><div className="font-bold text-zinc-300">{s.name}</div><div className="text-[10px] text-zinc-600 uppercase font-black tracking-wider">{s.type}</div></td>
-                                            <td className="px-6 py-4">{needsMusic ? <button onClick={() => toggle(s.id, 'music')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.music)}`}>{getStatusLabel(p.music)}</button> : <div className="text-center text-zinc-800">-</div>}</td>
-                                            <td className="px-6 py-4">{needsDance ? <button onClick={() => toggle(s.id, 'dance')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.dance)}`}>{getStatusLabel(p.dance)}</button> : <div className="text-center text-zinc-800">-</div>}</td>
-                                            <td className="px-6 py-4"><button onClick={() => toggle(s.id, 'block')} className={`w-full py-1.5 rounded text-[10px] font-black uppercase border transition-all ${getStatusColor(p.block)}`}>{getStatusLabel(p.block)}</button></td>
-                                            <td className="px-6 py-4 text-center">{isReady ? <CheckCircle2 size={20} className="mx-auto text-emerald-500 animate-in zoom-in"/> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-800 mx-auto"/>}</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+            {/* THE BREAKDOWN LIST */}
+            <div className="bg-zinc-900 border border-white/5 rounded-3xl flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-white/5 bg-black/20 flex justify-between items-center">
+                    <div className="text-xs font-black uppercase tracking-widest text-zinc-400">Scene Points</div>
+                    <div className="text-[10px] text-zinc-500">{stats.earnedPoints} / {stats.totalPointsScope}</div>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    {stats.weightedScenes.sort((a: any, b: any) => b.sceneMaxPoints - a.sceneMaxPoints).map((s: any) => (
+                        <div key={s.id} className="p-3 rounded-xl bg-black/20 border border-white/5 hover:bg-white/5 transition-colors group">
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="overflow-hidden">
+                                    <div className="font-bold text-sm text-zinc-200 truncate pr-2">{s.name}</div>
+                                    <div className="text-[10px] text-zinc-500 font-mono flex gap-2">
+                                        <span className="bg-white/5 px-1 rounded">Difficulty: {s.sceneMaxPoints/2}</span>
+                                        <span className="text-emerald-500">Max Pts: {s.sceneMaxPoints}</span>
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    {/* Mini Pie Chart or % */}
+                                    <div className={`text-xs font-black ${s.sceneEarned === s.sceneMaxPoints ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                        {Math.round((s.sceneEarned / s.sceneMaxPoints) * 100)}%
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* PROGRESS DOTS */}
+                            <div className="flex gap-2 items-center">
+                                {s.hasMusic ? (
+                                    <button onClick={() => toggleStatus(s.id, 'music')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.music || 0)}`}/>
+                                ) : <div className="flex-1 h-2 bg-transparent"/>}
+                                
+                                {s.hasDance ? (
+                                    <button onClick={() => toggleStatus(s.id, 'dance')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.dance || 0)}`}/>
+                                ) : <div className="flex-1 h-2 bg-transparent"/>}
+                                
+                                {s.hasBlock ? (
+                                    <button onClick={() => toggleStatus(s.id, 'block')} className={`h-2 flex-1 rounded-sm transition-all ${getStatusColor(progress[s.id]?.block || 0)}`}/>
+                                ) : <div className="flex-1 h-2 bg-transparent"/>}
+                            </div>
+                            
+                            {/* LABELS */}
+                            <div className="flex gap-2 mt-1 text-[8px] text-zinc-600 font-black uppercase tracking-wider text-center">
+                                <div className="flex-1">{s.hasMusic ? `Music (${s.mLoad})` : ''}</div>
+                                <div className="flex-1">{s.hasDance ? `Dance (${s.dLoad})` : ''}</div>
+                                <div className="flex-1">{s.hasBlock ? `Block (${s.bLoad})` : ''}</div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
-    );
+      </div>
+    </div>
+  );
+}
+
+// Reuse the same SVG Graph component from the previous response...
+const BurnUpGraph = ({ totalWeeks, targetWeeks, currentWeek, totalPoints, earnedPoints, projectedEndWeek }: any) => {
+    // Coordinate System: 0-100%
+    const getX = (week: number) => (week / totalWeeks) * 100;
+    const getY = (points: number) => 100 - ((points / totalPoints) * 100);
+
+    const curX = getX(currentWeek);
+    const curY = getY(earnedPoints);
+    const projX = getX(projectedEndWeek);
+    const projY = getY(totalPoints); // Top (100% points)
+    const idealX = getX(targetWeeks);
+
+    return (
+        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {/* Grid Lines (Vertical Weeks) */}
+            {Array.from({ length: Math.ceil(totalWeeks) + 1 }).map((_, i) => (
+                <line key={i} x1={getX(i)} y1="0" x2={getX(i)} y2="100" stroke="#333" strokeWidth="0.2" />
+            ))}
+            
+            {/* Total Scope Line (Top) */}
+            <line x1="0" y1="0" x2="100" y2="0" stroke="#555" strokeWidth="0.5" strokeDasharray="2" />
+            <text x="1" y="5" fontSize="3" fill="#555" fontWeight="bold">TOTAL SCOPE ({totalPoints} pts)</text>
+
+            {/* Ideal Velocity (Gray) */}
+            <line x1="0" y1="100" x2={idealX} y2="0" stroke="#333" strokeWidth="0.5" strokeDasharray="1" />
+
+            {/* Projection Line (Dashed Color) */}
+            <line x1={curX} y1={curY} x2={projX} y2={projY} 
+                  stroke={projectedEndWeek > targetWeeks ? "#ef4444" : "#10b981"} 
+                  strokeWidth="0.5" strokeDasharray="2" />
+
+            {/* Actual Progress (Solid Color) */}
+            <polyline points={`0,100 ${curX},${curY}`} fill="none" stroke="#10b981" strokeWidth="1" />
+            <circle cx={curX} cy={curY} r="1.5" fill="#10b981" stroke="white" strokeWidth="0.5" />
+
+            {/* Target Date Marker */}
+            <line x1={idealX} y1="0" x2={idealX} y2="100" stroke="#fbbf24" strokeWidth="0.5" />
+            <text x={idealX} y="98" fontSize="3" fill="#fbbf24" textAnchor="middle" fontWeight="bold">OPENING NIGHT</text>
+        </svg>
+    )
 }
