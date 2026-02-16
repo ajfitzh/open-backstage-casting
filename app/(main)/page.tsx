@@ -4,7 +4,8 @@ import { auth } from "@/auth";
 import { 
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
-  Theater, Waves, GraduationCap
+  Theater, Waves, GraduationCap,
+  UserCog // 🟢 Added this import
 } from 'lucide-react';
 
 // 1. Import Baserow Fetchers
@@ -15,7 +16,7 @@ import {
   getCreativeTeam, 
   getClasses,
   getAuditionees,     
-  getScenes,         
+  getScenes,        
   getProductionEvents,
   getSeasons,
   getAllShows
@@ -105,16 +106,34 @@ export default async function DashboardPage() {
             </div>
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">{show?.title}</h1>
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
+                
+                {/* 🟢 ACTION BUTTONS (Replaced Static Pills) */}
                 <div className="flex gap-2 shrink-0">
-                    <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                        <Users size={18} className="text-zinc-400"/>
-                        <span className="text-sm font-black text-white">{castCount} Cast</span>
-                    </div>
-                     <div className="flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
-                        <Ticket size={18} className={theme.accent}/>
-                        <span className={`text-sm font-black ${theme.accent}`}>Box Office</span>
-                    </div>
+                    
+                    {/* CAST BUTTON */}
+                    <Link 
+                        href={`/production/${show.id}/cast`}
+                        className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
+                    >
+                        <Users size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
+                        <span className="text-sm font-black text-white group-hover:underline decoration-white/30 underline-offset-4">
+                            {castCount} Cast
+                        </span>
+                    </Link>
+
+                    {/* TEAM BUTTON */}
+                    <Link 
+                        href={`/production/${show.id}/team`}
+                        className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
+                    >
+                         <UserCog size={18} className={`${theme.accent} group-hover:text-white transition-colors`}/>
+                         <span className={`text-sm font-black ${theme.accent} group-hover:text-white group-hover:underline decoration-white/30 underline-offset-4 transition-colors`}>
+                            Production Team
+                         </span>
+                    </Link>
+
                 </div>
+
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
                 {creativeTeam && <CreativeTeam team={creativeTeam as any} />}
             </div>
@@ -124,8 +143,8 @@ export default async function DashboardPage() {
       {/* 2. WORKFLOW TRACKER */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
          <WorkflowProgress 
-            status={workflowStatus} 
-            productionId={show.id} 
+           status={workflowStatus} 
+           productionId={show.id} 
          />
       </div>
 
