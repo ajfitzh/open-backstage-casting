@@ -342,7 +342,7 @@ export default function StaffClient({ productionId, productionTitle, assignments
   );
 }
 
-// --- HELPER COMPONENTS ---
+// --- HELPER COMPONENTS ---  
 
 function RichStatusIcon({ type, member }: any) {
   const config = LEGACY_MAP[type as keyof typeof LEGACY_MAP];
