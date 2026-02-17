@@ -1190,3 +1190,37 @@ export async function getGlobalSalesSummary() {
 }
 
 export { DB };
+
+// app/lib/baserow.ts
+
+// ... existing code ...
+
+export async function createGoogleUser(googleUser: any) {
+  const F = DB.PEOPLE.FIELDS;
+  
+  // 1. Split Name (Google gives "Austin Fitzhugh", we want "Austin" and "Fitzhugh")
+  const fullName = googleUser.name || "Unknown User";
+  const nameParts = fullName.split(' ');
+  const firstName = nameParts[0];
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : "";
+
+  // 2. Prepare the data for Baserow
+  const payload = {
+    [F.FIRST_NAME]: firstName,
+    [F.LAST_NAME]: lastName,
+    // We map Google's email to your personal email field
+    [F.CYT_ACCOUNT_PERSONAL_EMAIL]: googleUser.email,
+    // 🟢 CRITICAL: Default them to "Guest" so they have limited access
+    [F.STATUS]: ["Guest"], 
+    [F.ORIGINAL_BIO]: "Created via Google Login Auto-Registration",
+  };
+
+  // 3. Send the "Create Row" command to Baserow
+  const res = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  return res;
+}

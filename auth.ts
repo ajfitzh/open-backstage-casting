@@ -1,7 +1,8 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
-import { verifyUserCredentials, findUserByEmail } from "@/app/lib/baserow"
+// 🟢 1. Added 'createGoogleUser' to imports
+import { verifyUserCredentials, findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -29,14 +30,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // SECURITY GATE: Check if Google user exists in Baserow
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const baserowUser = await findUserByEmail(user.email || "");
+        const email = user.email || "";
+        const baserowUser = await findUserByEmail(email);
+
         if (baserowUser) {
-          // Attach Baserow ID/Role to the transient user object
+          // A. User Exists: Attach Baserow ID/Role to the transient user object
           user.id = baserowUser.id;
           (user as any).role = baserowUser.role;
           return true; 
+        } else {
+          // 🟢 B. User DOES NOT Exist: Auto-Register them!
+          try {
+            console.log(`🆕 New Google User: ${email}. Auto-registering...`);
+            await createGoogleUser(user);
+            return true; // Allow them in!
+          } catch (error) {
+            console.error("❌ Auto-registration failed:", error);
+            return false; // Deny access only if creation fails
+          }
         }
-        return false; // Deny access (Not in roster)
       }
       return true; // Credentials login is already verified in authorize()
     },
@@ -45,10 +57,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        
         // Double check Google role if needed
+        // (This is helpful for the NEW user we just created, as they won't have the role attached to 'user' yet)
         if (account?.provider === "google" && !token.role) {
              const baserowUser = await findUserByEmail(user.email || "");
-             if (baserowUser) token.role = baserowUser.role;
+             if (baserowUser) {
+                token.id = baserowUser.id; // Ensure ID is synced
+                token.role = baserowUser.role;
+             }
         }
       }
       return token;
@@ -62,7 +79,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     }
   },
-pages: {
+  pages: {
     signIn: '/login',
     signOut: '/login',
     error: '/login', // Error code will be passed as a query param
