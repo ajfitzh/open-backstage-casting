@@ -432,58 +432,7 @@ export async function getRoles() {
   }));
 }
 
-// app/lib/baserow.ts
 
-export async function getAssignments(productionId?: number) {
-  // 1. CONFIG: Use the Field ID found by your Python script
-  const PRODUCTION_FIELD_ID = "field_6023"; 
-  
-  const params: any = { 
-    size: "200",
-    user_field_names: "true" // 🟢 Turn this back on to get readable names like "Person"
-  };
-
-  if (productionId) {
-    // We manually construct the filter using the ID we verified exists
-    params[`filter__${PRODUCTION_FIELD_ID}__link_row_has`] = productionId;
-  }
-
-  let allRows: any[] = [];
-  let page = 1;
-  let hasMore = true;
-
-  // 2. PAGINATION LOOP
-  while (hasMore) {
-    const data = await fetchBaserow(
-      `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
-      {}, 
-      { ...params, page: page.toString() }
-    );
-
-    if (!Array.isArray(data) || data.length === 0) {
-      hasMore = false;
-    } else {
-      allRows = [...allRows, ...data];
-      if (data.length < 200) hasMore = false;
-      else page++;
-    }
-  }
-
-  // 3. MAP DATA
-  return allRows.map((row: any) => {
-    // With user_field_names=true, these keys should be human readable
-    // But we check both just in case
-    const personObj = row["Person"]?.[0] || row["field_6038"]?.[0]; // Adjust field ID if needed
-    const roleName = row["Assignment"] || row["field_6037"] || "Unknown Role";
-
-    return {
-      id: row.id,
-      assignment: roleName, 
-      personId: personObj ? personObj.id : 0, 
-      personName: personObj ? personObj.value : "Unknown Actor",
-    };
-  });
-}
 
 export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
   const body = {
@@ -772,8 +721,64 @@ export async function getCastDemographics() {
   }));
 }
 
+// app/lib/baserow.ts
+
+// ...
+
+export async function getAssignments(productionId?: number) {
+  // 🟢 CORRECT ID from Schema for Table 603
+  const PRODUCTION_FIELD_ID = DB.ASSIGNMENTS.FIELDS.PRODUCTION; // "field_5787"
+  
+  const params: any = { 
+    size: "200",
+    user_field_names: "true" 
+  };
+
+  if (productionId) {
+    // Manually construct the filter with the correct raw ID
+    params[`filter__${PRODUCTION_FIELD_ID}__link_row_has`] = productionId;
+  }
+
+  let allRows: any[] = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const data = await fetchBaserow(
+      `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
+      {}, 
+      { ...params, page: page.toString() }
+    );
+
+    if (!Array.isArray(data) || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = [...allRows, ...data];
+      if (data.length < 200) hasMore = false;
+      else page++;
+    }
+  }
+
+  return allRows.map((row: any) => {
+    // Schema says "field_5786" is PERSON. With user_field_names=true, it might be "Person"
+    const personObj = row["Person"]?.[0] || row[DB.ASSIGNMENTS.FIELDS.PERSON]?.[0]; 
+    // Schema says "field_5785" is ASSIGNMENT (Formula)
+    const assignmentName = row["Assignment"] || row[DB.ASSIGNMENTS.FIELDS.ASSIGNMENT] || "Unknown Role";
+
+    return {
+      id: row.id,
+      assignment: assignmentName, 
+      personId: personObj ? personObj.id : 0, 
+      personName: personObj ? personObj.value : "Unknown Actor",
+    };
+  });
+}
+
 export async function getCreativeTeam(productionId?: number) {
-  const params: any = { size: "100" };
+  // 🟢 CORRECT ID from Schema for Table 610 (SHOW_TEAM)
+  // "PRODUCTIONS": "field_5852"
+  const params: any = { size: "100", user_field_names: "true" };
+  
   if (productionId) {
     params[`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`] = productionId;
   }
@@ -782,9 +787,11 @@ export async function getCreativeTeam(productionId?: number) {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-      const name = safeGet(row[DB.SHOW_TEAM.FIELDS.PERSON], "");
-      const role = safeGet(row[DB.SHOW_TEAM.FIELDS.POSITION], "Volunteer");
+      const name = row["Person"]?.[0]?.value || row[DB.SHOW_TEAM.FIELDS.PERSON]?.[0]?.value;
+      const role = row["Position"]?.[0]?.value || row[DB.SHOW_TEAM.FIELDS.POSITION]?.[0]?.value || "Volunteer";
+      
       if (!name) return null;
+      
       return {
         id: row.id,
         name: name,
