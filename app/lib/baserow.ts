@@ -385,8 +385,6 @@ export async function getAllShows() {
 // 👯 CASTING & PEOPLE (READ & WRITE)
 // ==============================================================================
 
-// app/lib/baserow.ts
-
 export async function getPeople() {
   const F = DB.PEOPLE.FIELDS;
   
@@ -398,7 +396,11 @@ export async function getPeople() {
     const data = await fetchBaserow(
       `/database/rows/table/${DB.PEOPLE.ID}/`, 
       {}, 
-      { size: "200", user_field_names: "true", page: page.toString() }
+      { 
+        size: "200", 
+        page: page.toString() 
+        // 🟢 user_field_names is now REMOVED (defaults to false)
+      }
     );
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -412,10 +414,11 @@ export async function getPeople() {
 
   return allRows.map((row: any) => ({
     id: row.id,
-    name: `${row["First Name"] || ""} ${row["Last Name"] || ""}`.trim() || row["Full Name"] || "Unknown",
-    headshot: row["Headshot"]?.[0]?.url || row["Avatar"]?.[0]?.url || null,
-    email: row["CYT Account / Personal Email"] || row["Email"] || null,
-    phone: row["Phone Number"] || row["Phone"] || null
+    // 🟢 Using internal field IDs from your schema
+    name: row[F.FULL_NAME] || `${row[F.FIRST_NAME] || ""} ${row[F.LAST_NAME] || ""}`.trim(),
+    headshot: row[F.HEADSHOT]?.[0]?.url || null,
+    email: row[F.CYT_ACCOUNT_PERSONAL_EMAIL] || row[F.CYT_NATIONAL_INDIVIDUAL_EMAIL],
+    phone: row[F.PHONE_NUMBER]
   }));
 }
 
