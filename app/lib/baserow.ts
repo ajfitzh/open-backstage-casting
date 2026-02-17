@@ -385,16 +385,37 @@ export async function getAllShows() {
 // 👯 CASTING & PEOPLE (READ & WRITE)
 // ==============================================================================
 
+// app/lib/baserow.ts
+
 export async function getPeople() {
   const F = DB.PEOPLE.FIELDS;
-  const params = { size: "200", user_field_names: "true" };
-  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, params);
-  if (!Array.isArray(data)) return [];
+  
+  let allRows: any[] = [];
+  let page = 1;
+  let hasMore = true;
 
-  return data.map((row: any) => ({
+  while (hasMore) {
+    const data = await fetchBaserow(
+      `/database/rows/table/${DB.PEOPLE.ID}/`, 
+      {}, 
+      { size: "200", user_field_names: "true", page: page.toString() }
+    );
+
+    if (!Array.isArray(data) || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = [...allRows, ...data];
+      if (data.length < 200) hasMore = false;
+      else page++;
+    }
+  }
+
+  return allRows.map((row: any) => ({
     id: row.id,
-    name: `${row[F.FIRST_NAME]} ${row[F.LAST_NAME]}`.trim(),
-    headshot: row[F.HEADSHOT]?.[0]?.url || null
+    name: `${row["First Name"] || ""} ${row["Last Name"] || ""}`.trim() || row["Full Name"] || "Unknown",
+    headshot: row["Headshot"]?.[0]?.url || row["Avatar"]?.[0]?.url || null,
+    email: row["CYT Account / Personal Email"] || row["Email"] || null,
+    phone: row["Phone Number"] || row["Phone"] || null
   }));
 }
 
@@ -411,25 +432,53 @@ export async function getRoles() {
   }));
 }
 
+// app/lib/baserow.ts
+
 export async function getAssignments(productionId?: number) {
-  const F = DB.ASSIGNMENTS.FIELDS;
+  // 1. CONFIG: Use the Field ID found by your Python script
+  const PRODUCTION_FIELD_ID = "field_6023"; 
   
-  // 1. REMOVE 'user_field_names: "true"' so keys match DB.SCHEMA (e.g. field_5786)
-  const params: any = { size: "200" }; 
+  const params: any = { 
+    size: "200",
+    user_field_names: "true" // 🟢 Turn this back on to get readable names like "Person"
+  };
 
   if (productionId) {
-    params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
+    // We manually construct the filter using the ID we verified exists
+    params[`filter__${PRODUCTION_FIELD_ID}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, params);
-  if (!Array.isArray(data)) return [];
+  let allRows: any[] = [];
+  let page = 1;
+  let hasMore = true;
 
-  return data.map((row: any) => {
-    const personObj = row[F.PERSON]?.[0]; 
+  // 2. PAGINATION LOOP
+  while (hasMore) {
+    const data = await fetchBaserow(
+      `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
+      {}, 
+      { ...params, page: page.toString() }
+    );
+
+    if (!Array.isArray(data) || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = [...allRows, ...data];
+      if (data.length < 200) hasMore = false;
+      else page++;
+    }
+  }
+
+  // 3. MAP DATA
+  return allRows.map((row: any) => {
+    // With user_field_names=true, these keys should be human readable
+    // But we check both just in case
+    const personObj = row["Person"]?.[0] || row["field_6038"]?.[0]; // Adjust field ID if needed
+    const roleName = row["Assignment"] || row["field_6037"] || "Unknown Role";
+
     return {
       id: row.id,
-      assignment: safeGet(row[F.ASSIGNMENT]),
-      // Now this will find the data because row["field_..."] exists
+      assignment: roleName, 
       personId: personObj ? personObj.id : 0, 
       personName: personObj ? personObj.value : "Unknown Actor",
     };
