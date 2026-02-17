@@ -720,23 +720,12 @@ export async function getCastDemographics() {
     gender: safeGet(row[DB.PEOPLE.FIELDS.GENDER], "Unknown"),
   }));
 }
-
-// app/lib/baserow.ts
-
-// ...
-
 export async function getAssignments(productionId?: number) {
-  // 🟢 CORRECT ID from Schema for Table 603
-  const PRODUCTION_FIELD_ID = DB.ASSIGNMENTS.FIELDS.PRODUCTION; // "field_5787"
-  
-  const params: any = { 
-    size: "200",
-    user_field_names: "true" 
-  };
+  const F = DB.ASSIGNMENTS.FIELDS;
+  const params: any = { size: "200" }; // user_field_names is OFF by default
 
   if (productionId) {
-    // Manually construct the filter with the correct raw ID
-    params[`filter__${PRODUCTION_FIELD_ID}__link_row_has`] = productionId;
+    params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   }
 
   let allRows: any[] = [];
@@ -760,14 +749,11 @@ export async function getAssignments(productionId?: number) {
   }
 
   return allRows.map((row: any) => {
-    // Schema says "field_5786" is PERSON. With user_field_names=true, it might be "Person"
-    const personObj = row["Person"]?.[0] || row[DB.ASSIGNMENTS.FIELDS.PERSON]?.[0]; 
-    // Schema says "field_5785" is ASSIGNMENT (Formula)
-    const assignmentName = row["Assignment"] || row[DB.ASSIGNMENTS.FIELDS.ASSIGNMENT] || "Unknown Role";
-
+    const personObj = row[F.PERSON]?.[0]; // Link rows are always arrays of objects
+    
     return {
       id: row.id,
-      assignment: assignmentName, 
+      assignment: row[F.ASSIGNMENT] || "Unknown Role", // Formula field
       personId: personObj ? personObj.id : 0, 
       personName: personObj ? personObj.value : "Unknown Actor",
     };
@@ -775,20 +761,22 @@ export async function getAssignments(productionId?: number) {
 }
 
 export async function getCreativeTeam(productionId?: number) {
-  // 🟢 CORRECT ID from Schema for Table 610 (SHOW_TEAM)
-  // "PRODUCTIONS": "field_5852"
-  const params: any = { size: "100", user_field_names: "true" };
+  const F = DB.SHOW_TEAM.FIELDS;
+  const params: any = { size: "100" };
   
   if (productionId) {
-    params[`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`] = productionId;
+    params[`filter__${F.PRODUCTIONS}__link_row_has`] = productionId;
   }
 
   const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-      const name = row["Person"]?.[0]?.value || row[DB.SHOW_TEAM.FIELDS.PERSON]?.[0]?.value;
-      const role = row["Position"]?.[0]?.value || row[DB.SHOW_TEAM.FIELDS.POSITION]?.[0]?.value || "Volunteer";
+      const personObj = row[F.PERSON]?.[0];
+      const positionObj = row[F.POSITION]?.[0];
+      
+      const name = personObj ? personObj.value : "";
+      const role = positionObj ? positionObj.value : "Volunteer";
       
       if (!name) return null;
       
