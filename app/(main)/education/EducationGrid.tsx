@@ -7,10 +7,29 @@ import {
 } from "lucide-react";
 import ClassManagerModal from "@/app/components/education/ClassManagerModal";
 
-// --- HELPERS ---
+// --- TYPES ---
+// This matches the exact shape guaranteed by our Zod schema
+interface EducationClass {
+  id: number;
+  name: string;
+  session: string;
+  teacher: string;
+  location: string;
+  spaceId: number | null;
+  spaceName: string;
+  day: string;
+  time: string;
+  type: string;
+  status: string;
+  minAge: number;
+  maxAge: number;
+  ageRange: string;
+  students: number;
+}
 
+// --- HELPERS ---
 function getSessionValue(sessionName: string) {
-  if (!sessionName) return 0;
+  if (!sessionName || sessionName === "Unknown Session") return 0;
   const parts = sessionName.split(' ');
   let year = 0;
   let term = 0;
@@ -24,9 +43,9 @@ function getSessionValue(sessionName: string) {
   return (year * 100) + term;
 }
 
-function getVenueName(cls: any) {
-    if (!cls.spaceName) return "TBD Location";
-    return cls.spaceName.split(' - ')[0].trim();
+function getVenueName(spaceName: string) {
+    if (!spaceName || spaceName === "Unknown Room") return "TBD Location";
+    return spaceName.split(' - ')[0].trim();
 }
 
 function getVenueTheme(venueName: string) {
@@ -38,7 +57,6 @@ function getVenueTheme(venueName: string) {
     return { color: 'text-zinc-400', bg: 'bg-zinc-800', border: 'border-white/5', icon: <MapPin size={14}/> };
 }
 
-// 🆕 NEW: Age Buckets for smarter filtering
 const AGE_BUCKETS = [
   { label: "Minis (5-7)", min: 5, max: 7 },
   { label: "Youth (8-12)", min: 8, max: 12 },
@@ -46,8 +64,8 @@ const AGE_BUCKETS = [
   { label: "Adult (18+)", min: 18, max: 100 },
 ];
 
-export default function EducationGrid({ classes }: { classes: any[] }) {
-  const [selectedClass, setSelectedClass] = useState<any>(null);
+export default function EducationGrid({ classes = [] }: { classes: EducationClass[] }) {
+  const [selectedClass, setSelectedClass] = useState<EducationClass | null>(null);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'campus' | 'metrics'>('grid');
   
@@ -56,45 +74,40 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
     const unique = Array.from(new Set(classes.map(c => c.session).filter(Boolean)));
     return unique.sort((a, b) => getSessionValue(b) - getSessionValue(a));
   }, [classes]);
-
+  
   const [activeSession, setActiveSession] = useState<string>(sessions[0] || "");
 
   // 2. DERIVED DATA FOR CURRENT SESSION
   const sessionClasses = useMemo(() => {
-    return classes.map(c => ({
+    return classes.filter(c => c.session === activeSession).map(c => ({
         ...c,
-        venue: getVenueName(c),
-        // Ensure we have numbers for math
-        minAge: c.minAge || 0,
-        maxAge: c.maxAge || 99
-    })).filter(c => c.session === activeSession);
+        venue: getVenueName(c.spaceName),
+    }));
   }, [classes, activeSession]);
 
   // 3. EXTRACT FILTERS
   const availableVenues = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.venue))).sort(), [sessionClasses]);
-  const availableDays = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.day).filter(Boolean))).sort(), [sessionClasses]);
+  const availableDays = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.day).filter(d => d !== "TBD"))).sort(), [sessionClasses]);
 
   // 4. FILTERS STATE
   const [filterVenue, setFilterVenue] = useState<string | null>(null);
   const [filterDay, setFilterDay] = useState<string | null>(null);
-  const [filterAgeLabel, setFilterAgeLabel] = useState<string | null>(null); // Use Label, not exact string
+  const [filterAgeLabel, setFilterAgeLabel] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 5. APPLY FILTERS (Upgraded Logic)
+  // 5. APPLY FILTERS
   const visibleClasses = sessionClasses.filter(c => {
     const matchesVenue = filterVenue ? c.venue === filterVenue : true;
     const matchesDay = filterDay ? c.day === filterDay : true;
     
-    // 🆕 NEW: Age Range Overlap Logic
     let matchesAge = true;
     if (filterAgeLabel) {
        const bucket = AGE_BUCKETS.find(b => b.label === filterAgeLabel);
        if (bucket) {
-          // Check intersection: [ClassMin, ClassMax] overlaps with [BucketMin, BucketMax]
           matchesAge = c.maxAge >= bucket.min && c.minAge <= bucket.max;
        }
     }
-
+    
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.teacher.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -105,20 +118,21 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
   const metrics = useMemo(() => {
     const totalStudents = sessionClasses.reduce((acc, c) => acc + c.students, 0);
     const totalRevenue = totalStudents * 275; 
+    
     const byTeacher = Object.entries(sessionClasses.reduce((acc: any, c) => {
         if (!acc[c.teacher]) acc[c.teacher] = { count: 0, students: 0 };
         acc[c.teacher].count++;
         acc[c.teacher].students += c.students;
         return acc;
     }, {})).sort((a: any, b: any) => b[1].students - a[1].students);
-
+    
     const byVenue = Object.entries(sessionClasses.reduce((acc: any, c) => {
         if (!acc[c.venue]) acc[c.venue] = { classes: 0, students: 0 };
         acc[c.venue].classes++;
         acc[c.venue].students += c.students;
         return acc;
     }, {})).sort((a: any, b: any) => b[1].students - a[1].students);
-
+    
     return { totalStudents, totalRevenue, byTeacher, byVenue };
   }, [sessionClasses]);
 
@@ -160,14 +174,13 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
                         </div>
                     )}
                 </div>
-
                 <div className="bg-zinc-900 border border-white/10 rounded-2xl p-1 flex items-center shrink-0">
                     <button onClick={() => setViewMode('grid')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`} title="Grid View"><LayoutGrid size={18} /></button>
                     <button onClick={() => setViewMode('campus')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'campus' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`} title="Venue View"><Building2 size={18} /></button>
                     <div className="w-px h-6 bg-white/5 mx-1"></div>
                     <button onClick={() => setViewMode('metrics')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'metrics' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-blue-400'}`} title="Analytics"><BarChart3 size={18} /></button>
                 </div>
-
+                
                 {viewMode !== 'metrics' && (
                     <div className="relative flex-1">
                         <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -195,12 +208,10 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
                         <span className="text-[9px] font-black uppercase tracking-widest">All Venues</span>
                         <span className="text-[9px] font-medium opacity-60">{sessionClasses.length} Classes</span>
                     </button>
-
                     {availableVenues.map(venue => {
                         const theme = getVenueTheme(venue);
                         const count = sessionClasses.filter(c => c.venue === venue).length;
                         const isActive = filterVenue === venue;
-
                         return (
                             <button
                                 key={venue}
@@ -233,7 +244,6 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
                     ))}
                     <div className="w-px h-4 bg-white/10 mx-1 hidden sm:block"></div>
                     
-                    {/* 🆕 UPDATED AGE FILTERS: Using Buckets */}
                     {AGE_BUCKETS.map(bucket => (
                         <button 
                            key={bucket.label} 
@@ -252,7 +262,7 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
             {visibleClasses.map((cls) => (
-                <ClassCard key={cls.id} cls={cls} onClick={() => setSelectedClass(cls)} />
+                <ClassCard key={cls.id} cls={cls as any} onClick={() => setSelectedClass(cls)} />
             ))}
             {visibleClasses.length === 0 && <EmptyState />}
         </div>
@@ -337,13 +347,11 @@ export default function EducationGrid({ classes }: { classes: any[] }) {
   );
 }
 
-// ... (Subcomponents remain the same, just copied from your original file)
-function ClassCard({ cls, onClick }: any) {
-    const theme = getVenueTheme(cls.venue);
+function ClassCard({ cls, onClick }: { cls: EducationClass, onClick: () => void }) {
+    const theme = getVenueTheme(cls.venue as any); // Type assertion because venue is a computed property
     return (
         <div onClick={onClick} className="group cursor-pointer bg-zinc-900/40 border border-white/5 hover:border-white/10 hover:bg-zinc-900/60 rounded-2xl p-5 transition-all flex flex-col h-full relative overflow-hidden shadow-sm hover:shadow-2xl">
             <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br rounded-bl-full -mr-8 -mt-8 pointer-events-none opacity-10 ${theme.bg.replace('bg-', 'from-').replace('/10', '')} to-transparent`} />
-
             <div className="mb-4">
                 <div className="flex items-start justify-between gap-4">
                     <h3 className="font-bold text-zinc-100 leading-tight group-hover:text-emerald-400 transition-colors">
@@ -364,7 +372,6 @@ function ClassCard({ cls, onClick }: any) {
                     <School size={10}/> {cls.teacher}
                 </p>
             </div>
-
             <div className="mt-auto space-y-2 pt-4 border-t border-white/5">
                 <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-xs text-zinc-400">

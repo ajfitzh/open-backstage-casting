@@ -1,65 +1,48 @@
 import { cookies } from 'next/headers';
-import { 
-    getShowById, 
-    getActiveProduction,
-    getScenes,
-    getRoles,
-    getSceneAssignments,
-    getPeople,
-    getScheduleSlots, 
-    getProductionEvents
-} from '@/app/lib/baserow';
+import { BaserowClient } from '@/app/lib/BaserowClient';
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
 
-export const dynamic = 'force-dynamic';
+export default async function SchedulePage() {
+  const cookieStore = cookies();
+  
+  // Use the exact same global state logic we used for Casting
+  const savedShowId = cookieStore.get('active_production_id')?.value;
+  const showId = parseInt(savedShowId || "94", 10);
 
-export default async function SchedulerPage() {
-  const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value);
-  
-  // 🟢 1. ROBUST TITLE FETCHING
-  let showTitle = "Select a Production";
-  
-  if (activeId) {
-    try {
-      // Try fetching specific show first
-      const showData = await getShowById(activeId);
-      if (showData && showData.title) {
-        showTitle = showData.title;
-      } else {
-        // Fallback: Check if it matches the active production
-        const activeProd = await getActiveProduction();
-        if (activeProd && activeProd.id === activeId) {
-          showTitle = activeProd.title;
-        }
-      }
-    } catch (e) {
-      console.error("Error fetching title:", e);
-    }
+  if (isNaN(showId)) {
+    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
   }
 
-  // 🟢 2. FETCH DATA
-  const [scenes, roles, sceneAssignments, people, existingSlots, events] = await Promise.all([
-      getScenes(activeId),      
-      getRoles(),               
-      getSceneAssignments(activeId),
-      getPeople(),
-      getScheduleSlots(activeId),
-      getProductionEvents(activeId) // ✅ Fetching production events for the active production
+  // Fetch ALL data needed for the schedule board in parallel
+  const [
+    events, 
+    allSlots, 
+    conflicts, 
+    scenes, 
+    assignments, 
+    roster
+  ] = await Promise.all([
+    BaserowClient.getEventsForShow(showId),
+    BaserowClient.getSlotsForShow(showId), // Pulls a large batch from the table
+    BaserowClient.getConflictsForShow(showId),
+    BaserowClient.getScenesForShow(showId),
+    BaserowClient.getAssignmentsForShow(showId),
+    BaserowClient.getRosterForShow(showId),
   ]);
 
+  // Clean up: Only keep the slots that belong to the events for THIS show
+  const eventIds = new Set(events.map(e => e.id));
+  const showSlots = allSlots.filter(slot => slot.eventId && eventIds.has(slot.eventId));
+
   return (
-    <main className="h-screen bg-zinc-950 overflow-hidden">
-      <SchedulerClient 
-        scenes={scenes || []}
-        roles={roles || []}
-        assignments={sceneAssignments || []}
-        people={people || []}
-        productionTitle={showTitle} // ✅ Passed correctly
-        productionId={activeId}
-        initialSchedule={existingSlots || []} 
-        events={events || []}
-      />
-    </main>
+    <SchedulerClient 
+      activeId={showId}
+      events={events}
+      slots={showSlots}
+      conflicts={conflicts}
+      scenes={scenes}
+      assignments={assignments}
+      roster={roster}
+    />
   );
 }

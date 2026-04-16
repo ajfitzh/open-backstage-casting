@@ -1,8 +1,9 @@
 "use client";
+// At the top of app/components/education/HiringKanban.tsx
+import { updateApplicantStatus } from '@/app/lib/actions'; // 🟢 Changed from baserow
 
 import React, { useState } from 'react';
 import { Search, UserPlus, GripVertical, Mail, FileText } from 'lucide-react';
-import { updateApplicantStatus } from '@/app/lib/baserow';
 
 // Match these IDs exactly to your new Baserow Options
 const COLUMNS = [

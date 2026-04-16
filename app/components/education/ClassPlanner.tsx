@@ -11,44 +11,60 @@ import { updateClassSchedule } from '@/app/lib/actions';
 const TIME_SLOTS = ["4:30 PM", "5:00 PM", "6:00 PM", "6:30 PM", "8:00 PM"];
 const DAYS = ["Monday", "Tuesday", "Thursday", "Saturday"];
 
-export default function ClassPlanner({ classes, venues }: { classes: any[], venues: any[] }) {
+// Define our clean class type
+interface EducationClass {
+  id: number;
+  name: string;
+  session: string;
+  teacher: string;
+  location: string;
+  day: string;
+  time: string;
+  type: string;
+  status: string;
+  ageRange: string;
+}
+
+export default function ClassPlanner({ classes }: { classes: EducationClass[] }) {
   // 1. STATE
-  const [activeSession, setActiveSession] = useState("Fall 2026"); // Default/Dynamic
+  const [activeSession, setActiveSession] = useState("Winter 2026"); // Updated to a valid session from your data
   const [activeDay, setActiveDay] = useState("Tuesday");
   const [isSaving, setIsSaving] = useState(false);
   
   // Local state for optimistic updates
-  const [localClasses, setLocalClasses] = useState(classes);
+  const [localClasses, setLocalClasses] = useState<EducationClass[]>(classes);
 
   // 2. FILTER DATA
   const sessionClasses = useMemo(() => 
-    localClasses.filter((c:any) => c.session === activeSession), 
+    localClasses.filter(c => c.session === activeSession), 
   [localClasses, activeSession]);
 
-  const bench = sessionClasses.filter((c:any) => c.status === 'Proposed' || c.status === 'Seeking Instructor');
+  const bench = sessionClasses.filter(c => c.status === 'Proposed' || c.status === 'Seeking Instructor');
   
+  // Extract unique venues for THIS session to build the columns
+  const activeVenues = useMemo(() => {
+     return Array.from(new Set(sessionClasses.map(c => c.location).filter(Boolean))).sort();
+  }, [sessionClasses]);
+
   // Group scheduled classes by Venue -> Time
   const gridData = useMemo(() => {
-    const scheduled = sessionClasses.filter((c:any) => 
-        (c.status === 'Drafting' || c.status === 'Active') && 
+    const scheduled = sessionClasses.filter(c => 
+        (c.status === 'Drafting' || c.status === 'Active' || c.status === 'Completed') && 
         c.day === activeDay
     );
     
     // Group by Venue Name
-    const groups: Record<string, any[]> = {};
-    venues.forEach((v:any) => groups[v.name] = []);
+    const groups: Record<string, EducationClass[]> = {};
+    activeVenues.forEach(v => groups[v] = []);
     
-    scheduled.forEach((c:any) => {
-        if(groups[c.location]) groups[c.location].push(c);
-        // Fallback if location name doesn't match perfectly
-        else {
-             if(!groups["Other"]) groups["Other"] = [];
-             groups["Other"].push(c);
-        }
+    scheduled.forEach(c => {
+        const loc = c.location || "Other";
+        if (!groups[loc]) groups[loc] = [];
+        groups[loc].push(c);
     });
     
     return groups;
-  }, [sessionClasses, activeDay, venues]);
+  }, [sessionClasses, activeDay, activeVenues]);
 
   // 3. ACTIONS
   const handleDragStart = (e: React.DragEvent, classId: number) => {
@@ -61,7 +77,7 @@ export default function ClassPlanner({ classes, venues }: { classes: any[], venu
     if(!classId) return;
 
     // Optimistic Update
-    setLocalClasses((prev: any[]) => prev.map((c: any) => 
+    setLocalClasses(prev => prev.map(c => 
         c.id === classId 
             ? { ...c, day: activeDay, time: timeSlot, location: venueName, status: 'Drafting' } 
             : c
@@ -81,7 +97,7 @@ export default function ClassPlanner({ classes, venues }: { classes: any[], venu
   const handleUnschedule = async (classId: number) => {
     if(!confirm("Move back to bench?")) return;
     
-    setLocalClasses((prev: any[]) => prev.map((c: any) => 
+    setLocalClasses(prev => prev.map(c => 
         c.id === classId 
             ? { ...c, day: "", time: "", location: "", status: 'Proposed' } 
             : c
@@ -107,17 +123,21 @@ export default function ClassPlanner({ classes, venues }: { classes: any[], venu
                         <option>Fall 2026</option>
                         <option>Winter 2026</option>
                         <option>Spring 2026</option>
+                        {/* Fallbacks based on your actual data */}
+                        <option>Fall 2025</option>
+                        <option>Winter 2025</option>
+                        <option>Spring 2025</option>
                     </select>
                 </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                {bench.map((c:any) => (
+                {bench.map(c => (
                     <div 
                         key={c.id} 
                         draggable 
                         onDragStart={(e) => handleDragStart(e, c.id)}
-                        className="bg-zinc-950 border border-white/10 p-3 rounded-xl cursor-grab hover:border-blue-500/50 hover:shadow-lg transition-all group"
+                        className="bg-zinc-950 border border-white/10 p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-blue-500/50 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] transition-all group"
                     >
                         <div className="flex justify-between items-start mb-2">
                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ${c.status === 'Seeking Instructor' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
@@ -156,37 +176,45 @@ export default function ClassPlanner({ classes, venues }: { classes: any[], venu
             {/* Venues Columns */}
             <div className="flex-1 overflow-x-auto overflow-y-auto p-6 bg-black/20">
                 <div className="flex gap-6 h-full min-h-[600px]">
-                    {venues.map((venue: any) => (
-                        <div key={venue.id} className="w-72 shrink-0 flex flex-col bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden">
+                    {activeVenues.length === 0 && (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500">
+                            <AlertCircle size={48} className="mb-4 opacity-20" />
+                            <p>No venues found for this session.</p>
+                            <p className="text-xs mt-2">Classes must have a Location assigned in the database.</p>
+                        </div>
+                    )}
+                    {activeVenues.map(venue => (
+                        <div key={venue} className="w-72 shrink-0 flex flex-col bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden">
                             <div className="p-4 border-b border-white/5 bg-zinc-950/50 flex items-center gap-2 sticky top-0 z-10">
                                 <MapPin size={14} className="text-zinc-500"/>
-                                <h3 className="text-sm font-black text-zinc-300 uppercase tracking-wide">{venue.name}</h3>
+                                <h3 className="text-sm font-black text-zinc-300 uppercase tracking-wide truncate" title={venue}>{venue}</h3>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-2 space-y-2">
                                 {/* Time Slots Buckets */}
                                 {TIME_SLOTS.map(time => {
-                                    const slotClasses = gridData[venue.name]?.filter((c:any) => c.time === time) || [];
+                                    const slotClasses = gridData[venue]?.filter(c => c.time === time) || [];
                                     return (
                                         <div 
                                             key={time} 
                                             onDragOver={(e) => e.preventDefault()}
-                                            onDrop={(e) => handleDrop(e, venue.name, time)}
-                                            className={`min-h-[80px] rounded-xl border border-dashed border-white/5 p-2 transition-colors ${slotClasses.length > 0 ? 'bg-zinc-900/50' : 'hover:bg-white/5'}`}
+                                            onDrop={(e) => handleDrop(e, venue, time)}
+                                            className={`min-h-[80px] rounded-xl border border-dashed border-white/5 p-2 transition-colors ${slotClasses.length > 0 ? 'bg-zinc-900/50' : 'hover:bg-white/5 hover:border-white/20'}`}
                                         >
                                             <div className="text-[9px] font-mono text-zinc-600 mb-2 block">{time}</div>
                                             
-                                            {slotClasses.map((c:any) => (
+                                            {slotClasses.map(c => (
                                                 <div key={c.id} className="bg-zinc-800 border border-white/10 p-2 rounded-lg shadow-sm mb-2 group relative">
-                                                    <div className="font-bold text-xs text-white truncate pr-4">{c.name}</div>
+                                                    <div className="font-bold text-xs text-white truncate pr-4" title={c.name}>{c.name}</div>
                                                     <div className="text-[10px] text-zinc-400 truncate">{c.teacher}</div>
                                                     
                                                     {/* Unschedule Button */}
                                                     <button 
                                                         onClick={() => handleUnschedule(c.id)}
-                                                        className="absolute top-1 right-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        className="absolute top-1 right-1 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 hover:bg-black p-1 rounded"
+                                                        title="Unschedule"
                                                     >
-                                                        <X size={12}/>
+                                                        <X size={10}/>
                                                     </button>
                                                 </div>
                                             ))}

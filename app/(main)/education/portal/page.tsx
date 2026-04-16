@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { getTeacherClasses, getOpenBounties } from "@/app/lib/baserow";
+import { BaserowClient } from "@/app/lib/BaserowClient";
 import TeacherPortalClient from "@/app/components/education/TeacherPortalClient";
 
 export const dynamic = "force-dynamic";
@@ -8,15 +8,18 @@ export const dynamic = "force-dynamic";
 export default async function TeacherPortalPage() {
     const session = await auth();
     if (!session?.user?.email) redirect("/login");
-
-    // 1. Identify the Teacher (Using Name for now, eventually link to People ID)
+    
+    // 1. Identify the Teacher
     const teacherName = session.user.name || "Unknown Teacher";
+    
+    // 2. Fetch ALL classes cleanly
+    const allClasses = await BaserowClient.getAllClasses();
 
-    // 2. Fetch Data
-    const [myClasses, bounties] = await Promise.all([
-        getTeacherClasses(teacherName),
-        getOpenBounties()
-    ]);
+    // 3. Filter them for this specific teacher
+    const myClasses = allClasses.filter(c => c.teacher === teacherName);
+    
+    // 4. Filter them for Open Bounties
+    const bounties = allClasses.filter(c => c.status === "Seeking Instructor" && c.teacher === "TBA");
 
     return (
         <div className="flex flex-col h-full bg-zinc-950 text-white overflow-y-auto custom-scrollbar">
@@ -26,13 +29,12 @@ export default async function TeacherPortalPage() {
                     <p className="text-zinc-400 mt-1">Welcome back, <span className="text-white font-bold">{teacherName}</span>.</p>
                 </div>
             </header>
-
             <main className="p-8 max-w-5xl mx-auto w-full pb-24">
                 <TeacherPortalClient 
                     teacherName={teacherName} 
                     history={myClasses} 
                     bounties={bounties} 
-                    currentSession="Fall 2026" // You could make this dynamic later
+                    currentSession="Winter 2025" // Updated to match your current data
                 />
             </main>
         </div>

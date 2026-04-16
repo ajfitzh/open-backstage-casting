@@ -1,42 +1,30 @@
-import React from 'react';
 import { cookies } from 'next/headers';
-import { 
-  getActiveProduction, 
-  getShowById, 
-  getConflicts, 
-  getProductionEvents,
-  getAssignments 
-} from '@/app/lib/baserow';
-import { Users, Calendar, AlertTriangle } from 'lucide-react';
-import ConflictsClient from '@/app/components/conflicts/ConflictsClient'; // Assuming you have a client component for the filters/log
+import { BaserowClient } from '@/app/lib/BaserowClient';
+import { AlertTriangle } from 'lucide-react';
+import ConflictsClient from '@/app/components/conflicts/ConflictsClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ConflictsPage() {
-  // 1. 🔍 RESOLVE CONTEXT (The Fix)
-  const cookieStore = await cookies();
-  const cookieId = cookieStore.get('active_production_id')?.value;
+  const cookieStore = cookies();
   
-  let production = null;
-  if (cookieId) production = await getShowById(cookieId);
-  if (!production) production = await getActiveProduction();
+  // 1. Unify the Global State logic
+  const savedShowId = cookieStore.get('active_production_id')?.value;
+  const showId = parseInt(savedShowId || "94", 10);
 
-  if (!production) return <div className="p-10 text-zinc-500">No Active Production found.</div>;
+  if (isNaN(showId)) {
+    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
+  }
 
-  // 2. 📡 FETCH DATA FOR THIS SPECIFIC SHOW
-  const [conflicts, events, assignments] = await Promise.all([
-    getConflicts(production.id),
-    getProductionEvents(production.id),
-    getAssignments(production.id) // Fetches the specific cast list for this show
+  // 2. Fetch the perfect, typed data using our client
+  const [production, conflicts, roster] = await Promise.all([
+    BaserowClient.getProduction(showId),
+    BaserowClient.getConflictsForShow(showId),
+    BaserowClient.getRosterForShow(showId)
   ]);
 
-  // 3. 🧹 CLEAN DATA FOR UI
-  // Create a unique list of actors for the sidebar filter
-  const actors = Array.from(new Set(
-    assignments
-      .filter((a: any) => a.personName)
-      .map((a: any) => ({ id: a.personId, name: a.personName }))
-  )).sort((a: any, b: any) => a.name.localeCompare(b.name));
+  // 3. Map the roster into a simple array for the sidebar dropdown
+  const actors = roster.map(r => ({ id: r.id, name: r.name }));
 
   return (
     <main className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
@@ -49,7 +37,7 @@ export default async function ConflictsPage() {
             Conflict Matrix
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-             Managing attendance for <span className="text-white font-bold">{production.title}</span>
+             Managing attendance for <span className="text-white font-bold">{production?.title || "Active Production"}</span>
           </p>
         </div>
         
@@ -62,14 +50,12 @@ export default async function ConflictsPage() {
         </div>
       </header>
 
-      {/* CLIENT COMPONENT (Handles Filtering & Layout) */}
+      {/* CLIENT COMPONENT */}
       <ConflictsClient 
         initialConflicts={conflicts} 
-        actors={actors} // Pass the correct cast list here
-        events={events}
-        showTitle={production.title}
+        actors={actors} 
+        showTitle={production?.title || "Active Production"}
       />
-
     </main>
   );
 }

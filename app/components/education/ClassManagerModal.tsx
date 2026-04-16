@@ -4,36 +4,57 @@ import { useState, useEffect } from 'react';
 import { 
   X, Users, Calendar, Phone, Mail, 
   CheckCircle2, Clock, XCircle, Loader2, 
-  Save, ChevronRight, Search 
+  Save
 } from 'lucide-react';
 import { fetchRosterAction } from "@/app/lib/actions";
 
-export default function ClassManagerModal({ cls, onClose }: { cls: any, onClose: () => void }) {
+// 🟢 STRICT TYPES
+interface EducationClass {
+  id: number;
+  name: string;
+  day: string;
+  time: string;
+  teacher: string;
+}
+
+export interface ClassStudent {
+  id: number;
+  name: string;
+  age: string | number;
+  email: string;
+  phone: string;
+}
+
+interface Props {
+  cls: EducationClass;
+  onClose: () => void;
+}
+
+export default function ClassManagerModal({ cls, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<'roster' | 'attendance'>('roster');
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<ClassStudent[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Attendance State
-  const [attendance, setAttendance] = useState<Record<string, string>>({});
+  const [attendance, setAttendance] = useState<Record<number, string>>({});
 
-  // Fetch data when modal opens
   useEffect(() => {
     async function load() {
       const data = await fetchRosterAction(cls.id);
-      setStudents(data);
+      setStudents(data || []);
       setLoading(false);
     }
     load();
   }, [cls.id]);
 
-  const toggleAttendance = (studentId: string) => {
+  const toggleAttendance = (studentId: number) => {
     const current = attendance[studentId];
     const next = current === 'present' ? 'late' : current === 'late' ? 'absent' : 'present';
     setAttendance(prev => ({ ...prev, [studentId]: next }));
   };
 
   const markAllPresent = () => {
-    const update: any = {};
+    const update: Record<number, string> = {};
     students.forEach(s => update[s.id] = 'present');
     setAttendance(update);
   };
@@ -93,7 +114,7 @@ export default function ClassManagerModal({ cls, onClose }: { cls: any, onClose:
                   {students.map(student => (
                     <div key={student.id} className="bg-zinc-950 border border-white/5 p-4 rounded-xl flex items-start gap-4 hover:border-white/10 transition-colors">
                       <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-500 shrink-0">
-                        {student.name.substring(0,2).toUpperCase()}
+                        {student.name.substring(0,2).toUpperCase() || "??"}
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-white truncate">{student.name}</div>
@@ -126,7 +147,6 @@ export default function ClassManagerModal({ cls, onClose }: { cls: any, onClose:
                         Mark All Present
                       </button>
                    </div>
-
                    {students.map(student => {
                      const status = attendance[student.id];
                      return (
@@ -137,7 +157,7 @@ export default function ClassManagerModal({ cls, onClose }: { cls: any, onClose:
                              status === 'late' ? 'bg-amber-500 text-black' :
                              status === 'absent' ? 'bg-red-500 text-white' : 'bg-zinc-800 text-zinc-600'
                            }`}>
-                             {student.name.substring(0,2).toUpperCase()}
+                             {student.name.substring(0,2).toUpperCase() || "??"}
                            </div>
                            <span className={`font-bold transition-colors ${status ? 'text-white' : 'text-zinc-400'}`}>{student.name}</span>
                          </div>
@@ -174,9 +194,7 @@ function TabButton({ active, onClick, icon, label }: any) {
     <button 
       onClick={onClick}
       className={`flex-1 flex items-center justify-center gap-2 py-4 text-xs font-bold uppercase tracking-widest transition-all ${
-        active 
-          ? 'bg-zinc-900 text-white border-b-2 border-blue-500' 
-          : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+        active ? 'bg-zinc-900 text-white border-b-2 border-blue-500' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
       }`}
     >
       {icon} {label}

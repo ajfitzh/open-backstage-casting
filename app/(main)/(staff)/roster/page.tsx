@@ -1,52 +1,28 @@
 import { cookies } from 'next/headers';
-import { 
-    getActiveProduction, 
-    getShowById, // <--- 1. Import this!
-    getAssignments, 
-    getComplianceData, 
-    getPeople 
-} from '@/app/lib/baserow';
-import StaffClient from '@/app/components/staff/StaffClient';
+import { BaserowClient } from '@/app/lib/BaserowClient';
+// Assuming StaffClient wraps ComplianceDashboard, but let's just use ComplianceDashboard directly to keep it clean!
+import ComplianceDashboard from '@/app/components/ComplianceDashboard'; 
 
 export default async function RosterPage() {
-  const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value);
-  
-  let productionTitle = "Cast Roster";
-  let productionId = activeId || 0;
+  const cookieStore = cookies();
+  const savedShowId = cookieStore.get('active_production_id')?.value;
+  const showId = parseInt(savedShowId || "94", 10);
 
-  // 2. LOGIC FIX:
-  if (activeId) {
-      // If we have a cookie, fetch THAT specific show
-      const showData = await getShowById(activeId);
-      
-      // Baserow sometimes returns an array [obj] or just obj depending on the endpoint
-      const prod = Array.isArray(showData) ? showData[0] : showData;
-      
-      if (prod) productionTitle = prod.Title;
-  } else {
-      // Fallback: If no cookie, get the default "Active" show
-      const prod = await getActiveProduction(); 
-      if (prod) {
-          productionTitle = prod.title;
-          productionId = prod.id;
-      }
+  if (isNaN(showId)) {
+    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
   }
 
-  // 3. Fetch Data using the determined ID
-  const [assignments, people, compliance] = await Promise.all([
-      getAssignments(productionId),
-      getPeople(),
-      getComplianceData(productionId)
+  // Fetch only the two things we need!
+  const [production, roster] = await Promise.all([
+      BaserowClient.getProduction(showId),
+      BaserowClient.getRosterForShow(showId)
   ]);
 
   return (
-    <main className="h-full bg-zinc-950 overflow-hidden">
-      <StaffClient 
-        productionTitle={productionTitle} 
-        assignments={assignments}
-        people={people}
-        compliance={compliance}
+    <main className="h-full bg-zinc-950">
+      <ComplianceDashboard 
+        productionTitle={production?.title || "Active Production"} 
+        students={roster}
       />
     </main>
   );

@@ -22,7 +22,8 @@ export default async function MainLayout({
 
   // 2. Determine Active Production (Context)
   const cookieStore = await cookies();
-  const activeId = Number(cookieStore.get('active_production_id')?.value);
+  const cookieVal = cookieStore.get('active_production_id')?.value;
+  const activeId = cookieVal ? Number(cookieVal) : 94; // Default to Little Mermaid
   
   // 3. Fetch Context-Aware Role
   let productionRole = null;

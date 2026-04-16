@@ -1,4 +1,3 @@
- 
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -6,6 +5,21 @@ import {
   Printer, Crown, Wand2, RotateCcw, X, 
   Trash2, Sliders, Info, CheckCircle2
 } from 'lucide-react';
+
+// --- TYPES ---
+interface Volunteer {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  studentName: string;
+  preShow1: string | null;
+  preShow2: string | null;
+  preShow3: string | null;
+  showWeek1: string | null;
+  showWeek2: string | null;
+  showWeek3: string | null;
+}
 
 // --- CONFIG ---
 const COMMITTEES = {
@@ -27,30 +41,26 @@ const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?
 };
 
 export default function CommitteeDashboard({ 
-    volunteers = [], // Default to empty array
-    students = [],   // Default to empty array
+    volunteers = [], 
+    students = [],   
     activeId 
 }: { 
-    volunteers?: any[], 
+    volunteers?: Volunteer[], 
     students?: any[], 
     activeId: number 
 }) {
   
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
-  const [rawData] = useState<any[]>(volunteers);
+  const [rawData] = useState<Volunteer[]>(volunteers);
   
-  // 🚨 FIX: Smart Initial Assignments
-  // If we are in Pre-Show mode, we default to Pre-Show 1st choice, etc.
-  // Since assignments are "session based" in this view, we track them separately per mode effectively.
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [assignments, setAssignments] = useState<Record<number, string>>({});
   const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- HELPER: Get Preferences based on current View ---
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const getPrefs = (p: any) => {
+  const getPrefs = (p: Volunteer) => {
       if (groupBy === 'Pre-Show') {
           return { first: p.preShow1, second: p.preShow2, third: p.preShow3 };
       } else {
@@ -68,15 +78,9 @@ export default function CommitteeDashboard({
       return calculated;
   };
 
-  const updateRuleValue = (key: string, newVal: number) => {
-      setRules(prev => ({ ...prev, [key]: { ...prev[key], val: newVal } }));
-  };
-
   // --- ACTIONS ---
   const handleClearBoard = () => {
       if(!confirm(`Are you sure you want to clear assignments for ${groupBy}?`)) return;
-      // In a real app, you might want to separate "Pre-Show Assignments" from "Show Week Assignments"
-      // For now, we just clear the current in-memory state
       setAssignments({});
   };
 
@@ -84,12 +88,10 @@ export default function CommitteeDashboard({
       if(!confirm(`Auto-Balance ${groupBy}?`)) return;
       
       const newAssignments = { ...assignments };
-      // @ts-ignore
       const currentCommittees = COMMITTEES[groupBy];
-      let movedCount = 0;
-
+      
       const getCount = (comm: string) => rawData.filter(p => newAssignments[p.id] === comm).length;
-
+      
       currentCommittees.forEach((targetComm: string) => {
           const targetLimit = getCommitteeTarget(targetComm); 
           if (getCount(targetComm) < targetLimit) {
@@ -99,12 +101,9 @@ export default function CommitteeDashboard({
                    const prefs = getPrefs(p);
                    const currentComm = newAssignments[p.id];
                    
-                   // Logic: If unassigned OR assigned to something over-full
-                   // AND they want this committee
                    if (!currentComm || (getCount(currentComm) > getCommitteeTarget(currentComm))) {
                        if (prefs.first === targetComm || prefs.second === targetComm) {
                            newAssignments[p.id] = targetComm;
-                           movedCount++;
                        }
                    }
                });
@@ -113,46 +112,33 @@ export default function CommitteeDashboard({
       setAssignments(newAssignments);
   };
 
-  const handleSetLeader = (committee: string, role: 'chair' | 'coChair', personId: number | null) => {
-      const key = `${groupBy}:${committee}`;
-      setLeadership(prev => ({
-          ...prev, [key]: { ...(prev[key] || { chair: null, coChair: null }), [role]: personId }
-      }));
-  };
-
   // Group Logic
   const groupedData = useMemo(() => {
-      const groups: Record<string, any[]> = {};
-      // @ts-ignore
+      const groups: Record<string, Volunteer[]> = {};
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
       groups["Unassigned"] = [];
-
+      
       rawData.forEach(p => {
-          // Check if manual assignment exists
           let assignedVal = assignments[p.id];
           
-          // If NOT manually assigned, Default to their 1st Choice for this phase
           if (!assignedVal) {
               const prefs = getPrefs(p);
-              // Only auto-assign if it's a valid committee for this phase
-              // @ts-ignore
-              if (COMMITTEES[groupBy].includes(prefs.first)) {
+              if (prefs.first && COMMITTEES[groupBy].includes(prefs.first)) {
                   assignedVal = prefs.first;
               }
           }
-
           if (assignedVal && groups[assignedVal]) groups[assignedVal].push(p);
           else groups["Unassigned"].push(p);
       });
       return groups;
-  }, [groupBy, rawData, assignments, getPrefs]);
+  }, [groupBy, rawData, assignments]);
 
   const currentTeam = selectedCommittee ? groupedData[selectedCommittee] : [];
   const leadershipKey = `${groupBy}:${selectedCommittee}`;
   const currentLeaders = leadership[leadershipKey] || { chair: null, coChair: null };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans p-4 md:p-6 flex flex-col">
+    <div className="min-h-screen bg-zinc-950 text-white font-sans p-4 md:p-6 flex flex-col overflow-y-auto custom-scrollbar">
         {/* HEADER */}
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 print:hidden">
             <div>
@@ -166,27 +152,26 @@ export default function CommitteeDashboard({
                     <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
                     <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
                 </div>
-                <button onClick={() => setIsSettingsOpen(true)} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/5 px-4 py-2 rounded-lg text-xs font-bold uppercase flex items-center gap-2 transition-all"><Sliders size={14}/> Rules</button>
                 <button onClick={handleAutoBalance} className="bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
                 <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14}/> Clear</button>
-                <button onClick={() => setAssignments({})} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-2 rounded-lg transition-all"><RotateCcw size={14}/></button>
                 <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
             </div>
         </div>
 
         {/* BOARD GRID */}
-        <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 print:block print:columns-2">
+        <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 print:block print:columns-2 pb-24">
             {Object.keys(groupedData).map(committee => {
                 const team = groupedData[committee];
                 const target = getCommitteeTarget(committee);
                 const isUnderstaffed = team.length < target;
                 const statusColor = isUnderstaffed ? 'text-amber-500' : 'text-emerald-500';
+                
                 const lKey = `${groupBy}:${committee}`;
                 const leaders = leadership[lKey] || { chair: null, coChair: null };
                 const chairName = rawData.find(p => p.id === leaders.chair)?.name;
-
+                
                 if (team.length === 0 && committee !== "Unassigned") return null;
-
+                
                 return (
                     <div key={committee} className={`break-inside-avoid mb-6 rounded-2xl overflow-hidden border shadow-2xl border-white/10 bg-zinc-900/40 print:border-black print:bg-white print:mb-8`}>
                         <div onClick={() => setSelectedCommittee(committee)} className="p-4 border-b border-white/5 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors">
@@ -196,8 +181,9 @@ export default function CommitteeDashboard({
                             </div>
                             <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
                         </div>
+                        
                         <div className="p-3 space-y-1">
-                            {team.slice(0, 3).map((p: any) => {
+                            {team.slice(0, 3).map((p: Volunteer) => {
                                 const prefs = getPrefs(p);
                                 return (
                                     <div key={p.id} className="text-xs text-zinc-400 flex justify-between">
@@ -213,7 +199,7 @@ export default function CommitteeDashboard({
             })}
         </div>
 
-        {/* --- DRAWER (Simplified for brevity) --- */}
+        {/* --- DRAWER --- */}
         {selectedCommittee && (
             <div className="fixed inset-0 z-50 flex justify-end">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedCommittee(null)} />
@@ -225,10 +211,10 @@ export default function CommitteeDashboard({
                         </div>
                         <button onClick={() => setSelectedCommittee(null)} className="p-2 hover:bg-white/10 rounded-full"><X/></button>
                     </div>
+                    
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
-                         {/* Roster List */}
                          <div className="bg-zinc-950 border border-white/5 rounded-xl divide-y divide-white/5">
-                            {currentTeam.map((p: any) => {
+                            {currentTeam.map((p: Volunteer) => {
                                 const prefs = getPrefs(p);
                                 return (
                                     <div key={p.id} className="p-3 hover:bg-white/5 transition-colors group flex justify-between items-center">
@@ -244,9 +230,8 @@ export default function CommitteeDashboard({
                                             <select 
                                                 className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-[10px] text-zinc-400 outline-none focus:text-white"
                                                 value={assignments[p.id] || ((prefs.first === selectedCommittee) ? selectedCommittee : "Unassigned")}
-                                                onChange={(e) => { const n = {...assignments}; n[p.id] = e.target.value; setAssignments(n); }}
+                                                onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
                                             >
-                                                {/* @ts-ignore */}
                                                 {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
                                                 <option value="Unassigned">Unassigned</option>
                                             </select>

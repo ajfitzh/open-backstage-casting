@@ -10,7 +10,17 @@ import {
   claimBounty
 } from "@/app/lib/baserow";
 import { DB } from "@/app/lib/schema";
-
+// 🎯 HARDCODED IDs
+const TBL_CLASSES = 633;
+const FLD_CLASS_NAME = 'field_6115';
+const FLD_CLASS_TEACHER = 'field_6117'; // Notice this is a Link Row field
+const FLD_CLASS_STATUS = 'field_6241';  // Single Select
+const FLD_CLASS_DESC = 'field_6242';
+const FLD_CLASS_OBJ = 'field_6243';
+const FLD_CLASS_TYPE = 'field_6217';    // Single Select
+const FLD_CLASS_SESSION = 'field_6116'; // Link Row
+const TBL_SESSIONS = 632;
+const TBL_PEOPLE = 599;
 // --- HELPERS ---
 
 export async function getSeasonBoard(seasonId: string) {
@@ -54,34 +64,160 @@ const formatTimeHHMM = (decimal: number) => {
 // --- EDUCATION ACTIONS ---
 
 export async function submitProposalAction(data: any) {
-  await submitClassProposal(data);
-  revalidatePath("/education/portal");
+  // 1. We must find the Session ID for the string "Winter 2025"
+  const sessionRes = await fetchBaserow(`/database/rows/table/${TBL_SESSIONS}/?user_field_names=true&filter__field_6109__equal=${data.session}&size=1`);
+  const sessionId = Array.isArray(sessionRes) && sessionRes.length > 0 ? sessionRes[0].id : null;
+
+  // 2. We must find the Person ID for the teacher name
+  const teacherRes = await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/?user_field_names=true&filter__field_5735__equal=${data.teacher}&size=1`);
+  const teacherId = Array.isArray(teacherRes) && teacherRes.length > 0 ? teacherRes[0].id : null;
+
+  try {
+      await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [FLD_CLASS_NAME]: data.name,
+          [FLD_CLASS_DESC]: data.description,
+          [FLD_CLASS_OBJ]: data.objectives,
+          // Since these are link_row fields, we must send an array containing the ID
+          ...(sessionId && { [FLD_CLASS_SESSION]: [sessionId] }),
+          ...(teacherId && { [FLD_CLASS_TEACHER]: [teacherId] }),
+          // Send the string values for Single Selects
+          [FLD_CLASS_TYPE]: data.type, 
+          [FLD_CLASS_STATUS]: "Proposed" 
+        })
+      });
+      revalidatePath("/education/portal");
+      return { success: true };
+  } catch (e) {
+      console.error("Failed to submit proposal:", e);
+      return { success: false };
+  }
 }
+
 
 export async function claimBountyAction(classId: number, teacherName: string) {
-  await claimBounty(classId, teacherName);
-  revalidatePath("/education/portal");
+  // 1. Find the Person ID for the teacher claiming it
+  const teacherRes = await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/?user_field_names=true&filter__field_5735__equal=${teacherName}&size=1`);
+  const teacherId = Array.isArray(teacherRes) && teacherRes.length > 0 ? teacherRes[0].id : null;
+
+  if (!teacherId) return { success: false, error: "Teacher not found in database" };
+
+  try {
+      await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/${classId}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [FLD_CLASS_TEACHER]: [teacherId], // Link the teacher
+          [FLD_CLASS_STATUS]: "Proposed"    // Change status from Seeking to Proposed
+        })
+      });
+      revalidatePath("/education/portal");
+      revalidatePath("/education/proposals");
+      return { success: true };
+  } catch (e) {
+      console.error("Failed to claim bounty:", e);
+      return { success: false };
+  }
+}
+export async function updateApplicantStatus(personId: number, oldTags: string[], newTag: string) {
+  // Table 599 is PEOPLE
+  // Field 5782 is Status (Multiple Select)
+  const TBL_PEOPLE = 599;
+  const FLD_STATUS = 'field_5782';
+
+  const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
+  
+  // Keep all tags that AREN'T hiring tags (e.g. keep "Parent", "Student")
+  const keptTags = oldTags.filter(t => !hiringTags.includes(t));
+  
+  // Add the new hiring column tag
+  const newTags = [...keptTags, newTag];
+
+  try {
+    await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/${personId}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        // Baserow Multiple Select fields expect an array of strings
+        [FLD_STATUS]: newTags 
+      })
+    });
+    
+    revalidatePath("/education/hiring");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update applicant status:", error);
+    return { success: false };
+  }
 }
 
-export async function fetchRosterAction(classId: string) {
-  return await getClassRoster(classId);
+export async function fetchRosterAction(classId: number) {
+  // 🟢 THE FIX: Grab the correct URL from your environment variables!
+  const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
+  
+  // Table 599 is PEOPLE. Field 6151 is Classes.
+  const url = `${BASE_URL}/api/database/rows/table/599/?user_field_names=true&filter__field_6151__link_row_has=${classId}&size=200`;
+  
+  try {
+    const res = await fetch(url, {
+      headers: { 
+        "Authorization": `Token ${process.env.BASEROW_API_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      cache: 'no-store'
+    });
+    
+    if (!res.ok) {
+        console.error("❌ [fetchRosterAction] Failed:", res.status, res.statusText);
+        return [];
+    }
+    
+    const data = await res.json();
+    const students = data.results || data;
+    
+    return students.map((row: any) => ({
+      id: row.id,
+      name: row['Full Name'] || 'Unknown Student',
+      age: row['Age'] || '?',
+      email: row['CYT Account Personal Email'] || '',
+      phone: row['Phone Number'] || ''
+    }));
+  } catch (error) {
+    console.error("❌ [fetchRosterAction] Network Error:", error);
+    return [];
+  }
 }
+
 
 export async function updateClassSchedule(
   classId: number, 
   payload: { day: string; time: string; location: string; status: string }
 ) {
-  const F = DB.CLASSES.FIELDS;
-  await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
+  // Table 633 is CLASSES
+  const TBL_CLASSES = 633;
+  
+  // Field IDs from schema dump
+  const FLD_CLASS_DAY = 'field_6119';    // Single Select
+  const FLD_CLASS_TIME = 'field_6120';   // Single Select
+  const FLD_CLASS_LOC = 'field_6118';    // Single Select
+  const FLD_CLASS_STATUS = 'field_6241'; // Single Select
+
+  await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/${classId}/`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      [F.DAY]: payload.day,
-      [F.TIME_SLOT]: payload.time,
-      [F.LOCATION]: payload.location,
-      [F.STATUS]: payload.status 
+      // Because these are Single Select fields in Baserow, we pass the string value.
+      // Baserow is smart enough to match the string to the correct select option ID.
+      // If we pass an empty string "", it clears the field.
+      [FLD_CLASS_DAY]: payload.day || "",
+      [FLD_CLASS_TIME]: payload.time || "",
+      [FLD_CLASS_LOC]: payload.location || "",
+      [FLD_CLASS_STATUS]: payload.status 
     })
   });
+
   revalidatePath("/education/planning");
   revalidatePath("/education"); 
 }
@@ -159,16 +295,16 @@ type SceneLoadUpdate = {
   load: { music: number; dance: number; block: number; };
 };
 
-export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
-  const F = DB.SCENES.FIELDS;
+export async function updateSceneLoads(updates: {id: number, load: {music: number, dance: number, block: number}}[]) {
+  // Table 627 is SCENES
   const promises = updates.map(async (update) => {
-    await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/${update.id}/`, {
+    await fetchBaserow(`/database/rows/table/627/${update.id}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        [F.MUSIC_LOAD]: update.load.music,
-        [F.DANCE_LOAD]: update.load.dance,
-        [F.BLOCKING_LOAD]: update.load.block,
+        'field_6222': update.load.music, // Music Load
+        'field_6223': update.load.dance, // Dance Load
+        'field_6224': update.load.block, // Blocking Load
       }),
     });
   });
@@ -176,6 +312,7 @@ export async function updateSceneLoads(updates: SceneLoadUpdate[]) {
   revalidatePath("/analysis");
   return { success: true };
 }
+
 
 export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance' | 'block', status: string) {
   const F = DB.SCENES.FIELDS;
@@ -192,9 +329,29 @@ export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance
   revalidatePath("/production");
 }
 
+// ============================================================================
 // --- SCHEDULING ACTIONS ---
+// ============================================================================
+
+// 🎯 HARDCODED IDs FOR STABILITY
+const TBL_EVENTS = 625;
+const FLD_EV_PROD = 'field_6007';
+const FLD_EV_DATE = 'field_6008';
+const FLD_EV_START = 'field_6010';
+const FLD_EV_END = 'field_6011';
+
+const TBL_SLOTS = 640;
+const FLD_SL_EVENT = 'field_6230';
+const FLD_SL_SCENE = 'field_6233';
+const FLD_SL_TRACK = 'field_6235';
+const FLD_SL_START = 'field_6236';
+const FLD_SL_DURATION = 'field_6238';
+
 
 export async function saveScheduleBatch(productionId: number, items: any[]) {
+  console.log(`[Save] Schedule Batch for Prod ${productionId}: ${items.length} items`);
+  
+  // Group slots by day so we can create one parent Event per day
   const itemsByDate: Record<string, any[]> = {};
   items.forEach(item => {
       if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
@@ -203,283 +360,118 @@ export async function saveScheduleBatch(productionId: number, items: any[]) {
 
   const promises = Object.entries(itemsByDate).map(async ([date, dayItems]) => {
       let parentEventId = dayItems[0].existingParentEventId; 
-
+      
+      // 1. CREATE PARENT EVENT (If it doesn't exist)
       if (!parentEventId) {
           const minTime = Math.min(...dayItems.map((i:any) => i.startTime)); 
           const maxTime = Math.max(...dayItems.map((i:any) => i.startTime + (i.duration/60))); 
           
-          const parentRes = await fetchBaserow(`/database/rows/table/${DB.EVENTS.ID}/`, {
+          const parentRes = await fetchBaserow(`/database/rows/table/${TBL_EVENTS}/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                  [DB.EVENTS.FIELDS.PRODUCTION]: [productionId],
-                  [DB.EVENTS.FIELDS.EVENT_DATE]: date,
-                  [DB.EVENTS.FIELDS.START_TIME]: `${date}T${formatTimeHHMM(minTime)}:00`,
-                  [DB.EVENTS.FIELDS.END_TIME]: `${date}T${formatTimeHHMM(maxTime)}:00`,
-                  [DB.EVENTS.FIELDS.EVENT_TYPE]: "Rehearsal" 
+                  [FLD_EV_PROD]: [productionId],
+                  [FLD_EV_DATE]: date,
+                  [FLD_EV_START]: `${date}T${formatTimeHHMM(minTime)}:00`,
+                  [FLD_EV_END]: `${date}T${formatTimeHHMM(maxTime)}:00`,
               })
           });
           if (parentRes && !parentRes.error) parentEventId = parentRes.id;
       }
 
+      // 2. CREATE CHILD SLOTS
       if (parentEventId) {
-        const SLOT_DB = DB.SCHEDULE_SLOTS; 
         const slotPromises = dayItems.map(item => {
-             return fetchBaserow(`/database/rows/table/${SLOT_DB.ID}/`, {
+             return fetchBaserow(`/database/rows/table/${TBL_SLOTS}/`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    [SLOT_DB.FIELDS.EVENT_LINK]: [parentEventId], 
-                    [SLOT_DB.FIELDS.SCENE]: [item.sceneId],       
-                    [SLOT_DB.FIELDS.TRACK]: item.track,           
-                    [SLOT_DB.FIELDS.START_TIME]: `${date}T${formatTimeHHMM(item.startTime)}:00`,
-                    [SLOT_DB.FIELDS.DURATION]: item.duration
+                    [FLD_SL_EVENT]: [parentEventId], 
+                    [FLD_SL_SCENE]: [item.sceneId],       
+                    [FLD_SL_TRACK]: item.track,           
+                    [FLD_SL_START]: `${date}T${formatTimeHHMM(item.startTime)}:00`,
+                    [FLD_SL_DURATION]: item.duration
                 })
              });
         });
         await Promise.all(slotPromises);
       }
   });
-
+  
   await Promise.all(promises);
   revalidatePath("/schedule");
   return { success: true };
 }
 
-// --- CASTING ACTIONS ---
 
-// 1. GENERATE EMPTY ROWS (Initialize Grid) - OPTIMIZED PARALLEL
+// ============================================================================
+// --- CASTING ACTIONS ---
+// ============================================================================
+
+// 🎯 HARDCODED IDs FOR STABILITY
+// Pulled directly from the schema dump to prevent "undefined field" errors during saves.
+const TBL_ASSIGNMENTS = 603;
+const FLD_ASSIGN_PERSON = 'field_5786';
+const FLD_ASSIGN_PROD = 'field_5787';
+const FLD_ASSIGN_ROLE = 'field_5796'; // Performance Identity
+
+const TBL_SCENE_ASSIGNMENTS = 628;
+const FLD_SA_PERSON = 'field_6032';
+const FLD_SA_SCENE = 'field_6033';
+const FLD_SA_PROD = 'field_6036';
+
+const TBL_ROLES = 605;
+const TBL_SCENES = 627;
+
+// 1. GENERATE EMPTY ROWS (Initialize Grid)
 export async function generateCastingRows(productionId: number) {
   console.log(`[Action] Generating rows for Production ${productionId}`);
-
-  // A. Get Master Show ID
-  const production = await fetchBaserow(
-    `/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`
-  );
   
+  // A. Get Master Show ID from the Production
+  const production = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
   if (!production) return { success: false, error: "Production not found" };
-
+  
   const masterShowId = production['Master Show Database']?.[0]?.id;
   if (!masterShowId) return { success: false, error: "No Master Show linked" };
 
-  // B. Fetch Blueprint Roles (Strictly filtered by Master Show)
-  const blueprintRoles = await fetchBaserow(
-    `/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, 
-    {}, 
-    { 
-      // Prevent "Ghost Data" from other shows
-      [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
+  // B. Fetch Blueprint Roles for this specific Master Show
+  const blueprintRoles = await fetchBaserow(`/database/rows/table/${TBL_ROLES}/`, {}, { 
+      [`filter__field_5794__link_row_has`]: masterShowId, // 5794 is 'Master Show Database' on Roles
       size: "200" 
-    }
-  );
-  
+  });
   if (!Array.isArray(blueprintRoles)) return { success: false, error: "Failed to fetch blueprint" };
 
-  // C. Fetch Existing (Avoid Duplicates)
-  const existing = await fetchBaserow(
-    `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
-    {}, 
-    {
-      [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+  // C. Fetch Existing Assignments to avoid creating duplicates
+  const existing = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {}, {
+      [`filter__${FLD_ASSIGN_PROD}__link_row_has`]: productionId,
       size: "200"
-    }
-  );
+  });
   
   const existingRoleIds = new Set(
-    Array.isArray(existing) 
-      ? existing.map((r: any) => r[DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]?.[0]?.id) 
-      : []
+    Array.isArray(existing) ? existing.map((r: any) => r[FLD_ASSIGN_ROLE]?.[0]?.id) : []
   );
 
-  // D. Create Missing Rows (Parallelized)
+  // D. Create Missing Rows
   const rolesToCreate = blueprintRoles.filter(role => !existingRoleIds.has(role.id));
-  
-  if (rolesToCreate.length === 0) {
-    return { success: true, count: 0, message: "Already up to date" };
-  }
+  if (rolesToCreate.length === 0) return { success: true, count: 0, message: "Already up to date" };
 
   const createPromises = rolesToCreate.map(role => 
-    fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {
+    fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-        [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id]
+        [FLD_ASSIGN_PROD]: [productionId],
+        [FLD_ASSIGN_ROLE]: [role.id]
       })
     })
   );
 
   await Promise.all(createPromises);
-
   revalidatePath("/casting");
   return { success: true, count: rolesToCreate.length };
 }
 
-// 2. TOGGLE CHICLET (Single)
-export async function toggleSceneAssignment(
-  studentId: number, sceneId: number, productionId: number, isActive: boolean
-) {
-  const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
-  const F = DB.SCENE_ASSIGNMENTS.FIELDS;
-
-  if (isActive) {
-    // CREATE
-    await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [F.PERSON]: [studentId],      
-        [F.SCENE]: [sceneId],        
-        [F.PRODUCTION]: [productionId],
-        [F.SLOT_TYPE]: 3007 // Default to Lead
-      })
-    });
-  } else {
-    // DELETE
-    const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
-      filter_type: "AND",
-      [`filter__${F.PERSON}__link_row_has`]: studentId,
-      [`filter__${F.SCENE}__link_row_has`]: sceneId,
-      [`filter__${F.PRODUCTION}__link_row_has`]: productionId
-    });
-
-    if (Array.isArray(existing) && existing.length > 0) {
-      await fetchBaserow(`/database/rows/table/${TABLE_ID}/${existing[0].id}/`, { method: "DELETE" });
-    }
-  }
-  revalidatePath("/casting");
-}
-
-// 3. AUTO-ASSIGN SCENES (Draft Mode)
-export async function initializeSceneAssignments(productionId: number) {
-  // A. Fetch Scenes (With linked Blueprint Roles)
-  const scenesRes = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, {
-    [`filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    "size": "200",
-    "user_field_names": "true" 
-  });
-
-  // B. Fetch Current Cast
-  const castRes = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
-    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    "size": "200",
-    "user_field_names": "true"
-  });
-
-  if (!Array.isArray(scenesRes) || !Array.isArray(castRes)) return { success: false, count: 0 };
-
-  // C. Map Role -> Actor
-  const roleToActorMap = new Map();
-  castRes.forEach((assignment: any) => {
-      const role = assignment['Performance Identity']?.[0]; 
-      const actor = assignment['Person']?.[0]; 
-      if (role && actor) {
-          roleToActorMap.set(role.id, actor.id);
-      }
-  });
-
-  const operations = [];
-
-  // D. Find Matches
-  for (const scene of scenesRes) {
-      const linkedRoles = scene['Blueprint Roles'] || []; 
-      for (const role of linkedRoles) {
-          const actorId = roleToActorMap.get(role.id);
-          if (actorId) {
-              operations.push({
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.PERSON]: [actorId],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.SCENE]: [scene.id],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-                  [DB.SCENE_ASSIGNMENTS.FIELDS.SLOT_TYPE]: 3007 
-              });
-          }
-      }
-  }
-
-  // E. Execute (Parallelized Batches recommended, but sequential for safety here)
-  let count = 0;
-  for (const op of operations) {
-    await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(op)
-    });
-    count++;
-  }
-
-  revalidatePath("/casting");
-  return { success: true, count };
-}
-
-// 4. SYNC CHANGES (Bulk Save)
-export async function syncCastingChanges(productionId: number, changes: any[]) {
-  const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
-  const F = DB.SCENE_ASSIGNMENTS.FIELDS;
-
-  for (const change of changes) {
-      if (!change.studentId) continue;
-
-      // Additions
-      for (const sceneId of change.addedSceneIds) {
-          await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                  [F.PERSON]: [change.studentId],
-                  [F.SCENE]: [sceneId],
-                  [F.PRODUCTION]: [productionId]
-              })
-          });
-      }
-
-      // Removals
-      for (const sceneId of change.removedSceneIds) {
-          const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
-              filter_type: "AND",
-              [`filter__${F.PERSON}__link_row_has`]: change.studentId,
-              [`filter__${F.SCENE}__link_row_has`]: sceneId,
-              [`filter__${F.PRODUCTION}__link_row_has`]: productionId
-          });
-
-          if (Array.isArray(existing) && existing.length > 0) {
-              await fetchBaserow(`/database/rows/table/${TABLE_ID}/${existing[0].id}/`, { method: "DELETE" });
-          }
-      }
-  }
-  revalidatePath("/casting");
-  return { success: true };
-}
-
-// 5. CLEAR ALL CASTING DATA
-export async function clearCastingData(productionId: number) {
-  // Delete Assignments
-  const sceneAssigns = await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {}, {
-    [`filter__${DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    size: "200"
-  });
-
-  if (Array.isArray(sceneAssigns)) {
-    for (const row of sceneAssigns) {
-      await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/${row.id}/`, { method: "DELETE" });
-    }
-  }
-
-  // Delete Rows
-  const castAssigns = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {}, {
-    [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-    size: "200"
-  });
-
-  if (Array.isArray(castAssigns)) {
-    for (const row of castAssigns) {
-      await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${row.id}/`, { method: "DELETE" });
-    }
-  }
-
-  revalidatePath("/casting");
-  return { success: true };
-}
-
+// 2. THE MAIN SAVE FUNCTION
 export async function saveCastingGrid(
   productionId: number, 
   actorChanges: any[], 
@@ -489,106 +481,120 @@ export async function saveCastingGrid(
 ) {
   console.log(`[Save] Prod: ${productionId} | Actors: ${actorChanges.length} | Scenes: ${sceneChanges.length} | Del: ${deletedRowIds.length} | New: ${createdRows.length}`);
 
-  // 1. HANDLE DELETIONS
+  // 🧹 PHASE 1: HANDLE DELETIONS
   if (deletedRowIds.length > 0) {
     await Promise.all(deletedRowIds.map(id => 
-      fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${id}/`, { method: "DELETE" })
+      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${id}/`, { method: "DELETE" })
     ));
   }
 
-  // 2. HANDLE CREATED ROWS
+  // 🏗️ PHASE 2: HANDLE CREATED ROWS (Custom Roles added in UI)
   if (createdRows.length > 0) {
     await Promise.all(createdRows.map(row => 
-      fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, {
+      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-          // Note: If you have a 'Role Name' text field for custom roles, add it here.
-          // Otherwise, we just create the row with the assigned actors.
-          [DB.ASSIGNMENTS.FIELDS.PERSON]: row.assignedStudentIds || [],
-          // If you created a link to a Blueprint Role (if ID > 0)
-          // [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: row.roleId > 0 ? [row.roleId] : []
+          [FLD_ASSIGN_PROD]: [productionId],
+          [FLD_ASSIGN_PERSON]: row.assignedStudentIds || [],
+          // Note: If you want the custom name to save, you'd need a text field on Assignments for "Custom Role Name"
         })
       })
     ));
   }
 
-  // 3. HANDLE ACTOR CHANGES (Assignment Row)
-  // We process these FIRST so the DB is up to date before we try to link Scenes to these people.
+  // 🎭 PHASE 3: UPDATE ACTORS IN EXISTING ROLES
   for (const change of actorChanges) {
-    await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${change.assignmentId}/`, {
+    await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${change.assignmentId}/`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        // ✅ FIX: Send the ARRAY of IDs directly. 
-        // Client sends { studentIds: [1, 2] }, Baserow expects [1, 2]
-        [DB.ASSIGNMENTS.FIELDS.PERSON]: change.studentIds
+        [FLD_ASSIGN_PERSON]: change.studentIds // Baserow expects an array of IDs: [1, 2]
       })
     });
   }
 
-  // 4. HANDLE SCENE CHANGES ("Chiclets")
-  // The 'Chiclet' is a separate table (SCENE_ASSIGNMENTS) linking Person <-> Scene.
-  // We must find out WHO is in this Assignment Row to create the links for them.
+  // 🎬 PHASE 4: UPDATE SCENE ASSIGNMENTS (The Junction Table)
   for (const change of sceneChanges) {
     const { assignmentId, addedSceneIds, removedSceneIds } = change;
-
-    // A. We need the current Actors in this Role. 
-    // Optimization: Check if we just updated them in step 3.
+    
+    // We need to know who is in the role to assign them to the scene.
+    // Check if we just updated them in Phase 3, otherwise fetch the current row.
     let studentIds: number[] = [];
     const actorUpdate = actorChanges.find(a => a.assignmentId === assignmentId);
     
     if (actorUpdate) {
       studentIds = actorUpdate.studentIds;
     } else {
-      // If actors didn't change, we must fetch the row to see who is currently assigned
-      const row = await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/?user_field_names=true`);
-      if (row && row.Person) {
-        studentIds = row.Person.map((p: any) => p.id);
-      }
+      const row = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${assignmentId}/?user_field_names=true`);
+      if (row && row.Person) studentIds = row.Person.map((p: any) => p.id);
     }
 
-    if (studentIds.length === 0) continue; // No one to assign scenes to
+    if (studentIds.length === 0) continue; 
 
-    // B. For every Actor in this Role, Add/Remove the Scene Link
+    // For every Actor in this Role, Add/Remove the specific Scene Links
     for (const studentId of studentIds) {
-      const TABLE_ID = DB.SCENE_ASSIGNMENTS.ID;
-      const F = DB.SCENE_ASSIGNMENTS.FIELDS;
-
+      
       // ADDITIONS
       for (const sceneId of addedSceneIds) {
-         // check if already exists to avoid duplicates? Baserow might handle it, but safer to just post.
-         await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {
+         await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                [F.PERSON]: [studentId],
-                [F.SCENE]: [sceneId],
-                [F.PRODUCTION]: [productionId],
-                [F.SLOT_TYPE]: 3007 // Default ID for "Cast"
+                [FLD_SA_PERSON]: [studentId],
+                [FLD_SA_SCENE]: [sceneId],
+                [FLD_SA_PROD]: [productionId]
             })
          });
       }
 
       // REMOVALS
       for (const sceneId of removedSceneIds) {
-        // We have to find the specific SCENE_ASSIGNMENT row ID to delete it.
-        const existing = await fetchBaserow(`/database/rows/table/${TABLE_ID}/`, {}, {
+        // Find the specific junction row linking this Person to this Scene
+        const existing = await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {}, {
             filter_type: "AND",
-            [`filter__${F.PERSON}__link_row_has`]: studentId,
-            [`filter__${F.SCENE}__link_row_has`]: sceneId,
-            [`filter__${F.PRODUCTION}__link_row_has`]: productionId
+            [`filter__${FLD_SA_PERSON}__link_row_has`]: studentId,
+            [`filter__${FLD_SA_SCENE}__link_row_has`]: sceneId,
+            [`filter__${FLD_SA_PROD}__link_row_has`]: productionId
         });
 
         if (Array.isArray(existing) && existing.length > 0) {
-            // Delete all matches (cleanup duplicates if any)
+            // Delete it (and clean up duplicates if they exist)
             for (const item of existing) {
-                await fetchBaserow(`/database/rows/table/${TABLE_ID}/${item.id}/`, { method: "DELETE" });
+                await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/${item.id}/`, { method: "DELETE" });
             }
         }
       }
     }
+  }
+
+  // Tell Next.js to clear the cache so the page reloads with fresh data
+  revalidatePath("/casting");
+  return { success: true };
+}
+
+// 3. CLEAR ALL CASTING DATA (Nuke button)
+export async function clearCastingData(productionId: number) {
+  // A. Delete Scene Assignments
+  const sceneAssigns = await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {}, {
+    [`filter__${FLD_SA_PROD}__link_row_has`]: productionId,
+    size: "200"
+  });
+  if (Array.isArray(sceneAssigns)) {
+    await Promise.all(sceneAssigns.map(row => 
+      fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/${row.id}/`, { method: "DELETE" })
+    ));
+  }
+
+  // B. Delete Roles/Assignments
+  const castAssigns = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {}, {
+    [`filter__${FLD_ASSIGN_PROD}__link_row_has`]: productionId,
+    size: "200"
+  });
+  if (Array.isArray(castAssigns)) {
+    await Promise.all(castAssigns.map(row => 
+      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${row.id}/`, { method: "DELETE" })
+    ));
   }
 
   revalidatePath("/casting");
