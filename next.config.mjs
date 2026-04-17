@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // vvv THIS BLOCK IS ADDED TO DISABLE THE UNSTABLE TURBOPACK COMPILER vvv
-  experimental: {
-    turbopack: false,
-  },
+
   // ^^^ THE BLOCK ABOVE IS THE ONLY CHANGE ^^^
 
   typescript: {
