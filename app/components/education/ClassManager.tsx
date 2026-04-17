@@ -163,7 +163,7 @@ export default function ClassManager({ classes }: any) {
                         return (
                             <button key={loc.name} onClick={() => setSelectedLocation(loc.name)} className={`relative overflow-hidden bg-zinc-900 border ${theme.border} p-8 rounded-[2rem] text-left group hover:bg-zinc-800 transition-all shadow-2xl h-64 flex flex-col justify-between`}>
                                 <div className={`absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 transition-all duration-500 ${theme.color} rotate-12 scale-150`}>
-                                    {React.cloneElement(theme.icon as React.ReactElement, { size: 180 })}
+                                    {React.cloneElement(theme.icon as any, { size: 180 })}
                                 </div>
                                 <div className="flex justify-between items-start relative z-10">
                                     <div className={`p-4 ${theme.bg} ${theme.color} rounded-2xl`}>{theme.icon}</div>

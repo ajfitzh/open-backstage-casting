@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -13,6 +13,41 @@ import {
   AlertTriangle, Info, ChevronDown, Filter, X,
   Music, Drama, Mic2, Palette, Monitor, Baby, Map
 } from 'lucide-react';
+
+// --- TYPES ---
+export interface EducationClass {
+  id: string | number;
+  session: string;
+  ageRange: string;
+  type: string;
+  name: string;
+  teacher: string;
+  location: string;
+  day: string;
+  students: number;
+}
+
+export interface Space {
+  id: string | number;
+  name: string;
+  capacity: number;
+  classes: EducationClass[];
+}
+
+export interface Venue {
+  id: string | number;
+  name: string;
+  type: string;
+  rates: {
+    hourly: number;
+  };
+  spaces: Space[];
+}
+
+interface AcademyClientProps {
+  classes?: EducationClass[];
+  venues?: Venue[];
+}
 
 // --- HELPERS ---
 
@@ -42,7 +77,7 @@ const getTypeIcon = (type: string) => {
     return <Palette size={14}/>; 
 };
 
-export default function AcademyClient({ classes = [], venues = [] }: { classes: any[], venues: any[] }) {
+export default function AcademyClient({ classes = [], venues = [] }: AcademyClientProps) {
   
   // --- 1. DERIVE OPTIONS (SESSIONS, TYPES, AGES) ---
   const { sessions, ageRanges, types } = useMemo(() => {
@@ -113,18 +148,18 @@ export default function AcademyClient({ classes = [], venues = [] }: { classes: 
     const activeClassIds = new Set(filteredClasses.map(c => c.id));
     
     return venues.map(venue => {
-        const activeSpaces = venue.spaces.map((space: any) => {
-            const relevantClasses = space.classes.filter((c: any) => activeClassIds.has(c.id));
+        const activeSpaces = venue.spaces.map((space: Space) => {
+            const relevantClasses = space.classes.filter((c: EducationClass) => activeClassIds.has(c.id));
             return { ...space, classes: relevantClasses };
         });
 
         // Only show venues that have classes matching the current filter
-        const hasClasses = activeSpaces.some((s:any) => s.classes.length > 0);
+        const hasClasses = activeSpaces.some((s: Space) => s.classes.length > 0);
         if (hasClasses) {
             return { ...venue, spaces: activeSpaces };
         }
         return null;
-    }).filter(Boolean);
+    }).filter(Boolean) as Venue[];
   }, [venues, filteredClasses]);
 
   // Analytics: Stats for Charts
@@ -286,7 +321,7 @@ export default function AcademyClient({ classes = [], venues = [] }: { classes: 
             {activeTab === 'logistics' && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4">
                    {activeVenues.length > 0 ? (
-                     activeVenues.map((venue: any) => (
+                     activeVenues.map((venue: Venue) => (
                       <VenueCard key={venue.id} venue={venue} />
                      ))
                    ) : (
@@ -356,7 +391,14 @@ export default function AcademyClient({ classes = [], venues = [] }: { classes: 
 
 // --- SUB COMPONENTS ---
 
-function FilterButton({ label, active, icon, onClick }: any) {
+interface FilterButtonProps {
+  label: string;
+  active: boolean;
+  icon: React.ReactNode;
+  onClick: () => void;
+}
+
+function FilterButton({ label, active, icon, onClick }: FilterButtonProps) {
     return (
         <button 
             onClick={onClick}
@@ -373,7 +415,7 @@ function FilterButton({ label, active, icon, onClick }: any) {
     )
 }
 
-function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) {
+function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
     <button onClick={onClick} className={`px-4 py-2 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${active ? 'bg-zinc-100 text-black shadow-lg scale-[1.02]' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}`}>
       {icon} <span className="hidden sm:inline">{label}</span>
@@ -391,7 +433,7 @@ function EmptyState({ session }: { session: string }) {
     )
 }
 
-function ClassCard({ cls }: { cls: any }) {
+function ClassCard({ cls }: { cls: EducationClass }) {
     // Determine color accent based on type
     const isDance = cls.type?.toLowerCase().includes('dance');
     const isActing = cls.type?.toLowerCase().includes('acting') || cls.type?.toLowerCase().includes('drama');
@@ -448,7 +490,7 @@ function ClassCard({ cls }: { cls: any }) {
     )
 }
 
-function VenueCard({ venue }: { venue: any }) {
+function VenueCard({ venue }: { venue: Venue }) {
     return (
         <div className="bg-zinc-900/50 border border-white/5 rounded-[2rem] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-white/5 bg-zinc-950/30 flex justify-between items-start">
@@ -468,9 +510,9 @@ function VenueCard({ venue }: { venue: any }) {
             </div>
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {venue.spaces.map((space: any) => {
+            {venue.spaces.map((space: Space) => {
                 // Calculate utilization based on *filtered* classes
-                const currentStudents = space.classes.reduce((acc:number, c:any) => acc + c.students, 0);
+                const currentStudents = space.classes.reduce((acc: number, c: EducationClass) => acc + c.students, 0);
                 const utilization = Math.round((currentStudents / (space.capacity * Math.max(1, space.classes.length))) * 100) || 0;
                 const isOver = utilization > 100;
                 const hasClasses = space.classes.length > 0;
@@ -482,7 +524,7 @@ function VenueCard({ venue }: { venue: any }) {
                         <h4 className={`text-sm font-bold ${hasClasses ? 'text-white' : 'text-zinc-600'}`}>{space.name}</h4>
                         {hasClasses ? (
                         <div className="mt-1 flex flex-col gap-1">
-                            {space.classes.map((cls:any) => (
+                            {space.classes.map((cls: EducationClass) => (
                             <span key={cls.id} className="text-[9px] text-zinc-400 truncate max-w-[150px] block">• {cls.name}</span>
                             ))}
                         </div>

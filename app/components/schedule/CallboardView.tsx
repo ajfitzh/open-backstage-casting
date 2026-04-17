@@ -35,7 +35,7 @@ export default function CallboardView({
         const actorMap: Record<string, { fri: any[], sat: any[] }> = {};
 
         // Group by Actor & Day
-        schedule.forEach((slot: any) => {
+        (schedule || []).forEach((slot: any) => {
             if (!slot.castList) return; 
             slot.castList.forEach((actorName: string) => {
                 if (!actorMap[actorName]) actorMap[actorName] = { fri: [], sat: [] };
@@ -53,7 +53,7 @@ export default function CallboardView({
         const processDay = (slots: any[]) => {
             if (slots.length === 0) return null;
             slots.sort((a, b) => a.start - b.start);
-            const calls: any[] = [];
+            const calls: any[] | null  = [];
             let currentCall = { start: slots[0].start, end: slots[0].end, segments: [slots[0]] };
 
             for (let i = 1; i < slots.length; i++) {
@@ -80,7 +80,7 @@ export default function CallboardView({
     // --- 🧠 2. CLEANUP CREW GENERATOR (UPDATED) ---
     const generateCrew = (day: 'Fri' | 'Sat', limit: number) => {
         // A. Find the "End of the Night" time
-        const dayItems = schedule.filter((s:any) => s.day === day);
+        const dayItems = (schedule || []).filter((s:any) => s.day === day);
         if (dayItems.length === 0) return [];
         
         // Find the absolute latest end time in the schedule
@@ -130,7 +130,7 @@ export default function CallboardView({
         return `${h12}:${m}${suffix}`;
     };
 
-    const renderCall = (calls: any[]) => {
+    const renderCall = (calls: any[] | null ) => {
         if (!calls) return <span className="text-zinc-600/30 text-[10px] italic">No Call</span>;
         return calls.map((call, i) => (
             <div key={i} className="flex flex-col">

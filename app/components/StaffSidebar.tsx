@@ -214,10 +214,12 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     };
 
     return (
-        <>
+        <div 
+            onMouseEnter={handleMouseEnter} 
+            onMouseLeave={handleMouseLeave} 
+            className="w-full relative"
+        >
             <button 
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
                 className={`
                     w-full flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-all
                     ${active ? 'text-white bg-white/5' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
@@ -268,7 +270,7 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
                 </div>,
                 document.body
             )}
-        </>
+        </div>
     );
 }
 
@@ -325,16 +327,18 @@ function SidebarTooltip({ children, text, isCollapsed }: { children: React.React
 
     if (!isCollapsed) return children;
 
+    // Remove the onMouseEnter/onMouseLeave injection and use a wrapper div instead
     return (
-        <>
-            {React.cloneElement(children, {
-                onMouseEnter: (e: React.MouseEvent) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setCoords({ x: rect.right + 10, y: rect.top + (rect.height / 2) });
-                    setIsHovered(true);
-                },
-                onMouseLeave: () => setIsHovered(false)
-            })}
+        <div 
+            onMouseEnter={(e: React.MouseEvent) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setCoords({ x: rect.right + 10, y: rect.top + (rect.height / 2) });
+                setIsHovered(true);
+            }}
+            onMouseLeave={() => setIsHovered(false)}
+            className="w-full relative"
+        >
+            {children}
             
             {isHovered && coords && createPortal(
                 <div 
@@ -346,6 +350,6 @@ function SidebarTooltip({ children, text, isCollapsed }: { children: React.React
                 </div>,
                 document.body
             )}
-        </>
+        </div>
     );
 }

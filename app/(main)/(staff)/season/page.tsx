@@ -1,19 +1,16 @@
+import { cookies } from 'next/headers';
 import { getSeasonBoard } from "@/app/lib/actions";
-import SeasonBoard from "./SeasonBoard"; // Your client component
+import SeasonBoard from "./SeasonBoard"; 
 import { DB } from "@/app/lib/schema";
 
-// Helper to safely extract linked values
 const safeMap = (field: any) => {
   if (!field || !Array.isArray(field)) return [];
   return field.map((item: any) => item.value);
 };
 
 export default async function SeasonPlannerPage() {
-  // 1. Get the current active season ID
-  // For now, we'll just grab the first one or hardcode a specific ID if you have one.
-  // Ideally, this comes from a param or the active production cookie.
-  // Let's assume we are looking for Season 1 (or replace "1" with your actual Season ID)
-  const seasonId = "1"; 
+  const cookieStore = await cookies();
+  const seasonId = cookieStore.get('active_season_id')?.value || "1"; 
 
   const boardData = await getSeasonBoard(seasonId);
 
@@ -26,15 +23,11 @@ export default async function SeasonPlannerPage() {
     );
   }
 
-  // 2. Transform the raw Baserow data into the shape your Client Component needs
-  // We use the DB schema keys to make it readable
   const formattedTalent = boardData.talentPool.map((row: any) => ({
     id: row.id,
     name: row[DB.STAFF_INTEREST.FIELDS.NAME] || "Unknown",
-    // FIX: Safely map the roles using the helper
     roles: safeMap(row[DB.STAFF_INTEREST.FIELDS.ROLE_PREFERENCES]), 
     availability_json: JSON.parse(row[DB.STAFF_INTEREST.FIELDS.AVAILABILITY_JSON] || "{}"),
-    // FIX: Safely split string, checking if it exists first
     constraints: (row[DB.STAFF_INTEREST.FIELDS.CONSTRAINTS] || "").split(",").filter(Boolean),
   }));
 
@@ -42,8 +35,6 @@ export default async function SeasonPlannerPage() {
     id: row.id,
     title: row[DB.PRODUCTIONS.FIELDS.TITLE] || "Untitled Slot",
     status: row[DB.PRODUCTIONS.FIELDS.STATUS]?.value || "Pending",
-    // If you have a 'Filled By' field for the director, map it here. 
-    // Otherwise leave it null for drag-and-drop.
     filledBy: null 
   }));
 
@@ -67,7 +58,6 @@ export default async function SeasonPlannerPage() {
         </div>
       </header>
 
-      {/* 3. Pass safe data to the Client Component */}
       <SeasonBoard 
         initialTalent={formattedTalent} 
         initialSlots={formattedSlots} 

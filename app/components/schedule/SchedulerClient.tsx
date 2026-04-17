@@ -1,23 +1,22 @@
+/* eslint-disable react-hooks/purity */
 /* eslint-disable react-hooks/immutability */
 "use client";
 
 import Link from 'next/link'; 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, ChevronRight, ChevronLeft, Search,
   CheckCircle2, Plus, Minus,
   TrendingUp, Calendar as CalendarIcon, 
-  FileText, Wand2, Coffee, AlertTriangle, 
-  Target, Umbrella, LayoutGrid, X, Save, Loader2,
-  ArrowRight,
-  Settings
+  FileText, Wand2, AlertTriangle, 
+  Target, X, Save, Loader2,
+  ArrowRight, Settings
 } from 'lucide-react';
 
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
 import { saveScheduleBatch } from '@/app/lib/actions'; 
 
-// --- TYPES ---
 type TrackType = "Acting" | "Music" | "Dance";
 type SceneStatus = "New" | "Worked" | "Polished";
 
@@ -33,16 +32,11 @@ interface ScheduledItem {
   span?: number;
 }
 
-// --- CONFIG ---
 const FRI_START = 18; 
 const FRI_END = 21;   
 const SAT_START = 10; 
 const SAT_END = 17;   
 const TOTAL_WEEKS = 10; 
-
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
 
 export default function SchedulerClient({ 
     activeId,
@@ -55,20 +49,17 @@ export default function SchedulerClient({
     productionTitle = "Active Production",
 }: any) {
   
-  // --- STATE ---
   const [activeTab, setActiveTab] = useState<'calendar' | 'progress' | 'callboard'>('calendar');
   const [isAutoSchedulerOpen, setIsAutoSchedulerOpen] = useState(false);
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   const [isSaving, setIsSaving] = useState(false); 
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  // --- SMART WEEK CALCULATOR ---
   const weekStats = useMemo(() => {
     if (!events || events.length === 0) {
         return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
     }
     
-    // Safely parse the exact strings guaranteed by Zod
     const dates = events.map((e: any) => new Date(e.date).getTime()).filter((d: number) => !isNaN(d));
     if (dates.length === 0) return { current: 1, total: 10, label: "Week 1 of 10", viewedDate: new Date() };
     
@@ -111,13 +102,11 @@ export default function SchedulerClient({
     };
   }, [events, currentWeekOffset]);
 
-  // --- SHARED DATA PREP (CLEANED UP! No more defensive checks) ---
   const sceneData = useMemo(() => {
     if (!scenes || scenes.length === 0) return [];
     
     const sceneCastMap = new Map<number, Set<string>>();
     
-    // Map over assignments using the clean data structure guaranteed by Zod
     assignments.forEach((a: any) => {
         const actorNames = a.person?.map((p: any) => p.value) || [];
         const sceneIds = a.savedScenes?.map((s: any) => s.id) || [];
@@ -134,13 +123,12 @@ export default function SchedulerClient({
         
         return {
             id: s.id, 
-            name: s.name, // Guaranteed by Zod
-            act: s.act,   // Guaranteed by Zod
+            name: s.name, 
+            act: s.act,   
             type: "Scene", 
             cast: castNames.map(name => ({ name })), 
             castNames: castNames, 
             status: 'New',
-            // Default load values if none exist in the db
             mLoad: 1, dLoad: 1, bLoad: 1
         };
     }).sort((a: any, b: any) => a.id - b.id);
@@ -153,7 +141,6 @@ export default function SchedulerClient({
       });
   }, [schedule, sceneData]);
 
-  // --- SAVE LOGIC ---
   const handleSaveChanges = async () => {
     setIsSaving(true);
     const newItems = schedule.filter(item => item.id.length > 10);
@@ -177,7 +164,6 @@ export default function SchedulerClient({
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-        {/* HEADER */}
         <header className="h-16 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-30">
             <div className="flex items-center gap-6">
                 <div>
@@ -218,7 +204,6 @@ export default function SchedulerClient({
             </div>
         </header>
 
-        {/* CONTENT AREA */}
         <div className="flex-1 overflow-hidden relative">
             {activeTab === 'calendar' && (
                 <CalendarView 
@@ -233,7 +218,7 @@ export default function SchedulerClient({
             {activeTab === 'progress' && <BurnUpView 
                 sceneData={sceneData} 
                 currentWeek={weekStats.current} 
-                totalWeeks={weekStats.total}    
+                totalWeeks={weekStats.total}   
             />}
             {activeTab === 'callboard' && <CallboardView schedule={callboardSchedule} productionTitle={productionTitle} />}
         </div>
@@ -242,9 +227,6 @@ export default function SchedulerClient({
   );
 }
 
-// ============================================================================
-// SUB-COMPONENT: CALENDAR VIEW
-// ============================================================================
 function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, setCurrentWeekOffset, weekLabel }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -340,9 +322,9 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
          </aside>
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
-                 <button onClick={() => setCurrentWeekOffset(c => c - 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronLeft size={18}/></button>
+                 <button onClick={() => setCurrentWeekOffset((c: number) => c - 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronLeft size={18}/></button>
                  <span className="text-xs font-black uppercase tracking-widest text-zinc-300 w-48 text-center">{weekLabel}</span>
-                 <button onClick={() => setCurrentWeekOffset(c => c + 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronRight size={18}/></button>
+                 <button onClick={() => setCurrentWeekOffset((c: number) => c + 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronRight size={18}/></button>
              </div>
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[850px]">
@@ -368,7 +350,7 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                                                   const isDraggingThis = draggedItemId === item.id;
                                                   
                                                   return (
-                                                      <div key={item.id} draggable onDragStart={(e) => { e.dataTransfer.setData("itemId", item.id); setDraggedItemId(item.id); }} onDragEnd={() => setDraggedItemId(null)}
+                                                      <div key={item.id} draggable onDragStart={(e) => { e.dataTransfer.setData("itemId", item.id.toString()); setDraggedItemId(item.id.toString()); }} onDragEnd={() => setDraggedItemId(null)}
                                                         className={`absolute rounded-xl border-l-[6px] shadow-2xl text-xs transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
                                                           ${getTrackStyles(item.track)}
                                                           ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}
@@ -409,13 +391,10 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
   );
 }
 
-// ============================================================================
-// SUB-COMPONENT: BURN-UP VIEW
-// ============================================================================
 function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
   const [progress, setProgress] = useState<Record<string, { music: number, dance: number, block: number }>>(() => {
     const initial: any = {};
-    sceneData.forEach((s: any) => { initial[s.id] = { music: 0, dance: 0, block: 0 }; });
+    sceneData.forEach((s: any) => { initial[s.id.toString()] = { music: 0, dance: 0, block: 0 }; });
     return initial;
   });
   
@@ -445,9 +424,9 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
     
     const weightedScenes = sceneData.map((s: any) => {
       const override = loadOverrides[s.id];
-      const mLoad = parseInt(override?.music ?? s.mLoad ?? 1); 
-      const dLoad = parseInt(override?.dance ?? s.dLoad ?? 1);
-      const bLoad = parseInt(override?.block ?? s.bLoad ?? 1);
+      const mLoad = Number(override?.music ?? s.mLoad ?? 1); 
+      const dLoad = Number(override?.dance ?? s.dLoad ?? 1);
+      const bLoad = Number(override?.block ?? s.bLoad ?? 1);
       const type = (s.type || "").toLowerCase();
       
       const hasMusic = (type.includes('song') || type.includes('mixed')) && mLoad > 0;
@@ -459,7 +438,7 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
       if (hasDance) sceneMaxPoints += (dLoad * 2);
       if (hasBlock) sceneMaxPoints += (bLoad * 2);
       
-      const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
+      const p = progress[s.id.toString()] || { music: 0, dance: 0, block: 0 };
       let sceneEarned = 0;
       if (hasMusic) sceneEarned += (p.music * mLoad); 
       if (hasDance) sceneEarned += (p.dance * dLoad);
@@ -564,15 +543,15 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
                             
                             <div className="flex gap-1.5 items-center">
                                 <div className="flex-1 flex flex-col gap-1">
-                                    {s.hasMusic ? <button onClick={() => toggleStatus(s.id, 'music')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.music || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasMusic ? <button onClick={() => toggleStatus(s.id.toString(), 'music')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id.toString()]?.music || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
                                     {s.hasMusic && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Music ({s.mLoad})</span>}
                                 </div>
                                 <div className="flex-1 flex flex-col gap-1">
-                                    {s.hasDance ? <button onClick={() => toggleStatus(s.id, 'dance')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.dance || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasDance ? <button onClick={() => toggleStatus(s.id.toString(), 'dance')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id.toString()]?.dance || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
                                     {s.hasDance && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Dance ({s.dLoad})</span>}
                                 </div>
                                 <div className="flex-1 flex flex-col gap-1">
-                                    {s.hasBlock ? <button onClick={() => toggleStatus(s.id, 'block')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id]?.block || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
+                                    {s.hasBlock ? <button onClick={() => toggleStatus(s.id.toString(), 'block')} className={`h-2 w-full rounded-sm transition-all ${getStatusColor(progress[s.id.toString()]?.block || 0)}`}/> : <div className="h-2 w-full bg-zinc-800/20 rounded-sm"/>}
                                     {s.hasBlock && <span className="text-[7px] font-black uppercase text-center text-zinc-600">Block ({s.bLoad})</span>}
                                 </div>
                             </div>
@@ -590,9 +569,6 @@ function BurnUpView({ sceneData, currentWeek, totalWeeks }: any) {
   );
 }
 
-// ============================================================================
-// SUB-COMPONENT: SVG GRAPH
-// ============================================================================
 const BurnUpGraph = ({ totalWeeks, targetWeeks, currentWeek, totalPoints, earnedPoints, projectedEndWeek }: any) => {
     const safeTotalPoints = totalPoints || 100;
     const safeTotalWeeks = totalWeeks || 10;
@@ -623,9 +599,6 @@ const BurnUpGraph = ({ totalWeeks, targetWeeks, currentWeek, totalPoints, earned
     )
 }
 
-// ============================================================================
-// SUB-COMPONENT: QUICK EDIT MODAL
-// ============================================================================
 function QuickEditModal({ scene, onClose, onSave }: any) {
   const [loads, setLoads] = useState({ music: scene.mLoad, dance: scene.dLoad, block: scene.bLoad });
   return (

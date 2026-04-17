@@ -247,7 +247,7 @@ export default function GlobalHeaderClient({
               
               {NAV_CONFIG.map((section) => {
                 // 1. Check Section Permission
-                if (section.permission && !hasPermission(effectiveRole, productionRole, section.permission)) return null;
+                if (section.permission && !hasPermission(effectiveRole, productionRole, section.permission as any)) return null;
                 // Skip Dashboard group in mobile drawer to save space if desired (optional)
                 if (section.title === "Dashboard") return null;
 
@@ -259,7 +259,7 @@ export default function GlobalHeaderClient({
                     <div className="space-y-1">
                       {section.items.map((item: any) => {
                         // 2. Check Item Permission
-                        if (item.permission && !hasPermission(effectiveRole, productionRole, item.permission)) return null;
+                        if (item.permission && !hasPermission(effectiveRole, productionRole, item.permission as any)) return null;
 
                         // 3. Handle Nested Items (Casting Suite)
                         if (item.isCollapsible && item.children) {
@@ -267,7 +267,7 @@ export default function GlobalHeaderClient({
                             <div key={item.label} className="pl-2 border-l border-zinc-800 ml-2 mt-2 mb-2 space-y-1">
                                 <div className="text-[9px] font-bold text-zinc-500 uppercase px-3 py-1">{item.label}</div>
                                 {item.children.map((child: any) => (
-                                    (!child.permission || hasPermission(effectiveRole, productionRole, child.permission)) && (
+                                    (!child.permission || hasPermission(effectiveRole, productionRole, child.permission as any)) && (
                                         <MenuLink 
                                             key={child.href}
                                             onClick={() => setIsNavOpen(false)} 

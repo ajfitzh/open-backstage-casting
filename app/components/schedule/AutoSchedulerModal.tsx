@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -36,23 +37,19 @@ interface ScheduleStats {
 // 🟢 HELPER: Robust Date Normalizer
 const normalizeDate = (dateStr: string) => {
     if (!dateStr) return "";
-    // Handle MM/DD/YYYY
     if (dateStr.includes('/')) {
         const [m, d, y] = dateStr.split('/');
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     }
-    // Handle ISO
     return dateStr.split('T')[0];
 };
 
 export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, conflicts = [], onCommit }: any) {
-    // --- STATE ---
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewSchedule, setPreviewSchedule] = useState<any[]>([]);
     const [stats, setStats] = useState<ScheduleStats | null>(null);
     const [activeTabWeek, setActiveTabWeek] = useState(1);
 
-    // --- CONTROLS ---
     const [trackPriority, setTrackPriority] = useState<TrackType[]>(['Music', 'Dance', 'Acting']);
     const [useSmartDuration, setUseSmartDuration] = useState(true); 
     const [baseDuration, setBaseDuration] = useState(30); 
@@ -60,23 +57,15 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
     const [targetPasses, setTargetPasses] = useState(3); 
     const [includeWarmups, setIncludeWarmups] = useState(true);
 
-    // --- CONSTRAINTS & STAFF ---
     const [blackoutWeeks, setBlackoutWeeks] = useState("10, 11, 12");
-    const [staffRoles, setStaffRoles] = useState({
-        director: "", 
-        music: "",    
-        dance: ""     
-    });
+    const [staffRoles, setStaffRoles] = useState({ director: "", music: "", dance: "" });
 
-    // --- TIME HORIZON ---
     const [startWeek, setStartWeek] = useState(1);
     const [endWeek, setEndWeek] = useState(12);
-    // Default to today, but DO NOT auto-change it unless requested
     const [projectStartDate, setProjectStartDate] = useState(new Date().toISOString().split('T')[0]);
 
     useEffect(() => { setActiveTabWeek(startWeek); }, [startWeek]);
 
-    // 🟢 MANUAL TRIGGER: Detect Start Date
     const autoDetectStartDate = () => {
         if (conflicts.length > 0) {
             const dates = conflicts
@@ -86,10 +75,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             
             if (dates.length > 0) {
                 const first = new Date(dates[0]);
-                const day = first.getDay(); // 0=Sun, 5=Fri, 6=Sat
-                // Snap to the Friday of that week
-                // If it's Saturday (6), go back 1 day. If it's Sunday (0), go back 2 days? 
-                // Let's just find the previous Friday.
+                const day = first.getDay(); 
                 const dist = (day + 7 - 5) % 7;
                 first.setDate(first.getDate() - dist);
                 setProjectStartDate(first.toISOString().split('T')[0]);
@@ -97,15 +83,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         }
     };
 
-    // --- 🧮 THE ALGORITHM ---
     const generateSchedule = () => {
         setIsGenerating(true);
         setPreviewSchedule([]); 
         
-        // 0. PARSE BLACKOUT WEEKS
-        const blockedWeeksList = blackoutWeeks.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-
-        // 1. CONFLICT PRE-PROCESSING
+        const blockedWeeksList = blackoutWeeks.split(',').map((str: string) => parseInt(str.trim())).filter(n => !isNaN(n));
         const conflictMap: Record<string, Record<string, {start: number, end: number}[]>> = {};
         
         (conflicts || []).forEach((c: any) => {
@@ -116,7 +98,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             const mins = parseInt(c["Minutes Late / Early"] || c.minutes || 0);
             
             if (!dateKey || !personName) return;
-
             if (!conflictMap[dateKey]) conflictMap[dateKey] = {};
             if (!conflictMap[dateKey][personName]) conflictMap[dateKey][personName] = [];
 
@@ -133,9 +114,8 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             }
         });
 
-        // 2. DATA PREP
-        const enrichedScenes = scenes.map((s: any) => {
-            const name = (s["Scene Name"] || s.name || "").toLowerCase();
+        const enrichedScenes = scenes.map((sceneObj: any) => {
+            const name = (sceneObj["Scene Name"] || sceneObj.name || "").toLowerCase();
             const musicKeywords = ['song', 'mixed', 'musical', 'sing', 'vocal', 'finale', 'opening', 'overture', 'entr\'acte', 'reprise', 'bows', 'anthem', 'prologue', 'fathoms', 'poissons'];
             const danceKeywords = ['dance', 'mixed', 'choreo', 'ballet', 'tap', 'waltz', 'tango', 'movement', 'number', 'routine', 'triton', 'positoovity'];
             const isMusicByName = musicKeywords.some(k => name.includes(k));
@@ -143,9 +123,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             const defaultMusic = isMusicByName ? 1 : 0;
             const defaultDance = isDanceByName ? 1 : 0;
 
-            const mLoad = parseInt(s["Music Load"] ?? s.load?.music ?? s.music_load ?? defaultMusic) || 0; 
-            const dLoad = parseInt(s["Dance Load"] ?? s.load?.dance ?? s.dance_load ?? defaultDance) || 0;
-            const bLoad = parseInt(s["Blocking Load"] ?? s.load?.block ?? s.blocking_load ?? 1) || 1; 
+            const mLoad = parseInt(sceneObj["Music Load"] ?? sceneObj.load?.music ?? sceneObj.music_load ?? defaultMusic) || 0; 
+            const dLoad = parseInt(sceneObj["Dance Load"] ?? sceneObj.load?.dance ?? sceneObj.dance_load ?? defaultDance) || 0;
+            const bLoad = parseInt(sceneObj["Blocking Load"] ?? sceneObj.load?.block ?? sceneObj.blocking_load ?? 1) || 1; 
 
             const canMusic = mLoad > 0;
             const canDance = dLoad > 0;
@@ -155,9 +135,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             if (rawDuration > 90) rawDuration = 90;
             const smartTime = Math.ceil(rawDuration / 5) * 5;
             
-            let finalCast = s.cast || [];
-            if ((!finalCast || finalCast.length === 0) && s["Scene Assignments"]) {
-                 const raw = s["Scene Assignments"];
+            let finalCast = sceneObj.cast || [];
+            if ((!finalCast || finalCast.length === 0) && sceneObj["Scene Assignments"]) {
+                 const raw = sceneObj["Scene Assignments"];
                  const extracted = raw.match(/([a-zA-Z0-9\s\.\']+) - \[\{/g);
                  if (extracted) {
                      finalCast = extracted.map((str: string) => ({ 
@@ -167,7 +147,7 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             }
 
             return { 
-                ...s, cast: finalCast, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime 
+                ...sceneObj, cast: finalCast, mLoad, dLoad, bLoad, canMusic, canDance, totalPoints, smartTime 
             };
         });
 
@@ -181,16 +161,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         let pointsCleared = 0;
         let totalSlotsIterated = 0;
         
-        // Safety: Ensure we don't accidentally schedule before the project start
         const projectStartObj = new Date(projectStartDate);
 
         for (let w = startWeek; w <= endWeek; w++) {
-            
-            // 🟢 CONSTRAINT 1: Blackout Weeks (Tech/Show)
             if (blockedWeeksList.includes(w)) continue;
-
-            // 🟢 CONSTRAINT 2: Pre-Weeks (Before Week 1)
-            // Implicitly handled by w starting at startWeek (min 1), but let's be safe:
             if (w < 1) continue; 
 
             const workDays = [
@@ -198,7 +172,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                 { day: 'Sat', start: SAT_START, end: SAT_END }  
             ];
 
-            // Calculate the Friday of this specific Week number
             const weekStartObj = new Date(projectStartDate);
             weekStartObj.setDate(weekStartObj.getDate() + ((w - 1) * 7));
 
@@ -206,19 +179,15 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                 const trackClocks: Record<string, number> = { 'Music': start, 'Dance': start, 'Acting': start };
                 let currentTime = start;
                 
-                // Align Date
                 const dayOffset = day === 'Fri' ? (5 - weekStartObj.getDay()) : (6 - weekStartObj.getDay());
                 const specificDate = new Date(weekStartObj);
                 specificDate.setDate(specificDate.getDate() + dayOffset);
                 const dateKey = specificDate.toISOString().split('T')[0];
 
-                // 🟢 CONSTRAINT 3: Hard Date Safety
-                // If the math pushed us before project start (e.g. bad offsets), skip
                 if (specificDate < projectStartObj) return;
 
                 const daysConflicts = conflictMap[dateKey] || {};
 
-                // Warmups
                 if (includeWarmups) {
                     trackClocks['Music'] += 0.25;
                     trackClocks['Dance'] += 0.25;
@@ -251,7 +220,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             return; 
                         }
 
-                        // 🟢 CONSTRAINT 4: Staff Availability
                         let isStaffBlocked = false;
                         let staffName = "";
                         if (track === 'Acting') staffName = staffRoles.director;
@@ -272,43 +240,39 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             return; 
                         }
 
-                        // Filter Candidates
-                        const candidates = enrichedScenes.filter((scene: any) => {
-                            const key = `${scene.id}-${track}`;
+                        const candidates = enrichedScenes.filter((sceneObj: any) => {
+                            const key = `${sceneObj.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
                             if (currentPass >= targetPasses) return false;
                             
-                            const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === scene.id && i.track === track && i.weekOffset === (w-1));
+                            const alreadyScheduledThisWeek = proposedSchedule.some(i => i.sceneId === sceneObj.id && i.track === track && i.weekOffset === (w-1));
                             if (alreadyScheduledThisWeek) return false;
 
-                            const totalCast = scene.cast.length || 1;
+                            const totalCast = sceneObj.cast.length || 1;
                             let missingCount = 0;
-                            (scene.cast || []).forEach((c:any) => {
+                            (sceneObj.cast || []).forEach((c:any) => {
                                 if (daysConflicts[c.name.toLowerCase()]) missingCount++;
                             });
                             if (missingCount === totalCast) return false;
 
-                            if (track === 'Music' && !scene.canMusic) return false;
-                            if (track === 'Dance' && !scene.canDance) return false;
+                            if (track === 'Music' && !sceneObj.canMusic) return false;
+                            if (track === 'Dance' && !sceneObj.canDance) return false;
                             return true;
                         });
 
-                        // Score Candidates
-                        const scored = candidates.map((scene: any) => {
+                        const scored = candidates.map((sceneObj: any) => {
                             let score = 10000; 
-                            const key = `${scene.id}-${track}`;
+                            const key = `${sceneObj.id}-${track}`;
                             const currentPass = completionCounts[key] || 0;
 
-                            const durationHrs = (useSmartDuration ? scene.smartTime : baseDuration) / 60;
+                            const durationHrs = (useSmartDuration ? sceneObj.smartTime : baseDuration) / 60;
                             const proposedEnd = currentTime + durationHrs;
 
-                            // Internal Conflicts
-                            const internalConflict = (scene.cast || []).some((c:any) => busyActorsNow.has(c.name));
-                            if (internalConflict) return { ...scene, score: -9999 };
+                            const internalConflict = (sceneObj.cast || []).some((c:any) => busyActorsNow.has(c.name));
+                            if (internalConflict) return { ...sceneObj, score: -9999 };
 
-                            // External Conflicts
                             let missingActors = 0;
-                            (scene.cast || []).forEach((c:any) => {
+                            (sceneObj.cast || []).forEach((c:any) => {
                                 const actorConflicts = daysConflicts[c.name.toLowerCase()];
                                 if (actorConflicts) {
                                     const hasOverlap = actorConflicts.some(range => 
@@ -318,40 +282,39 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                 }
                             });
 
-                            const totalCast = scene.cast.length || 1;
+                            const totalCast = sceneObj.cast.length || 1;
                             const missingRatio = missingActors / totalCast;
 
                             if (missingActors > 0) {
                                 if (totalCast < 5 || missingRatio > 0.20) {
                                     conflictsAvoided++; 
-                                    return { ...scene, score: -9999 };
+                                    return { ...sceneObj, score: -9999 };
                                 }
                                 conflictsAccepted++;
                                 score -= (missingActors * 2000); 
                             }
 
-                            const size = scene.cast?.length || 0;
+                            const size = sceneObj.cast?.length || 0;
                             if (strategy === 'velocity') {
                                 score += size * 2; 
-                                score += (scene.totalPoints * 5); 
+                                score += (sceneObj.totalPoints * 5); 
                             } else {
                                 if (size > 0 && size <= 15) score += 500;       
                                 else if (size <= 25) score += 200; 
                                 else score -= 100;                 
-                                score += (scene.totalPoints * 2);
+                                score += (sceneObj.totalPoints * 2);
                             }
 
                             score -= (currentPass * 500); 
-                            const idleKids = (scene.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
+                            const idleKids = (sceneObj.cast || []).filter((c:any) => !scheduledCast.has(c.name)).length;
                             score += (idleKids * 10);
                             
-                            // Track Affinity
-                            const name = (scene.name || s["Scene Name"] || "").toLowerCase();
-                            const type = (scene.type || "").toLowerCase();
+                            const name = (sceneObj.name || sceneObj["Scene Name"] || "").toLowerCase();
+                            const type = (sceneObj.type || "").toLowerCase();
                             if (track === 'Music' && (name.includes('song') || name.includes('finale') || type.includes('music'))) score += 100;
                             if (track === 'Dance' && (name.includes('dance') || name.includes('tango'))) score += 100;
 
-                            return { ...scene, score };
+                            return { ...sceneObj, score };
                         });
 
                         scored.sort((a: any, b: any) => b.score - a.score);
@@ -444,7 +407,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-white/10 w-full max-w-6xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                 
-                {/* HEADER */}
                 <div className="p-6 border-b border-white/10 bg-zinc-900 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 flex items-center gap-2">
@@ -456,17 +418,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                 </div>
 
                 <div className="flex flex-1 overflow-hidden">
-                    
-                    {/* LEFT: Controls */}
                     <div className="w-80 bg-zinc-900/50 border-r border-white/5 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-                        
-                        {/* 1. DATE & SCOPE */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <CalendarRange size={14} className="text-blue-400"/> Schedule Scope
                             </h3>
-                            
-                            {/* START DATE PICKER */}
                             <div>
                                 <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Week 1 Start Date (Friday)</label>
                                 <div className="flex gap-2">
@@ -487,7 +443,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     )}
                                 </div>
                             </div>
-
                             <div className="flex items-center gap-2">
                                 <div className="flex-1">
                                     <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Start Week</label>
@@ -509,13 +464,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             </div>
                         </div>
 
-                        {/* 2. CONSTRAINTS & STAFF */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                             <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <Ban size={14} className="text-red-400"/> Constraints & Staff
                             </h3>
-                            
-                            {/* Blackout Weeks */}
                             <div>
                                 <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Blackout Weeks (Tech/Show)</label>
                                 <input 
@@ -527,8 +479,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                 />
                                 <p className="text-[9px] text-zinc-600 mt-1 italic">Comma separated week numbers.</p>
                             </div>
-
-                            {/* Staff Mapping */}
                             <div className="pt-2 border-t border-white/5">
                                 <label className="text-[9px] uppercase font-bold text-zinc-500 mb-2 block flex items-center gap-1"><UserCog size={10}/> Staff Availability Map</label>
                                 <div className="space-y-2">
@@ -555,7 +505,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             </div>
                         </div>
 
-                        {/* 3. REHEARSAL PASSES */}
                         <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
                              <h3 className="text-xs font-black uppercase text-zinc-500 tracking-widest flex items-center gap-2">
                                 <RefreshCw size={14} className="text-emerald-400"/> Rehearsal Passes
@@ -573,7 +522,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             </div>
                         </div>
 
-                        {/* GENERATE */}
                         <div className="mt-auto pt-4 border-t border-white/5">
                             <button 
                                 onClick={generateSchedule} 
@@ -586,7 +534,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                         </div>
                     </div>
 
-                    {/* RIGHT: Results Preview */}
                     <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar flex flex-col">
                         {previewSchedule.length === 0 ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-zinc-600 opacity-50">
@@ -596,7 +543,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                             </div>
                         ) : (
                             <>
-                                {/* SCOREBOARD */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 shrink-0">
                                     <div className={`p-5 rounded-2xl border flex items-center justify-between ${stats?.completion === 100 ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-blue-900/10 border-blue-500/20'}`}>
                                         <div>
@@ -632,10 +578,9 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     </div>
                                 </div>
 
-                                {/* 🟢 TAB BAR: WEEKS */}
                                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
                                     {Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i).map(week => {
-                                        const isBlackout = blackoutWeeks.split(',').map(s=>parseInt(s.trim())).includes(week);
+                                        const isBlackout = blackoutWeeks.split(',').map((str: string) => parseInt(str.trim())).includes(week);
                                         const count = previewSchedule.filter(i => i.weekOffset === (week - 1)).length;
                                         const isFull = count > 15; 
                                         return (
@@ -656,13 +601,11 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     })}
                                 </div>
 
-                                {/* PREVIEW LIST */}
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                                     {(() => {
                                         const weekItems = previewSchedule.filter(item => item.weekOffset === (activeTabWeek - 1));
                                         
-                                        // 🟢 BLACKOUT MESSAGE
-                                        if (blackoutWeeks.split(',').map(s=>parseInt(s.trim())).includes(activeTabWeek)) {
+                                        if (blackoutWeeks.split(',').map((str: string) => parseInt(str.trim())).includes(activeTabWeek)) {
                                             return (
                                                 <div className="text-center py-20 text-zinc-500 italic flex flex-col items-center gap-4">
                                                     <Ban size={32} className="text-red-500/50"/>
@@ -726,10 +669,10 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                                                                         );
                                                                                         
                                                                                         const color = item.sceneName.includes("Warmup") ? 'bg-amber-900/20 text-amber-200 border-amber-500/30' :
-                                                                                                    item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
+                                                                                                      item.track === 'Acting' ? 'bg-blue-900/20 text-blue-200 border-blue-500/30' 
                                                                                                     : item.track === 'Music' ? 'bg-pink-900/20 text-pink-200 border-pink-500/30' 
                                                                                                     : 'bg-emerald-900/20 text-emerald-200 border-emerald-500/30';
-                                                                                                    
+                                                                                        
                                                                                         return (
                                                                                             <div key={item.id} className={`p-3 rounded-lg border flex flex-col justify-between shadow-lg relative overflow-hidden group/card ${color}`}>
                                                                                                 <div>
@@ -762,7 +705,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
                                     })()}
                                 </div>
                                 
-                                {/* CONFIRM BUTTON */}
                                 <div className="flex justify-end pt-6 border-t border-white/10 sticky bottom-0 bg-zinc-950 p-4 -mx-4 -mb-4">
                                     <button 
                                         onClick={() => { onCommit(previewSchedule); onClose(); }} 

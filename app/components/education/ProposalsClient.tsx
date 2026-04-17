@@ -84,7 +84,7 @@ export default function ProposalsClient({ proposals }: { proposals: EducationCla
                     <XCircle size={14} /> Reject
                 </button>
                 <button className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors">
-                    <CheckCircle2 size={14} /> Approve
+                    <CheckCircle size={14} /> Approve
                 </button>
             </div>
 

@@ -86,7 +86,7 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
   }, [classes, activeSession]);
 
   // 3. EXTRACT FILTERS
-  const availableVenues = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.venue))).sort(), [sessionClasses]);
+  const availableVenues = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.location))).sort(), [sessionClasses]);
   const availableDays = useMemo(() => Array.from(new Set(sessionClasses.map(c => c.day).filter(d => d !== "TBD"))).sort(), [sessionClasses]);
 
   // 4. FILTERS STATE
@@ -97,7 +97,7 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
 
   // 5. APPLY FILTERS
   const visibleClasses = sessionClasses.filter(c => {
-    const matchesVenue = filterVenue ? c.venue === filterVenue : true;
+    const matchesVenue = filterVenue ? c.location === filterVenue : true;
     const matchesDay = filterDay ? c.day === filterDay : true;
     
     let matchesAge = true;
@@ -127,9 +127,9 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
     }, {})).sort((a: any, b: any) => b[1].students - a[1].students);
     
     const byVenue = Object.entries(sessionClasses.reduce((acc: any, c) => {
-        if (!acc[c.venue]) acc[c.venue] = { classes: 0, students: 0 };
-        acc[c.venue].classes++;
-        acc[c.venue].students += c.students;
+        if (!acc[c.location]) acc[c.location] = { classes: 0, students: 0 };
+        acc[c.location].classes++;
+        acc[c.location].students += c.students;
         return acc;
     }, {})).sort((a: any, b: any) => b[1].students - a[1].students);
     
@@ -139,8 +139,8 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
   // Group by Venue for "Campus View"
   const classesByVenue = useMemo(() => {
     return visibleClasses.reduce((acc: any, c) => {
-      if (!acc[c.venue]) acc[c.venue] = [];
-      acc[c.venue].push(c);
+      if (!acc[c.location]) acc[c.location] = [];
+      acc[c.location].push(c);
       return acc;
     }, {});
   }, [visibleClasses]);
@@ -210,7 +210,7 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
                     </button>
                     {availableVenues.map(venue => {
                         const theme = getVenueTheme(venue);
-                        const count = sessionClasses.filter(c => c.venue === venue).length;
+                        const count = sessionClasses.filter(c => c.location === venue).length;
                         const isActive = filterVenue === venue;
                         return (
                             <button
@@ -348,7 +348,7 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
 }
 
 function ClassCard({ cls, onClick }: { cls: EducationClass, onClick: () => void }) {
-    const theme = getVenueTheme(cls.venue as any); // Type assertion because venue is a computed property
+    const theme = getVenueTheme(cls.location as any); // Type assertion because venue is a computed property
     return (
         <div onClick={onClick} className="group cursor-pointer bg-zinc-900/40 border border-white/5 hover:border-white/10 hover:bg-zinc-900/60 rounded-2xl p-5 transition-all flex flex-col h-full relative overflow-hidden shadow-sm hover:shadow-2xl">
             <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br rounded-bl-full -mr-8 -mt-8 pointer-events-none opacity-10 ${theme.bg.replace('bg-', 'from-').replace('/10', '')} to-transparent`} />

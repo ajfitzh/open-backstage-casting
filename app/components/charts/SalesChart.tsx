@@ -2,12 +2,23 @@
 
 import React, { useMemo } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Ticket, Users, TrendingUp, AlertCircle } from 'lucide-react';
 
-export default function SalesChart({ data }) {
-  // Memoize calculations to prevent unnecessary re-renders
+interface SalesData {
+  name: string;
+  sold: number;
+  empty: number;
+  fillRate: number;
+  capacity: number;
+}
+
+interface SalesChartProps {
+  data: SalesData[];
+}
+
+export default function SalesChart({ data }: SalesChartProps) {
   const stats = useMemo(() => {
     if (!data?.length) return null;
     const totalSold = data.reduce((acc, curr) => acc + curr.sold, 0);
@@ -27,17 +38,16 @@ export default function SalesChart({ data }) {
 
   return (
     <div className="space-y-6">
-      {/* 📊 TOP-LEVEL SUMMARY METRICS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard 
           label="Total Tickets Sold" 
-          value={stats?.totalSold.toLocaleString()} 
-          sub={`Out of ${stats?.maxCapacity.toLocaleString()} available`}
+          value={stats?.totalSold.toLocaleString() || "0"} 
+          sub={`Out of ${stats?.maxCapacity.toLocaleString() || "0"} available`}
           icon={<Ticket className="text-emerald-500" size={20} />} 
         />
         <StatCard 
           label="Avg. House Fill" 
-          value={`${stats?.avgFill}%`} 
+          value={`${stats?.avgFill || 0}%`} 
           sub="Across all performances"
           icon={<Users className="text-blue-500" size={20} />} 
         />
@@ -49,7 +59,6 @@ export default function SalesChart({ data }) {
         />
       </div>
 
-      {/* 🎟️ MAIN CAPACITY CHART */}
       <div className="bg-zinc-900/40 border border-white/5 p-6 rounded-3xl backdrop-blur-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
@@ -73,7 +82,7 @@ export default function SalesChart({ data }) {
                 fontWeight={700}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(val) => val.split('@')[0]} 
+                tickFormatter={(val: string) => val.split('@')[0]} 
               />
               <YAxis 
                 stroke="#3f3f46" 
@@ -84,7 +93,7 @@ export default function SalesChart({ data }) {
               />
               <Tooltip 
                 cursor={{ fill: '#27272a', opacity: 0.4 }}
-                content={<CustomTooltip />}
+                content={<CustomTooltip active={false} payload={[]} label={""} />}
               />
               <Bar dataKey="sold" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
               <Bar dataKey="empty" stackId="a" fill="#27272a" radius={[6, 6, 0, 0]} />
@@ -96,12 +105,11 @@ export default function SalesChart({ data }) {
   );
 }
 
-// Sub-components for a cleaner main export
-function StatCard({ label, value, sub, icon }) {
+function StatCard({ label, value, sub, icon }: { label: string, value: string | number, sub: string, icon: React.ReactElement }) {
   return (
     <div className="p-5 bg-zinc-900/40 border border-white/5 rounded-2xl relative overflow-hidden group">
       <div className="absolute right-[-10px] top-[-10px] opacity-5 group-hover:scale-110 transition-transform">
-        {React.cloneElement(icon, { size: 80 })}
+        {React.cloneElement(icon as any, { size: 80 })}
       </div>
       <div className="flex items-center gap-3 mb-2">
         <div className="p-2 bg-zinc-950 rounded-lg border border-white/5">{icon}</div>
@@ -113,7 +121,7 @@ function StatCard({ label, value, sub, icon }) {
   );
 }
 
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label }: { active?: boolean, payload?: any[], label?: string }) {
   if (active && payload && payload.length) {
     const sold = payload[0].value;
     const empty = payload[1].value;

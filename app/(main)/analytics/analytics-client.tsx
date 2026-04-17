@@ -493,8 +493,8 @@ export default function AnalyticsDashboard({
                         <ResponsiveContainer width="100%" height="100%">
 <ComposedChart data={rhythmData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} layout="vertical">
     <CartesianGrid strokeDasharray="3 3" stroke="#18181b" horizontal={false} />
-    <XAxis type="number" yAxisId="left" stroke="#52525b" tick={{fontSize: 10}} axisLine={false} tickLine={false} />
-    <XAxis type="number" yAxisId="right" orientation="top" hide /> {/* Hidden axis for Fill % */}
+    <XAxis type="number" xAxisId="left" stroke="#52525b" tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+    <XAxis type="number" xAxisId="right" orientation="top" hide /> {/* Hidden axis for Fill % */}
     <YAxis dataKey="name" type="category" yAxisId="left" stroke="#52525b" tick={{fontSize: 10, fontWeight: 'bold'}} axisLine={false} tickLine={false} width={60} />
     <Tooltip cursor={{fill: '#27272a', opacity: 0.4}} contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px' }} />
     

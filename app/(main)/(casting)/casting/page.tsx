@@ -22,13 +22,13 @@ export default async function CastingPage() {
     BaserowClient.getAssignmentsForShow(showId),
   ]);
 
-  return (
+return (
     <CastingClient 
       activeId={showId}
       blueprintRoles={roles}
       allScenes={scenes}
       roster={roster}
-      assignments={assignments}
+      assignments={assignments as any} 
     />
   );
 }

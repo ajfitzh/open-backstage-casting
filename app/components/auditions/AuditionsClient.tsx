@@ -1,16 +1,22 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  User, Star, Music, Move, X, Save, Clock, CheckCircle2, 
-  MessageSquare, Search, UserPlus, PlayCircle, Film, Loader2
+  User, Clock, CheckCircle2, Search, UserPlus, PlayCircle, Film, Loader2
 } from "lucide-react";
 import { getAuditionees, updateAuditionSlot, submitAudition } from "@/app/lib/baserow";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 
+import JudgeSetupModal from "./JudgeSetupModal";
+import ScoringSidebar from "./ScoringSidebar";
+
 // --- TYPES ---
-interface Performer {
+export type AuditionSession = "Thursday" | "Friday" | "Video/Remote" | "Walk-In";
+export type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
+
+export interface Performer {
   id: number;
   originalId: number;
   performerId?: number;
@@ -40,45 +46,13 @@ interface Performer {
   isWalkIn: boolean;
 }
 
-type AuditionSession = "Thursday" | "Friday" | "Video/Remote" | "Walk-In";
-type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
-
-const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
+export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
   Director: { color: "border-blue-500", text: "text-blue-400", glow: "shadow-blue-500/20", weight: "Acting 60% | Vocal 20% | Dance 20%" },
   Music: { color: "border-purple-500", text: "text-purple-400", glow: "shadow-purple-500/20", weight: "Vocal 80% | Acting 20%" },
   Choreographer: { color: "border-emerald-500", text: "text-emerald-400", glow: "shadow-emerald-500/20", weight: "Dance 80% | Presence 20%" },
   "Drop-In": { color: "border-amber-500", text: "text-amber-400", glow: "shadow-amber-500/20", weight: "Impression Only" },
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
-
-// --- HELPER COMPONENT: RUBRIC SLIDER ---
-const RubricSlider = ({ label, val, setVal, disabled }: { label: string, val: number, setVal: (n: number) => void, disabled: boolean }) => (
-  <div className={`space-y-3 ${disabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-    <div className="flex justify-between items-end">
-      <label className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-        {label === "Vocal Ability" && <Music size={14} className="text-purple-500" />}
-        {label === "Acting / Reads" && <Star size={14} className="text-blue-500" />}
-        {label === "Dance / Movement" && <Move size={14} className="text-emerald-500" />}
-        {label}
-      </label>
-      <span className={`text-xl font-black ${val > 0 ? 'text-white' : 'text-zinc-700'}`}>{val || "-"}</span>
-    </div>
-    <input 
-      type="range" min="0" max="5" step="1" value={val} 
-      onChange={(e) => setVal(Number(e.target.value))} 
-      className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-      aria-label={`Score for ${label}`} 
-    />
-    <div className="flex justify-between text-[9px] font-bold uppercase text-zinc-600 px-1">
-      <span>N/A</span>
-      <span>Weak</span>
-      <span>Fair</span>
-      <span>Good</span>
-      <span>Great</span>
-      <span>Exc.</span>
-    </div>
-  </div>
-);
 
 interface AuditionsClientProps {
   productionId: number;
@@ -88,7 +62,7 @@ interface AuditionsClientProps {
 export default function AuditionsClient({ productionId, productionTitle }: AuditionsClientProps) {
   const [isMounted, setIsMounted] = useState(false); 
   
-  // Judge State (Stored in LocalStorage as it's device-specific)
+  // Judge State 
   const [judgeName, setJudgeName] = useState("");
   const [judgeRole, setJudgeRole] = useState<JudgeRole | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -112,30 +86,23 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
 
   const reopenJudgeSetup = () => setIsReady(false);
 
-  // ✅ UPDATED INITIALIZATION LOGIC
   useEffect(() => {
     setIsMounted(true); 
     const savedName = localStorage.getItem("judgeName");
     const savedRole = localStorage.getItem("judgeRole") as JudgeRole | null;
     
     if (savedName && savedRole) {
-      // Case A: User has used this before
       setJudgeName(savedName);
       setJudgeRole(savedRole);
       setIsReady(true);
     } else {
-      // Case B: First time (or cleared cache) -> Default to Austin/Director
       const defaultName = "Austin Fitzhugh";
       const defaultRole: JudgeRole = "Director";
-
       setJudgeName(defaultName);
       setJudgeRole(defaultRole);
-      
-      // Save defaults so we don't have to set them again
       localStorage.setItem("judgeName", defaultName);
       localStorage.setItem("judgeRole", defaultRole);
-      
-      setIsReady(true); // Skip the modal!
+      setIsReady(true); 
     }
   }, []);
 
@@ -148,12 +115,9 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
       console.log(`🚀 Loading Auditions for ${productionTitle} (ID: ${productionId})...`);
       
       try {
-        // 1. Fetch CLEAN data (The new baserow.ts handles the ugly extraction)
         const slots = await getAuditionees(productionId);
-
         console.log(`✅ Loaded ${slots.length} actors.`);
         
-        // Helper to format height if needed
         const formatHeight = (val: any) => {
           if (!val) return "N/A";
           if (String(val).includes("'")) return val; 
@@ -163,38 +127,36 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
         };
 
         const formattedSchedule: Performer[] = slots.map((row: any) => {
-   let session: AuditionSession = "Video/Remote";
-   let displayTime = "TBD";
+           let session: AuditionSession = "Video/Remote";
+           let displayTime = "TBD";
 
-   if (row.date) {
-     const dateObj = new Date(row.date); // "03/05/2026 17:00" parses correctly in JS
-     const dayOfWeek = dateObj.getDay(); 
-     
-     // 4 = Thursday, 5 = Friday
-     if (dayOfWeek === 4) session = "Thursday";
-     else if (dayOfWeek === 5) session = "Friday";
-     
-     displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-   } else if (row.video) {
+           if (row.date) {
+             const dateObj = new Date(row.date);
+             const dayOfWeek = dateObj.getDay(); 
+             
+             if (dayOfWeek === 4) session = "Thursday";
+             else if (dayOfWeek === 5) session = "Friday";
+             
+             displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+           } else if (row.video) {
                session = "Video/Remote";
            }
 
-           // Check for Walk-In status
            if (row.status === "Walk-In") session = "Walk-In";
 
            return {
              id: row.id,
              originalId: row.id, 
-             performerId: row.studentId, // Mapped in baserow.ts
-             name: row.name || "Unknown Actor", // Mapped in baserow.ts
-             avatar: row.headshot || null,      // Mapped in baserow.ts
+             performerId: row.studentId, 
+             name: row.name || "Unknown Actor", 
+             avatar: row.headshot || null,      
              age: row.age || "?",
              video: row.video || null,
              height: formatHeight(row.height),
              vocalRange: row.vocalRange || "",
              dob: row.dob || "",
              conflicts: row.conflicts || "",
-             tenure: row.status || "Unknown", // "New" or "Returning"
+             tenure: row.status || "Unknown", 
              pastRoles: row.pastRoles || [],
              song: row.song || "",
              monologue: row.monologue || "",
@@ -220,8 +182,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
           if (p.vocal > 0 || p.dance > 0 || p.acting > 0 || p.video) initialGrades[p.id] = p;
         });
         setGrades(initialGrades);
-
-        // Store full list for walk-in search
         setAllStudents(slots);
 
       } catch (err) {
@@ -233,6 +193,7 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
 
     loadData();
   }, [isReady, productionId, productionTitle]);
+
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
 
@@ -260,7 +221,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
     updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
   };
 
-  /* ---------- STANDARD SAVE ACTION ---------- */
   const handleCommit = async () => {
     if (!selectedPerson) return;
     
@@ -307,7 +267,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
       }
 
       if (isWalkIn) {
-        // Use the SERVER ID provided via props
         await submitAudition(originalId, productionId, payload);
         alert("Walk-In Created!");
       } else {
@@ -322,7 +281,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
     }
   };
 
-  /* ---------- Logic: Grouping & Scoring ---------- */
   const calculateWeightedScore = (scores: any) => {
     if (!judgeRole) return 0;
     const s = {
@@ -375,40 +333,21 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
     return Object.keys(groups).sort().reduce((acc, key) => { acc[key] = groups[key]; return acc; }, {} as Record<string, Performer[]>);
   }, [visibleList, activeSession]);
 
-
  return (
   <>
-    {/* --- JUDGE SETUP MODAL --- */}
     {!isReady && (
-      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
-        <div className="w-full max-w-[420px] bg-zinc-950 border border-white/10 rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl">
-          <h2 className="text-2xl font-black uppercase tracking-tight">Judge Setup</h2>
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Judge Name</label>
-            <input value={judgeName} onChange={(e) => setJudgeName(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-all" placeholder="Enter your name" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-2">Judge Role</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(ROLE_THEMES) as JudgeRole[]).map((role) => (
-                <button key={role} onClick={() => setJudgeRole(role)} className={`p-3 rounded-lg border text-xs font-black uppercase transition-all ${judgeRole === role ? "bg-white text-black border-white shadow-lg" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}>{role}</button>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            {isMounted && localStorage.getItem("judgeName") && (
-              <button onClick={() => setIsReady(true)} className="px-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-colors">Cancel</button>
-            )}
-            <button disabled={!judgeName || !judgeRole} onClick={() => { localStorage.setItem("judgeName", judgeName); localStorage.setItem("judgeRole", judgeRole!); setIsReady(true); }} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 py-4 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-900/20">{isMounted && localStorage.getItem("judgeName") ? "Update Profile" : "Start Judging"}</button>
-          </div>
-        </div>
-      </div>
+      <JudgeSetupModal
+        isMounted={isMounted}
+        judgeName={judgeName}
+        setJudgeName={setJudgeName}
+        judgeRole={judgeRole}
+        setJudgeRole={setJudgeRole}
+        setIsReady={setIsReady}
+      />
     )}
 
-    {/* --- MAIN UI --- */}
     {isReady && (
       judgeRole === 'Choreographer' ? (
-        // === CHOREOGRAPHER WORKSPACE ===
         <div className="h-screen bg-black flex flex-col">
             <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
                 <button onClick={reopenJudgeSetup} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">
@@ -438,7 +377,6 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
             </div>
         </div>
       ) : (
-        // === STANDARD AUDITION DECK ===
         <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
           <div className="flex-1 flex flex-col min-w-0">
             
@@ -547,69 +485,16 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
             </div>
           </div>
 
-          {/* SCORING SIDEBAR */}
           {selectedPerson && (
-            <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
-                <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex gap-4">
-                      <div className="w-20 h-20 rounded-2xl bg-zinc-800 overflow-hidden shadow-inner border border-white/10 shrink-0">
-                        {selectedPerson.avatar ? <img src={selectedPerson.avatar} className="w-full h-full object-cover" alt={selectedPerson.name} /> : <div className="w-full h-full flex items-center justify-center text-zinc-600"><User size={32} /></div>}
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-black italic uppercase leading-none tracking-tight">{selectedPerson.name}</h2>
-                        <div className="flex items-center gap-2 mt-2">
-                            <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide">{selectedPerson.isWalkIn ? "Walk-In" : `Age ${selectedPerson.age}`}</span>
-                            {!selectedPerson.isWalkIn && <span className="border border-zinc-700 text-zinc-500 px-2 py-1 rounded text-[10px] font-bold uppercase">{selectedPerson.timeSlot}</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <button onClick={() => setSelectedPerson(null)} className="text-zinc-500 hover:text-white transition-colors" aria-label="Close Panel"><X size={24}/></button>
-                 </div>
-               </div>
-
-               <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-                  {selectedPerson.video && (
-                     <div className="rounded-xl overflow-hidden border border-white/10 bg-black aspect-video relative group shadow-2xl">
-                        <video src={selectedPerson.video} controls className="w-full h-full object-contain" poster={selectedPerson.avatar || undefined} />
-                        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase text-white pointer-events-none border border-white/10">Audition Tape</div>
-                     </div>
-                  )}
-
-                  <div className={`p-4 rounded-xl border ${ROLE_THEMES[judgeRole!].color} bg-zinc-900/50`}>
-                      <div className="flex justify-between items-center">
-                        <div>
-                            <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-1">Your Rating</p>
-                            <p className="text-3xl font-black tabular-nums leading-none">{calculateWeightedScore(currentScores).toFixed(1)} <span className="text-sm text-zinc-600 font-normal">/ 5.0</span></p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[9px] uppercase text-zinc-500 font-bold leading-relaxed">{judgeRole} Priority:<br/><span className="text-zinc-300">{judgeRole === "Director" ? "Acting 70% | Vocal 30%" : ROLE_THEMES[judgeRole!].weight}</span></p>
-                        </div>
-                      </div>
-                  </div>
-
-                  <div className="space-y-6">
-                      <RubricSlider label="Vocal Ability" val={currentScores.vocal} setVal={(v) => setCurrentScores((s) => ({ ...s, vocal: v }))} disabled={judgeRole !== "Music" && judgeRole !== "Admin"} />
-                      <RubricSlider label="Acting / Reads" val={currentScores.acting} setVal={(v) => setCurrentScores((s) => ({ ...s, acting: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
-                      {(judgeRole === "Choreographer" || judgeRole === "Admin") && (
-                        <RubricSlider label="Dance / Movement" val={currentScores.dance} setVal={(v) => setCurrentScores((s) => ({ ...s, dance: v }))} disabled={false} />
-                      )}
-                      <RubricSlider label="Stage Presence" val={currentScores.presence} setVal={(v) => setCurrentScores((s) => ({ ...s, presence: v }))} disabled={judgeRole !== "Director" && judgeRole !== "Admin"} />
-                  </div>
-
-                  <div className="pt-2 border-t border-white/5">
-                    <label className="text-xs uppercase text-zinc-500 font-bold mb-3 block tracking-widest flex items-center gap-2"><MessageSquare size={12}/> Notes</label>
-                    <textarea className="w-full bg-zinc-900 border border-white/10 p-4 rounded-xl text-sm min-h-[100px] focus:border-blue-500 outline-none resize-none transition-all placeholder:text-zinc-700" placeholder={`Internal notes for ${selectedPerson.name}...`} value={currentScores.notes} onChange={(e) => setCurrentScores((s) => ({ ...s, notes: e.target.value }))} />
-                  </div>
-               </div>
-
-               <div className="p-6 border-t border-white/10 bg-zinc-900/50">
-                 <button onClick={handleCommit} className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-transform active:scale-95">
-                   <Save size={18} />
-                   {selectedPerson.isWalkIn ? "Submit Walk-In" : "Save Score"}
-                 </button>
-               </div>
-            </aside>
+            <ScoringSidebar
+                selectedPerson={selectedPerson}
+                setSelectedPerson={setSelectedPerson}
+                judgeRole={judgeRole!}
+                currentScores={currentScores}
+                setCurrentScores={setCurrentScores}
+                handleCommit={handleCommit}
+                calculateWeightedScore={calculateWeightedScore}
+            />
           )}
         </div>
       )

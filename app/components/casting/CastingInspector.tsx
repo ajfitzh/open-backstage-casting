@@ -41,8 +41,8 @@ export default function CastingInspector({ actor, allScenes = [], stats = { assi
                     <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase rounded border border-white/5">{actor.age || "Age ?"}</span>
                 </div>
                 <div className="flex gap-2 mt-3">
-                   {actor.actingNotes && <FileText size={14} className="text-blue-500" title="Has Acting Notes" />}
-                   {actor.musicNotes && <Mic2 size={14} className="text-purple-500" title="Has Vocal Notes" />}
+                   {actor.actingNotes && <span title="Has Acting Notes"><FileText size={14} className="text-blue-500" /></span>}
+                   {actor.musicNotes && <span title="Has Vocal Notes"><Mic2 size={14} className="text-purple-500" /></span>}
                 </div>
              </div>
           </div>

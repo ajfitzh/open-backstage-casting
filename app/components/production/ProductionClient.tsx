@@ -14,7 +14,72 @@ const WEEKS_TOTAL = 10;
 const CURRENT_WEEK = 4; // Mocking that we are in Week 4
 const GOAL_WEEK_8 = 8;  // Super Saturday Target
 
-export default function ProductionClient({ show, assignments, auditionees, scenes, assets, population = [] }: any) {
+// --- TYPES ---
+export interface ProductionShow {
+  id: number | string;
+  title: string;
+}
+
+export interface CastAssignment {
+  personId: number | string;
+  roleId?: number | string;
+}
+
+export interface CastMember {
+  id: number | string;
+  gender?: { value: string } | string;
+  showCount?: number;
+  age?: number;
+  height?: number;
+}
+
+export interface SceneLoad {
+  music: number;
+  dance: number;
+  block: number;
+}
+
+export interface SceneStatus {
+  music: string;
+  dance: string;
+  block: string;
+}
+
+export interface Scene {
+  id: string | number;
+  name: string;
+  act: string;
+  type: string;
+  order: number;
+  pages?: number | string;
+  status: SceneStatus;
+  load: SceneLoad;
+}
+
+export interface ProductionAsset {
+  id: string | number;
+  type: string;
+  name: string;
+  link: string;
+}
+
+interface ProductionClientProps {
+  show: ProductionShow;
+  assignments: CastAssignment[];
+  auditionees?: unknown[]; 
+  scenes: Scene[];
+  assets: ProductionAsset[];
+  population?: CastMember[];
+}
+
+export default function ProductionClient({ 
+    show, 
+    assignments, 
+    auditionees, 
+    scenes, 
+    assets, 
+    population = [] 
+}: ProductionClientProps) {
     const [activeTab, setActiveTab] = useState<'overview' | 'progress'>('overview');
     
     // Safety check
@@ -57,7 +122,6 @@ export default function ProductionClient({ show, assignments, auditionees, scene
             <div className="p-8">
                 {activeTab === 'overview' ? (
                     <OverviewView 
-                        show={show}
                         assignments={assignments} 
                         population={population} 
                         scenes={scenes} 
@@ -74,24 +138,31 @@ export default function ProductionClient({ show, assignments, auditionees, scene
 // ============================================================================
 // 1. OVERVIEW TAB (Analytics & Assets)
 // ============================================================================
-function OverviewView({ assignments, population, scenes, assets }: any) {
+function OverviewView({ assignments, population, scenes, assets }: { assignments: CastAssignment[], population: CastMember[], scenes: Scene[], assets: ProductionAsset[] }) {
     const [assetFilter, setAssetFilter] = useState("All");
 
     // --- LOGIC: CAST ANALYTICS ---
     const stats = useMemo(() => {
         // 1. Filter Population
-        const activeIds = new Set(assignments.map((a:any) => a.personId).filter(Boolean));
-        const activeCast = population.filter((p:any) => activeIds.has(p.id));
+        const activeIds = new Set(assignments.map((a: CastAssignment) => a.personId).filter(Boolean));
+        const activeCast = population.filter((p: CastMember) => activeIds.has(p.id));
         
         const total = activeCast.length;
 
         // 2. Gender
-        const males = activeCast.filter((p:any) => (p.gender || "").trim() === 'Male').length;
-        const females = activeCast.filter((p:any) => (p.gender || "").trim() === 'Female').length;
+        const males = activeCast.filter((p: CastMember) => {
+            const gen = typeof p.gender === 'object' ? p.gender.value : p.gender;
+            return (gen || "").trim() === 'Male';
+        }).length;
+        
+        const females = activeCast.filter((p: CastMember) => {
+            const gen = typeof p.gender === 'object' ? p.gender.value : p.gender;
+            return (gen || "").trim() === 'Female';
+        }).length;
         
         // 3. Experience
         const exp = { green: 0, journey: 0, pro: 0 };
-        activeCast.forEach((p:any) => {
+        activeCast.forEach((p: CastMember) => {
             const count = p.showCount || 0;
             if (count <= 2) exp.green++;
             else if (count <= 5) exp.journey++;
@@ -99,13 +170,13 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
         });
 
         // 4. Age
-        const validAges = activeCast.map((p:any) => p.age).filter((a:number) => a > 0);
+        const validAges = activeCast.map((p: CastMember) => p.age).filter((a): a is number => typeof a === 'number' && a > 0);
         const avgAge = validAges.length ? (validAges.reduce((a:number,b:number)=>a+b,0) / validAges.length).toFixed(1) : "N/A";
         const minAge = validAges.length ? Math.min(...validAges) : 0;
         const maxAge = validAges.length ? Math.max(...validAges) : 0;
 
         // 5. Height (Converted to Feet/Inches)
-        const validHeights = activeCast.map((p:any) => p.height).filter((h:number) => h > 0);
+        const validHeights = activeCast.map((p: CastMember) => p.height).filter((h): h is number => typeof h === 'number' && h > 0);
         let avgHeightStr = "N/A";
         
         if (validHeights.length > 0) {
@@ -121,7 +192,7 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
     // --- LOGIC: ASSETS ---
     const filteredAssets = useMemo(() => {
         if (!assets) return [];
-        return assetFilter === "All" ? assets : assets.filter((a:any) => a.type === assetFilter);
+        return assetFilter === "All" ? assets : assets.filter((a: ProductionAsset) => a.type === assetFilter);
     }, [assets, assetFilter]);
 
     return (
@@ -195,12 +266,11 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
                     </div>
                 </div>
 
-                {/* 4. HEIGHT SPECS (UPDATED) */}
+                {/* 4. HEIGHT SPECS */}
                 <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 relative overflow-hidden group hover:border-white/10 transition-all">
                     <div className="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-pink-500"><Ruler size={80}/></div>
                     <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Avg Height</div>
                     
-                    {/* 🚨 FIX: Display Feet/Inches String */}
                     <div className="text-4xl font-black text-white mb-2">{stats.avgHeightStr}</div>
                     
                     <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
@@ -231,11 +301,11 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
                          </div>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            {filteredAssets.map((asset: any) => {
+                            {filteredAssets.map((asset: ProductionAsset) => {
                                 const isImage = asset.type === 'Image' || (asset.link && asset.link.match(/\.(jpeg|jpg|gif|png)$/i));
                                 return (
-                                    <a key={asset.id} href={asset.link} target="_blank" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
-                                        {isImage ? <img src={asset.link} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
+                                    <a key={asset.id} href={asset.link} target="_blank" rel="noreferrer" className="group relative aspect-square bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden hover:border-white/30 transition-all">
+                                        {isImage ? <img src={asset.link} alt={asset.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 group-hover:text-white transition-colors bg-zinc-800/50"><Box size={32}/></div>}
                                         <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
                                             <p className="text-xs font-bold text-white truncate">{asset.name}</p>
                                             <p className="text-[9px] font-black text-zinc-400 uppercase">{asset.type}</p>
@@ -258,9 +328,9 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
                             <div key={act}>
                                 <h4 className="text-[10px] font-black uppercase text-zinc-500 mb-3 border-b border-white/10 pb-1">{act}</h4>
                                 <div className="space-y-1">
-                                    {scenes.filter((s:any) => {
+                                    {scenes.filter((s: Scene) => {
                                         return s.act === act || (act === 'Act 1' && s.act === 'I') || (act === 'Act 2' && s.act === 'II');
-                                    }).map((s:any) => (
+                                    }).map((s: Scene) => (
                                         <div key={s.id} className="flex justify-between text-xs py-2 px-3 bg-zinc-950/50 border border-white/5 rounded-lg">
                                             <span className="font-bold text-zinc-300">{s.name}</span>
                                             <span className="text-[10px] font-black text-zinc-600 uppercase">{s.type}</span>
@@ -279,11 +349,11 @@ function OverviewView({ assignments, population, scenes, assets }: any) {
 // ============================================================================
 // 2. PROGRESS TAB
 // ============================================================================
-function ProgressView({ scenes }: any) {
+function ProgressView({ scenes }: { scenes: Scene[] }) {
     const [progress, setProgress] = useState<Record<string, Record<string, number>>>(() => {
-        const initial: any = {};
-        scenes.forEach((s: any) => {
-            initial[s.id] = {
+        const initial: Record<string, Record<string, number>> = {};
+        scenes.forEach((s: Scene) => {
+            initial[s.id.toString()] = {
                 music: Math.random() > 0.5 ? 2 : 0, 
                 dance: Math.random() > 0.7 ? 1 : 0,
                 block: Math.random() > 0.3 ? 2 : 0,
@@ -292,12 +362,13 @@ function ProgressView({ scenes }: any) {
         return initial;
     });
 
-    const toggleStatus = (sceneId: string, type: 'music' | 'dance' | 'block') => {
+    const toggleStatus = (sceneId: string | number, type: 'music' | 'dance' | 'block') => {
+        const idStr = sceneId.toString();
         setProgress(prev => ({
             ...prev,
-            [sceneId]: {
-                ...prev[sceneId],
-                [type]: (prev[sceneId][type] + 1) % 3
+            [idStr]: {
+                ...prev[idStr],
+                [type]: ((prev[idStr]?.[type] || 0) + 1) % 3
             }
         }));
     };
@@ -313,7 +384,7 @@ function ProgressView({ scenes }: any) {
         let totalUnits = 0;
         let completedUnits = 0;
 
-        scenes.forEach((s: any) => {
+        scenes.forEach((s: Scene) => {
             const type = s.type;
             const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
             const hasDance = type === 'Dance' || type === 'Mixed';
@@ -323,7 +394,7 @@ function ProgressView({ scenes }: any) {
             if (hasDance) totalUnits++;
             if (hasBlock) totalUnits++;
 
-            const p = progress[s.id];
+            const p = progress[s.id.toString()];
             if (hasMusic && p?.music === 2) completedUnits++;
             if (hasDance && p?.dance === 2) completedUnits++;
             if (hasBlock && p?.block === 2) completedUnits++;
@@ -428,11 +499,11 @@ function ProgressView({ scenes }: any) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {scenes.map((s: any, i: number) => {
+                            {scenes.map((s: Scene, i: number) => {
                                 const type = s.type;
                                 const hasMusic = type === 'Song' || type === 'Mixed' || type === 'Dance';
                                 const hasDance = type === 'Dance' || type === 'Mixed';
-                                const p = progress[s.id] || { music: 0, dance: 0, block: 0 };
+                                const p = progress[s.id.toString()] || { music: 0, dance: 0, block: 0 };
                                 const isReady = (!hasMusic || p.music === 2) && (!hasDance || p.dance === 2) && (p.block === 2);
 
                                 return (

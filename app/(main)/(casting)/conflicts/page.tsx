@@ -55,6 +55,7 @@ export default async function ConflictsPage() {
         initialConflicts={conflicts} 
         actors={actors} 
         showTitle={production?.title || "Active Production"}
+        events={[]}
       />
     </main>
   );
