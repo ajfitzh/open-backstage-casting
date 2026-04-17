@@ -1,21 +1,21 @@
 import { test as setup, expect } from '@playwright/test';
 
-// The file where Playwright will save your authentication cookies
 const authFile = 'playwright/.auth/user.json';
 
 setup('authenticate', async ({ page }) => {
-  // 1. Navigate to the login page
   await page.goto('/login');
 
-  // 2. Perform the login steps
-  // ⚠️ CHANGE THESE to match your actual login form inputs!
-  await page.getByPlaceholder('Email').fill('austin.j.fitzhugh@gmail.com');
-  await page.getByPlaceholder('Password').fill('41');
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  // 1. Match your specific placeholders
+  await page.getByPlaceholder('Email Address').fill('test@email.com');
+  await page.getByPlaceholder('App Password').fill('test');
 
-  // 3. Wait until the page redirects and loads the dashboard to ensure cookies are set
-  await expect(page.getByText('Dashboard')).toBeVisible(); // or whatever text proves you are logged in
+  // 2. Click the EXACT button name from your code
+  await page.getByRole('button', { name: 'Enter Deck' }).click();
 
-  // 4. Save the cookies/tokens to our file
+  // 3. Wait for the app to land on the dashboard
+  // (Adjust the text 'Dashboard' to something that actually exists on your home page)
+  await page.waitForURL('**/'); 
+ await expect(page.getByText(/dashboard|staff portal|war room/i).first()).toBeVisible({ timeout: 10000 });
+  // 4. Save the session
   await page.context().storageState({ path: authFile });
 });

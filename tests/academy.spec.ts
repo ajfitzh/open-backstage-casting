@@ -5,8 +5,7 @@ test.describe('Education Hub', () => {
     await page.goto('/education'); // Adjust route if your academy page lives elsewhere
 
     // 1. Default view should be the class manager
-    await expect(page.getByRole('button', { name: 'Classes' })).toBeVisible();
-
+await expect(page.getByRole('button', { name: 'Classes' }).first()).toBeVisible();
     // 2. Switch to the Logistics/Map view
     await page.getByRole('button', { name: 'Logistics' }).click();
     // Since we don't have real data in the test, we look for the empty state or the component wrapper

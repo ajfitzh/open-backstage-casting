@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-
+// This forces this specific file to start with a clean, logged-out slate
+test.use({ storageState: { cookies: [], origins: [] } });
 test.describe('Authentication & Routing', () => {
   test('unauthenticated users are redirected to login', async ({ page }) => {
     // Attempt to access a protected route directly
