@@ -37,7 +37,7 @@ export default function SandboxMenu() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* AUDITION CHECK-IN CARD */}
-          <Link href="/sandbox/checkin" className="group">
+          <Link href="/sandbox/check-in" className="group">
             <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 relative overflow-hidden">
               {/* Decorative Glow */}
               <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-600/10 blur-3xl group-hover:bg-indigo-600/20 transition-colors"></div>
