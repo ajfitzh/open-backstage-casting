@@ -49,7 +49,7 @@ const generateMassiveRoster = () => {
       completedForms: hasForms ? ['Registration Fee'] : ['Registration Fee', 'Medical Release', 'Code of Conduct'],
       missingForms: hasForms ? ['Medical Release', 'Code of Conduct'] : [],
       showHistory: isFirst ? [] : [{ title: 'The Little Mermaid', role: 'Ensemble', year: '2024' }],
-      auditionPrep: { monologue: i % 2 === 0 ? 'Comedic 1' : 'Dramatic 2', songTitle: i % 3 === 0 ? 'Tomorrow' : 'Stars', musicProvided: Math.random() > 0.3 },
+      auditionPrep: { monologue: i % 2 === 0 ? 'Comedic 1' : 'Dramatic 2', songTitle: i % 3 === 0 ? 'Tomorrow (Annie)' : 'Stars (Les Mis)', musicProvided: Math.random() > 0.3 },
       lobbyNote: ''
     });
   }
@@ -137,7 +137,8 @@ export default function SandboxCheckIn() {
     setSentLinks([]); 
   };
 
-  const handleReassign = (id: string, field: 'timeSlot' | 'auditionDay' | 'name', value: string) => {
+  // Changed field type to string to support email and phone modifications
+  const handleReassign = (id: string, field: string, value: string) => {
     setStudents(students.map(s => s.id === id ? { ...s, [field]: value } : s));
     setActiveStudent(prev => prev ? { ...prev, [field]: value } : null);
   };
@@ -285,11 +286,28 @@ export default function SandboxCheckIn() {
             </div>
 
             <div className={`p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar ${activeStudent.status !== 'Pending' ? 'opacity-40 pointer-events-none' : ''}`}>
+              
+              {/* Context Block (Now with Show History) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`p-4 rounded-xl border ${activeStudent.isFirstShow ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : 'bg-indigo-500/5 border-indigo-500/20 text-indigo-400'} flex flex-col justify-center`}>
-                  <p className="font-black text-[10px] uppercase tracking-widest mb-1">{activeStudent.isFirstShow ? '🎉 New Family' : '✨ Welcome Back'}</p>
-                  <p className="text-xs opacity-80">{activeStudent.isFirstShow ? 'Point out the parent orientation table.' : 'Returning Student'}</p>
-                </div>
+                {activeStudent.isFirstShow ? (
+                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 text-emerald-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-1">🎉 New Family</p>
+                    <p className="text-xs opacity-80">Point out the parent orientation table.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20 text-indigo-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-2">✨ Welcome Back</p>
+                    <div className="space-y-1 border-t border-indigo-500/20 pt-2 mt-1">
+                      {activeStudent.showHistory.length > 0 ? activeStudent.showHistory.slice(0,2).map((show: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center text-xs">
+                          <span className="truncate pr-2 opacity-80">{show.title}</span>
+                          <span className="font-bold whitespace-nowrap">{show.role}</span>
+                        </div>
+                      )) : <span className="text-xs opacity-80">Returning Student</span>}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-xl">
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-1">Guardians</span>
@@ -304,24 +322,50 @@ export default function SandboxCheckIn() {
                 </div>
               </div>
 
+              {/* Lobby Note */}
               <div className="p-4 border border-slate-800 rounded-xl bg-slate-950/30">
-                <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-comment-dots text-indigo-500"></i> Director Alert</p>
-                <textarea value={currentNote} onChange={(e) => setCurrentNote(e.target.value)} placeholder="Special notes..." className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-xl focus:ring-1 ring-indigo-500 outline-none text-sm min-h-[70px] resize-none"/>
+                <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fas fa-comment-dots text-indigo-500"></i> Director Situational Alert
+                </p>
+                <textarea value={currentNote} onChange={(e) => setCurrentNote(e.target.value)} placeholder="Scared, cough, peanut allergy, stressed parent..." className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-xl focus:ring-1 ring-indigo-500 outline-none text-sm min-h-[70px] resize-none placeholder:opacity-30"/>
               </div>
 
+              {/* Audition Material (Now with Song Title) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex justify-between items-center shadow-inner">
-                  <div><p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Monologue</p><p className="text-sm font-bold">{activeStudent.auditionPrep.monologue}</p></div>
-                  <button className="text-[10px] font-black text-indigo-400 hover:text-white uppercase tracking-widest p-2">Change</button>
+                  <div>
+                    <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Monologue</p>
+                    <p className="text-sm font-bold">{activeStudent.auditionPrep.monologue}</p>
+                  </div>
+                  <button className="text-[10px] font-black text-indigo-400 hover:text-white uppercase tracking-widest p-2">Re-send</button>
                 </div>
                 <div className={`border p-4 rounded-xl flex justify-between items-center shadow-inner ${activeStudent.auditionPrep.musicProvided ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
-                  <div><p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Music Track</p><p className={`text-sm font-bold ${activeStudent.auditionPrep.musicProvided ? 'text-emerald-400' : 'text-rose-400'}`}>{activeStudent.auditionPrep.musicProvided ? 'LOADED' : 'MISSING'}</p></div>
+                  <div>
+                    <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Audition Song</p>
+                    <p className={`text-sm font-bold ${activeStudent.auditionPrep.musicProvided ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {activeStudent.auditionPrep.songTitle} 
+                      <span className="text-[10px] ml-1 opacity-70">({activeStudent.auditionPrep.musicProvided ? 'LOADED' : 'MISSING'})</span>
+                    </p>
+                  </div>
                   {!activeStudent.auditionPrep.musicProvided && <button className="text-[10px] font-black text-rose-400 hover:text-white uppercase tracking-widest p-2">Send Link</button>}
                 </div>
               </div>
 
+              {/* Contact Info Editing (Phone & Email Restored) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Phone</label>
+                  <input type="text" value={activeStudent.phone} onChange={(e) => handleReassign(activeStudent.id, 'phone', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Email</label>
+                  <input type="email" value={activeStudent.email} onChange={(e) => handleReassign(activeStudent.id, 'email', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+              </div>
+
+              {/* Paperwork Logic */}
               <div className="space-y-3">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Paperwork</p>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Outstanding Paperwork</p>
                 {activeStudent.missingForms.length === 0 ? (
                   <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold text-center">Complete</div>
                 ) : (
@@ -331,8 +375,8 @@ export default function SandboxCheckIn() {
                       <div key={form} className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950 border border-rose-500/20 p-3 rounded-xl gap-3">
                         <div className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div><span className="text-sm font-bold text-rose-100">{form}</span></div>
                         <div className="flex gap-2">
-                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors">View</button>
-                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500'}`}>{isSent ? 'Sent' : 'Re-send'}</button>
+                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors flex-1 md:flex-none">View File</button>
+                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-lg'}`}>{isSent ? 'Sent' : 'Re-send'}</button>
                         </div>
                       </div>
                     );
@@ -341,13 +385,17 @@ export default function SandboxCheckIn() {
               </div>
             </div>
 
+            {/* Footer Action Bar */}
             {activeStudent.status === 'Pending' ? (
               <div className="p-4 md:p-6 border-t border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
-                <div className="flex gap-2">
-                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'No Show')} className="px-4 py-3 rounded-xl font-black text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 text-[10px] uppercase tracking-widest transition-all hidden md:block">No-Show</button>
-                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Late')} className="px-4 py-3 rounded-xl font-black text-amber-500/60 hover:text-amber-400 hover:bg-amber-400/10 text-[10px] uppercase tracking-widest transition-all">Late</button>
+                <div className="flex gap-1 md:gap-2">
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'No Show')} className="px-3 md:px-4 py-3 rounded-xl font-black text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 text-[10px] uppercase tracking-widest transition-all hidden md:block">No-Show</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Late')} className="px-3 md:px-4 py-3 rounded-xl font-black text-amber-500/60 hover:text-amber-400 hover:bg-amber-400/10 text-[10px] uppercase tracking-widest transition-all">Mark Late</button>
                 </div>
-                <button onClick={() => handleUpdateStatus(activeStudent.id, 'Checked In')} className="px-10 py-3.5 rounded-xl font-black text-white bg-indigo-600 text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-indigo-500/40 hover:bg-indigo-500 transition-all active:scale-95">Verify & Check In</button>
+                <div className="flex gap-3 md:gap-4 items-center">
+                  <button onClick={() => setActiveStudent(null)} className="font-bold text-slate-500 hover:text-white text-xs transition-colors p-2 hidden md:block">Cancel</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Checked In')} className="px-6 md:px-10 py-3.5 rounded-xl font-black text-white bg-indigo-600 text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-indigo-500/40 hover:bg-indigo-500 transition-all active:scale-95 w-full md:w-auto">Verify & Check In</button>
+                </div>
               </div>
             ) : (
               <div className="p-6 border-t border-slate-800 bg-slate-950 flex justify-between items-center shrink-0">
@@ -359,17 +407,21 @@ export default function SandboxCheckIn() {
         </div>
       )}
 
-      {/* OVERLAYS (Forms & Images) */}
+      {/* Form Overlay */}
       {viewingForm && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[100]" onClick={() => setViewingForm(null)}>
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
             <h3 className="text-xl md:text-2xl font-black text-white mb-4 border-b border-white/5 pb-4">{FORM_TEMPLATES[viewingForm].title}</h3>
             <p className="text-slate-400 text-sm leading-relaxed mb-8">{FORM_TEMPLATES[viewingForm].text}</p>
-            <button onClick={() => setViewingForm(null)} className="w-full py-3 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700">Close Preview</button>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Signature Required</span>
+              <button onClick={() => setViewingForm(null)} className="px-6 py-3 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700">Close Preview</button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Image Zoom Overlay */}
       {maximizedImage && (
         <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setMaximizedImage(null)}>
           <div className="relative group">
