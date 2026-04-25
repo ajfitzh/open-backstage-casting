@@ -68,7 +68,7 @@ export default function SandboxMenu() {
               <div>
                 <h3 className="text-xl font-bold text-slate-300 mb-2">Data & Backups</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Export the current roster to CSV for paper-trail backups or Director's call sheets.
+                  Export the current roster to CSV for paper-trail backups or Director&apos;s call sheets.
                 </p>
               </div>
             </div>
