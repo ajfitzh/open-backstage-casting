@@ -40,6 +40,250 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+.github/
+  workflows/
+    playwright.yml
+app/
+  (main)/
+    (casting)/
+      auditions/
+        page.tsx
+      callbacks/
+        page.tsx
+      casting/
+        page.tsx
+      conflicts/
+        page.tsx
+      layout.tsx
+    (creative)/
+      production/
+        page.tsx
+    (production)/
+      analysis/
+        page.tsx
+        SceneAnalysisClient.tsx
+    (staff)/
+      committees/
+        page.tsx
+      reports/
+        page.tsx
+      roster/
+        page.tsx
+      season/
+        page.tsx
+        SeasonBoard.tsx
+      layout.tsx
+    @modal/
+      (.)production/
+        [id]/
+          cast/
+            page.tsx
+          team/
+            page.tsx
+      default.tsx
+    analytics/
+      analytics-client.tsx
+      page.tsx
+    education/
+      hiring/
+        page.tsx
+      planning/
+        page.tsx
+      portal/
+        page.tsx
+      proposals/
+        page.tsx
+      AcademyClient.tsx
+      EducationGrid.tsx
+      page.tsx
+    production/
+      [id]/
+        cast/
+          page.tsx
+    schedule/
+      page.tsx
+    settings/
+      page.tsx
+    layout.tsx
+    loading.tsx
+    page.tsx
+  actions/
+    casting.ts
+  api/
+    auth/
+      [...nextauth]/
+        route.ts
+    upload/
+      route.ts
+  components/
+    auditions/
+      AuditionsClient.tsx
+      JudgeSetupModal.tsx
+      ScoringSidebar.tsx
+    casting/
+      AutoCastButton.tsx
+      CallbackActorModal.tsx
+      CallbackClient.tsx
+      CastingClient.tsx
+      CastingInspector.tsx
+      CastingPrintView.tsx
+      CastWorkspace.tsx
+      ChemistryWorkspace.tsx
+    charts/
+      SalesChart.tsx
+    committees/
+      CommitteeClient.tsx
+    conflicts/
+      ConflictAnalysisDashboard.tsx
+      ConflictsClient.tsx
+    dashboard/
+      CreativeTeam.tsx
+      DashboardClient.tsx
+      ProductionOverview.tsx
+      ProductionTracker.tsx
+      SeasonContext.tsx
+      WorkflowProgress.tsx
+    education/
+      AttendanceSheet.tsx
+      ClassManager.tsx
+      ClassManagerModal.tsx
+      ClassPlanner.tsx
+      HiringKanban.tsx
+      ProposalsClient.tsx
+      TeacherPortalClient.tsx
+    globalappheader/
+      client.tsx
+      globalappheader.tsx
+      index.tsx
+    production/
+      ProductionClient.tsx
+    reports/
+      ReportsClient.tsx
+    schedule/
+      AutoSchedulerModal.tsx
+      CallboardView.tsx
+      SchedulerClient.tsx
+    settings/
+      SettingsClient.tsx
+    staff/
+      StaffClient.tsx
+    ActorProfileModal.tsx
+    ChoreoWorkspace.tsx
+    ComplianceDashboard.tsx
+    ConflictMatrix.tsx
+    ContextSwitcher.tsx
+    logo.svg
+    logo.tsx
+    Modal.tsx
+    SidebarShell.tsx
+    StaffSidebar.tsx
+  context/
+    SimulationContext.tsx
+  lib/
+    schemas/
+      casting.ts
+      education.ts
+      person.ts
+      schedule.ts
+    actions.ts
+    baserow.ts
+    BaserowClient.ts
+    CastingContext.tsx
+    educationFillerData.ts
+    nav-config.tsx
+    permissions.ts
+    schema.ts
+  login/
+    page.tsx
+  privacy/
+    page.tsx
+  terms/
+    page.tsx
+  actions.ts
+  favicon.ico
+  globals.css
+  layout.tsx
+  plan.md
+  providers.tsx
+lib/
+  CastingContext.tsx
+  PeopleContext.tsx
+  types.ts
+public/
+  file.svg
+  globe.svg
+  next.svg
+  vercel.svg
+  window.svg
+tests/
+  academy.spec.ts
+  auditions.spec.ts
+  auth.setup.ts
+  auth.spec.ts
+  example.spec.ts
+  schedule.spec.ts
+.gitignore
+.hintrc
+auth.ts
+eslint.config.mjs
+get-schema.js
+LICENSE
+middleware.ts
+next.config.mjs
+package.json
+playwright.config.ts
+postcss.config.mjs
+README.md
+repomix-output.1.xml
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="repomix-output.1.xml">
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
 app/
   (main)/
     (casting)/
@@ -226,6 +470,50 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
 
 <file path="app/(main)/(casting)/auditions/page.tsx">
 import { cookies } from 'next/headers';
@@ -7631,6 +7919,115 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 </file>
 
+<file path="eslint.config.mjs">
+import { defineConfig } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+
+export default defineConfig([
+  ...nextVitals,
+  {
+    rules: {
+      // Disable the specific accessibility warnings cluttering your screen
+      "jsx-a11y/alt-text": "off",
+      "jsx-a11y/role-has-required-aria-props": "off",
+      "@next/next/no-img-element": "off"
+    }
+  }
+]);
+</file>
+
+<file path="get-schema.js">
+// get-schema.js
+// Run with: node --env-file=.env.local get-schema.js
+
+const https = require('https');
+
+// IDs updated based on your provided list
+const TABLES = {
+  PEOPLE: "599",
+  PRODUCTIONS: "600",
+  MASTER_SHOW_DB: "601",
+  ASSIGNMENTS: "603",    // Cast/Crew Assignments
+  ROLES: "605",          // Blueprint Roles
+  SIGNATURES: "607",
+  STATS: "608",
+  ROLES_POSITIONS: "609",
+  TEAM_ASSIGNMENTS: "610",
+  MEASUREMENTS: "616",
+  GARMENT_INVENTORY: "617",
+  STUDENT_BIO: "618",
+  COMMITTEE_PREFS: "620",
+  ATTENDANCE: "622",
+  CONFLICTS: "623",      // Rehearsal Event Conflicts
+  REQUIREMENTS: "624",
+  EVENTS: "625",         // Rehearsal/Production Events (The Parent Container)
+  SCENES: "627",
+  SCENE_ASSIGNMENTS: "628",
+  AUDITIONS: "630",
+  RESOURCES: "631",
+  SESSIONS: "632",
+  CLASSES: "633",
+  FAMILIES: "634",
+  VENUES: "635",
+  SEATS: "636",
+  PERFORMANCES: "637",
+  SPACES: "638",
+  RATES: "639",
+  SLOTS: "640",          // Schedule Slots (The Child/Time Blocks)
+};
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
+const TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN;
+
+// Remove trailing slash if present for the fetch URL
+const CLEAN_BASE_URL = BASE_URL.replace(/\/$/, "");
+
+async function fetchFields(tableId, tableName) {
+  const url = `${CLEAN_BASE_URL}/api/database/fields/table/${tableId}/`;
+  
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Token ${TOKEN}`
+      }
+    });
+
+    if (!res.ok) {
+        console.error(`\n❌ Error fetching ${tableName} (${tableId}): ${res.status} ${res.statusText}`);
+        return { table: tableName, fields: ["ERROR_FETCHING"] };
+    }
+
+    const fields = await res.json();
+    // Simplify output to just Name + Type + ID (Tokens save space)
+    const simplified = fields.map(f => `${f.name} (ID: field_${f.id}, Type: ${f.type})`);
+    return { table: tableName, id: tableId, fields: simplified };
+
+  } catch (e) {
+    console.error(`\n❌ Network Error for ${tableName}:`, e.message);
+    return { table: tableName, fields: ["NETWORK_ERROR"] };
+  }
+}
+
+(async () => {
+  if (!TOKEN) {
+      console.error("❌ FATAL: No Token found. Make sure .env.local exists and has NEXT_PUBLIC_BASEROW_TOKEN.");
+      process.exit(1);
+  }
+
+  console.log("--- BASEROW SCHEMA CONTEXT ---");
+  console.log(`Target: ${CLEAN_BASE_URL}`);
+  
+  for (const [name, id] of Object.entries(TABLES)) {
+    const data = await fetchFields(id, name);
+    if (data.fields[0] !== "ERROR_FETCHING") {
+        console.log(`\nTABLE: ${name} (ID: ${id})`);
+        console.log(data.fields.join("\n"));
+    }
+  }
+  console.log("\n--- END CONTEXT ---");
+})();
+</file>
+
 <file path="lib/CastingContext.tsx">
 "use client";
 import React, { createContext, useContext, useState } from 'react';
@@ -7807,179 +8204,6 @@ export interface SceneAssignment {
 }
 </file>
 
-<file path="public/file.svg">
-<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
-</file>
-
-<file path="public/globe.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
-</file>
-
-<file path="public/next.svg">
-<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
-</file>
-
-<file path="public/vercel.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
-</file>
-
-<file path="public/window.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
-</file>
-
-<file path=".gitignore">
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-</file>
-
-<file path="eslint.config.mjs">
-import { defineConfig } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-
-export default defineConfig([
-  ...nextVitals,
-  {
-    rules: {
-      // Disable the specific accessibility warnings cluttering your screen
-      "jsx-a11y/alt-text": "off",
-      "jsx-a11y/role-has-required-aria-props": "off",
-      "@next/next/no-img-element": "off"
-    }
-  }
-]);
-</file>
-
-<file path="get-schema.js">
-// get-schema.js
-// Run with: node --env-file=.env.local get-schema.js
-
-const https = require('https');
-
-// IDs updated based on your provided list
-const TABLES = {
-  PEOPLE: "599",
-  PRODUCTIONS: "600",
-  MASTER_SHOW_DB: "601",
-  ASSIGNMENTS: "603",    // Cast/Crew Assignments
-  ROLES: "605",          // Blueprint Roles
-  SIGNATURES: "607",
-  STATS: "608",
-  ROLES_POSITIONS: "609",
-  TEAM_ASSIGNMENTS: "610",
-  MEASUREMENTS: "616",
-  GARMENT_INVENTORY: "617",
-  STUDENT_BIO: "618",
-  COMMITTEE_PREFS: "620",
-  ATTENDANCE: "622",
-  CONFLICTS: "623",      // Rehearsal Event Conflicts
-  REQUIREMENTS: "624",
-  EVENTS: "625",         // Rehearsal/Production Events (The Parent Container)
-  SCENES: "627",
-  SCENE_ASSIGNMENTS: "628",
-  AUDITIONS: "630",
-  RESOURCES: "631",
-  SESSIONS: "632",
-  CLASSES: "633",
-  FAMILIES: "634",
-  VENUES: "635",
-  SEATS: "636",
-  PERFORMANCES: "637",
-  SPACES: "638",
-  RATES: "639",
-  SLOTS: "640",          // Schedule Slots (The Child/Time Blocks)
-};
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io";
-const TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN;
-
-// Remove trailing slash if present for the fetch URL
-const CLEAN_BASE_URL = BASE_URL.replace(/\/$/, "");
-
-async function fetchFields(tableId, tableName) {
-  const url = `${CLEAN_BASE_URL}/api/database/fields/table/${tableId}/`;
-  
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Token ${TOKEN}`
-      }
-    });
-
-    if (!res.ok) {
-        console.error(`\n❌ Error fetching ${tableName} (${tableId}): ${res.status} ${res.statusText}`);
-        return { table: tableName, fields: ["ERROR_FETCHING"] };
-    }
-
-    const fields = await res.json();
-    // Simplify output to just Name + Type + ID (Tokens save space)
-    const simplified = fields.map(f => `${f.name} (ID: field_${f.id}, Type: ${f.type})`);
-    return { table: tableName, id: tableId, fields: simplified };
-
-  } catch (e) {
-    console.error(`\n❌ Network Error for ${tableName}:`, e.message);
-    return { table: tableName, fields: ["NETWORK_ERROR"] };
-  }
-}
-
-(async () => {
-  if (!TOKEN) {
-      console.error("❌ FATAL: No Token found. Make sure .env.local exists and has NEXT_PUBLIC_BASEROW_TOKEN.");
-      process.exit(1);
-  }
-
-  console.log("--- BASEROW SCHEMA CONTEXT ---");
-  console.log(`Target: ${CLEAN_BASE_URL}`);
-  
-  for (const [name, id] of Object.entries(TABLES)) {
-    const data = await fetchFields(id, name);
-    if (data.fields[0] !== "ERROR_FETCHING") {
-        console.log(`\nTABLE: ${name} (ID: ${id})`);
-        console.log(data.fields.join("\n"));
-    }
-  }
-  console.log("\n--- END CONTEXT ---");
-})();
-</file>
-
 <file path="LICENSE">
 MIT License
 
@@ -8012,6 +8236,26 @@ const config = {
 };
 
 export default config;
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
 </file>
 
 <file path="README.md">
@@ -12925,6 +13169,132 @@ function MetricCard({ label, value, icon }: { label: string, value: string, icon
 }
 </file>
 
+<file path="app/(main)/analytics/page.tsx">
+import { BaserowClient } from "@/app/lib/BaserowClient";
+import AnalyticsDashboard from "./analytics-client";
+
+export const dynamic = "force-dynamic";
+
+function parseLegacySales(jsonString: string) {
+  if (!jsonString) return { sold: 0, capacity: 0, count: 0 };
+  try {
+    const cleanString = jsonString.replace(/""/g, '"');
+    const data = JSON.parse(cleanString);
+    if (!Array.isArray(data)) return { sold: 0, capacity: 0, count: 0 };
+    let sold = 0; let capacity = 0;
+    data.forEach((perf: any) => {
+      sold += Number(perf.sold) || 0;
+      capacity += Number(perf.total) || 0;
+    });
+    return { sold, capacity, count: data.length };
+  } catch (e) {
+    return { sold: 0, capacity: 0, count: 0 };
+  }
+}
+
+export default async function AnalyticsPage() {
+  const [rawData, allShows, allVenuesRaw, allSeasons] = await Promise.all([
+    BaserowClient.getPerformances(),
+    BaserowClient.getAllProductions(),
+    BaserowClient.getAllVenues(),
+    BaserowClient.getAllSeasons()
+  ]);
+
+  const allVenues = allVenuesRaw.map((v: any) => ({
+    ...v,
+    id: v.id,
+    name: v['Venue Name'] || "Unknown Venue",
+    capacity: Number(v['Seating Capacity']) || 0,
+    marketingName: v['Public Name (Marketing)'] || null
+  }));
+
+  const venueCapMap = new Map<string, number>();
+  allVenues.forEach((v: any) => {
+    if (v.name) venueCapMap.set(v.name, v.capacity);
+    if (v.marketingName) venueCapMap.set(v.marketingName, v.capacity);
+  });
+
+  const seasonDateMap = new Map<string, number>();
+  allSeasons.forEach((s: any) => {
+    if (s['Session Name'] && s['Start Date']) seasonDateMap.set(s['Session Name'], new Date(s['Start Date']).getTime());
+  });
+
+  const showsMap = new Map();
+  allShows.forEach((meta: any) => {
+    const showName = meta['Title'] || `Show ${meta.id}`;
+    const typeValue = meta['Type']?.value || "";
+    let type = "Other";
+    if (typeValue === "Lite" || showName.toLowerCase().includes("lite")) type = "CYT Lite";
+    else if (typeValue === "Main Stage") type = "Mainstage";
+
+    const legacyJson = meta['Performances'] || meta['field_6177']; 
+    const legacyStats = parseLegacySales(legacyJson);
+
+    let venueName = "TBD";
+    if (Array.isArray(meta['Venue']) && meta['Venue'].length > 0) venueName = meta['Venue'][0].value;
+    else if (typeof meta['Venue'] === 'string') venueName = meta['Venue'];
+
+    showsMap.set(meta.id, {
+      id: meta.id,
+      name: showName,
+      season: meta['Session']?.value || "Other",
+      type: type,
+      venue: venueName,
+      totalSold: Number(legacyStats.sold) || 0, 
+      totalCapacity: Number(legacyStats.capacity) || 0,
+      performances: Number(legacyStats.count) || 0,
+      source: legacyStats.count > 0 ? "Legacy JSON" : "Inventory"
+    });
+  });
+
+  rawData.forEach((row: any) => {
+    const prodId = row['Production']?.[0]?.id;
+    let show = showsMap.get(prodId);
+    
+    if (!show && row['Performance']) {
+      const rawName = row['Performance'].split(" - ")[0];
+      for (const s of showsMap.values()) {
+        if (s.name === rawName) { show = s; break; }
+      }
+    }
+
+    if (show) {
+      const realVenueCap = venueCapMap.get(show.venue) || 0;
+      const rowCap = Number(row['Total Inventory']) || 0;
+      const performanceCap = realVenueCap ? Math.max(realVenueCap, rowCap) : rowCap;
+      
+      show.totalSold += Number(row['Tickets Sold']) || 0;
+      show.totalCapacity += Number(performanceCap) || 0;
+      show.performances += 1;
+      show.source = show.source === "Legacy JSON" ? "Hybrid" : "Modern Linked";
+    }
+  });
+
+  const showData = Array.from(showsMap.values()).map((show: any) => ({
+    ...show,
+    avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0,
+    revenue: show.totalSold * 15
+  })).sort((a: any, b: any) => {
+    const dateA = seasonDateMap.get(a.season) || 0;
+    const dateB = seasonDateMap.get(b.season) || 0;
+    if (dateA !== dateB) return dateA - dateB;
+    return b.totalSold - a.totalSold;
+  });
+
+  return (
+    <main className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
+      {/* 📉 The Client Component now handles everything, including the top ribbon! */}
+      <AnalyticsDashboard 
+        performanceData={rawData} 
+        showData={showData} 
+        venues={allVenues}
+        ticketPrice={15} 
+      />
+    </main>
+  );
+}
+</file>
+
 <file path="app/components/casting/CastingInspector.tsx">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
@@ -14232,132 +14602,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   "exclude": [
     "node_modules"
   ]
-}
-</file>
-
-<file path="app/(main)/analytics/page.tsx">
-import { BaserowClient } from "@/app/lib/BaserowClient";
-import AnalyticsDashboard from "./analytics-client";
-
-export const dynamic = "force-dynamic";
-
-function parseLegacySales(jsonString: string) {
-  if (!jsonString) return { sold: 0, capacity: 0, count: 0 };
-  try {
-    const cleanString = jsonString.replace(/""/g, '"');
-    const data = JSON.parse(cleanString);
-    if (!Array.isArray(data)) return { sold: 0, capacity: 0, count: 0 };
-    let sold = 0; let capacity = 0;
-    data.forEach((perf: any) => {
-      sold += Number(perf.sold) || 0;
-      capacity += Number(perf.total) || 0;
-    });
-    return { sold, capacity, count: data.length };
-  } catch (e) {
-    return { sold: 0, capacity: 0, count: 0 };
-  }
-}
-
-export default async function AnalyticsPage() {
-  const [rawData, allShows, allVenuesRaw, allSeasons] = await Promise.all([
-    BaserowClient.getPerformances(),
-    BaserowClient.getAllProductions(),
-    BaserowClient.getAllVenues(),
-    BaserowClient.getAllSeasons()
-  ]);
-
-  const allVenues = allVenuesRaw.map((v: any) => ({
-    ...v,
-    id: v.id,
-    name: v['Venue Name'] || "Unknown Venue",
-    capacity: Number(v['Seating Capacity']) || 0,
-    marketingName: v['Public Name (Marketing)'] || null
-  }));
-
-  const venueCapMap = new Map<string, number>();
-  allVenues.forEach((v: any) => {
-    if (v.name) venueCapMap.set(v.name, v.capacity);
-    if (v.marketingName) venueCapMap.set(v.marketingName, v.capacity);
-  });
-
-  const seasonDateMap = new Map<string, number>();
-  allSeasons.forEach((s: any) => {
-    if (s['Session Name'] && s['Start Date']) seasonDateMap.set(s['Session Name'], new Date(s['Start Date']).getTime());
-  });
-
-  const showsMap = new Map();
-  allShows.forEach((meta: any) => {
-    const showName = meta['Title'] || `Show ${meta.id}`;
-    const typeValue = meta['Type']?.value || "";
-    let type = "Other";
-    if (typeValue === "Lite" || showName.toLowerCase().includes("lite")) type = "CYT Lite";
-    else if (typeValue === "Main Stage") type = "Mainstage";
-
-    const legacyJson = meta['Performances'] || meta['field_6177']; 
-    const legacyStats = parseLegacySales(legacyJson);
-
-    let venueName = "TBD";
-    if (Array.isArray(meta['Venue']) && meta['Venue'].length > 0) venueName = meta['Venue'][0].value;
-    else if (typeof meta['Venue'] === 'string') venueName = meta['Venue'];
-
-    showsMap.set(meta.id, {
-      id: meta.id,
-      name: showName,
-      season: meta['Session']?.value || "Other",
-      type: type,
-      venue: venueName,
-      totalSold: Number(legacyStats.sold) || 0, 
-      totalCapacity: Number(legacyStats.capacity) || 0,
-      performances: Number(legacyStats.count) || 0,
-      source: legacyStats.count > 0 ? "Legacy JSON" : "Inventory"
-    });
-  });
-
-  rawData.forEach((row: any) => {
-    const prodId = row['Production']?.[0]?.id;
-    let show = showsMap.get(prodId);
-    
-    if (!show && row['Performance']) {
-      const rawName = row['Performance'].split(" - ")[0];
-      for (const s of showsMap.values()) {
-        if (s.name === rawName) { show = s; break; }
-      }
-    }
-
-    if (show) {
-      const realVenueCap = venueCapMap.get(show.venue) || 0;
-      const rowCap = Number(row['Total Inventory']) || 0;
-      const performanceCap = realVenueCap ? Math.max(realVenueCap, rowCap) : rowCap;
-      
-      show.totalSold += Number(row['Tickets Sold']) || 0;
-      show.totalCapacity += Number(performanceCap) || 0;
-      show.performances += 1;
-      show.source = show.source === "Legacy JSON" ? "Hybrid" : "Modern Linked";
-    }
-  });
-
-  const showData = Array.from(showsMap.values()).map((show: any) => ({
-    ...show,
-    avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0,
-    revenue: show.totalSold * 15
-  })).sort((a: any, b: any) => {
-    const dateA = seasonDateMap.get(a.season) || 0;
-    const dateB = seasonDateMap.get(b.season) || 0;
-    if (dateA !== dateB) return dateA - dateB;
-    return b.totalSold - a.totalSold;
-  });
-
-  return (
-    <main className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
-      {/* 📉 The Client Component now handles everything, including the top ribbon! */}
-      <AnalyticsDashboard 
-        performanceData={rawData} 
-        showData={showData} 
-        venues={allVenues}
-        ticketPrice={15} 
-      />
-    </main>
-  );
 }
 </file>
 
@@ -19313,6 +19557,226 @@ export default function CastingClient({ assignments = [], blueprintRoles = [], a
     </div>
   );
 }
+</file>
+
+</files>
+</file>
+
+<file path="tests/example.spec.ts">
+import { test, expect } from '@playwright/test';
+
+test('has title', async ({ page }) => {
+  await page.goto('https://playwright.dev/');
+
+  // Expect a title "to contain" a substring.
+  await expect(page).toHaveTitle(/Playwright/);
+});
+
+test('get started link', async ({ page }) => {
+  await page.goto('https://playwright.dev/');
+
+  // Click the get started link.
+  await page.getByRole('link', { name: 'Get started' }).click();
+
+  // Expects page to have a heading with the name of Installation.
+  await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
+});
+</file>
+
+<file path="tests/schedule.spec.ts">
+import { test, expect } from '@playwright/test';
+
+test.describe('Production Scheduler', () => {
+  test('toggles between Calendar, Burn-up, and Callboard views', async ({ page }) => {
+    await page.goto('/schedule'); // Adjust to your schedule route
+
+    // 1. Verify Calendar is the default
+    await expect(page.getByRole('button', { name: 'Calendar' })).toBeVisible();
+    await expect(page.getByText('Friday Evening')).toBeVisible();
+
+    // 2. Test Burn-Up View
+    await page.getByRole('button', { name: 'Burn-Up' }).click();
+    await expect(page.getByRole('heading', { name: 'Burn-Up Chart' })).toBeVisible();
+    await expect(page.getByText('Current Velocity')).toBeVisible();
+
+    // 3. Test Callboard View
+    await page.getByRole('button', { name: 'Callboard' }).click();
+    await expect(page.getByText('Callboard Generator')).toBeVisible();
+    await expect(page.getByText('Important Reminders')).toBeVisible();
+  });
+
+  test('auto-scheduler modal opens and closes', async ({ page }) => {
+    await page.goto('/schedule');
+
+    // Open Modal
+    await page.getByRole('button', { name: 'Auto' }).click();
+    await expect(page.getByText('Multi-Track Auto-Scheduler')).toBeVisible();
+
+    // Close Modal via the X button
+    await page.locator('.fixed button').first().click(); // Grabs the X close button
+    await expect(page.getByText('Multi-Track Auto-Scheduler')).toBeHidden();
+  });
+});
+</file>
+
+<file path="tests/auditions.spec.ts">
+import { test, expect } from '@playwright/test';
+
+test.describe('Audition Deck & Judge Setup', () => {
+test('forces judge setup before showing the deck', async ({ page }) => {
+    await page.goto('/auditions'); 
+
+    // 1. Wait for the main deck to load (since useEffect auto-skips the modal)
+    await expect(page.getByRole('button', { name: /Audition Deck/i })).toBeVisible({ timeout: 15000 });
+    
+    // 2. Click the header to reopen the Judge Setup modal manually!
+    await page.getByRole('button', { name: /Audition Deck/i }).click();
+
+    // 3. Now the modal is open and STABLE.
+    await expect(page.getByRole('heading', { name: /Judge Setup/i })).toBeVisible();
+
+    // 4. Fill and submit
+    await page.getByPlaceholder(/name/i).fill('Playwright Tester');
+    await page.getByText(/Director/i).click(); 
+    
+    const submitBtn = page.getByRole('button', { name: /Start Judging|Update Profile/i });
+    await expect(submitBtn).toBeEnabled();
+    await submitBtn.click();
+});
+  test('can switch between audition days', async ({ page }) => {
+    await page.goto('/auditions');
+    
+    // Test the tab switching logic we refactored
+    await page.getByRole('button', { name: 'Walk-In' }).click();
+    await expect(page.getByPlaceholder('Type student name...')).toBeVisible();
+  });
+});
+</file>
+
+<file path="tests/auth.setup.ts">
+import { test as setup, expect } from '@playwright/test';
+
+const authFile = 'playwright/.auth/user.json';
+
+setup('authenticate', async ({ page }) => {
+  await page.goto('/login');
+
+  // 1. Match your specific placeholders
+  await page.getByPlaceholder('Email Address').fill('test@email.com');
+  await page.getByPlaceholder('App Password').fill('test');
+
+  // 2. Click the EXACT button name from your code
+  await page.getByRole('button', { name: 'Enter Deck' }).click();
+
+  // 3. Wait for the app to land on the dashboard
+  // (Adjust the text 'Dashboard' to something that actually exists on your home page)
+  await page.waitForURL('**/'); 
+ await expect(page.getByText(/dashboard|staff portal|war room/i).first()).toBeVisible({ timeout: 10000 });
+  // 4. Save the session
+  await page.context().storageState({ path: authFile });
+});
+</file>
+
+<file path="tests/auth.spec.ts">
+import { test, expect } from '@playwright/test';
+// This forces this specific file to start with a clean, logged-out slate
+test.use({ storageState: { cookies: [], origins: [] } });
+test.describe('Authentication & Routing', () => {
+  test('unauthenticated users are redirected to login', async ({ page }) => {
+    // Attempt to access a protected route directly
+    await page.goto('/settings');
+
+    // The NextAuth middleware should intercept and bounce us to the login page
+    await expect(page).toHaveURL(/.*\/login/);
+    
+    // Verify the login UI rendered
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+  });
+});
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+</file>
+
+<file path="tests/academy.spec.ts">
+import { test, expect } from '@playwright/test';
+
+test.describe('Education Hub', () => {
+  test('navigates between academy management views', async ({ page }) => {
+    // 1. Load the page
+    await page.goto('/education');
+
+    // 2. Verify Default State (Grid View)
+    // Check for the main header to ensure the page loaded
+    await expect(page.getByRole('heading', { name: /Academy Manager/i })).toBeVisible();
+    
+    // Check for the "All Venues" filter pill which renders in Grid/Venue views
+    await expect(page.getByRole('button', { name: /All Venues/i })).toBeVisible();
+
+    // 3. Switch to Venue View (Campus Mode)
+    // Playwright reads the title="Venue View" attribute on your icon button!
+    await page.getByRole('button', { name: 'Venue View' }).click();
+    
+    // We just verify it didn't crash and the button is still there
+    await expect(page.getByRole('button', { name: 'Venue View' })).toBeVisible();
+
+    // 4. Switch to Analytics View (Metrics Mode)
+    await page.getByRole('button', { name: 'Analytics' }).click();
+
+    // 5. Verify Analytics/Metrics UI renders correctly
+    // These match the exact static text inside your MetricCards and section headings
+    await expect(page.getByText('Total Enrollment')).toBeVisible();
+    await expect(page.getByText('Est. Revenue')).toBeVisible();
+    await expect(page.getByText(/Venue Utilization/i)).toBeVisible();
+    await expect(page.getByText(/Teacher Performance/i)).toBeVisible();
+  });
+});
 </file>
 
 </files>
