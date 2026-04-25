@@ -2,6 +2,23 @@
 
 import { useState, useEffect } from 'react';
 
+interface Student {
+  id: string;
+  name: string;
+  avatar: string;
+  status: string;
+  auditioned: boolean;
+  timeSlot: string;
+  auditionDay: string;
+  isFirstShow: boolean;
+  age: number;
+  showHistory: { title: string; role: string; season: string; year: string }[];
+  auditionPrep: { monologue: string; songTitle: string; musicProvided: boolean };
+  lobbyNote: string;
+  skills: Record<string, number>;
+  directorNotes: Record<string, string>;
+}
+
 const AUDITION_DAYS = ['Thursday', 'Friday', 'Video/Remote', 'Walk-In'];
 const ALL_TIME_SLOTS = ['5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM'];
 
@@ -115,13 +132,14 @@ const generateMassiveRoster = () => {
 };
 
 export default function DirectorDeckSandbox() {
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [hasMounted, setHasMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDayFilter, setActiveDayFilter] = useState('Thursday');
-  const [activeStudent, setActiveStudent] = useState<any | null>(null);
+  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudents(generateMassiveRoster());
     setHasMounted(true);
   }, []);
@@ -136,7 +154,7 @@ export default function DirectorDeckSandbox() {
     if (!acc[student.timeSlot]) acc[student.timeSlot] = [];
     acc[student.timeSlot].push(student);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, Student[]>);
 
   const handleScoreStudent = (id: string) => {
     setStudents(students.map(s => s.id === id ? { ...s, auditioned: true } : s));
@@ -367,7 +385,7 @@ export default function DirectorDeckSandbox() {
                         <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center text-[10px] font-black">C</div>
                         <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Connor <span className="opacity-50">(Dir)</span></p>
                       </div>
-                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">"{activeStudent.directorNotes.Connor}"</p>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Connor}&quot;</p>
                     </div>
 
                     {/* Choreographer Note */}
@@ -376,7 +394,7 @@ export default function DirectorDeckSandbox() {
                         <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-[10px] font-black">R</div>
                         <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Rebecca <span className="opacity-50">(Chor)</span></p>
                       </div>
-                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">"{activeStudent.directorNotes.Rebecca}"</p>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Rebecca}&quot;</p>
                     </div>
 
                     {/* Music Director Note */}
@@ -385,7 +403,7 @@ export default function DirectorDeckSandbox() {
                         <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center text-[10px] font-black">H</div>
                         <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Hailey <span className="opacity-50">(MD)</span></p>
                       </div>
-                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">"{activeStudent.directorNotes.Hailey}"</p>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Hailey}&quot;</p>
                     </div>
 
                   </div>

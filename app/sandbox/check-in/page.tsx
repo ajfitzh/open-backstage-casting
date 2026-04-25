@@ -69,6 +69,7 @@ export default function SandboxCheckIn() {
   const [maximizedImage, setMaximizedImage] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudents(generateMassiveRoster());
     setHasMounted(true);
   }, []);
@@ -140,7 +141,7 @@ export default function SandboxCheckIn() {
   // Changed field type to string to support email and phone modifications
   const handleReassign = (id: string, field: string, value: string) => {
     setStudents(students.map(s => s.id === id ? { ...s, [field]: value } : s));
-    setActiveStudent(prev => prev ? { ...prev, [field]: value } : null);
+    setActiveStudent((prev: any) => prev ? { ...prev, [field]: value } : null);
   };
 
   const handleSendLink = (linkId: string) => setSentLinks([...sentLinks, linkId]);
@@ -241,7 +242,7 @@ export default function SandboxCheckIn() {
                   <span className="opacity-50">{getSlotCount(slot, activeDayFilter)} / {SLOT_LIMIT}</span>
                 </h3>
                 <div className="space-y-1.5">
-                  {groupedStudents[slot].map((student) => (
+                  {groupedStudents[slot].map((student: any) => (
                     <div key={student.id} onClick={() => handleOpenModal(student)} className={`flex justify-between items-center p-3 md:p-4 rounded-xl transition-all group cursor-pointer bg-slate-900/50 border border-white/5 hover:border-indigo-500/50 ${student.status !== 'Pending' ? 'opacity-50' : ''}`}>
                       <div className="flex items-center gap-4 min-w-0 pr-4">
                         <div className="shrink-0 relative">

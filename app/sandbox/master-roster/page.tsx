@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 // --- DATA GENERATOR ---
 const generateMassiveRoster = () => {
@@ -48,16 +48,20 @@ const generateMassiveRoster = () => {
 };
 
 export default function MasterRosterSandbox() {
-  const [students, setStudents] = useState<any[]>([]);
+// Use lazy initialization (the arrow function) so the massive roster 
+  // is generated exactly once when the component first builds its state.
+  const [students, setStudents] = useState<any[]>(() => 
+    generateMassiveRoster().sort((a, b) => a.name.localeCompare(b.name))
+  );
+  
   const [hasMounted, setHasMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterView, setFilterView] = useState('All');
-  
-  // Track which row is expanded
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   useEffect(() => {
-    setStudents(generateMassiveRoster().sort((a, b) => a.name.localeCompare(b.name)));
+    // The effect is now only responsible for preventing Next.js hydration mismatch errors
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasMounted(true);
   }, []);
 

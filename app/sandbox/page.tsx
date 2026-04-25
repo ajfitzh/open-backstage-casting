@@ -67,7 +67,7 @@ export default function SandboxMenu() {
                   🎭
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Director's Deck</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">Director&apos;s Deck</h3>
                   <p className="text-slate-500 text-sm leading-relaxed">
                     Real-time sync with the lobby, live scoring rubrics, and instant situational alerts for the creative team.
                   </p>
