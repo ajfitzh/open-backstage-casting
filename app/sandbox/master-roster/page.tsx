@@ -4,25 +4,44 @@ import { useState, useEffect, useMemo } from 'react';
 
 // --- DATA GENERATOR ---
 const generateMassiveRoster = () => {
-  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore', 'Abigail', 'Jack', 'Emily', 'Levi', 'Elizabeth', 'Alexander', 'Mila', 'Jackson', 'Ella', 'Mateo', 'Avery', 'Daniel', 'Sofia', 'Michael', 'Camila', 'Mason', 'Aria', 'Sebastian', 'Scarlett', 'Ethan', 'Victoria', 'Logan', 'Madison', 'Owen', 'Luna', 'Samuel', 'Grace', 'Jacob', 'Chloe', 'Asher', 'Penelope', 'Aiden', 'Layla'];
-  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson'];
+  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore'];
+  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
   
   const roster = [];
   for (let i = 0; i < 76; i++) {
     const fName = firstNames[i % firstNames.length];
     const lName = lastNames[i % lastNames.length];
     
+    // Simulate the real-world chaos
     roster.push({
       id: (1000 + i).toString(),
       name: `${fName} ${lName}`,
-      avatar: `https://i.pravatar.cc/150?u=${2000 + i}`, // Changed seed so faces look different than audition deck
+      avatar: `https://i.pravatar.cc/150?u=${2000 + i}`,
       role: i < 15 ? 'Lead / Supporting' : 'Ensemble',
+      
+      // The "13 Forms" broken down into trackable booleans
       compliance: {
-        agreement: Math.random() > 0.2, // 80% complete
-        fees: Math.random() > 0.3,      // 70% complete
-        headshot: Math.random() > 0.4,  // 60% complete
-        measurements: Math.random() > 0.5 // 50% complete
-      }
+        // Legal & Registration
+        regFee: Math.random() > 0.1,         // 90% paid
+        medicalForm: Math.random() > 0.2,    // 80% complete
+        studentCTC: Math.random() > 0.3,     // 70% complete
+        parentCTC: Math.random() > 0.3,      // 70% complete
+        
+        // Show Logistics
+        headshot: Math.random() > 0.4,       // 60% complete
+        measurements: Math.random() > 0.5,   // 50% complete
+        castBio: Math.random() > 0.6,        // 40% complete
+        conflictsSubmitted: Math.random() > 0.2, // 80% complete
+        
+        // Parent Requirements
+        committeeSignedUp: Math.random() > 0.4, // 60% complete
+        castPartyPaid: Math.random() > 0.5,     // 50% complete ($5 pizza money)
+      },
+      
+      // Fun metadata for the expanded row
+      conflictCount: Math.floor(Math.random() * 4), // 0 to 3 conflicts
+      committeeRole: Math.random() > 0.4 ? 'Sets / Build' : 'Unassigned',
+      pizzaPreference: Math.random() > 0.5 ? 'Cheese' : 'Pepperoni',
     });
   }
   return roster;
@@ -33,6 +52,9 @@ export default function MasterRosterSandbox() {
   const [hasMounted, setHasMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterView, setFilterView] = useState('All');
+  
+  // Track which row is expanded
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   useEffect(() => {
     setStudents(generateMassiveRoster().sort((a, b) => a.name.localeCompare(b.name)));
@@ -43,10 +65,10 @@ export default function MasterRosterSandbox() {
   const stats = useMemo(() => {
     return {
       total: students.length,
-      missingAgreements: students.filter(s => !s.compliance.agreement).length,
-      missingFees: students.filter(s => !s.compliance.fees).length,
-      missingHeadshots: students.filter(s => !s.compliance.headshot).length,
-      missingMeasurements: students.filter(s => !s.compliance.measurements).length,
+      missingCTC: students.filter(s => !s.compliance.studentCTC || !s.compliance.parentCTC).length,
+      missingBios: students.filter(s => !s.compliance.castBio).length,
+      missingCommittees: students.filter(s => !s.compliance.committeeSignedUp).length,
+      missingPartyFees: students.filter(s => !s.compliance.castPartyPaid).length,
     };
   }, [students]);
 
@@ -69,14 +91,18 @@ export default function MasterRosterSandbox() {
     if (!matchesSearch) return false;
 
     if (filterView === 'All') return true;
-    if (filterView === 'Missing Agreements') return !s.compliance.agreement;
-    if (filterView === 'Missing Fees') return !s.compliance.fees;
-    if (filterView === 'Missing Headshots') return !s.compliance.headshot;
-    if (filterView === 'Missing Measurements') return !s.compliance.measurements;
+    if (filterView === 'Missing CTC') return !s.compliance.studentCTC || !s.compliance.parentCTC;
+    if (filterView === 'Missing Bios') return !s.compliance.castBio;
+    if (filterView === 'Missing Committees') return !s.compliance.committeeSignedUp;
+    if (filterView === 'Missing Party Fees') return !s.compliance.castPartyPaid;
     return true;
   });
 
-  if (!hasMounted) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-black tracking-widest text-xs uppercase">Loading Roster...</div>;
+  const toggleRow = (id: string) => {
+    setExpandedRowId(expandedRowId === id ? null : id);
+  };
+
+  if (!hasMounted) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-black tracking-widest text-xs uppercase">Loading Master Roster...</div>;
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
@@ -96,9 +122,6 @@ export default function MasterRosterSandbox() {
           <div className="px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 text-xs font-bold transition-colors flex items-center gap-3">
             <i className="fas fa-file-invoice-dollar"></i> Reports & Fees
           </div>
-          <div className="px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 text-xs font-bold transition-colors flex items-center gap-3">
-            <i className="fas fa-tshirt"></i> Costuming Dept.
-          </div>
         </div>
       </aside>
 
@@ -108,7 +131,7 @@ export default function MasterRosterSandbox() {
         <header className="p-6 border-b border-slate-800 shrink-0 bg-slate-900/30">
           <div className="flex justify-between items-end mb-6">
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-white mb-1">Staff Portal: Compliance & Onboarding</h1>
+              <h1 className="text-2xl font-black tracking-tight text-white mb-1">Compliance & Onboarding</h1>
               <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
                 Production: <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">Little Mermaid Jr.</span>
               </p>
@@ -125,21 +148,21 @@ export default function MasterRosterSandbox() {
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">View All</p>
               <p className="text-lg font-black text-white">{stats.total}</p>
             </button>
-            <button onClick={() => setFilterView('Missing Agreements')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Agreements' ? 'bg-rose-500/10 border-rose-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-rose-500/30'}`}>
-              <p className="text-[9px] font-black uppercase tracking-widest text-rose-400 mb-1">Missing Agreements</p>
-              <p className="text-lg font-black text-rose-100">{stats.missingAgreements}</p>
+            <button onClick={() => setFilterView('Missing CTC')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing CTC' ? 'bg-rose-500/10 border-rose-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-rose-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-rose-400 mb-1 flex items-center gap-1.5"><i className="fas fa-file-signature"></i> Missing CTC</p>
+              <p className="text-lg font-black text-rose-100">{stats.missingCTC}</p>
             </button>
-            <button onClick={() => setFilterView('Missing Fees')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Fees' ? 'bg-rose-500/10 border-rose-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-rose-500/30'}`}>
-              <p className="text-[9px] font-black uppercase tracking-widest text-rose-400 mb-1">Missing Fees</p>
-              <p className="text-lg font-black text-rose-100">{stats.missingFees}</p>
+            <button onClick={() => setFilterView('Missing Bios')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Bios' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-amber-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1 flex items-center gap-1.5"><i className="fas fa-pen-nib"></i> Missing Bios</p>
+              <p className="text-lg font-black text-amber-100">{stats.missingBios}</p>
             </button>
-            <button onClick={() => setFilterView('Missing Headshots')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Headshots' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-amber-500/30'}`}>
-              <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1">Missing Headshots</p>
-              <p className="text-lg font-black text-amber-100">{stats.missingHeadshots}</p>
+            <button onClick={() => setFilterView('Missing Committees')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Committees' ? 'bg-indigo-500/10 border-indigo-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-1 flex items-center gap-1.5"><i className="fas fa-users-cog"></i> Unassigned Vol.</p>
+              <p className="text-lg font-black text-indigo-100">{stats.missingCommittees}</p>
             </button>
-            <button onClick={() => setFilterView('Missing Measurements')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Measurements' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-amber-500/30'}`}>
-              <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1">Missing Measurements</p>
-              <p className="text-lg font-black text-amber-100">{stats.missingMeasurements}</p>
+            <button onClick={() => setFilterView('Missing Party Fees')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Party Fees' ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-emerald-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1 flex items-center gap-1.5"><i className="fas fa-pizza-slice"></i> $5 Party Fees</p>
+              <p className="text-lg font-black text-emerald-100">{stats.missingPartyFees}</p>
             </button>
           </div>
 
@@ -150,17 +173,17 @@ export default function MasterRosterSandbox() {
         </header>
 
         {/* MASTER DATA TABLE */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-          <div className="border border-slate-800 rounded-xl overflow-hidden shadow-2xl bg-slate-900">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative">
+          <div className="border border-slate-800 rounded-xl shadow-2xl bg-slate-900 absolute left-6 right-6 top-6">
             <table className="w-full text-left text-sm border-collapse">
               <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-black tracking-widest sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-4">Performer</th>
-                  <th className="px-4 py-4 text-center">Agreement</th>
-                  <th className="px-4 py-4 text-center">Fees Paid</th>
-                  <th className="px-4 py-4 text-center">Headshot</th>
-                  <th className="px-4 py-4 text-center">Measurements</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th className="px-4 py-4 text-center">Cast Bio</th>
+                  <th className="px-4 py-4 text-center">Med Release</th>
+                  <th className="px-4 py-4 text-center">Student CTC</th>
+                  <th className="px-4 py-4 text-center">Parent CTC</th>
+                  <th className="px-6 py-4 text-right">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -170,45 +193,123 @@ export default function MasterRosterSandbox() {
                   </tr>
                 ) : (
                   filteredStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-slate-800/30 transition-colors group">
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-4">
-                          <img src={student.avatar} alt={student.name} className="w-10 h-10 rounded-full border border-slate-700 object-cover shadow-md" />
-                          <div>
-                            <p className="font-bold text-white text-base">{student.name}</p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-0.5">{student.role}</p>
+                    <React.Fragment key={student.id}>
+                      
+                      {/* TOP LEVEL ROW */}
+                      <tr onClick={() => toggleRow(student.id)} className={`transition-colors group cursor-pointer ${expandedRowId === student.id ? 'bg-indigo-900/10' : 'hover:bg-slate-800/30'}`}>
+                        <td className="px-6 py-3">
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <img src={student.avatar} alt={student.name} className={`w-10 h-10 rounded-full object-cover shadow-md border ${expandedRowId === student.id ? 'border-indigo-500' : 'border-slate-700'}`} />
+                              {student.conflictCount > 0 && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-slate-900" title={`${student.conflictCount} Conflicts`}>
+                                  {student.conflictCount}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className={`font-bold text-base transition-colors ${expandedRowId === student.id ? 'text-indigo-400' : 'text-white'}`}>{student.name}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-0.5">{student.role}</p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      
-                      {/* COMPLIANCE TOGGLES */}
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => handleToggleCompliance(student.id, 'agreement')} className={`p-2 rounded-lg transition-all ${student.compliance.agreement ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-600 bg-slate-950 hover:bg-rose-500/10 hover:text-rose-400 border border-slate-800'}`}>
-                          {student.compliance.agreement ? <i className="fas fa-check-circle text-lg"></i> : <i className="far fa-circle text-lg"></i>}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => handleToggleCompliance(student.id, 'fees')} className={`p-2 rounded-lg transition-all ${student.compliance.fees ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-600 bg-slate-950 hover:bg-rose-500/10 hover:text-rose-400 border border-slate-800'}`}>
-                          {student.compliance.fees ? <i className="fas fa-check-circle text-lg"></i> : <i className="far fa-circle text-lg"></i>}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => handleToggleCompliance(student.id, 'headshot')} className={`p-2 rounded-lg transition-all ${student.compliance.headshot ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-600 bg-slate-950 hover:bg-amber-500/10 hover:text-amber-400 border border-slate-800'}`}>
-                          {student.compliance.headshot ? <i className="fas fa-camera text-lg"></i> : <i className="fas fa-camera text-lg opacity-40"></i>}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => handleToggleCompliance(student.id, 'measurements')} className={`p-2 rounded-lg transition-all ${student.compliance.measurements ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-slate-600 bg-slate-950 hover:bg-amber-500/10 hover:text-amber-400 border border-slate-800'}`}>
-                          {student.compliance.measurements ? <i className="fas fa-ruler text-lg"></i> : <i className="fas fa-ruler text-lg opacity-40"></i>}
-                        </button>
-                      </td>
-                      
-                      <td className="px-6 py-3 text-right">
-                        <button className="text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:text-white px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500 hover:border-transparent transition-all">
-                          Edit Profile
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                        
+                        {/* HIGH PRIORITY QUICK TOGGLES */}
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.castBio ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                            {student.compliance.castBio ? <i className="fas fa-check"></i> : <i className="fas fa-pen"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.medicalForm ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.medicalForm ? <i className="fas fa-check"></i> : <i className="fas fa-notes-medical"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.studentCTC ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.studentCTC ? <i className="fas fa-check"></i> : <i className="fas fa-times"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.parentCTC ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.parentCTC ? <i className="fas fa-check"></i> : <i className="fas fa-times"></i>}
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-3 text-right">
+                          <i className={`fas fa-chevron-down text-slate-500 transition-transform ${expandedRowId === student.id ? 'rotate-180 text-indigo-400' : ''}`}></i>
+                        </td>
+                      </tr>
+
+                      {/* EXPANDED DETAILS DRAWER */}
+                      {expandedRowId === student.id && (
+                        <tr>
+                          <td colSpan={6} className="p-0 border-b border-indigo-500/20">
+                            <div className="bg-slate-900/50 p-6 shadow-inner animate-in slide-in-from-top-2 duration-200">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                
+                                {/* Logistics Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Admin & Costs</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Registration Fee</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'regFee')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.regFee ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
+                                      {student.compliance.regFee ? 'Paid' : 'Unpaid'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Cast Party ($5)</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'castPartyPaid')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.castPartyPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
+                                      {student.compliance.castPartyPaid ? 'Paid' : 'Unpaid'}
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 italic">Pizza Pref: {student.pizzaPreference}</p>
+                                </div>
+
+                                {/* Show Requirements Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Production Needs</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Headshot</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'headshot')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.headshot ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.headshot ? 'Uploaded' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Measurements</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'measurements')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.measurements ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.measurements ? 'Submitted' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Cast Bio</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'castBio')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.castBio ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.castBio ? 'Approved' : 'Missing'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Parent Requirements Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Parent Involvement</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Committee</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'committeeSignedUp')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.committeeSignedUp ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white'}`}>
+                                      {student.compliance.committeeSignedUp ? 'Signed Up' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <p className="text-xs font-medium text-slate-400 pl-3">
+                                    <span className="text-[10px] uppercase tracking-widest text-slate-500 block mb-0.5">Assigned Role:</span>
+                                    {student.compliance.committeeSignedUp ? student.committeeRole : <span className="text-rose-400/50 italic">None</span>}
+                                  </p>
+                                </div>
+
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
