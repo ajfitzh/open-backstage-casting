@@ -23,6 +23,7 @@ interface Volunteer {
   showWeek3: string | null;
   assignedPreShow: string | null;
   assignedShowWeek: string | null;
+  isChair: boolean;
 }
 
 // --- CONFIG ---
@@ -66,7 +67,7 @@ export default function CommitteeDashboard({
   const [rawData] = useState<Volunteer[]>(volunteers);
   
   const [assignments, setAssignments] = useState<Record<number, string>>({});
-  const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
+  const [chairs, setChairs] = useState<Record<number, boolean>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   
   const [targets, setTargets] = useState<Record<string, number>>({});
@@ -99,11 +100,19 @@ export default function CommitteeDashboard({
       return acc;
   }, [rawData, groupBy]);
 
+  const initialChairs = useMemo(() => {
+      const acc: Record<number, boolean> = {};
+      rawData.forEach(v => { if (v.isChair) acc[v.id] = true; });
+      return acc;
+  }, [rawData]);
+
   useEffect(() => {
       setAssignments(initialAssignments);
-  }, [initialAssignments]);
+      setChairs(initialChairs);
+  }, [initialAssignments, initialChairs]);
 
-  const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments);
+  const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments) ||
+                     JSON.stringify(chairs) !== JSON.stringify(initialChairs);
 
   // --- HELPERS ---
   const getPrefs = (p: Volunteer) => {
@@ -117,13 +126,14 @@ export default function CommitteeDashboard({
   // --- ACTIONS ---
   const handleSave = () => {
       startTransition(async () => {
-          await saveCommitteeAssignments(groupBy, assignments);
+          await saveCommitteeAssignments(groupBy, assignments, chairs);
       });
   };
 
   const handleClearBoard = () => {
       if(!confirm(`Are you sure you want to clear ALL unsaved assignments for ${groupBy}?`)) return;
       setAssignments(initialAssignments);
+      setChairs(initialChairs);
   };
 
   const handleAutoBalance = () => {
@@ -259,16 +269,14 @@ export default function CommitteeDashboard({
                     if (isOverstaffed) statusColor = 'text-rose-500';
                     if (committee === "Unassigned") statusColor = 'text-emerald-500';
                     
-                    const lKey = `${groupBy}:${committee}`;
-                    const leaders = leadership[lKey] || { chair: null, coChair: null };
-                    const chairName = rawData.find(p => p.id === leaders.chair)?.name;
+                    const chairName = team.find(p => chairs[p.id])?.name;
                     
                     return (
                         <div key={committee} className={`break-inside-avoid mb-6 rounded-2xl overflow-hidden border shadow-2xl border-white/10 bg-zinc-900/40 print:border-black print:bg-white print:mb-8`}>
                             <div onClick={() => setSelectedCommittee(committee)} className="p-4 border-b border-white/5 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors">
                                 <div>
                                     <h3 className={`font-black uppercase text-sm tracking-widest ${statusColor} print:text-black`}>{committee}</h3>
-                                    {chairName && <p className="text-[9px] text-blue-400 font-bold mt-0.5 flex items-center gap-1"><Crown size={10}/> {chairName}</p>}
+                                    {chairName && <p className="text-[9px] text-amber-400 font-bold mt-0.5 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(251,191,36,0.3)]"><Crown size={10}/> {chairName}</p>}
                                 </div>
                                 {committee !== "Unassigned" ? (
                                     <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
@@ -298,7 +306,7 @@ export default function CommitteeDashboard({
             <div className="pb-24 animate-in fade-in duration-300">
                 <div className="bg-zinc-900/40 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
                     <div className="overflow-x-auto custom-scrollbar">
-<table className="w-full text-left border-collapse table-fixed">
+                        <table className="w-full text-left border-collapse table-fixed">
                             <thead className="bg-zinc-950 border-b border-white/10 text-zinc-500 text-[10px] uppercase tracking-widest">
                                 <tr>
                                     <th className="px-3 py-2 font-black w-1/4">Volunteer</th>
@@ -306,7 +314,7 @@ export default function CommitteeDashboard({
                                     <th className="px-3 py-2 font-black w-32">1st Choice</th>
                                     <th className="px-3 py-2 font-black w-32">2nd Choice</th>
                                     <th className="px-3 py-2 font-black w-32">3rd Choice</th>
-                                    <th className="px-3 py-2 font-black w-40">Assignment</th>
+                                    <th className="px-3 py-2 font-black w-48">Assignment</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5 text-sm">
@@ -314,11 +322,16 @@ export default function CommitteeDashboard({
                                     const prefs = getPrefs(p);
                                     const currentAssigned = assignments[p.id] || "Unassigned";
                                     const isUnassigned = currentAssigned === "Unassigned";
+                                    const isChair = chairs[p.id];
                                     
                                     return (
-                                        <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : ''}`}>
-                                            {/* Removed whitespace-nowrap so long parent names can wrap nicely */}
-                                            <td className="px-3 py-2 font-bold text-zinc-200 text-xs leading-tight">{p.name}</td>
+                                        <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : isChair ? 'bg-amber-500/10' : ''}`}>
+                                            <td className="px-3 py-2 font-bold text-zinc-200 text-xs leading-tight">
+                                                <div className="flex items-center gap-2">
+                                                    {p.name}
+                                                    {isChair && <Crown size={14} className="text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]" />}
+                                                </div>
+                                            </td>
                                             <td className="px-3 py-2 text-zinc-400 text-[10px] leading-tight pr-4">{p.studentName || "-"}</td>
                                             
                                             <td className="px-3 py-2 whitespace-nowrap">
@@ -338,14 +351,31 @@ export default function CommitteeDashboard({
                                             </td>
                                             
                                             <td className="px-3 py-2">
-                                                <select 
-                                                    className={`w-full bg-zinc-950 border rounded px-2 py-1.5 text-xs font-bold outline-none transition-colors shadow-sm cursor-pointer ${isUnassigned ? 'border-amber-500/50 text-amber-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-zinc-700 text-zinc-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
-                                                    value={currentAssigned}
-                                                    onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
-                                                >
-                                                    {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
-                                                    <option value="Unassigned">Unassigned</option>
-                                                </select>
+                                                <div className="flex items-center gap-2">
+                                                    <select 
+                                                        className={`w-full bg-zinc-950 border rounded px-2 py-1.5 text-xs font-bold outline-none transition-colors shadow-sm cursor-pointer ${isUnassigned ? 'border-amber-500/50 text-amber-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400' : isChair ? 'border-amber-500 text-amber-400' : 'border-zinc-700 text-zinc-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
+                                                        value={currentAssigned}
+                                                        onChange={(e) => {
+                                                            setAssignments(prev => ({...prev, [p.id]: e.target.value}));
+                                                            if (isChair) {
+                                                                setChairs(prev => ({...prev, [p.id]: false}));
+                                                            }
+                                                        }}
+                                                    >
+                                                        {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                                        <option value="Unassigned">Unassigned</option>
+                                                    </select>
+
+                                                    {!isUnassigned && currentAssigned !== "Show Chair" && (
+                                                        <button 
+                                                            onClick={() => setChairs(prev => ({...prev, [p.id]: !prev[p.id]}))}
+                                                            className={`p-1.5 rounded transition-all flex-shrink-0 ${isChair ? 'bg-amber-500 text-white shadow-[0_0_10px_rgba(251,191,36,0.3)]' : 'bg-zinc-800 text-zinc-500 hover:text-amber-400 hover:bg-zinc-700'}`}
+                                                            title={isChair ? "Remove as Chair" : "Make Chair"}
+                                                        >
+                                                            <Crown size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     )
@@ -426,10 +456,15 @@ export default function CommitteeDashboard({
                          <div className="bg-zinc-950 border border-white/5 rounded-xl divide-y divide-white/5">
                             {currentTeam.map((p: Volunteer) => {
                                 const prefs = getPrefs(p);
+                                const isChair = chairs[p.id];
+
                                 return (
-                                    <div key={p.id} className="p-3 hover:bg-white/5 transition-colors group flex justify-between items-center">
+                                    <div key={p.id} className={`p-3 hover:bg-white/5 transition-colors group flex justify-between items-center ${isChair ? 'bg-amber-500/10' : ''}`}>
                                         <div>
-                                            <div className="text-sm font-bold text-zinc-200">{p.name}</div>
+                                            <div className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                                                {p.name}
+                                                {isChair && <Crown size={14} className="text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]" />}
+                                            </div>
                                             <div className="text-[10px] text-zinc-500">{p.studentName && `Parent of ${p.studentName}`}</div>
                                         </div>
                                         <div className="flex items-center gap-4">
@@ -438,13 +473,28 @@ export default function CommitteeDashboard({
                                                 <PreferenceBadge rank="2" value={prefs.second} current={selectedCommittee}/>
                                             </div>
                                             <select 
-                                                className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-[10px] text-zinc-400 outline-none focus:text-white"
+                                                className={`bg-zinc-900 border rounded px-2 py-1 text-[10px] outline-none ${isChair ? 'border-amber-500 text-amber-400' : 'border-zinc-800 text-zinc-400 focus:text-white'}`}
                                                 value={assignments[p.id] || "Unassigned"}
-                                                onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
+                                                onChange={(e) => {
+                                                    setAssignments(prev => ({...prev, [p.id]: e.target.value}));
+                                                    if (isChair) {
+                                                        setChairs(prev => ({...prev, [p.id]: false}));
+                                                    }
+                                                }}
                                             >
                                                 {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
                                                 <option value="Unassigned">Unassigned</option>
                                             </select>
+                                            
+                                            {selectedCommittee !== "Show Chair" && (
+                                                <button 
+                                                    onClick={() => setChairs(prev => ({...prev, [p.id]: !prev[p.id]}))}
+                                                    className={`p-1.5 rounded transition-all ${isChair ? 'bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-amber-400'}`}
+                                                    title={isChair ? "Remove as Chair" : "Make Chair"}
+                                                >
+                                                    <Crown size={14} />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 )

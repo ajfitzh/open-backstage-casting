@@ -106,6 +106,8 @@ async function getCommitteePrefsForShow(showId: number) {
       // NEW: Pulling the final confirmed assignments into the UI
       assignedPreShow: extractSelect(row["Pre-Show Phase"]),
       assignedShowWeek: extractSelect(row["Show Week Committees"]),
+      // Add this right below assignedShowWeek
+      isChair: !!row["Is Chair?"],
     };
   });
 }
