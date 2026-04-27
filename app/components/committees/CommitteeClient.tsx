@@ -298,15 +298,15 @@ export default function CommitteeDashboard({
             <div className="pb-24 animate-in fade-in duration-300">
                 <div className="bg-zinc-900/40 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse">
+<table className="w-full text-left border-collapse table-fixed">
                             <thead className="bg-zinc-950 border-b border-white/10 text-zinc-500 text-[10px] uppercase tracking-widest">
                                 <tr>
-                                    <th className="p-4 font-black whitespace-nowrap">Volunteer</th>
-                                    <th className="p-4 font-black whitespace-nowrap">Student</th>
-                                    <th className="p-4 font-black whitespace-nowrap">1st Choice</th>
-                                    <th className="p-4 font-black whitespace-nowrap">2nd Choice</th>
-                                    <th className="p-4 font-black whitespace-nowrap">3rd Choice</th>
-                                    <th className="p-4 font-black whitespace-nowrap">Assignment</th>
+                                    <th className="px-3 py-2 font-black w-1/4">Volunteer</th>
+                                    <th className="px-3 py-2 font-black w-1/5">Student</th>
+                                    <th className="px-3 py-2 font-black w-32">1st Choice</th>
+                                    <th className="px-3 py-2 font-black w-32">2nd Choice</th>
+                                    <th className="px-3 py-2 font-black w-32">3rd Choice</th>
+                                    <th className="px-3 py-2 font-black w-40">Assignment</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5 text-sm">
@@ -317,28 +317,29 @@ export default function CommitteeDashboard({
                                     
                                     return (
                                         <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : ''}`}>
-                                            <td className="p-4 font-bold text-zinc-200 whitespace-nowrap">{p.name}</td>
-                                            <td className="p-4 text-zinc-400 text-xs whitespace-nowrap">{p.studentName || "-"}</td>
+                                            {/* Removed whitespace-nowrap so long parent names can wrap nicely */}
+                                            <td className="px-3 py-2 font-bold text-zinc-200 text-xs leading-tight">{p.name}</td>
+                                            <td className="px-3 py-2 text-zinc-400 text-[10px] leading-tight pr-4">{p.studentName || "-"}</td>
                                             
-                                            <td className="p-4 whitespace-nowrap">
-                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.first ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.first || "-"} {currentAssigned === prefs.first && <CheckCircle2 size={14}/>}
+                                            <td className="px-3 py-2 whitespace-nowrap">
+                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.first ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.first || "-"} {currentAssigned === prefs.first && <CheckCircle2 size={12}/>}
                                                 </div>
                                             </td>
-                                            <td className="p-4 whitespace-nowrap">
-                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.second ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.second || "-"} {currentAssigned === prefs.second && <CheckCircle2 size={14}/>}
+                                            <td className="px-3 py-2 whitespace-nowrap">
+                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.second ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.second || "-"} {currentAssigned === prefs.second && <CheckCircle2 size={12}/>}
                                                 </div>
                                             </td>
-                                            <td className="p-4 whitespace-nowrap">
-                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.third ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.third || "-"} {currentAssigned === prefs.third && <CheckCircle2 size={14}/>}
+                                            <td className="px-3 py-2 whitespace-nowrap">
+                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.third ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.third || "-"} {currentAssigned === prefs.third && <CheckCircle2 size={12}/>}
                                                 </div>
                                             </td>
                                             
-                                            <td className="p-4 whitespace-nowrap">
+                                            <td className="px-3 py-2">
                                                 <select 
-                                                    className={`bg-zinc-950 border rounded-lg px-3 py-2 text-xs font-bold outline-none transition-colors shadow-sm cursor-pointer ${isUnassigned ? 'border-amber-500/50 text-amber-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-zinc-700 text-zinc-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
+                                                    className={`w-full bg-zinc-950 border rounded px-2 py-1.5 text-xs font-bold outline-none transition-colors shadow-sm cursor-pointer ${isUnassigned ? 'border-amber-500/50 text-amber-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-zinc-700 text-zinc-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
                                                     value={currentAssigned}
                                                     onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
                                                 >
