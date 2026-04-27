@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { 
   Printer, Crown, Wand2, RotateCcw, X, 
-  Trash2, Sliders, Info, CheckCircle2
+  Trash2, Sliders, Info, CheckCircle2, Save, Loader2
 } from 'lucide-react';
+import { saveCommitteeAssignments } from '@/app/actions/committees';
 
 // --- TYPES ---
 interface Volunteer {
@@ -19,26 +20,11 @@ interface Volunteer {
   showWeek1: string | null;
   showWeek2: string | null;
   showWeek3: string | null;
+  assignedPreShow: string | null;
+  assignedShowWeek: string | null;
 }
 
-// --- CONFIG ---
-const COMMITTEES = {
-    'Pre-Show': ["Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
-    'Show Week': ["Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
-};
-
-const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
-    "Green Room": { type: 'ratio', val: 8, min: 2, reason: "Safety: 1 Adult per 8 Students" }, 
-    "Costumes": { type: 'ratio', val: 6, min: 3, reason: "Labor: 1 per 6 Actors" },   
-    "Makeup": { type: 'ratio', val: 7, min: 2, reason: "Speed: 1 per 7 Actors" },
-    "Tech": { type: 'fixed', val: 5, reason: "Booth + Deck Crew" },              
-    "Sets": { type: 'fixed', val: 8, reason: "Heavy Lifting Team" },              
-    "Security": { type: 'fixed', val: 3, reason: "Door & Perimeter" },
-    "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window & Will Call" },
-    "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
-    "Publicity": { type: 'fixed', val: 3, reason: "Social Media & Posters" },
-    "default": { type: 'fixed', val: 3, reason: "Standard Committee Size" }
-};
+// ... Keep your COMMITTEES and DEFAULT_RULES here ...
 
 export default function CommitteeDashboard({ 
     volunteers = [], 
@@ -54,35 +40,38 @@ export default function CommitteeDashboard({
   const [rawData] = useState<Volunteer[]>(volunteers);
   
   const [assignments, setAssignments] = useState<Record<number, string>>({});
-  const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
-  const [rules, setRules] = useState(DEFAULT_RULES);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  // --- HELPER: Get Preferences based on current View ---
-  const getPrefs = (p: Volunteer) => {
-      if (groupBy === 'Pre-Show') {
-          return { first: p.preShow1, second: p.preShow2, third: p.preShow3 };
-      } else {
-          return { first: p.showWeek1, second: p.showWeek2, third: p.showWeek3 };
-      }
-  };
+  // --- 1. LOAD SAVED DATA FROM DB ON TAB SWITCH ---
+  const initialAssignments = useMemo(() => {
+      const acc: Record<number, string> = {};
+      volunteers.forEach(v => {
+          const val = groupBy === 'Pre-Show' ? v.assignedPreShow : v.assignedShowWeek;
+          if (val) acc[v.id] = val;
+      });
+      return acc;
+  }, [volunteers, groupBy]);
 
-  // --- HELPER: CALCULATE TARGETS ---
-  const getCommitteeTarget = (committeeName: string) => {
-      const castSize = students.length || 40; 
-      const rule = rules[committeeName] || rules["default"];
-      if (rule.type === 'fixed') return rule.val;
-      let calculated = Math.ceil(castSize / rule.val);
-      if (rule.min && calculated < rule.min) calculated = rule.min;
-      return calculated;
-  };
+  useEffect(() => {
+      setAssignments(initialAssignments);
+  }, [initialAssignments]);
+
+  // Check if current board differs from database
+  const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments);
 
   // --- ACTIONS ---
+  const handleSave = () => {
+      startTransition(async () => {
+          await saveCommitteeAssignments(groupBy, assignments);
+      });
+  };
+
   const handleClearBoard = () => {
       if(!confirm(`Are you sure you want to clear assignments for ${groupBy}?`)) return;
       setAssignments({});
   };
+  // --- ACTIONS ---
 
   const handleAutoBalance = () => {
       if(!confirm(`Auto-Balance ${groupBy}?`)) return;

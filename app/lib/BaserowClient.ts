@@ -69,10 +69,10 @@ async function findUserByEmail(email: string) {
 
 
 async function getCommitteePrefsForShow(showId: number) {
+  // Table 620 is COMMITTEE_PREFS. Field 5952 links to Production.
   const endpoint = `/database/rows/table/620/?user_field_names=true&filter__field_5952__link_row_has=${showId}&size=200`;
   
-  // Note: If CommitteeListSchema fails validation because it expects strings instead of objects, 
-  // you can temporarily replace it with z.any() here to bypass the crash.
+  // Temporarily use z.any() to bypass the strict schema while we manually flatten the response
   const result = await fetchAndValidate(endpoint, z.any()); 
   
   if (!result) return [];
@@ -102,6 +102,10 @@ async function getCommitteePrefsForShow(showId: number) {
       showWeek1: extractSelect(row["Show Week 1st"]),
       showWeek2: extractSelect(row["Show Week 2nd"]),
       showWeek3: extractSelect(row["Show Week 3rd"]),
+      
+      // NEW: Pulling the final confirmed assignments into the UI
+      assignedPreShow: extractSelect(row["Pre-Show Phase"]),
+      assignedShowWeek: extractSelect(row["Show Week Committees"]),
     };
   });
 }
