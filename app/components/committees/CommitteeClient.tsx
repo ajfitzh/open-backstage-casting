@@ -24,7 +24,24 @@ interface Volunteer {
   assignedShowWeek: string | null;
 }
 
-// ... Keep your COMMITTEES and DEFAULT_RULES here ...
+// --- CONFIG ---
+const COMMITTEES: Record<string, string[]> = {
+    'Pre-Show': ["Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
+    'Show Week': ["Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
+};
+
+const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
+    "Green Room": { type: 'ratio', val: 8, min: 2, reason: "Safety: 1 Adult per 8 Students" }, 
+    "Costumes": { type: 'ratio', val: 6, min: 3, reason: "Labor: 1 per 6 Actors" },   
+    "Makeup": { type: 'ratio', val: 7, min: 2, reason: "Speed: 1 per 7 Actors" },
+    "Tech": { type: 'fixed', val: 5, reason: "Booth + Deck Crew" },              
+    "Sets": { type: 'fixed', val: 8, reason: "Heavy Lifting Team" },              
+    "Security": { type: 'fixed', val: 3, reason: "Door & Perimeter" },
+    "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window & Will Call" },
+    "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
+    "Publicity": { type: 'fixed', val: 3, reason: "Social Media & Posters" },
+    "default": { type: 'fixed', val: 3, reason: "Standard Committee Size" }
+};
 
 export default function CommitteeDashboard({ 
     volunteers = [], 
@@ -40,25 +57,47 @@ export default function CommitteeDashboard({
   const [rawData] = useState<Volunteer[]>(volunteers);
   
   const [assignments, setAssignments] = useState<Record<number, string>>({});
+  const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
+  const [rules] = useState(DEFAULT_RULES);
   const [isPending, startTransition] = useTransition();
 
   // --- 1. LOAD SAVED DATA FROM DB ON TAB SWITCH ---
   const initialAssignments = useMemo(() => {
       const acc: Record<number, string> = {};
-      volunteers.forEach(v => {
+      rawData.forEach(v => {
           const val = groupBy === 'Pre-Show' ? v.assignedPreShow : v.assignedShowWeek;
           if (val) acc[v.id] = val;
       });
       return acc;
-  }, [volunteers, groupBy]);
+  }, [rawData, groupBy]);
 
+  // Reset local assignments to DB state whenever tab changes
   useEffect(() => {
       setAssignments(initialAssignments);
   }, [initialAssignments]);
 
   // Check if current board differs from database
   const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments);
+
+  // --- HELPER: Get Preferences based on current View ---
+  const getPrefs = (p: Volunteer) => {
+      if (groupBy === 'Pre-Show') {
+          return { first: p.preShow1, second: p.preShow2, third: p.preShow3 };
+      } else {
+          return { first: p.showWeek1, second: p.showWeek2, third: p.showWeek3 };
+      }
+  };
+
+  // --- HELPER: CALCULATE TARGETS ---
+  const getCommitteeTarget = (committeeName: string) => {
+      const castSize = students.length || 40; 
+      const rule = rules[committeeName] || rules["default"];
+      if (rule.type === 'fixed') return rule.val;
+      let calculated = Math.ceil(castSize / rule.val);
+      if (rule.min && calculated < rule.min) calculated = rule.min;
+      return calculated;
+  };
 
   // --- ACTIONS ---
   const handleSave = () => {
@@ -68,63 +107,60 @@ export default function CommitteeDashboard({
   };
 
   const handleClearBoard = () => {
-      if(!confirm(`Are you sure you want to clear assignments for ${groupBy}?`)) return;
-      setAssignments({});
+      if(!confirm(`Are you sure you want to clear ALL unsaved assignments for ${groupBy}?`)) return;
+      setAssignments(initialAssignments);
   };
-  // --- ACTIONS ---
 
   const handleAutoBalance = () => {
-      if(!confirm(`Auto-Balance ${groupBy}?`)) return;
+      if(!confirm(`Auto-Balance unassigned volunteers for ${groupBy}? (This will NOT overwrite people you have already assigned)`)) return;
       
       const newAssignments = { ...assignments };
       const currentCommittees = COMMITTEES[groupBy];
       
       const getCount = (comm: string) => rawData.filter(p => newAssignments[p.id] === comm).length;
       
-      currentCommittees.forEach((targetComm: string) => {
-          const targetLimit = getCommitteeTarget(targetComm); 
-          if (getCount(targetComm) < targetLimit) {
-               rawData.forEach(p => {
-                   if (getCount(targetComm) >= targetLimit) return; 
-                   
-                   const prefs = getPrefs(p);
-                   const currentComm = newAssignments[p.id];
-                   
-                   if (!currentComm || (getCount(currentComm) > getCommitteeTarget(currentComm))) {
-                       if (prefs.first === targetComm || prefs.second === targetComm) {
-                           newAssignments[p.id] = targetComm;
-                       }
-                   }
-               });
+      rawData.forEach(p => {
+          // Only auto-assign if they are currently unassigned
+          if (!newAssignments[p.id] || newAssignments[p.id] === "Unassigned") {
+              const prefs = getPrefs(p);
+              const choices = [prefs.first, prefs.second, prefs.third].filter(Boolean) as string[];
+              
+              // Try to put them in their 1st, then 2nd, then 3rd choice if there is room
+              for (const choice of choices) {
+                  if (currentCommittees.includes(choice)) {
+                      const targetLimit = getCommitteeTarget(choice);
+                      if (getCount(choice) < targetLimit) {
+                          newAssignments[p.id] = choice;
+                          break; // Move to the next person once assigned
+                      }
+                  }
+              }
           }
       });
       setAssignments(newAssignments);
   };
 
-  // Group Logic
+  // --- GROUP DATA FOR RENDER ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Volunteer[]> = {};
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
       groups["Unassigned"] = [];
       
       rawData.forEach(p => {
-          let assignedVal = assignments[p.id];
-          
-          if (!assignedVal) {
-              const prefs = getPrefs(p);
-              if (prefs.first && COMMITTEES[groupBy].includes(prefs.first)) {
-                  assignedVal = prefs.first;
-              }
+          const assignedVal = assignments[p.id];
+          if (assignedVal && groups[assignedVal]) {
+              groups[assignedVal].push(p);
+          } else if (assignedVal === "Unassigned") {
+              groups["Unassigned"].push(p);
+          } else {
+             // If completely blank in DB and local state, leave them unassigned
+             groups["Unassigned"].push(p);
           }
-          if (assignedVal && groups[assignedVal]) groups[assignedVal].push(p);
-          else groups["Unassigned"].push(p);
       });
       return groups;
   }, [groupBy, rawData, assignments]);
 
   const currentTeam = selectedCommittee ? groupedData[selectedCommittee] : [];
-  const leadershipKey = `${groupBy}:${selectedCommittee}`;
-  const currentLeaders = leadership[leadershipKey] || { chair: null, coChair: null };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans p-4 md:p-6 flex flex-col overflow-y-auto custom-scrollbar">
@@ -141,8 +177,22 @@ export default function CommitteeDashboard({
                     <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
                     <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
                 </div>
-                <button onClick={handleAutoBalance} className="bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
-                <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14}/> Clear</button>
+                
+                <button 
+                    onClick={handleSave} 
+                    disabled={!hasChanges || isPending}
+                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all border ${
+                        hasChanges 
+                            ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
+                            : 'bg-zinc-900 text-zinc-500 border-white/10 cursor-not-allowed'
+                    }`}
+                >
+                    {isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14}/>}
+                    {hasChanges ? "Save Changes" : "Saved"}
+                </button>
+
+                <button onClick={handleAutoBalance} className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
+                <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><RotateCcw size={14}/> Revert</button>
                 <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
             </div>
         </div>
@@ -218,7 +268,7 @@ export default function CommitteeDashboard({
                                             </div>
                                             <select 
                                                 className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-[10px] text-zinc-400 outline-none focus:text-white"
-                                                value={assignments[p.id] || ((prefs.first === selectedCommittee) ? selectedCommittee : "Unassigned")}
+                                                value={assignments[p.id] || "Unassigned"}
                                                 onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
                                             >
                                                 {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
