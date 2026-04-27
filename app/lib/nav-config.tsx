@@ -36,12 +36,12 @@ export const NAV_CONFIG = [
   {
     title: "Logistics & Ops",
     color: "text-emerald-500",
-    permission: "view_cast_list",
+    // 👈 Notice: We removed the `permission: "view_cast_list"` from this folder level
     items: [
-      { label: "Master Roster", href: "/roster", icon: UserSquare2 },
-      { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon },
-      { label: "Committees", href: "/committees", icon: VenetianMask },
-      { label: "Season Planner", href: "/season", icon: LayoutGrid },
+      { label: "Master Roster", href: "/roster", icon: UserSquare2, permission: "view_cast_list" },
+      { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
+      { label: "Committees", href: "/committees", icon: VenetianMask, permission: "manage_committees" }, // 👈 NEW PERMISSION HERE
+      { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
     ]
   },
   {

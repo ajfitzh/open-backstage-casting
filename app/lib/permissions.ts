@@ -5,18 +5,19 @@ export type Permission =
   | 'manage_casting'
   | 'view_cast_list'
   | 'view_billing'
-  | 'view_auditions'; // 👈 Added this missing key
+  | 'view_auditions'
+  | 'manage_committees'; // 👈 NEW!
 
 // 1. GLOBAL ROLES
 const GLOBAL_ROLES: Record<string, Permission[]> = {
   // Aimee & Admins: See Everything
   'Executive Director': [
       'view_financials', 'edit_compliance', 'view_sensitive_reports', 
-      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions'
+      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 'manage_committees'
   ],
   'Admin': [
       'view_financials', 'edit_compliance', 'view_sensitive_reports', 
-      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions'
+      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 'manage_committees'
   ],
 
   // Krista: Money & Risk
@@ -26,7 +27,7 @@ const GLOBAL_ROLES: Record<string, Permission[]> = {
 
   // Jenny: Logistics + Casting
   'Production Coordinator': [
-      'edit_compliance', 'manage_casting', 'view_cast_list', 'view_sensitive_reports', 'view_auditions'
+      'edit_compliance', 'manage_casting', 'view_cast_list', 'view_sensitive_reports', 'view_auditions', 'manage_committees'
   ],
   
   // Elizabeth: Education + Casting Visibility
@@ -38,6 +39,11 @@ const GLOBAL_ROLES: Record<string, Permission[]> = {
   'Staff': [
       'view_cast_list', 'manage_casting', 'edit_compliance', 'view_auditions'
   ], 
+
+  // 🛡️ THE NEW HYPER-FOCUSED ROLE 🛡️
+  'Committee Team': [
+      'manage_committees'
+  ],
   
   // Parents
   'Parent/Guardian': ['view_billing']
@@ -55,10 +61,10 @@ const PRODUCTION_ROLES: Record<string, Permission[]> = {
       'manage_casting', 'view_cast_list', 'view_auditions'
   ],
   'Stage Manager': [
-      'view_cast_list', 'edit_compliance', 'view_auditions'
+      'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees'
   ],
   'Producer': [
-      'view_financials', 'view_sensitive_reports', 'view_cast_list', 'edit_compliance', 'view_auditions'
+      'view_financials', 'view_sensitive_reports', 'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees'
   ]
 };
 
