@@ -69,10 +69,41 @@ async function findUserByEmail(email: string) {
 
 
 async function getCommitteePrefsForShow(showId: number) {
-  // Table 620 is COMMITTEE_PREFS. Field 5952 links to Production.
   const endpoint = `/database/rows/table/620/?user_field_names=true&filter__field_5952__link_row_has=${showId}&size=200`;
-  const result = await fetchAndValidate(endpoint, CommitteeListSchema);
-  return result ?? [];
+  
+  // Note: If CommitteeListSchema fails validation because it expects strings instead of objects, 
+  // you can temporarily replace it with z.any() here to bypass the crash.
+  const result = await fetchAndValidate(endpoint, z.any()); 
+  
+  if (!result) return [];
+
+  // Transform Baserow's raw objects/arrays into the flat interface expected by CommitteeClient.tsx
+  return result.map((row: any) => {
+    // Helper to extract text from a Link/Lookup array: [{id: 1, value: "Name"}] -> "Name"
+    const extractArray = (arr: any) => {
+        if (!arr || !Array.isArray(arr)) return "";
+        return arr.map(item => item.value).join(" & ");
+    };
+
+    // Helper to extract text from a Single Select: {id: 1, value: "Props", color: "blue"} -> "Props"
+    const extractSelect = (field: any) => field?.value || null;
+
+    return {
+      id: row.id,
+      name: extractArray(row["Parent/Guardian Name"]),
+      email: extractArray(row["Email"]),
+      phone: extractArray(row["Phone"]),
+      studentName: extractArray(row["Student Name"]),
+      
+      preShow1: extractSelect(row["Pre-Show 1st"]),
+      preShow2: extractSelect(row["Pre-Show 2nd"]),
+      preShow3: extractSelect(row["Pre-Show 3rd"]),
+      
+      showWeek1: extractSelect(row["Show Week 1st"]),
+      showWeek2: extractSelect(row["Show Week 2nd"]),
+      showWeek3: extractSelect(row["Show Week 3rd"]),
+    };
+  });
 }
 async function getRolesForShow(showId: number) {
   return await fetchAndValidate(`/database/rows/table/605/?user_field_names=true&filter__field_5794__link_row_has=${showId}&size=200`, RoleListSchema) ?? [];

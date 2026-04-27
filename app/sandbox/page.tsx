@@ -1,126 +1,124 @@
-'use client';
-
 import Link from 'next/link';
+import { Calendar, UserPlus, ArrowRight, PlayCircle, Star, MapPin } from 'lucide-react';
 
-export default function SandboxMenu() {
+export default function Home() {
   return (
-    <div className="min-h-screen bg-slate-950 p-6 md:p-12 font-sans text-slate-200">
+    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 selection:bg-blue-200">
       
-      {/* BRANDING HEADER */}
-      <div className="max-w-5xl mx-auto flex items-center justify-between mb-12">
-        <div className="flex items-center space-x-2 select-none">
-          <span className="font-black text-white tracking-widest text-2xl">CYT</span>
-          <span className="text-indigo-500 font-light text-2xl">|</span>
-          <span className="text-slate-400 font-normal lowercase text-xl">open-backstage</span>
+      {/* NAVIGATION */}
+      <nav className="bg-white border-b border-zinc-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div className="font-black text-2xl tracking-tight uppercase">
+          CYT <span className="text-blue-600">Fredericksburg</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-indigo-500/20">
-            Prototype Hub
-          </span>
+        <div className="hidden md:flex gap-6 font-bold text-sm text-zinc-500">
+          <Link href="#" className="hover:text-zinc-900 transition-colors">Shows</Link>
+          <Link href="#" className="hover:text-zinc-900 transition-colors">Classes</Link>
+          <Link href="#" className="hover:text-zinc-900 transition-colors">About</Link>
         </div>
-      </div>
+        <button className="bg-zinc-900 text-white px-5 py-2 rounded-lg font-bold text-sm hover:bg-zinc-800 transition-all">
+          Family Login
+        </button>
+      </nav>
 
-      <div className="max-w-5xl mx-auto space-y-12">
+      {/* HERO SECTION */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
         
-        {/* HERO SECTION */}
-        <div className="space-y-4">
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter">
-            The Sandbox <span className="text-indigo-500">.</span>
+        <div className="text-center max-w-3xl mx-auto mb-16 space-y-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-bold text-sm uppercase tracking-wide">
+            <Star size={16} /> Spring 2026 Season
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-zinc-900 leading-tight">
+            Take the stage. <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">
+              Find your spotlight.
+            </span>
           </h1>
-          <p className="text-slate-400 max-w-2xl leading-relaxed">
-            Welcome to the digital backstage. Explore the prototype tools designed to streamline the audition lobby, empower the directing team, and simplify compliance for the business office.
+          <p className="text-xl text-zinc-500 font-medium leading-relaxed max-w-2xl mx-auto">
+            Join us for an unforgettable season of youth theater. Develop your skills, build lifelong friendships, and bring incredible stories to life.
           </p>
         </div>
 
-        {/* FEATURE GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* ACTIVE PRODUCTION CARD */}
+        <div className="bg-white rounded-3xl shadow-xl border border-zinc-200 overflow-hidden relative">
           
-          {/* 1. AUDITION CHECK-IN CARD (Indigo) */}
-          <Link href="/sandbox/check-in" className="group">
-            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-600/10 blur-3xl group-hover:bg-indigo-600/20 transition-colors"></div>
-              
-              <div className="relative z-10 space-y-6">
-                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/20">
-                  📋
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Lobby Check-In</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    Live roster management, capacity tracking, and digital paperwork verification for the front desk.
-                  </p>
-                </div>
+          {/* Top accent bar */}
+          <div className="h-3 w-full bg-gradient-to-r from-blue-600 to-cyan-400"></div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-8 md:p-12">
+            
+            {/* Show Info */}
+            <div className="space-y-6 flex flex-col justify-center">
+              <div>
+                <h3 className="text-zinc-500 font-bold uppercase tracking-widest text-sm mb-2">Now Casting</h3>
+                <h2 className="text-4xl md:text-5xl font-black text-zinc-900 tracking-tight">The Little Mermaid</h2>
               </div>
-              <div className="pt-8 flex items-center text-indigo-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
-                Launch App &rarr;
+              
+              <p className="text-zinc-600 text-lg leading-relaxed">
+                Journey under the sea in our spectacular Spring 2026 mainstage production. We are looking for passionate actors, singers, and dancers of all experience levels to bring this classic tale to life.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                {/* THE PRIMARY CALL TO ACTION */}
+                <Link 
+                  href="/audition-form" 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all active:scale-95 group"
+                >
+                  <UserPlus size={20} />
+                  Register to Audition
+                  <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                </Link>
+                
+                <Link 
+                  href="#" 
+                  className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 px-8 py-4 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <Calendar size={20} />
+                  View Schedule
+                </Link>
               </div>
             </div>
-          </Link>
 
-          {/* 2. DIRECTOR'S DECK CARD (Blue) */}
-          <Link href="/sandbox/director-deck" className="group">
-            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-blue-500/50 transition-all hover:shadow-2xl hover:shadow-blue-500/10 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/10 blur-3xl group-hover:bg-blue-600/20 transition-colors"></div>
+            {/* Quick Details Panel */}
+            <div className="bg-zinc-50 rounded-2xl p-8 border border-zinc-200 space-y-6">
+              <h4 className="font-bold text-xl border-b border-zinc-200 pb-4">Audition Details</h4>
               
-              <div className="relative z-10 space-y-6">
-                <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-blue-500/20">
-                  🎭
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Director&apos;s Deck</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    Real-time sync with the lobby, live scoring rubrics, and instant situational alerts for the creative team.
-                  </p>
-                </div>
-              </div>
-              <div className="pt-8 flex items-center text-blue-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
-                Launch App &rarr;
-              </div>
-            </div>
-          </Link>
+              <ul className="space-y-5">
+                <li className="flex items-start gap-4">
+                  <div className="bg-blue-100 p-3 rounded-lg text-blue-600 mt-1">
+                    <Calendar size={24} />
+                  </div>
+                  <div>
+                    <strong className="block text-zinc-900">Deadline to Register</strong>
+                    <span className="text-zinc-500">Wednesday, March 18th</span>
+                  </div>
+                </li>
+                
+                <li className="flex items-start gap-4">
+                  <div className="bg-blue-100 p-3 rounded-lg text-blue-600 mt-1">
+                    <MapPin size={24} />
+                  </div>
+                  <div>
+                    <strong className="block text-zinc-900">Location</strong>
+                    <span className="text-zinc-500">Main Campus Rehearsal Hall</span>
+                  </div>
+                </li>
 
-          {/* 3. MASTER ROSTER CARD (Emerald) */}
-          <Link href="/sandbox/master-roster" className="group">
-            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-600/10 blur-3xl group-hover:bg-emerald-600/20 transition-colors"></div>
-              
-              <div className="relative z-10 space-y-6">
-                <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/20">
-                  ✅
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Master Roster</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">
-                    Business office compliance dashboard to track fees, agreements, and measurements at a glance.
-                  </p>
-                </div>
-              </div>
-              <div className="pt-8 flex items-center text-emerald-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
-                Launch App &rarr;
-              </div>
+                <li className="flex items-start gap-4">
+                  <div className="bg-blue-100 p-3 rounded-lg text-blue-600 mt-1">
+                    <PlayCircle size={24} />
+                  </div>
+                  <div>
+                    <strong className="block text-zinc-900">Preparation</strong>
+                    <span className="text-zinc-500">1-minute vocal selection & short monologue required.</span>
+                  </div>
+                </li>
+              </ul>
             </div>
-          </Link>
-
+            
+          </div>
         </div>
 
-        {/* FOOTER ACTION */}
-        <div className="pt-12 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6">
-          <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">
-            Logged in as: <span className="text-slate-400">Sandbox Admin</span>
-          </p>
-          <button 
-            onClick={() => {
-              // Clear the sandbox cookie and go home
-              document.cookie = "sandbox_access=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
-              window.location.href = '/';
-            }}
-            className="text-rose-500/50 hover:text-rose-500 text-[10px] font-black uppercase tracking-widest transition-colors"
-          >
-            Exit Sandbox Mode
-          </button>
-        </div>
-
-      </div>
+      </main>
     </div>
   );
 }

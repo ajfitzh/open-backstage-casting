@@ -197,12 +197,23 @@ app/
     page.tsx
   privacy/
     page.tsx
+  sandbox/
+    check-in/
+      page.tsx
+    director-deck/
+      page.tsx
+    login/
+      page.tsx
+    master-roster/
+      page.tsx
+    page.tsx
   terms/
     page.tsx
   actions.ts
   favicon.ico
   globals.css
   layout.tsx
+  not-found.tsx
   plan.md
   providers.tsx
 lib/
@@ -235,6 +246,7 @@ playwright.config.ts
 postcss.config.mjs
 README.md
 repomix-output.1.xml
+repomix-output.2.xml
 tsconfig.json
 </directory_structure>
 
@@ -11532,32 +11544,143 @@ export const NAV_CONFIG = [
 ];
 </file>
 
-<file path="middleware.ts">
-import { auth } from "@/auth"
-import { NextResponse } from "next/server"
+<file path="app/sandbox/login/page.tsx">
+'use client';
 
-export default auth((req) => {
-  const { nextUrl } = req
-  const isLoggedIn = !!req.auth
-  const isOnLoginPage = nextUrl.pathname.startsWith("/login")
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-  // 1. If trying to access protected routes while logged out
-  if (!isLoggedIn && !isOnLoginPage) {
-    // Construct the URL manually to be safe
-    return NextResponse.redirect(new URL("/login", nextUrl.origin))
+export default function SandboxLoginPage() {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // In a real app, you'd call a Server Action to set a secure cookie.
+    // For a quick sandbox, we can just set it via document.cookie:
+    document.cookie = `sandbox_access=${password}; path=/; max-age=86400; SameSite=Strict`;
+    
+    // Refresh to let middleware re-check
+    window.location.href = '/sandbox';
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+      <div className="w-full max-w-sm space-y-8 text-center">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-black text-white tracking-tighter italic">CYT SANDBOX</h1>
+          <p className="text-slate-500 text-xs uppercase tracking-widest font-bold">Volunteer Check-In Access</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <input
+            type="password"
+            placeholder="Enter Desk Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-4 text-white text-center focus:ring-2 ring-indigo-500 outline-none transition-all"
+          />
+          <button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition-all uppercase tracking-widest text-xs shadow-lg shadow-indigo-500/20">
+            Open Desk
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/not-found.tsx">
+'use client';
+
+import Link from 'next/link';
+
+export default function NotFound() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full text-center space-y-8">
+        
+        {/* Goofy Visual */}
+        <div className="relative">
+          <h1 className="text-9xl font-black text-slate-900 select-none">404</h1>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-6xl">🎭</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-3xl font-black text-white tracking-tighter">
+            STAGE FRIGHT!
+          </h2>
+          <p className="text-slate-400 leading-relaxed">
+            Oh no! You just walked on stage, but it looks like you&apos;re in the 
+            wrong production. This page isn&apos;t in the script, and the Director 
+            is looking very confused.
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-3">
+          <Link 
+            href="/" 
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all uppercase tracking-widest text-xs shadow-lg shadow-indigo-500/20"
+          >
+            Back to Stage Left (Home)
+          </Link>
+          
+          <Link 
+            href="/sandbox" 
+            className="w-full bg-slate-900 hover:bg-slate-800 text-slate-400 font-black py-4 rounded-2xl transition-all uppercase tracking-widest text-xs border border-slate-800"
+          >
+            Return to the Sandbox
+          </Link>
+        </div>
+
+        <p className="text-slate-600 text-[10px] uppercase font-bold tracking-[0.2em]">
+          Intermission is over. Get back to your places.
+        </p>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/(main)/(casting)/casting/page.tsx">
+import { cookies } from 'next/headers';
+import { BaserowClient } from '@/app/lib/BaserowClient';
+import CastingClient from '@/app/components/casting/CastingClient';
+
+export default async function CastingPage() {
+  const cookieStore = cookies();
+  
+  // 🚨 THE FIX: Look for the exact cookie name your Context Switcher uses
+  const savedShowId = cookieStore.get('active_production_id')?.value;
+
+  // Default to 94 (Little Mermaid) if no cookie exists
+  const showId = parseInt(savedShowId || "94", 10);
+
+  if (isNaN(showId)) {
+    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
   }
 
-  // 2. If logged in but trying to go to login page
-  if (isLoggedIn && isOnLoginPage) {
-    return NextResponse.redirect(new URL("/", nextUrl.origin))
-  }
+  const [roles, scenes, roster, assignments] = await Promise.all([
+    BaserowClient.getRolesForShow(showId),
+    BaserowClient.getScenesForShow(showId),
+    BaserowClient.getRosterForShow(showId),
+    BaserowClient.getAssignmentsForShow(showId),
+  ]);
 
-  return NextResponse.next()
-})
-
-export const config = {
-  // 🟢 Added png, jpg, svg, etc. to the negative lookahead so images load on the login page
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)"],
+return (
+    <CastingClient 
+      activeId={showId}
+      blueprintRoles={roles}
+      allScenes={scenes}
+      roster={roster}
+      assignments={assignments as any} 
+    />
+  );
 }
 </file>
 
@@ -13929,117 +14052,50 @@ export const BaserowClient = {
 };
 </file>
 
-<file path="auth.ts">
-import NextAuth from "next-auth"
-import Credentials from "next-auth/providers/credentials"
-import Google from "next-auth/providers/google"
+<file path="middleware.ts">
+import { auth } from "@/auth"
+import { NextResponse } from "next/server"
 
-// 1. USE THE NEW, VALIDATED CLIENT
-// We keep 'createGoogleUser' for now, as it handles writing/creating a new user.
-import { BaserowClient } from "@/app/lib/BaserowClient"
-import { createGoogleUser } from "@/app/lib/baserow"
+export default auth((req) => {
+  const { nextUrl } = req
+  const isLoggedIn = !!req.auth
+  const pathname = nextUrl.pathname
+  
+  const isOnLoginPage = pathname.startsWith("/login")
+  const isOnSandbox = pathname.startsWith("/sandbox")
+  const isOnSandboxLogin = pathname === "/sandbox/login"
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [
-    // Google Provider (unchanged)
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
-
-    // Credentials Provider (updated)
-    Credentials({
-      name: "Casting Portal",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-
-        // 2. USE THE NEW, VALIDATED FUNCTION
-        // The old `verifyUserCredentials` likely handled both finding the user and checking the password.
-        // We now use our clean client to find the user.
-        // NOTE: You will need to re-implement the password check itself,
-        // likely by comparing `credentials.password` against a hashed password field
-        // that you can now add to the `UserProfileSchema`.
-        const user = await BaserowClient.findUserByEmail(credentials.email as string);
-
-        // For now, we'll assume if the user is found, the login is valid.
-        // TODO: Add password verification logic here.
-        if (user) {
-            return user;
-        }
-        
-        return null;
-      }
-    })
-  ],
-  callbacks: {
-    // SECURITY GATE: Check if Google user exists in Baserow
-    async signIn({ user, account }) {
-      if (account?.provider === "google") {
-        const email = user.email || "";
-
-        // 3. USE THE NEW CLIENT HERE TOO
-        const baserowUser = await BaserowClient.findUserByEmail(email);
-
-        if (baserowUser) {
-          // A. User Exists: Attach Baserow ID/Role to the transient user object
-          user.id = baserowUser.id;
-          (user as any).role = baserowUser.role;
-          return true; 
-        } else {
-          // B. User DOES NOT Exist: Auto-Register them!
-          try {
-            console.log(`🆕 New Google User: ${email}. Auto-registering...`);
-            await createGoogleUser(user);
-            return true; // Allow them in!
-          } catch (error) {
-            console.error("❌ Auto-registration failed:", error);
-            return false; // Deny access only if creation fails
-          }
-        }
-      }
-      return true; // Credentials login is already verified in authorize()
-    },
-
-    // TOKEN: Persist the ID/Role from signIn into the Token
-    async jwt({ token, user, account }) {
-      if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
-        
-        // This fallback is helpful for a NEWLY registered Google user,
-        // as their role isn't attached to the initial 'user' object from the provider.
-        if (account?.provider === "google" && !token.role) {
-            // 4. USE THE NEW CLIENT FOR THE FALLBACK CHECK
-            const baserowUser = await BaserowClient.findUserByEmail(user.email || "");
-            if (baserowUser) {
-              token.id = baserowUser.id; // Ensure ID is synced
-              token.role = baserowUser.role;
-            }
-        }
-      }
-      return token;
-    },
-
-    // SESSION: Pass the ID/Role from Token to the Client (unchanged)
-    async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-      }
-      return session;
+  // --- NEW: SANDBOX LOGIC ---
+  if (isOnSandbox && !isOnSandboxLogin) {
+    const sandboxAuth = req.cookies.get("sandbox_access")?.value
+    // If the cookie doesn't match your env variable, send them to the sandbox login
+    if (sandboxAuth !== process.env.SANDBOX_PASSWORD) {
+      return NextResponse.redirect(new URL("/sandbox/login", nextUrl.origin))
     }
-  },
-  pages: {
-    signIn: '/login',
-    signOut: '/login',
-    error: '/login',
-  },
-  secret: process.env.NEXTAUTH_SECRET,
+    return NextResponse.next()
+  }
+
+  if (isOnSandboxLogin) {
+    return NextResponse.next()
+  }
+  // --- END SANDBOX LOGIC ---
+
+  // 1. Existing Auth.js: If trying to access protected routes while logged out
+  if (!isLoggedIn && !isOnLoginPage) {
+    return NextResponse.redirect(new URL("/login", nextUrl.origin))
+  }
+
+  // 2. Existing Auth.js: If logged in but trying to go to login page
+  if (isLoggedIn && isOnLoginPage) {
+    return NextResponse.redirect(new URL("/", nextUrl.origin))
+  }
+
+  return NextResponse.next()
 })
+
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)"],
+}
 </file>
 
 <file path="next.config.mjs">
@@ -14081,6 +14137,245 @@ const nextConfig = {
 };
 
 export default nextConfig;
+</file>
+
+<file path="app/components/casting/CallbackActorModal.tsx">
+"use client";
+
+import React, { useState } from "react";
+import { 
+  X, Star, History, Calendar, Ruler, AlertCircle, User, 
+  Mic2, Move, FileText, Clapperboard
+} from "lucide-react";
+import { 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, 
+  ResponsiveContainer, RadarProps 
+} from "recharts";
+
+// TypeScript fix for Recharts
+const RechartsRadar = Radar as unknown as React.FC<RadarProps>;
+
+interface ActorProfileModalProps {
+  actor: any;
+  grades: any; 
+  timeline?: React.ReactNode; 
+  onClose: () => void;
+}
+
+export default function CallbackActorModal({ actor, grades, timeline, onClose }: ActorProfileModalProps) {
+  const [activeTab, setActiveTab] = useState<"insights" | "history">("insights");
+
+  const chartData = [
+    { subject: "Vocal", A: grades?.vocal || 0 },
+    { subject: "Acting", A: grades?.acting || 0 },
+    { subject: "Dance", A: grades?.dance || 0 },
+    { subject: "Presence", A: grades?.presence || 0 },
+  ];
+
+  const getRolesList = (roles: any) => {
+    if (!roles) return ["No previous productions listed"];
+    if (Array.isArray(roles)) return roles; 
+    if (typeof roles === 'string') return roles.split(',').map((s: string) => s.trim());
+    return [String(roles)];
+  };
+
+  const pastRolesList = getRolesList(actor.pastRoles);
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+      {/* CONTAINER FIX: 
+         max-h-[90vh] ensures it fits on laptop screens.
+         overflow-hidden contains the inner scrollbars.
+      */}
+      <div className="bg-zinc-950 w-full max-w-5xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col md:flex-row overflow-hidden relative">
+        
+        {/* MOBILE CLOSE BUTTON */}
+        <button 
+            onClick={onClose} 
+            className="absolute top-4 right-4 z-50 p-2 bg-black/50 backdrop-blur rounded-full text-zinc-400 hover:text-white md:hidden"
+        >
+            <X size={24} />
+        </button>
+
+        {/* --- LEFT SIDEBAR (Sticky/Scrollable) --- */}
+        <div className="p-6 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900/50 w-full md:w-[320px] flex flex-row md:flex-col items-center md:items-start gap-6 shrink-0 md:overflow-y-auto custom-scrollbar">
+          
+{/* Avatar */}
+          <div className="relative w-20 h-20 md:w-full md:h-auto md:aspect-square shrink-0 rounded-xl overflow-hidden border-2 border-white/10 shadow-lg bg-zinc-900">
+            {actor.avatar ? (
+              <img 
+                src={actor.avatar} 
+                alt={actor.name} 
+                // object-top is correct for headshots, but only if the container is actually a square!
+                className="w-full h-full object-cover object-top" 
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center"><User size={48} className="text-zinc-700"/></div>
+            )}
+          </div>
+          
+          <div className="flex-1 md:w-full md:text-left">
+              <h2 className="text-xl md:text-2xl font-black italic uppercase text-white leading-none mb-4">{actor.name}</h2>
+              
+              {/* Vitals */}
+              <div className="grid grid-cols-3 gap-2">
+                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase">Height</p>
+                    <p className="text-xs font-bold text-white">{actor.height || "-"}</p>
+                 </div>
+                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase">Age</p>
+                    <p className="text-xs font-bold text-white">{actor.age || "?"}</p>
+                 </div>
+                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase">Range</p>
+                    <p className="text-xs font-bold text-white">{actor.vocalRange || "-"}</p>
+                 </div>
+              </div>
+          </div>
+
+          {/* Radar Chart */}
+          <div className="hidden md:block w-full aspect-square relative opacity-80 mt-auto min-h-[200px]">
+             <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
+                <PolarGrid stroke="#27272a" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#71717a', fontSize: 10, fontWeight: '900' }} />
+                <RechartsRadar dataKey="A" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* --- RIGHT CONTENT (Scrollable) --- */}
+        <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
+          
+          {/* DESKTOP CLOSE */}
+          <div className="absolute top-4 right-4 hidden md:block z-20">
+            <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white bg-black/20 hover:bg-black/50 rounded-full transition-all">
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* TABS */}
+          <div className="flex border-b border-white/5 px-6 pt-6 gap-6 bg-zinc-950 shrink-0">
+            <button 
+              onClick={() => setActiveTab("insights")}
+              className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'insights' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Casting Insights
+            </button>
+            <button 
+              onClick={() => setActiveTab("history")}
+              className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'history' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Bio & Logistics
+            </button>
+          </div>
+
+          {/* CONTENT AREA */}
+          <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar space-y-8">
+            {activeTab === "insights" ? (
+              <>
+                {timeline && (
+                  <div className="bg-zinc-900/30 p-4 rounded-xl border border-white/5">
+                    <p className="text-[9px] font-black text-blue-400 uppercase mb-3 tracking-widest">Current Production Track</p>
+                    {timeline}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-zinc-900 rounded-xl border border-white/5">
+                    <p className="text-[9px] font-black text-purple-400 uppercase mb-1 tracking-tighter">Planned Song</p>
+                    <p className="text-sm font-bold text-zinc-300">{actor.song || "N/A"}</p>
+                  </div>
+                  <div className="p-4 bg-zinc-900 rounded-xl border border-white/5">
+                    <p className="text-[9px] font-black text-emerald-400 uppercase mb-1 tracking-tighter">Monologue</p>
+                    <p className="text-sm font-bold text-zinc-300">{actor.monologue || "N/A"}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                   <div className="flex items-center gap-2 text-zinc-400">
+                    <Star size={14} className="text-blue-500" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Panel Feedback</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { l: "Director", v: grades?.actingNotes, c: "text-blue-400", i: Clapperboard },
+                      { l: "Music", v: grades?.vocalNotes, c: "text-purple-400", i: Mic2 },
+                      { l: "Dance", v: grades?.choreoNotes, c: "text-emerald-400", i: Move },
+                      { l: "Admin", v: grades?.adminNotes, c: "text-amber-400", i: FileText },
+                    ].map((item, i) => (
+                      <div key={i} className="bg-zinc-900/40 p-4 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-2">
+                              <item.i size={12} className={item.c} />
+                              <p className={`text-[10px] font-bold uppercase ${item.c}`}>{item.l}</p>
+                          </div>
+                          <p className="text-xs text-zinc-300 italic">"{item.v || "No notes."}"</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <AlertCircle size={14} /> Schedule Conflicts
+                  </h4>
+                  <ConflictAnalyzer conflicts={actor.conflicts} />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-900 p-4 rounded-2xl border border-white/5">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2 mb-1">
+                      <Calendar size={12} /> Birthdate
+                    </p>
+                    <p className="text-sm font-bold text-white">{actor.dob || "N/A"}</p>
+                  </div>
+                  <div className="bg-zinc-900 p-4 rounded-2xl border border-white/5">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2 mb-1">
+                      <Ruler size={12} /> Experience
+                    </p>
+                    <p className="text-sm font-bold text-white">{actor.tenure || "New"}</p>
+                  </div>
+                </div>
+
+                <section>
+                  <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <History size={14} /> Production History
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {pastRolesList.map((role: string, i: number) => (
+                      <div key={i} className="text-[11px] bg-zinc-900 text-zinc-300 px-3 py-2 rounded-lg border border-white/5 font-bold">
+                        {role}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Conflict Helper
+function ConflictAnalyzer({ conflicts }: { conflicts: any }) {
+    const items = typeof conflicts === 'string' ? conflicts.split(',').filter(Boolean) : [];
+    if(items.length === 0) return <div className="text-zinc-500 text-xs italic">No conflicts listed.</div>
+    return (
+        <div className="flex flex-wrap gap-2">
+            {items.map((c: string, i: number) => (
+                <span key={i} className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-xs">
+                    {c}
+                </span>
+            ))}
+        </div>
+    )
+}
 </file>
 
 <file path="app/components/schedule/CallboardView.tsx">
@@ -15027,6 +15322,885 @@ export async function clearCastingData(productionId: number) {
 }
 </file>
 
+<file path="app/sandbox/director-deck/page.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+
+interface Student {
+  id: string;
+  name: string;
+  avatar: string;
+  status: string;
+  auditioned: boolean;
+  timeSlot: string;
+  auditionDay: string;
+  isFirstShow: boolean;
+  age: number;
+  showHistory: { title: string; role: string; season: string; year: string }[];
+  auditionPrep: { monologue: string; songTitle: string; musicProvided: boolean };
+  lobbyNote: string;
+  skills: Record<string, number>;
+  directorNotes: Record<string, string>;
+}
+
+const AUDITION_DAYS = ['Thursday', 'Friday', 'Video/Remote', 'Walk-In'];
+const ALL_TIME_SLOTS = ['5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM'];
+
+// --- CUSTOM SPIDER CHART COMPONENT ---
+const SpiderChart = ({ skills }: { skills: Record<string, number> }) => {
+  const size = 220;
+  const center = size / 2;
+  const radius = center - 40;
+  const labels = Object.keys(skills);
+  const angles = labels.map((_, i) => (Math.PI * 2 * i) / labels.length - Math.PI / 2);
+
+  // Generate the polygon points for the actual skill values
+  const dataPoints = labels.map((key, i) => {
+    const value = skills[key] / 100;
+    const x = center + radius * value * Math.cos(angles[i]);
+    const y = center + radius * value * Math.sin(angles[i]);
+    return `${x},${y}`;
+  }).join(' ');
+
+  // Generate the background "webs" (5 levels: 20, 40, 60, 80, 100)
+  const webs = [0.2, 0.4, 0.6, 0.8, 1].map(level => {
+    return labels.map((_, i) => {
+      const x = center + radius * level * Math.cos(angles[i]);
+      const y = center + radius * level * Math.sin(angles[i]);
+      return `${x},${y}`;
+    }).join(' ');
+  });
+
+  return (
+    <div className="relative flex items-center justify-center">
+      <svg width={size} height={size} className="overflow-visible">
+        {/* Background Webs */}
+        {webs.map((webPoints, idx) => (
+          <polygon key={idx} points={webPoints} fill="none" stroke="#27272a" strokeWidth="1" />
+        ))}
+        {/* Axis Lines */}
+        {angles.map((angle, idx) => (
+          <line key={idx} x1={center} y1={center} x2={center + radius * Math.cos(angle)} y2={center + radius * Math.sin(angle)} stroke="#27272a" strokeWidth="1" />
+        ))}
+        {/* The Data Polygon */}
+        <polygon points={dataPoints} fill="rgba(59, 130, 246, 0.2)" stroke="#3b82f6" strokeWidth="2" />
+        {/* Data Point Dots */}
+        {labels.map((key, i) => {
+          const value = skills[key] / 100;
+          const x = center + radius * value * Math.cos(angles[i]);
+          const y = center + radius * value * Math.sin(angles[i]);
+          return <circle key={i} cx={x} cy={y} r="4" fill="#60a5fa" />;
+        })}
+        {/* Labels */}
+        {labels.map((label, i) => {
+          const x = center + (radius + 20) * Math.cos(angles[i]);
+          const y = center + (radius + 20) * Math.sin(angles[i]);
+          return (
+            <text key={i} x={x} y={y} fill="#a1a1aa" fontSize="9" fontWeight="900" textAnchor="middle" dominantBaseline="middle" className="uppercase tracking-widest">
+              {label}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// --- DATA GENERATOR ---
+const generateMassiveRoster = () => {
+  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore'];
+  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson'];
+  
+  const roster = [];
+  for (let i = 0; i < 76; i++) {
+    const fName = firstNames[i % firstNames.length];
+    const lName = lastNames[i % lastNames.length];
+    const isFirst = Math.random() > 0.8;
+    const isCheckedIn = Math.random() > 0.5;
+    
+    let note = '';
+    if (i === 0) note = 'Terrified, needs a smile!';
+    if (i === 5) note = 'Just getting over a cough, voice might be rough.';
+    
+    roster.push({
+      id: (1000 + i).toString(),
+      name: `${fName} ${lName}`,
+      avatar: `https://i.pravatar.cc/400?u=${1000 + i}`,
+      status: isCheckedIn ? 'Checked In' : 'Pending',
+      auditioned: false,
+      timeSlot: ALL_TIME_SLOTS[i % ALL_TIME_SLOTS.length],
+      auditionDay: 'Thursday',
+      isFirstShow: isFirst,
+      age: Math.floor(Math.random() * 10) + 8,
+      showHistory: isFirst ? [] : [
+        { title: 'The Little Mermaid', role: 'Ensemble', season: 'Spring', year: '2024' },
+        { title: 'Beauty and the Beast', role: 'Chip', season: 'Fall', year: '2023' }
+      ],
+      auditionPrep: { monologue: i % 2 === 0 ? 'Comedic 1' : 'Dramatic 2', songTitle: i % 3 === 0 ? 'Tomorrow (Annie)' : 'Stars (Les Mis)', musicProvided: true },
+      lobbyNote: note,
+      skills: {
+        Vocal: Math.floor(Math.random() * 60) + 40,
+        Acting: Math.floor(Math.random() * 60) + 40,
+        Dance: Math.floor(Math.random() * 60) + 40,
+        Presence: Math.floor(Math.random() * 60) + 40,
+        Prep: Math.floor(Math.random() * 60) + 40,
+      },
+      directorNotes: {
+        Connor: 'Great projection. Took redirection very well.',
+        Rebecca: 'Picked up the combo fast, but needs to spot turns.',
+        Hailey: 'Pitch was slightly sharp on the high belt, but good tone.'
+      }
+    });
+  }
+  return roster;
+};
+
+export default function DirectorDeckSandbox() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [hasMounted, setHasMounted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeDayFilter, setActiveDayFilter] = useState('Thursday');
+  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStudents(generateMassiveRoster());
+    setHasMounted(true);
+  }, []);
+
+  const filteredStudents = students.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    s.auditionDay === activeDayFilter &&
+    s.status === 'Checked In'
+  );
+
+  const groupedStudents = filteredStudents.reduce((acc, student) => {
+    if (!acc[student.timeSlot]) acc[student.timeSlot] = [];
+    acc[student.timeSlot].push(student);
+    return acc;
+  }, {} as Record<string, Student[]>);
+
+  const handleScoreStudent = (id: string) => {
+    setStudents(students.map(s => s.id === id ? { ...s, auditioned: true } : s));
+    setActiveStudent(null);
+  };
+
+  const simulateLobbyCheckIn = () => {
+    const pendingKids = students.filter(s => s.status === 'Pending' && s.auditionDay === activeDayFilter);
+    if (pendingKids.length > 0) {
+      const luckyKid = pendingKids[0];
+      setStudents(students.map(s => s.id === luckyKid.id ? { ...s, status: 'Checked In' } : s));
+      alert(`Simulation: ${luckyKid.name} was just checked in by the Lobby! They will now appear in your list.`);
+    }
+  };
+
+  if (!hasMounted) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-black tracking-widest text-xs uppercase">Loading Director Deck...</div>;
+
+  return (
+    <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
+      
+      {/* UNIFIED SIDEBAR BRANDING */}
+      <aside className="hidden md:flex h-full shrink-0 flex-col w-64 border-r border-zinc-800 bg-zinc-950">
+        <div className="h-16 flex items-center border-b border-white/5 px-6 shrink-0">
+          <div className="flex flex-col">
+            <h1 className="text-sm font-black tracking-tighter text-blue-500">OPEN<span className="text-white">BACKSTAGE</span></h1>
+            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Creative Suite</span>
+          </div>
+        </div>
+        <div className="p-4 space-y-2">
+          <div className="px-3 py-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-zinc-200 text-xs font-bold transition-colors flex items-center gap-3">
+            <i className="fas fa-theater-masks"></i> Show Hub
+          </div>
+          <div className="px-3 py-2 rounded-lg bg-blue-600/20 text-blue-400 text-xs font-bold border border-blue-500/20 flex items-center gap-3">
+            <i className="fas fa-clipboard-list"></i> Audition Deck
+          </div>
+          <div className="px-3 py-2 rounded-lg text-zinc-400 hover:bg-white/5 hover:text-zinc-200 text-xs font-bold transition-colors flex items-center gap-3">
+            <i className="fas fa-users"></i> Cast Grid
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col min-w-0 h-full relative">
+        <header className="p-4 md:p-6 border-b border-zinc-800 bg-zinc-950 shrink-0 z-20">
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div>
+              <h1 className="text-xl md:text-2xl font-black italic uppercase text-white tracking-tight">Audition Deck</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[9px] font-black uppercase tracking-widest rounded border border-blue-500/20">Little Mermaid Jr.</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">• Sandbox Director</span>
+              </div>
+            </div>
+            
+            <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+              {AUDITION_DAYS.map(day => (
+                <button key={day} onClick={() => setActiveDayFilter(day)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border ${activeDayFilter === day ? 'bg-white text-black border-transparent' : 'bg-zinc-900 text-zinc-500 border-white/5 hover:text-white'}`}>
+                  {day}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center mt-6">
+            <div className="relative w-full md:w-64">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 text-xs">🔍</span>
+              <input type="text" placeholder="Find checked-in student..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 border border-white/5 rounded-lg py-2.5 pl-10 pr-4 text-xs focus:ring-1 ring-blue-500 outline-none text-white"/>
+            </div>
+            <button onClick={simulateLobbyCheckIn} className="px-4 py-2 bg-blue-600/20 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg border border-blue-500/30 hover:bg-blue-600 hover:text-white transition-colors hidden md:block">
+              Simulate Lobby Check-In
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar bg-black relative">
+          {Object.keys(groupedStudents).length === 0 ? (
+            <div className="text-center py-20 text-zinc-600 font-black tracking-widest text-xs uppercase">No Checked-In Students Found</div>
+          ) : (
+            ALL_TIME_SLOTS.map(slot => {
+              if (!groupedStudents[slot]) return null;
+              return (
+                <div key={slot} className="mb-8">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500 mb-3 flex items-center gap-2 sticky top-0 bg-black/95 backdrop-blur py-2 z-10">
+                    <i className="fas fa-clock"></i> {slot}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {groupedStudents[slot].map((student) => (
+                      <button key={student.id} onClick={() => setActiveStudent(student)} className={`text-left p-3 rounded-xl transition-all border flex items-center gap-4 group ${student.auditioned ? 'bg-zinc-900/40 border-transparent opacity-50' : 'bg-zinc-900 border-white/5 hover:border-blue-500/30 hover:bg-zinc-800'}`}>
+                        <div className="relative shrink-0">
+                          <img src={student.avatar} className="w-12 h-12 rounded-full object-cover border border-zinc-700" alt="" />
+                          {student.lobbyNote && !student.auditioned && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 border-2 border-zinc-900 rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.5)] animate-bounce">
+                              <i className="fas fa-exclamation text-[8px] text-black"></i>
+                            </div>
+                          )}
+                          {student.auditioned && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-zinc-900 rounded-full flex items-center justify-center">
+                              <i className="fas fa-check text-[8px] text-black font-black"></i>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm text-white truncate group-hover:text-blue-400 transition-colors">{student.name}</p>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Age {student.age} • {student.auditionPrep.monologue.split(' ')[0]}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </main>
+
+      {/* THE MASSIVE DIRECTOR'S MODAL */}
+      {activeStudent && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-50" onClick={() => setActiveStudent(null)}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-full max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            
+            {/* LEFT COLUMN: Bio & Context */}
+            <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-zinc-800 bg-zinc-900/30 p-6 md:p-8 flex flex-col overflow-y-auto custom-scrollbar">
+              <button onClick={() => setActiveStudent(null)} className="absolute top-4 right-4 md:hidden text-zinc-500 hover:text-white">&times;</button>
+              
+              <div className="flex flex-col items-center text-center mb-8">
+                <img src={activeStudent.avatar} className="w-32 h-32 rounded-full border-4 border-zinc-800 shadow-2xl mb-4 object-cover" alt="" />
+                <h2 className="text-3xl font-black text-white leading-tight">{activeStudent.name}</h2>
+                <div className="flex gap-2 mt-2">
+                  <span className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-black text-zinc-400 uppercase tracking-widest">Age {activeStudent.age}</span>
+                  <span className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-black text-zinc-400 uppercase tracking-widest">ID #{activeStudent.id}</span>
+                </div>
+              </div>
+
+              {activeStudent.lobbyNote && (
+                <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl relative overflow-hidden shrink-0">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1.5 flex items-center gap-2">
+                    <i className="fas fa-bell animate-pulse"></i> Lobby Alert
+                  </p>
+                  <p className="text-amber-100 text-sm font-medium">{activeStudent.lobbyNote}</p>
+                </div>
+              )}
+
+              <div className="space-y-6">
+                <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl shadow-inner">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Monologue</p>
+                  <p className="text-white text-sm font-bold">{activeStudent.auditionPrep.monologue}</p>
+                  <div className="w-full h-px bg-white/5 my-3"></div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Song Track</p>
+                  <p className="text-white text-sm font-bold flex items-center justify-between">
+                    {activeStudent.auditionPrep.songTitle}
+                    <span className="text-[9px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest">Loaded</span>
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-2">
+                    <i className="fas fa-history"></i> CYT Resume
+                  </p>
+                  {activeStudent.isFirstShow ? (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">First Show</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {activeStudent.showHistory.map((s:any, i:number) => (
+                        <div key={i} className="flex justify-between items-center p-3 bg-zinc-900/50 border border-white/5 rounded-xl">
+                          <div>
+                            <p className="text-xs font-bold text-white mb-0.5">{s.title}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{s.season} {s.year}</p>
+                          </div>
+                          <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-right">{s.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Grading & Spider Chart */}
+            <div className="flex-1 flex flex-col bg-zinc-950 relative">
+              <div className="p-6 md:p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50 shrink-0">
+                <div>
+                  <h3 className="text-lg font-black uppercase italic tracking-widest text-white mb-1">Audition Rubric</h3>
+                  <p className="text-zinc-500 text-xs font-medium">Evaluate the candidate across 5 key metrics.</p>
+                </div>
+                <button onClick={() => setActiveStudent(null)} className="hidden md:block w-10 h-10 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors flex items-center justify-center text-xl font-black">&times;</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 space-y-8">
+                
+                {/* TOP HALF: SPIDER CHART & SLIDERS */}
+                <div className="flex flex-col xl:flex-row gap-8 items-center xl:items-start">
+                  {/* The Radar Chart */}
+                  <div className="w-full xl:w-1/2 flex flex-col items-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-6 text-center">Talent Matrix</p>
+                    <SpiderChart skills={activeStudent.skills} />
+                  </div>
+
+                  {/* The Sliders */}
+                  <div className="w-full xl:w-1/2 space-y-5">
+                    {Object.keys(activeStudent.skills).map((metric) => (
+                      <div key={metric}>
+                        <div className="flex justify-between items-end mb-2">
+                          <label className="text-[10px] font-black text-white uppercase tracking-widest">{metric}</label>
+                          <span className="text-blue-400 font-black text-sm">{activeStudent.skills[metric]} <span className="text-[10px] text-zinc-600">/ 100</span></span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="100" defaultValue={activeStudent.skills[metric]} 
+                          className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-blue-500" 
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="w-full h-px bg-zinc-800"></div>
+
+                {/* BOTTOM HALF: CREATIVE TEAM NOTES */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-4 flex items-center gap-2">
+                    <i className="fas fa-users"></i> Creative Team Notes
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    {/* Director Note */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex flex-col">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center text-[10px] font-black">C</div>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Connor <span className="opacity-50">(Dir)</span></p>
+                      </div>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Connor}&quot;</p>
+                    </div>
+
+                    {/* Choreographer Note */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex flex-col">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-[10px] font-black">R</div>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Rebecca <span className="opacity-50">(Chor)</span></p>
+                      </div>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Rebecca}&quot;</p>
+                    </div>
+
+                    {/* Music Director Note */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex flex-col">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center text-[10px] font-black">H</div>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Hailey <span className="opacity-50">(MD)</span></p>
+                      </div>
+                      <p className="text-sm text-zinc-300 leading-relaxed font-medium">&quot;{activeStudent.directorNotes.Hailey}&quot;</p>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+              {/* FOOTER ACTION */}
+              <div className="p-6 border-t border-zinc-800 bg-zinc-950 flex justify-between items-center shrink-0">
+                <button className="text-[10px] font-black text-zinc-500 hover:text-rose-400 uppercase tracking-widest transition-colors flex items-center gap-2">
+                  <i className="fas fa-flag"></i> Flag for Callback
+                </button>
+                <div className="flex gap-3">
+                  <button onClick={() => setActiveStudent(null)} className="px-6 py-3 rounded-xl font-black text-zinc-500 text-[10px] uppercase tracking-widest hover:text-white transition-colors">Cancel</button>
+                  <button onClick={() => handleScoreStudent(activeStudent.id)} className="px-8 py-3 rounded-xl font-black text-white bg-blue-600 text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-500/20 hover:bg-blue-500 transition-all">Score & Complete</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+</file>
+
+<file path="app/sandbox/master-roster/page.tsx">
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+
+// --- DATA GENERATOR ---
+const generateMassiveRoster = () => {
+  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore'];
+  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+  
+  const roster = [];
+  for (let i = 0; i < 76; i++) {
+    const fName = firstNames[i % firstNames.length];
+    const lName = lastNames[i % lastNames.length];
+    
+    // Simulate the real-world chaos
+    roster.push({
+      id: (1000 + i).toString(),
+      name: `${fName} ${lName}`,
+      avatar: `https://i.pravatar.cc/150?u=${2000 + i}`,
+      role: i < 15 ? 'Lead / Supporting' : 'Ensemble',
+      
+      // The "13 Forms" broken down into trackable booleans
+      compliance: {
+        // Legal & Registration
+        regFee: Math.random() > 0.1,         // 90% paid
+        medicalForm: Math.random() > 0.2,    // 80% complete
+        studentCTC: Math.random() > 0.3,     // 70% complete
+        parentCTC: Math.random() > 0.3,      // 70% complete
+        
+        // Show Logistics
+        headshot: Math.random() > 0.4,       // 60% complete
+        measurements: Math.random() > 0.5,   // 50% complete
+        castBio: Math.random() > 0.6,        // 40% complete
+        conflictsSubmitted: Math.random() > 0.2, // 80% complete
+        
+        // Parent Requirements
+        committeeSignedUp: Math.random() > 0.4, // 60% complete
+        castPartyPaid: Math.random() > 0.5,     // 50% complete ($5 pizza money)
+      },
+      
+      // Fun metadata for the expanded row
+      conflictCount: Math.floor(Math.random() * 4), // 0 to 3 conflicts
+      committeeRole: Math.random() > 0.4 ? 'Sets / Build' : 'Unassigned',
+      pizzaPreference: Math.random() > 0.5 ? 'Cheese' : 'Pepperoni',
+    });
+  }
+  return roster;
+};
+
+export default function MasterRosterSandbox() {
+// Use lazy initialization (the arrow function) so the massive roster 
+  // is generated exactly once when the component first builds its state.
+  const [students, setStudents] = useState<any[]>(() => 
+    generateMassiveRoster().sort((a, b) => a.name.localeCompare(b.name))
+  );
+  
+  const [hasMounted, setHasMounted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterView, setFilterView] = useState('All');
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // The effect is now only responsible for preventing Next.js hydration mismatch errors
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasMounted(true);
+  }, []);
+
+  // --- STATS CALCULATIONS ---
+  const stats = useMemo(() => {
+    return {
+      total: students.length,
+      missingCTC: students.filter(s => !s.compliance.studentCTC || !s.compliance.parentCTC).length,
+      missingBios: students.filter(s => !s.compliance.castBio).length,
+      missingCommittees: students.filter(s => !s.compliance.committeeSignedUp).length,
+      missingPartyFees: students.filter(s => !s.compliance.castPartyPaid).length,
+    };
+  }, [students]);
+
+  // --- TOGGLE COMPLIANCE ---
+  const handleToggleCompliance = (id: string, field: string) => {
+    setStudents(students.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          compliance: { ...s.compliance, [field]: !s.compliance[field] }
+        };
+      }
+      return s;
+    }));
+  };
+
+  // --- FILTERING LOGIC ---
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (filterView === 'All') return true;
+    if (filterView === 'Missing CTC') return !s.compliance.studentCTC || !s.compliance.parentCTC;
+    if (filterView === 'Missing Bios') return !s.compliance.castBio;
+    if (filterView === 'Missing Committees') return !s.compliance.committeeSignedUp;
+    if (filterView === 'Missing Party Fees') return !s.compliance.castPartyPaid;
+    return true;
+  });
+
+  const toggleRow = (id: string) => {
+    setExpandedRowId(expandedRowId === id ? null : id);
+  };
+
+  if (!hasMounted) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-black tracking-widest text-xs uppercase">Loading Master Roster...</div>;
+
+  return (
+    <div className="flex h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
+      
+      {/* SIDEBAR (Visual Only) */}
+      <aside className="hidden md:flex h-full shrink-0 flex-col w-64 border-r border-slate-800 bg-slate-900/50">
+        <div className="h-16 flex items-center border-b border-slate-800 px-6 shrink-0">
+          <div className="flex flex-col">
+            <h1 className="text-sm font-black tracking-tighter text-indigo-500">OPEN<span className="text-white">BACKSTAGE</span></h1>
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Business Office</span>
+          </div>
+        </div>
+        <div className="p-4 space-y-2">
+          <div className="px-3 py-2 rounded-lg bg-indigo-600/20 text-indigo-400 text-xs font-bold border border-indigo-500/20 flex items-center gap-3">
+            <i className="fas fa-users"></i> Master Roster
+          </div>
+          <div className="px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 text-xs font-bold transition-colors flex items-center gap-3">
+            <i className="fas fa-file-invoice-dollar"></i> Reports & Fees
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col min-w-0 h-full relative bg-slate-950">
+        
+        {/* HEADER */}
+        <header className="p-6 border-b border-slate-800 shrink-0 bg-slate-900/30">
+          <div className="flex justify-between items-end mb-6">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-white mb-1">Compliance & Onboarding</h1>
+              <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
+                Production: <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">Little Mermaid Jr.</span>
+              </p>
+            </div>
+            <div className="text-right hidden md:block">
+              <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Total Cast</div>
+              <div className="text-3xl font-black text-white leading-none">{stats.total}</div>
+            </div>
+          </div>
+
+          {/* DASHBOARD STATS & FILTERS */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+            <button onClick={() => setFilterView('All')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'All' ? 'bg-slate-800 border-slate-600 shadow-lg' : 'bg-slate-900 border-slate-800 opacity-60 hover:opacity-100'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">View All</p>
+              <p className="text-lg font-black text-white">{stats.total}</p>
+            </button>
+            <button onClick={() => setFilterView('Missing CTC')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing CTC' ? 'bg-rose-500/10 border-rose-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-rose-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-rose-400 mb-1 flex items-center gap-1.5"><i className="fas fa-file-signature"></i> Missing CTC</p>
+              <p className="text-lg font-black text-rose-100">{stats.missingCTC}</p>
+            </button>
+            <button onClick={() => setFilterView('Missing Bios')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Bios' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-amber-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1 flex items-center gap-1.5"><i className="fas fa-pen-nib"></i> Missing Bios</p>
+              <p className="text-lg font-black text-amber-100">{stats.missingBios}</p>
+            </button>
+            <button onClick={() => setFilterView('Missing Committees')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Committees' ? 'bg-indigo-500/10 border-indigo-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-1 flex items-center gap-1.5"><i className="fas fa-users-cog"></i> Unassigned Vol.</p>
+              <p className="text-lg font-black text-indigo-100">{stats.missingCommittees}</p>
+            </button>
+            <button onClick={() => setFilterView('Missing Party Fees')} className={`p-3 rounded-xl border text-left transition-all ${filterView === 'Missing Party Fees' ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-emerald-500/30'}`}>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1 flex items-center gap-1.5"><i className="fas fa-pizza-slice"></i> $5 Party Fees</p>
+              <p className="text-lg font-black text-emerald-100">{stats.missingPartyFees}</p>
+            </button>
+          </div>
+
+          <div className="relative max-w-md">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 text-xs">🔍</span>
+            <input type="text" placeholder="Search cast members..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:ring-1 ring-indigo-500 outline-none text-white"/>
+          </div>
+        </header>
+
+        {/* MASTER DATA TABLE */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative">
+          <div className="border border-slate-800 rounded-xl shadow-2xl bg-slate-900 absolute left-6 right-6 top-6">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-black tracking-widest sticky top-0 z-10">
+                <tr>
+                  <th className="px-6 py-4">Performer</th>
+                  <th className="px-4 py-4 text-center">Cast Bio</th>
+                  <th className="px-4 py-4 text-center">Med Release</th>
+                  <th className="px-4 py-4 text-center">Student CTC</th>
+                  <th className="px-4 py-4 text-center">Parent CTC</th>
+                  <th className="px-6 py-4 text-right">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500 italic">No performers match this filter.</td>
+                  </tr>
+                ) : (
+                  filteredStudents.map((student) => (
+                    <React.Fragment key={student.id}>
+                      
+                      {/* TOP LEVEL ROW */}
+                      <tr onClick={() => toggleRow(student.id)} className={`transition-colors group cursor-pointer ${expandedRowId === student.id ? 'bg-indigo-900/10' : 'hover:bg-slate-800/30'}`}>
+                        <td className="px-6 py-3">
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <img src={student.avatar} alt={student.name} className={`w-10 h-10 rounded-full object-cover shadow-md border ${expandedRowId === student.id ? 'border-indigo-500' : 'border-slate-700'}`} />
+                              {student.conflictCount > 0 && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-slate-900" title={`${student.conflictCount} Conflicts`}>
+                                  {student.conflictCount}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className={`font-bold text-base transition-colors ${expandedRowId === student.id ? 'text-indigo-400' : 'text-white'}`}>{student.name}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-0.5">{student.role}</p>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        {/* HIGH PRIORITY QUICK TOGGLES */}
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.castBio ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'}`}>
+                            {student.compliance.castBio ? <i className="fas fa-check"></i> : <i className="fas fa-pen"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.medicalForm ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.medicalForm ? <i className="fas fa-check"></i> : <i className="fas fa-notes-medical"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.studentCTC ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.studentCTC ? <i className="fas fa-check"></i> : <i className="fas fa-times"></i>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${student.compliance.parentCTC ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                            {student.compliance.parentCTC ? <i className="fas fa-check"></i> : <i className="fas fa-times"></i>}
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-3 text-right">
+                          <i className={`fas fa-chevron-down text-slate-500 transition-transform ${expandedRowId === student.id ? 'rotate-180 text-indigo-400' : ''}`}></i>
+                        </td>
+                      </tr>
+
+                      {/* EXPANDED DETAILS DRAWER */}
+                      {expandedRowId === student.id && (
+                        <tr>
+                          <td colSpan={6} className="p-0 border-b border-indigo-500/20">
+                            <div className="bg-slate-900/50 p-6 shadow-inner animate-in slide-in-from-top-2 duration-200">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                
+                                {/* Logistics Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Admin & Costs</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Registration Fee</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'regFee')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.regFee ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
+                                      {student.compliance.regFee ? 'Paid' : 'Unpaid'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Cast Party ($5)</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'castPartyPaid')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.castPartyPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'}`}>
+                                      {student.compliance.castPartyPaid ? 'Paid' : 'Unpaid'}
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 italic">Pizza Pref: {student.pizzaPreference}</p>
+                                </div>
+
+                                {/* Show Requirements Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Production Needs</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Headshot</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'headshot')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.headshot ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.headshot ? 'Uploaded' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Measurements</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'measurements')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.measurements ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.measurements ? 'Submitted' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Cast Bio</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'castBio')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.castBio ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white'}`}>
+                                      {student.compliance.castBio ? 'Approved' : 'Missing'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Parent Requirements Block */}
+                                <div className="space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800 pb-2">Parent Involvement</h4>
+                                  <div className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                    <span className="text-xs font-bold text-slate-300">Committee</span>
+                                    <button onClick={() => handleToggleCompliance(student.id, 'committeeSignedUp')} className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${student.compliance.committeeSignedUp ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white'}`}>
+                                      {student.compliance.committeeSignedUp ? 'Signed Up' : 'Missing'}
+                                    </button>
+                                  </div>
+                                  <p className="text-xs font-medium text-slate-400 pl-3">
+                                    <span className="text-[10px] uppercase tracking-widest text-slate-500 block mb-0.5">Assigned Role:</span>
+                                    {student.compliance.committeeSignedUp ? student.committeeRole : <span className="text-rose-400/50 italic">None</span>}
+                                  </p>
+                                </div>
+
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  );
+}
+</file>
+
+<file path="auth.ts">
+import NextAuth from "next-auth"
+import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
+
+// 1. USE THE NEW, VALIDATED CLIENT
+// We keep 'createGoogleUser' for now, as it handles writing/creating a new user.
+import { BaserowClient } from "@/app/lib/BaserowClient"
+import { createGoogleUser } from "@/app/lib/baserow"
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  providers: [
+    // Google Provider (unchanged)
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
+
+    // Credentials Provider (updated)
+    Credentials({
+      name: "Casting Portal",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        // 2. USE THE NEW, VALIDATED FUNCTION
+        // The old `verifyUserCredentials` likely handled both finding the user and checking the password.
+        // We now use our clean client to find the user.
+        // NOTE: You will need to re-implement the password check itself,
+        // likely by comparing `credentials.password` against a hashed password field
+        // that you can now add to the `UserProfileSchema`.
+        const user = await BaserowClient.findUserByEmail(credentials.email as string);
+
+        // For now, we'll assume if the user is found, the login is valid.
+        // TODO: Add password verification logic here.
+        if (user) {
+            return user;
+        }
+        
+        return null;
+      }
+    })
+  ],
+  callbacks: {
+    // SECURITY GATE: Check if Google user exists in Baserow
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const email = user.email || "";
+
+        // 3. USE THE NEW CLIENT HERE TOO
+        const baserowUser = await BaserowClient.findUserByEmail(email);
+
+        if (baserowUser) {
+          // A. User Exists: Attach Baserow ID/Role to the transient user object
+          user.id = baserowUser.id;
+          (user as any).role = baserowUser.role;
+          return true; 
+        } else {
+          // B. User DOES NOT Exist: Auto-Register them!
+          try {
+            console.log(`🆕 New Google User: ${email}. Auto-registering...`);
+            await createGoogleUser(user);
+            return true; // Allow them in!
+          } catch (error) {
+            console.error("❌ Auto-registration failed:", error);
+            return false; // Deny access only if creation fails
+          }
+        }
+      }
+      return true; // Credentials login is already verified in authorize()
+    },
+
+    // TOKEN: Persist the ID/Role from signIn into the Token
+    async jwt({ token, user, account }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as any).role;
+        
+        // This fallback is helpful for a NEWLY registered Google user,
+        // as their role isn't attached to the initial 'user' object from the provider.
+        if (account?.provider === "google" && !token.role) {
+            // 4. USE THE NEW CLIENT FOR THE FALLBACK CHECK
+            const baserowUser = await BaserowClient.findUserByEmail(user.email || "");
+            if (baserowUser) {
+              token.id = baserowUser.id; // Ensure ID is synced
+              token.role = baserowUser.role;
+            }
+        }
+      }
+      return token;
+    },
+
+    // SESSION: Pass the ID/Role from Token to the Client (unchanged)
+    async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).id = token.id;
+        (session.user as any).role = token.role;
+      }
+      return session;
+    }
+  },
+  pages: {
+    signIn: '/login',
+    signOut: '/login',
+    error: '/login',
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+  trustHost: true,
+})
+</file>
+
 <file path="package.json">
 {
   "name": "open-backstage-casting",
@@ -15331,242 +16505,571 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
 }
 </file>
 
-<file path="app/components/casting/CallbackActorModal.tsx">
-"use client";
+<file path="app/sandbox/check-in/page.tsx">
+'use client';
 
-import React, { useState } from "react";
-import { 
-  X, Star, History, Calendar, Ruler, AlertCircle, User, 
-  Mic2, Move, FileText, Clapperboard
-} from "lucide-react";
-import { 
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, 
-  ResponsiveContainer, RadarProps 
-} from "recharts";
+import { useState, useEffect, useMemo } from 'react';
 
-// TypeScript fix for Recharts
-const RechartsRadar = Radar as unknown as React.FC<RadarProps>;
+const AUDITION_DAYS = ['Thursday', 'Friday', 'Video/Remote', 'Walk-In'];
+const ALL_TIME_SLOTS = ['5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM'];
+const SLOT_LIMIT = 15;
 
-interface ActorProfileModalProps {
-  actor: any;
-  grades: any; 
-  timeline?: React.ReactNode; 
-  onClose: () => void;
-}
+const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
+  'Medical Release': { 
+    title: 'Emergency Medical Release', 
+    text: 'I hereby give my consent for emergency medical care, hospitalization, or surgery for my child in the event of an emergency where I cannot be reached. I understand that I am responsible for all costs related to such treatment.' 
+  },
+  'Code of Conduct': { 
+    title: 'Student Code of Conduct', 
+    text: 'CYT expects students to exhibit respectful, safe behavior at all times. Bullying, harassment, or unsafe use of props/set pieces will result in immediate disciplinary action or removal from the production without refund.' 
+  }
+};
 
-export default function CallbackActorModal({ actor, grades, timeline, onClose }: ActorProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<"insights" | "history">("insights");
+const generateMassiveRoster = () => {
+  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore', 'Abigail', 'Jack', 'Emily', 'Levi', 'Elizabeth', 'Alexander', 'Mila', 'Jackson', 'Ella', 'Mateo', 'Avery', 'Daniel', 'Sofia', 'Michael', 'Camila', 'Mason', 'Aria', 'Sebastian', 'Scarlett', 'Ethan', 'Victoria', 'Logan', 'Madison', 'Owen', 'Luna', 'Samuel', 'Grace', 'Jacob', 'Chloe', 'Asher', 'Penelope', 'Aiden', 'Layla', 'John', 'Riley', 'Joseph', 'Zoey', 'Wyatt', 'Nora', 'David', 'Lily', 'Leo', 'Eleanor', 'Luke', 'Hannah', 'Julian', 'Lillian', 'Hudson', 'Addison', 'Grayson', 'Aubrey', 'Matthew', 'Ellie', 'Ezra', 'Stella', 'Gabriel'];
+  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson', 'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores', 'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell', 'Carter', 'Roberts'];
+  
+  const roster = [];
+  for (let i = 0; i < 76; i++) {
+    const fName = firstNames[i % firstNames.length];
+    const lName = lastNames[i % lastNames.length];
+    const isFirst = Math.random() > 0.8;
+    const hasForms = Math.random() > 0.7;
+    const timeSlot = ALL_TIME_SLOTS[i % ALL_TIME_SLOTS.length];
+    const siblings = [];
+    const siblingCount = Math.floor(Math.random() * 3); 
+    for (let s = 0; s < siblingCount; s++) {
+      siblings.push(firstNames[(i + (s + 1) * 12) % firstNames.length]);
+    }
+    
+    roster.push({
+      id: (1000 + i).toString(),
+      name: `${fName} ${lName}`,
+      avatar: `https://i.pravatar.cc/400?u=${1000 + i}`,
+      status: Math.random() > 0.9 ? 'Checked In' : 'Pending',
+      timeSlot: timeSlot,
+      auditionDay: 'Thursday',
+      isFirstShow: isFirst,
+      preferredName: fName,
+      phone: '(540) 555-' + Math.floor(1000 + Math.random() * 9000),
+      email: `${fName.toLowerCase()}.${lName.toLowerCase()}@example.com`,
+      family: { parents: [`${firstNames[(i + 5) % firstNames.length]} ${lName}`], siblings: siblings },
+      completedForms: hasForms ? ['Registration Fee'] : ['Registration Fee', 'Medical Release', 'Code of Conduct'],
+      missingForms: hasForms ? ['Medical Release', 'Code of Conduct'] : [],
+      showHistory: isFirst ? [] : [{ title: 'The Little Mermaid', role: 'Ensemble', year: '2024' }],
+      auditionPrep: { monologue: i % 2 === 0 ? 'Comedic 1' : 'Dramatic 2', songTitle: i % 3 === 0 ? 'Tomorrow (Annie)' : 'Stars (Les Mis)', musicProvided: Math.random() > 0.3 },
+      lobbyNote: ''
+    });
+  }
+  return roster;
+};
 
-  const chartData = [
-    { subject: "Vocal", A: grades?.vocal || 0 },
-    { subject: "Acting", A: grades?.acting || 0 },
-    { subject: "Dance", A: grades?.dance || 0 },
-    { subject: "Presence", A: grades?.presence || 0 },
-  ];
+export default function SandboxCheckIn() {
+  const [students, setStudents] = useState<any[]>([]);
+  const [hasMounted, setHasMounted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeStudent, setActiveStudent] = useState<any | null>(null);
+  const [sentLinks, setSentLinks] = useState<string[]>([]);
+  const [activeDayFilter, setActiveDayFilter] = useState('Thursday');
+  const [activeTimeFilter, setActiveTimeFilter] = useState('All');
+  const [currentNote, setCurrentNote] = useState('');
+  const [viewingForm, setViewingForm] = useState<string | null>(null);
+  const [maximizedImage, setMaximizedImage] = useState<string | null>(null);
 
-  const getRolesList = (roles: any) => {
-    if (!roles) return ["No previous productions listed"];
-    if (Array.isArray(roles)) return roles; 
-    if (typeof roles === 'string') return roles.split(',').map((s: string) => s.trim());
-    return [String(roles)];
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStudents(generateMassiveRoster());
+    setHasMounted(true);
+  }, []);
+
+  // --- STATS CALCULATIONS ---
+  const stats = useMemo(() => {
+    const total = students.length;
+    const checkedIn = students.filter(s => s.status === 'Checked In').length;
+    const noShow = students.filter(s => s.status === 'No Show').length;
+    const pending = total - checkedIn - noShow;
+    const percent = total > 0 ? (checkedIn / total) * 100 : 0;
+    return { total, checkedIn, noShow, pending, percent };
+  }, [students]);
+
+  // --- CSV EXPORT ---
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Day', 'Time', 'Status', 'Phone', 'Monologue', 'Note'];
+    const rows = students.map(s => [
+      s.name, s.auditionDay, s.timeSlot, s.status, s.phone, s.auditionPrep.monologue, s.lobbyNote
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `audition_roster_${new Date().toLocaleDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const pastRolesList = getRolesList(actor.pastRoles);
+  // --- WALK-IN HANDLER ---
+  const handleAddWalkIn = () => {
+    const newId = Date.now().toString();
+    const newStudent = {
+      id: newId,
+      name: 'New Walk-In',
+      avatar: `https://i.pravatar.cc/400?u=${newId}`,
+      status: 'Pending',
+      timeSlot: activeTimeFilter === 'All' ? '5:00 PM' : activeTimeFilter,
+      auditionDay: activeDayFilter,
+      isFirstShow: true,
+      preferredName: '',
+      phone: '',
+      email: '',
+      family: { parents: ['Needs Contact Info'], siblings: [] },
+      completedForms: [],
+      missingForms: ['Medical Release', 'Code of Conduct'],
+      showHistory: [],
+      auditionPrep: { monologue: 'TBD', songTitle: 'TBD', musicProvided: false },
+      lobbyNote: 'WALK-IN REGISTRATION'
+    };
+    setStudents([newStudent, ...students]);
+    setActiveStudent(newStudent);
+  };
+
+  const getSlotCount = (slot: string, day: string) => students.filter(s => s.timeSlot === slot && s.auditionDay === day).length;
+
+  const handleOpenModal = (student: any) => {
+    setActiveStudent(student);
+    setCurrentNote(student.lobbyNote || '');
+  };
+
+  const handleUpdateStatus = (id: string, newStatus: string) => {
+    setStudents(students.map(s => s.id === id ? { ...s, status: newStatus, lobbyNote: currentNote } : s));
+    setActiveStudent(null);
+    setSentLinks([]); 
+  };
+
+  // Changed field type to string to support email and phone modifications
+  const handleReassign = (id: string, field: string, value: string) => {
+    setStudents(students.map(s => s.id === id ? { ...s, [field]: value } : s));
+    setActiveStudent((prev: any) => prev ? { ...prev, [field]: value } : null);
+  };
+
+  const handleSendLink = (linkId: string) => setSentLinks([...sentLinks, linkId]);
+
+  const filteredStudents = students.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    s.auditionDay === activeDayFilter &&
+    (activeTimeFilter === 'All' || s.timeSlot === activeTimeFilter)
+  );
+
+  const groupedStudents = filteredStudents.reduce((acc, student) => {
+    if (!acc[student.timeSlot]) acc[student.timeSlot] = [];
+    acc[student.timeSlot].push(student);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case 'Checked In': return <div className="px-4 py-1.5 rounded-md font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 text-[10px] shrink-0">✓ CHECKED IN</div>;
+      case 'Late': return <div className="px-4 py-1.5 rounded-md font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 text-[10px] shrink-0">⏰ LATE</div>;
+      case 'No Show': return <div className="px-4 py-1.5 rounded-md font-bold text-slate-400 bg-slate-800 border border-slate-700 text-[10px] shrink-0">✕ NO SHOW</div>;
+      default: return <div className="px-5 py-2 rounded-lg font-bold text-indigo-400 flex items-center gap-2 group-hover:text-white transition-colors text-xs shrink-0">REVIEW &rarr;</div>;
+    }
+  };
+
+  if (!hasMounted) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-black tracking-widest text-xs uppercase">Loading Sandbox...</div>;
+  }
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-      {/* CONTAINER FIX: 
-         max-h-[90vh] ensures it fits on laptop screens.
-         overflow-hidden contains the inner scrollbars.
-      */}
-      <div className="bg-zinc-950 w-full max-w-5xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col md:flex-row overflow-hidden relative">
-        
-        {/* MOBILE CLOSE BUTTON */}
-        <button 
-            onClick={onClose} 
-            className="absolute top-4 right-4 z-50 p-2 bg-black/50 backdrop-blur rounded-full text-zinc-400 hover:text-white md:hidden"
-        >
-            <X size={24} />
-        </button>
-
-        {/* --- LEFT SIDEBAR (Sticky/Scrollable) --- */}
-        <div className="p-6 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900/50 w-full md:w-[320px] flex flex-row md:flex-col items-center md:items-start gap-6 shrink-0 md:overflow-y-auto custom-scrollbar">
-          
-{/* Avatar */}
-          <div className="relative w-20 h-20 md:w-full md:h-auto md:aspect-square shrink-0 rounded-xl overflow-hidden border-2 border-white/10 shadow-lg bg-zinc-900">
-            {actor.avatar ? (
-              <img 
-                src={actor.avatar} 
-                alt={actor.name} 
-                // object-top is correct for headshots, but only if the container is actually a square!
-                className="w-full h-full object-cover object-top" 
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center"><User size={48} className="text-zinc-700"/></div>
-            )}
-          </div>
-          
-          <div className="flex-1 md:w-full md:text-left">
-              <h2 className="text-xl md:text-2xl font-black italic uppercase text-white leading-none mb-4">{actor.name}</h2>
-              
-              {/* Vitals */}
-              <div className="grid grid-cols-3 gap-2">
-                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
-                    <p className="text-[9px] text-zinc-500 font-black uppercase">Height</p>
-                    <p className="text-xs font-bold text-white">{actor.height || "-"}</p>
-                 </div>
-                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
-                    <p className="text-[9px] text-zinc-500 font-black uppercase">Age</p>
-                    <p className="text-xs font-bold text-white">{actor.age || "?"}</p>
-                 </div>
-                 <div className="bg-black/40 p-2 rounded border border-white/5 text-center">
-                    <p className="text-[9px] text-zinc-500 font-black uppercase">Range</p>
-                    <p className="text-xs font-bold text-white">{actor.vocalRange || "-"}</p>
-                 </div>
-              </div>
-          </div>
-
-          {/* Radar Chart */}
-          <div className="hidden md:block w-full aspect-square relative opacity-80 mt-auto min-h-[200px]">
-             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
-                <PolarGrid stroke="#27272a" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: '#71717a', fontSize: 10, fontWeight: '900' }} />
-                <RechartsRadar dataKey="A" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
+    <div className="min-h-screen bg-slate-950 p-4 md:p-8 font-sans relative text-slate-200">
+      
+      {/* HEADER & TOP TOOLS */}
+      <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div className="flex items-center space-x-2 select-none">
+          <span className="font-black text-white tracking-widest text-2xl">CYT</span>
+          <span className="text-indigo-500 font-light text-2xl">|</span>
+          <span className="text-slate-400 font-normal lowercase text-xl">open-backstage</span>
         </div>
-
-        {/* --- RIGHT CONTENT (Scrollable) --- */}
-        <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
-          
-          {/* DESKTOP CLOSE */}
-          <div className="absolute top-4 right-4 hidden md:block z-20">
-            <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white bg-black/20 hover:bg-black/50 rounded-full transition-all">
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* TABS */}
-          <div className="flex border-b border-white/5 px-6 pt-6 gap-6 bg-zinc-950 shrink-0">
-            <button 
-              onClick={() => setActiveTab("insights")}
-              className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'insights' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Casting Insights
-            </button>
-            <button 
-              onClick={() => setActiveTab("history")}
-              className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-colors ${activeTab === 'history' ? 'border-blue-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
-            >
-              Bio & Logistics
-            </button>
-          </div>
-
-          {/* CONTENT AREA */}
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar space-y-8">
-            {activeTab === "insights" ? (
-              <>
-                {timeline && (
-                  <div className="bg-zinc-900/30 p-4 rounded-xl border border-white/5">
-                    <p className="text-[9px] font-black text-blue-400 uppercase mb-3 tracking-widest">Current Production Track</p>
-                    {timeline}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-zinc-900 rounded-xl border border-white/5">
-                    <p className="text-[9px] font-black text-purple-400 uppercase mb-1 tracking-tighter">Planned Song</p>
-                    <p className="text-sm font-bold text-zinc-300">{actor.song || "N/A"}</p>
-                  </div>
-                  <div className="p-4 bg-zinc-900 rounded-xl border border-white/5">
-                    <p className="text-[9px] font-black text-emerald-400 uppercase mb-1 tracking-tighter">Monologue</p>
-                    <p className="text-sm font-bold text-zinc-300">{actor.monologue || "N/A"}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                   <div className="flex items-center gap-2 text-zinc-400">
-                    <Star size={14} className="text-blue-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Panel Feedback</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {[
-                      { l: "Director", v: grades?.actingNotes, c: "text-blue-400", i: Clapperboard },
-                      { l: "Music", v: grades?.vocalNotes, c: "text-purple-400", i: Mic2 },
-                      { l: "Dance", v: grades?.choreoNotes, c: "text-emerald-400", i: Move },
-                      { l: "Admin", v: grades?.adminNotes, c: "text-amber-400", i: FileText },
-                    ].map((item, i) => (
-                      <div key={i} className="bg-zinc-900/40 p-4 rounded-xl border border-white/5">
-                          <div className="flex items-center gap-2 mb-2">
-                              <item.i size={12} className={item.c} />
-                              <p className={`text-[10px] font-bold uppercase ${item.c}`}>{item.l}</p>
-                          </div>
-                          <p className="text-xs text-zinc-300 italic">"{item.v || "No notes."}"</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <AlertCircle size={14} /> Schedule Conflicts
-                  </h4>
-                  <ConflictAnalyzer conflicts={actor.conflicts} />
-                </div>
-              </>
-            ) : (
-              <div className="space-y-8">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-zinc-900 p-4 rounded-2xl border border-white/5">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2 mb-1">
-                      <Calendar size={12} /> Birthdate
-                    </p>
-                    <p className="text-sm font-bold text-white">{actor.dob || "N/A"}</p>
-                  </div>
-                  <div className="bg-zinc-900 p-4 rounded-2xl border border-white/5">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2 mb-1">
-                      <Ruler size={12} /> Experience
-                    </p>
-                    <p className="text-sm font-bold text-white">{actor.tenure || "New"}</p>
-                  </div>
-                </div>
-
-                <section>
-                  <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <History size={14} /> Production History
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {pastRolesList.map((role: string, i: number) => (
-                      <div key={i} className="text-[11px] bg-zinc-900 text-zinc-300 px-3 py-2 rounded-lg border border-white/5 font-bold">
-                        {role}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            )}
-          </div>
+        
+        <div className="flex gap-2">
+          <button onClick={handleExportCSV} className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-colors">Export List</button>
+          <button onClick={handleAddWalkIn} className="px-5 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+ Add Walk-In</button>
         </div>
       </div>
+
+      <div className="max-w-4xl mx-auto bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        
+        {/* PROGRESS BAR (The "Go Home" Indicator) */}
+        <div className="bg-slate-950 border-b border-slate-800 p-4">
+          <div className="flex justify-between items-end mb-2">
+            <div className="flex gap-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400">{stats.checkedIn} In</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stats.pending} Waiting</div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-rose-500">{stats.noShow} No-Show</div>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{Math.round(stats.percent)}% Complete</div>
+          </div>
+          <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+            <div className="h-full bg-indigo-500 transition-all duration-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" style={{ width: `${stats.percent}%` }}></div>
+          </div>
+        </div>
+
+        <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 shrink-0 z-20 space-y-4">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-800 pb-4">
+            {AUDITION_DAYS.map(day => (
+              <button key={day} onClick={() => setActiveDayFilter(day)} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${activeDayFilter === day ? 'bg-white text-slate-900 border-white shadow-xl scale-105' : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'}`}>
+                {day}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between gap-4">
+            <div className="relative w-full md:max-w-xs shrink-0">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 text-xs">🔍</span>
+              <input type="text" placeholder="Search roster..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-slate-950 border border-slate-800 text-white pl-10 pr-4 py-3 rounded-lg focus:ring-1 ring-indigo-500 outline-none w-full text-sm"/>
+            </div>
+            
+            <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
+              <button onClick={() => setActiveTimeFilter('All')} className={`px-4 py-2.5 rounded-lg text-[10px] font-bold uppercase transition-all border ${activeTimeFilter === 'All' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-950 text-slate-500 border-slate-800'}`}>All Slots</button>
+              {ALL_TIME_SLOTS.map(slot => (
+                <button key={slot} onClick={() => setActiveTimeFilter(slot)} className={`px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap ${activeTimeFilter === slot ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg' : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-200'}`}>
+                  {slot} <span className="opacity-40 ml-1">({getSlotCount(slot, activeDayFilter)})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-2 md:p-4 overflow-y-auto flex-1 custom-scrollbar">
+          {Object.keys(groupedStudents).length === 0 ? (
+            <div className="text-center py-20 opacity-30 italic text-sm">No students found.</div>
+          ) : (
+            Object.keys(groupedStudents).sort().map(slot => (
+              <div key={slot} className="mb-8">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400 mb-3 flex justify-between items-center sticky top-0 bg-slate-900/95 backdrop-blur py-2 z-10 pr-2">
+                  <span>{slot} BLOCK</span>
+                  <span className="opacity-50">{getSlotCount(slot, activeDayFilter)} / {SLOT_LIMIT}</span>
+                </h3>
+                <div className="space-y-1.5">
+                  {groupedStudents[slot].map((student: any) => (
+                    <div key={student.id} onClick={() => handleOpenModal(student)} className={`flex justify-between items-center p-3 md:p-4 rounded-xl transition-all group cursor-pointer bg-slate-900/50 border border-white/5 hover:border-indigo-500/50 ${student.status !== 'Pending' ? 'opacity-50' : ''}`}>
+                      <div className="flex items-center gap-4 min-w-0 pr-4">
+                        <div className="shrink-0 relative">
+                          <img src={student.avatar} alt={student.name} onClick={(e) => { e.stopPropagation(); setMaximizedImage(student.avatar); }} className="w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-slate-700 bg-slate-800 object-cover shadow-md cursor-zoom-in hover:border-indigo-400 transition-colors" />
+                          {student.lobbyNote && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 border-2 border-slate-900 rounded-full bg-indigo-500 animate-pulse"></div>}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-white font-bold text-base md:text-lg truncate">{student.name}</h3>
+                          <p className="text-slate-500 text-[10px] md:text-xs uppercase font-bold tracking-wider mt-0.5">{student.auditionPrep.monologue}</p>
+                        </div>
+                      </div>
+                      {getStatusBadge(student.status)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* VERIFICATION MODAL */}
+      {activeStudent && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-2 md:p-4 z-40" onClick={() => setActiveStudent(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 md:p-6 border-b border-slate-800 flex justify-between items-start shrink-0 bg-slate-900/50">
+              <div className="flex gap-4 items-center">
+                <img src={activeStudent.avatar} alt="Avatar" onClick={() => setMaximizedImage(activeStudent.avatar)} className="w-16 h-16 rounded-full border-2 border-slate-700 shadow-lg hidden md:block cursor-zoom-in hover:border-indigo-400 transition-colors" />
+                <div className="space-y-2">
+                  <input type="text" value={activeStudent.name} onChange={(e) => handleReassign(activeStudent.id, 'name', e.target.value)} className="bg-transparent border-none text-2xl md:text-3xl font-black text-white leading-none outline-none focus:ring-1 ring-indigo-500 rounded px-1 -ml-1 w-full" />
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <select value={activeStudent.auditionDay} onChange={(e) => handleReassign(activeStudent.id, 'auditionDay', e.target.value)} className="bg-slate-950 border border-slate-800 text-indigo-400 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest outline-none shadow-inner">
+                      {AUDITION_DAYS.map(day => <option key={day} value={day}>{day}</option>)}
+                    </select>
+                    <select value={activeStudent.timeSlot} onChange={(e) => handleReassign(activeStudent.id, 'timeSlot', e.target.value)} className="bg-slate-950 border border-slate-800 text-indigo-400 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest outline-none shadow-inner">
+                      {ALL_TIME_SLOTS.map(slot => <option key={slot} value={slot}>{slot}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setActiveStudent(null)} className="text-slate-500 hover:text-white text-4xl leading-none p-2">&times;</button>
+            </div>
+
+            <div className={`p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar ${activeStudent.status !== 'Pending' ? 'opacity-40 pointer-events-none' : ''}`}>
+              
+              {/* Context Block (Now with Show History) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activeStudent.isFirstShow ? (
+                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 text-emerald-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-1">🎉 New Family</p>
+                    <p className="text-xs opacity-80">Point out the parent orientation table.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20 text-indigo-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-2">✨ Welcome Back</p>
+                    <div className="space-y-1 border-t border-indigo-500/20 pt-2 mt-1">
+                      {activeStudent.showHistory.length > 0 ? activeStudent.showHistory.slice(0,2).map((show: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center text-xs">
+                          <span className="truncate pr-2 opacity-80">{show.title}</span>
+                          <span className="font-bold whitespace-nowrap">{show.role}</span>
+                        </div>
+                      )) : <span className="text-xs opacity-80">Returning Student</span>}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-xl">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-1">Guardians</span>
+                    <p className="text-sm font-medium">{activeStudent.family.parents.join(' & ')}</p>
+                  </div>
+                  {activeStudent.family.siblings.length > 0 && (
+                    <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+                      <span className="text-[9px] text-indigo-400/60 font-black uppercase tracking-widest block mb-1">CYT Siblings</span>
+                      <div className="flex flex-wrap gap-2">{activeStudent.family.siblings.map((sib: string) => <span key={sib} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20">{sib}</span>)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Lobby Note */}
+              <div className="p-4 border border-slate-800 rounded-xl bg-slate-950/30">
+                <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center gap-2">
+                  <i className="fas fa-comment-dots text-indigo-500"></i> Director Situational Alert
+                </p>
+                <textarea value={currentNote} onChange={(e) => setCurrentNote(e.target.value)} placeholder="Scared, cough, peanut allergy, stressed parent..." className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-xl focus:ring-1 ring-indigo-500 outline-none text-sm min-h-[70px] resize-none placeholder:opacity-30"/>
+              </div>
+
+              {/* Audition Material (Now with Song Title) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex justify-between items-center shadow-inner">
+                  <div>
+                    <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Monologue</p>
+                    <p className="text-sm font-bold">{activeStudent.auditionPrep.monologue}</p>
+                  </div>
+                  <button className="text-[10px] font-black text-indigo-400 hover:text-white uppercase tracking-widest p-2">Re-send</button>
+                </div>
+                <div className={`border p-4 rounded-xl flex justify-between items-center shadow-inner ${activeStudent.auditionPrep.musicProvided ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
+                  <div>
+                    <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Audition Song</p>
+                    <p className={`text-sm font-bold ${activeStudent.auditionPrep.musicProvided ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {activeStudent.auditionPrep.songTitle} 
+                      <span className="text-[10px] ml-1 opacity-70">({activeStudent.auditionPrep.musicProvided ? 'LOADED' : 'MISSING'})</span>
+                    </p>
+                  </div>
+                  {!activeStudent.auditionPrep.musicProvided && <button className="text-[10px] font-black text-rose-400 hover:text-white uppercase tracking-widest p-2">Send Link</button>}
+                </div>
+              </div>
+
+              {/* Contact Info Editing (Phone & Email Restored) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Phone</label>
+                  <input type="text" value={activeStudent.phone} onChange={(e) => handleReassign(activeStudent.id, 'phone', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Email</label>
+                  <input type="email" value={activeStudent.email} onChange={(e) => handleReassign(activeStudent.id, 'email', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+              </div>
+
+              {/* Paperwork Logic */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Outstanding Paperwork</p>
+                {activeStudent.missingForms.length === 0 ? (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold text-center">Complete</div>
+                ) : (
+                  activeStudent.missingForms.map((form: string) => {
+                    const isSent = sentLinks.includes(form);
+                    return (
+                      <div key={form} className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950 border border-rose-500/20 p-3 rounded-xl gap-3">
+                        <div className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div><span className="text-sm font-bold text-rose-100">{form}</span></div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors flex-1 md:flex-none">View File</button>
+                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-lg'}`}>{isSent ? 'Sent' : 'Re-send'}</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Footer Action Bar */}
+            {activeStudent.status === 'Pending' ? (
+              <div className="p-4 md:p-6 border-t border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
+                <div className="flex gap-1 md:gap-2">
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'No Show')} className="px-3 md:px-4 py-3 rounded-xl font-black text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 text-[10px] uppercase tracking-widest transition-all hidden md:block">No-Show</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Late')} className="px-3 md:px-4 py-3 rounded-xl font-black text-amber-500/60 hover:text-amber-400 hover:bg-amber-400/10 text-[10px] uppercase tracking-widest transition-all">Mark Late</button>
+                </div>
+                <div className="flex gap-3 md:gap-4 items-center">
+                  <button onClick={() => setActiveStudent(null)} className="font-bold text-slate-500 hover:text-white text-xs transition-colors p-2 hidden md:block">Cancel</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Checked In')} className="px-6 md:px-10 py-3.5 rounded-xl font-black text-white bg-indigo-600 text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-indigo-500/40 hover:bg-indigo-500 transition-all active:scale-95 w-full md:w-auto">Verify & Check In</button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 border-t border-slate-800 bg-slate-950 flex justify-between items-center shrink-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Status: <span className="text-white ml-2 px-2 py-1 bg-slate-800 rounded">{activeStudent.status}</span></p>
+                <button onClick={() => handleUpdateStatus(activeStudent.id, 'Pending')} className="px-6 py-2 rounded-xl font-black text-rose-500 border border-rose-500/20 text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Undo Status</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Form Overlay */}
+      {viewingForm && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[100]" onClick={() => setViewingForm(null)}>
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl md:text-2xl font-black text-white mb-4 border-b border-white/5 pb-4">{FORM_TEMPLATES[viewingForm].title}</h3>
+            <p className="text-slate-400 text-sm leading-relaxed mb-8">{FORM_TEMPLATES[viewingForm].text}</p>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Signature Required</span>
+              <button onClick={() => setViewingForm(null)} className="px-6 py-3 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700">Close Preview</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Zoom Overlay */}
+      {maximizedImage && (
+        <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setMaximizedImage(null)}>
+          <div className="relative group">
+            <img src={maximizedImage} alt="Maximized Headshot" className="max-w-full max-h-[85vh] rounded-2xl border-4 border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)]" />
+            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white/10 px-4 py-1 rounded-full text-white/50 text-[10px] font-black uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">Click to close</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+</file>
 
-// Conflict Helper
-function ConflictAnalyzer({ conflicts }: { conflicts: any }) {
-    const items = typeof conflicts === 'string' ? conflicts.split(',').filter(Boolean) : [];
-    if(items.length === 0) return <div className="text-zinc-500 text-xs italic">No conflicts listed.</div>
-    return (
-        <div className="flex flex-wrap gap-2">
-            {items.map((c: string, i: number) => (
-                <span key={i} className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-xs">
-                    {c}
-                </span>
-            ))}
+<file path="app/sandbox/page.tsx">
+'use client';
+
+import Link from 'next/link';
+
+export default function SandboxMenu() {
+  return (
+    <div className="min-h-screen bg-slate-950 p-6 md:p-12 font-sans text-slate-200">
+      
+      {/* BRANDING HEADER */}
+      <div className="max-w-5xl mx-auto flex items-center justify-between mb-12">
+        <div className="flex items-center space-x-2 select-none">
+          <span className="font-black text-white tracking-widest text-2xl">CYT</span>
+          <span className="text-indigo-500 font-light text-2xl">|</span>
+          <span className="text-slate-400 font-normal lowercase text-xl">open-backstage</span>
         </div>
-    )
+        <div className="flex items-center gap-4">
+          <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-indigo-500/20">
+            Prototype Hub
+          </span>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto space-y-12">
+        
+        {/* HERO SECTION */}
+        <div className="space-y-4">
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter">
+            The Sandbox <span className="text-indigo-500">.</span>
+          </h1>
+          <p className="text-slate-400 max-w-2xl leading-relaxed">
+            Welcome to the digital backstage. Explore the prototype tools designed to streamline the audition lobby, empower the directing team, and simplify compliance for the business office.
+          </p>
+        </div>
+
+        {/* FEATURE GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          {/* 1. AUDITION CHECK-IN CARD (Indigo) */}
+          <Link href="/sandbox/check-in" className="group">
+            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-600/10 blur-3xl group-hover:bg-indigo-600/20 transition-colors"></div>
+              
+              <div className="relative z-10 space-y-6">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/20">
+                  📋
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">Lobby Check-In</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">
+                    Live roster management, capacity tracking, and digital paperwork verification for the front desk.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-8 flex items-center text-indigo-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
+                Launch App &rarr;
+              </div>
+            </div>
+          </Link>
+
+          {/* 2. DIRECTOR'S DECK CARD (Blue) */}
+          <Link href="/sandbox/director-deck" className="group">
+            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-blue-500/50 transition-all hover:shadow-2xl hover:shadow-blue-500/10 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/10 blur-3xl group-hover:bg-blue-600/20 transition-colors"></div>
+              
+              <div className="relative z-10 space-y-6">
+                <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-blue-500/20">
+                  🎭
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">Director&apos;s Deck</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">
+                    Real-time sync with the lobby, live scoring rubrics, and instant situational alerts for the creative team.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-8 flex items-center text-blue-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
+                Launch App &rarr;
+              </div>
+            </div>
+          </Link>
+
+          {/* 3. MASTER ROSTER CARD (Emerald) */}
+          <Link href="/sandbox/master-roster" className="group">
+            <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-600/10 blur-3xl group-hover:bg-emerald-600/20 transition-colors"></div>
+              
+              <div className="relative z-10 space-y-6">
+                <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/20">
+                  ✅
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">Master Roster</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">
+                    Business office compliance dashboard to track fees, agreements, and measurements at a glance.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-8 flex items-center text-emerald-400 font-black text-[10px] uppercase tracking-[0.2em] group-hover:gap-2 transition-all">
+                Launch App &rarr;
+              </div>
+            </div>
+          </Link>
+
+        </div>
+
+        {/* FOOTER ACTION */}
+        <div className="pt-12 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-6">
+          <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">
+            Logged in as: <span className="text-slate-400">Sandbox Admin</span>
+          </p>
+          <button 
+            onClick={() => {
+              // Clear the sandbox cookie and go home
+              document.cookie = "sandbox_access=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+              window.location.href = '/';
+            }}
+            className="text-rose-500/50 hover:text-rose-500 text-[10px] font-black uppercase tracking-widest transition-colors"
+          >
+            Exit Sandbox Mode
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -16250,43 +17753,6 @@ function SidebarTooltip({ children, text, isCollapsed }: { children: React.React
             )}
         </div>
     );
-}
-</file>
-
-<file path="app/(main)/(casting)/casting/page.tsx">
-import { cookies } from 'next/headers';
-import { BaserowClient } from '@/app/lib/BaserowClient';
-import CastingClient from '@/app/components/casting/CastingClient';
-
-export default async function CastingPage() {
-  const cookieStore = cookies();
-  
-  // 🚨 THE FIX: Look for the exact cookie name your Context Switcher uses
-  const savedShowId = cookieStore.get('active_production_id')?.value;
-
-  // Default to 94 (Little Mermaid) if no cookie exists
-  const showId = parseInt(savedShowId || "94", 10);
-
-  if (isNaN(showId)) {
-    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
-  }
-
-  const [roles, scenes, roster, assignments] = await Promise.all([
-    BaserowClient.getRolesForShow(showId),
-    BaserowClient.getScenesForShow(showId),
-    BaserowClient.getRosterForShow(showId),
-    BaserowClient.getAssignmentsForShow(showId),
-  ]);
-
-return (
-    <CastingClient 
-      activeId={showId}
-      blueprintRoles={roles}
-      allScenes={scenes}
-      roster={roster}
-      assignments={assignments as any} 
-    />
-  );
 }
 </file>
 
@@ -18149,6 +19615,532 @@ export async function createGoogleUser(googleUser: any) {
 }
 </file>
 
+<file path="app/components/casting/CastingClient.tsx">
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { 
+  Users, Filter, X, Check, Ruler, Scale, AlertOctagon, 
+  LayoutGrid, Search, ArrowUpDown, MoreHorizontal,
+  Archive, Undo, AlertCircle, Printer, Trash2, Plus,
+  ArrowDownAZ, Music, Mic2, Theater, User, Users2
+} from "lucide-react";
+
+import { generateCastingRows, saveCastingGrid } from '@/app/lib/actions';
+import CallbackActorModal from './CallbackActorModal';
+import AutoCastButton from './AutoCastButton';
+import CastingPrintView from './CastingPrintView';
+import ChemistryWorkspace from './ChemistryWorkspace';
+
+// ============================================================================
+// 1. TYPES & CONFIG
+// ============================================================================
+
+type BaserowLink = { id: number; value: string };
+
+type AssignmentRow = {
+  id: number; 
+  role: BaserowLink[];   
+  person: BaserowLink[]; 
+  production: { id: number }[];
+  savedScenes?: BaserowLink[];   
+  _pendingScenes?: BaserowLink[]; 
+  auditionInfo?: any; 
+  auditionGrades?: any;
+};
+
+type RosterStudent = {
+  id: number;
+  name: string;
+  avatar: string | null;
+  vocalScore: number;
+  actingScore: number;
+  danceScore: number;
+  auditionInfo: any;
+  auditionGrades: any;
+};
+
+type BlueprintRole = { id: number; name: string; activeScenes: BaserowLink[]; type?: string; };
+type Scene = { id: number; name: string; order: number; act: string; };
+
+interface CastingClientProps {
+  assignments: AssignmentRow[];
+  blueprintRoles: BlueprintRole[];
+  allScenes: Scene[];
+  roster: RosterStudent[];
+  activeId: number; 
+}
+
+type ComplianceStatus = "uncast" | "at-risk" | "compliant";
+
+// ============================================================================
+// 2. HELPER FUNCTIONS (Extracted to remove component spaghetti)
+// ============================================================================
+
+const getActiveScenes = (row: AssignmentRow) => row._pendingScenes || row.savedScenes || [];
+
+function getStudentCompliance(studentId: number, rows: AssignmentRow[], allScenes: Scene[]) {
+  const myAssignments = rows.filter(r => r.person?.some(p => p.id === studentId));
+  
+  if (myAssignments.length === 0) {
+    return { status: "uncast" as ComplianceStatus, sceneCount: 0, hasAct1: false, hasAct2: false };
+  }
+
+  const mySceneIds = new Set<number>();
+  myAssignments.forEach(row => getActiveScenes(row).forEach(s => mySceneIds.add(s.id)));
+  
+  const sceneCount = mySceneIds.size;
+  let hasAct1 = false;
+  let hasAct2 = false;
+
+  mySceneIds.forEach(sId => {
+    const sceneDef = allScenes.find(s => s.id === sId);
+    if (sceneDef?.act.includes("1")) hasAct1 = true;
+    if (sceneDef?.act.includes("2")) hasAct2 = true;
+  });
+
+  const status: ComplianceStatus = (sceneCount < 3 || !hasAct1 || !hasAct2) ? "at-risk" : "compliant";
+  return { status, sceneCount, hasAct1, hasAct2 };
+}
+
+function extractGender(student: RosterStudent): string {
+  const info = student.auditionInfo || {};
+  let raw = info.gender || info.Gender || info.sex || info.Sex || info["Student Gender"] || (student as any).gender;
+  
+  if (raw && typeof raw === 'object') {
+    raw = Array.isArray(raw) ? (raw[0]?.value || raw[0]) : raw.value;
+  }
+  
+  return String(raw || "").toLowerCase().trim();
+}
+
+// ============================================================================
+// 3. SUB-COMPONENT: ROSTER SIDEBAR
+// ============================================================================
+
+function RosterSidebar({ 
+  students, rows, allScenes, onSelect, releasedIds, onToggleRelease
+}: { 
+  students: RosterStudent[], rows: AssignmentRow[], allScenes: Scene[],
+  onSelect: (s: RosterStudent) => void, releasedIds: number[], onToggleRelease: (id: number) => void
+}) {
+  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"to-cast" | "in-progress" | "done">("to-cast");
+  const [showReleased, setShowReleased] = useState(false);
+  const [sortBy, setSortBy] = useState<"name" | "vocal" | "acting" | "dance">("name");
+  const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
+
+  const complianceMap = useMemo(() => {
+    const map = new Map();
+    students.forEach(s => map.set(s.id, getStudentCompliance(s.id, rows, allScenes)));
+    return map;
+  }, [students, rows, allScenes]);
+
+  const filtered = useMemo(() => {
+    return students.filter(s => {
+        if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+        
+        const isReleased = releasedIds.includes(s.id);
+        if (showReleased) return isReleased; 
+        if (isReleased) return false;        
+
+        const stats = complianceMap.get(s.id);
+        if (activeTab === "to-cast" && stats.status !== "uncast") return false;
+        if (activeTab === "in-progress" && stats.status !== "at-risk") return false;
+        if (activeTab === "done" && stats.status !== "compliant") return false;
+
+        if (genderFilter !== "all") {
+            const g = extractGender(s);
+            if (genderFilter === "F" && !(g.startsWith("f") || g === "girl" || g === "woman" || g.includes("she"))) return false;
+            if (genderFilter === "M" && !(g.startsWith("m") || g === "boy" || g === "man" || g.includes("he"))) return false;
+        }
+        return true;
+
+    }).sort((a, b) => {
+        if (sortBy === "name") return a.name.localeCompare(b.name);
+        return (b[`${sortBy}Score` as keyof RosterStudent] as number || 0) - (a[`${sortBy}Score` as keyof RosterStudent] as number || 0);
+    });
+  }, [students, search, showReleased, releasedIds, activeTab, complianceMap, genderFilter, sortBy]);
+
+  const counts = useMemo(() => {
+     let toCast = 0, inProgress = 0, done = 0;
+     students.forEach(s => {
+        if (releasedIds.includes(s.id)) return;
+        const status = complianceMap.get(s.id).status;
+        if (status === "uncast") toCast++;
+        else if (status === "at-risk") inProgress++;
+        else done++;
+     });
+     return { toCast, inProgress, done };
+  }, [students, complianceMap, releasedIds]);
+
+  return (
+    <aside className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0 h-full relative z-20">
+      
+      {/* TABS */}
+      <div className="flex border-b border-zinc-800 bg-zinc-900/50">
+         <button onClick={() => setActiveTab("to-cast")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'to-cast' ? 'border-red-500 text-white bg-red-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+            To Cast <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'to-cast' ? 'bg-red-500 text-black' : 'bg-zinc-800'}`}>{counts.toCast}</span>
+         </button>
+         <button onClick={() => setActiveTab("in-progress")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'in-progress' ? 'border-yellow-500 text-white bg-yellow-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+            Progress <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'in-progress' ? 'bg-yellow-500 text-black' : 'bg-zinc-800'}`}>{counts.inProgress}</span>
+         </button>
+         <button onClick={() => setActiveTab("done")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'done' ? 'border-emerald-500 text-white bg-emerald-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+            Done <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'done' ? 'bg-emerald-500 text-black' : 'bg-zinc-800'}`}>{counts.done}</span>
+         </button>
+      </div>
+
+      {/* FILTERS */}
+      <div className="border-b border-zinc-800 bg-zinc-900/30">
+        <div className="p-3 pb-2">
+            <div className="relative">
+                <Search size={12} className="absolute left-2 top-2 text-zinc-600" />
+                <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs pl-7 py-1.5 text-white focus:outline-none focus:border-zinc-700" />
+            </div>
+        </div>
+        <div className="px-3 pb-3 flex items-center justify-between gap-2">
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
+                <button onClick={() => setSortBy("name")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><ArrowDownAZ size={12} /></button>
+                <button onClick={() => setSortBy("vocal")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Mic2 size={12} /></button>
+                <button onClick={() => setSortBy("acting")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'acting' ? 'bg-purple-500/20 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Theater size={12} /></button>
+                <button onClick={() => setSortBy("dance")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'dance' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Music size={12} /></button>
+            </div>
+            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
+                <button onClick={() => setGenderFilter("all")} className={`px-2 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'all' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>ALL</button>
+                <button onClick={() => setGenderFilter("F")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>F</button>
+                <button onClick={() => setGenderFilter("M")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>M</button>
+            </div>
+        </div>
+      </div>
+
+      {/* LIST */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-zinc-950/50">
+        {filtered.length === 0 && <div className="text-center py-10 text-zinc-600 text-xs italic">No students match filter.</div>}
+        {filtered.map(student => {
+           const stats = complianceMap.get(student.id);
+           let borderClass = "border-zinc-800"; 
+           if (!showReleased) {
+               if (stats.status === "uncast") borderClass = "border-red-500/50 hover:border-red-500";
+               else if (stats.status === "at-risk") borderClass = "border-yellow-500/50 hover:border-yellow-500";
+               else borderClass = "border-emerald-500/50 hover:border-emerald-500";
+           }
+           return (
+            <div key={student.id} draggable={!showReleased} onClick={() => onSelect(student)} onDragStart={(e) => e.dataTransfer.setData("actorId", String(student.id))} className={`group bg-zinc-900 border-l-4 p-3 rounded-r-lg flex items-center gap-3 cursor-grab hover:bg-zinc-800 transition-all shadow-sm ${borderClass} ${showReleased ? 'opacity-60 grayscale' : ''}`}>
+                <div className="relative w-10 h-10 shrink-0">
+                    <img src={student.avatar || "https://placehold.co/100x100/222/888?text=?"} alt={student.name} className="w-full h-full rounded-full object-cover border border-white/10" />
+                    {sortBy !== 'name' && (
+                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border border-zinc-900 text-white ${sortBy === 'vocal' ? 'bg-blue-500' : sortBy === 'acting' ? 'bg-purple-500' : 'bg-pink-500'}`}>
+                            {Math.round(student[`${sortBy}Score` as keyof RosterStudent] as number || 0)}
+                        </div>
+                    )}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                        <div className="text-xs font-bold text-zinc-200 truncate">{student.name}</div>
+                        <button onClick={(e) => { e.stopPropagation(); onToggleRelease(student.id); }} className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                            {showReleased ? <Undo size={12} /> : <X size={12} />}
+                        </button>
+                    </div>
+                    {stats.status !== "uncast" && !showReleased && (
+                        <div className="flex items-center gap-3 mt-1.5">
+                            <div className={`text-[9px] font-mono font-bold px-1.5 rounded ${stats.sceneCount >= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                {stats.sceneCount}/3
+                            </div>
+                            <div className="flex gap-1">
+                                <div title="Act 1" className={`w-2 h-2 rounded-full border border-current ${stats.hasAct1 ? 'bg-blue-500 border-blue-500' : 'border-zinc-600'}`} />
+                                <div title="Act 2" className={`w-2 h-2 rounded-full border border-current ${stats.hasAct2 ? 'bg-blue-500 border-blue-500' : 'border-zinc-600'}`} />
+                            </div>
+                        </div>
+                    )}
+                    {(stats.status === "uncast" || showReleased) && <div className="text-[10px] text-zinc-500 mt-0.5">{showReleased ? "Released" : "Not yet assigned"}</div>}
+                </div>
+            </div>
+           );
+        })}
+      </div>
+      <div className="p-2 border-t border-zinc-800 bg-zinc-900/50">
+        <button onClick={() => setShowReleased(!showReleased)} className={`w-full flex items-center justify-center gap-2 py-2 rounded text-[10px] font-bold uppercase tracking-widest transition-colors ${showReleased ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+            <Archive size={12} /> {showReleased ? "View Active Pool" : "View Released"}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ============================================================================
+// 4. MAIN CLIENT
+// ============================================================================
+
+export default function CastingClient({ assignments = [], blueprintRoles = [], allScenes = [], roster = [], activeId }: CastingClientProps) {
+  const router = useRouter();
+  
+  const [viewMode, setViewMode] = useState<"matrix" | "chemistry">("matrix");
+  const [rows, setRows] = useState<AssignmentRow[]>(assignments);
+  const [selectedStudent, setSelectedStudent] = useState<RosterStudent | null>(null);
+  const [releasedIds, setReleasedIds] = useState<number[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
+  const hasInitialized = useRef(false);
+
+  useEffect(() => { setRows(assignments); }, [assignments]);
+
+  useEffect(() => {
+    // If we have assignments, or if we already tried to initialize, do nothing
+    if (assignments.length > 0 || hasInitialized.current) {
+        setIsLoading(false);
+        return;
+    }
+    
+    hasInitialized.current = true;
+    setIsLoading(true);
+    
+    generateCastingRows(activeId).then(res => {
+      if (res.success) {
+          router.refresh(); 
+      }
+      // ALWAYS turn off the loading spinner when done, success or fail
+      setIsLoading(false); 
+    }).catch(() => {
+        setIsLoading(false);
+    });
+  }, [assignments.length, activeId, router]);
+
+  useEffect(() => { if (assignments.length > 0 && isLoading) setIsLoading(false); }, [assignments.length, isLoading]);
+
+  // --- ACTIONS ---
+
+  const handleAddRole = () => {
+    const name = prompt("Enter new Role Name (e.g. 'Marching Winkies')");
+    if (!name) return;
+    setRows([{ id: -Date.now(), role: [{ id: -1, value: name }], person: [], production: [{ id: activeId }], _pendingScenes: [] }, ...rows]); 
+  };
+
+  const handleDeleteRole = (id: number) => {
+    if (!confirm("Are you sure you want to delete this role?")) return;
+    if (id > 0) setDeletedRowIds(prev => [...prev, id]);
+    setRows(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleDraftAutoFill = () => {
+    setRows(rows.map((row) => {
+      const blueprint = blueprintRoles.find(bp => bp.id === row.role?.[0]?.id);
+      if (blueprint?.activeScenes?.length && (!row._pendingScenes || row._pendingScenes.length === 0)) {
+        return { ...row, _pendingScenes: blueprint.activeScenes };
+      }
+      return row;
+    }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    
+    const actorChanges = rows.filter(row => row.id > 0 && (row.person?.map(p => p.id).sort().join(',') !== assignments.find(a => a.id === row.id)?.person?.map(p => p.id).sort().join(',')))
+      .map(row => ({ assignmentId: row.id, studentIds: row.person?.map(p => p.id) || [] }));
+
+    const sceneChanges = rows.filter(row => row.id > 0 && row._pendingScenes).map(row => {
+        const pendingIds = row._pendingScenes!.map(s => s.id);
+        const savedIds = row.savedScenes?.map(s => s.id) || [];
+        const added = pendingIds.filter(id => !savedIds.includes(id));
+        const removed = savedIds.filter(id => !pendingIds.includes(id));
+        return (added.length || removed.length) ? { assignmentId: row.id, addedSceneIds: added, removedSceneIds: removed } : null;
+    }).filter(Boolean);
+
+    const createdRows = rows.filter(r => r.id < 0).map(r => ({
+        roleName: r.role[0].value, assignedStudentIds: r.person.map(p => p.id), sceneIds: r._pendingScenes?.map(s => s.id) || []
+    }));
+
+    if (actorChanges.length || sceneChanges.length || deletedRowIds.length || createdRows.length) {
+      await saveCastingGrid(activeId, actorChanges, sceneChanges, deletedRowIds, createdRows);
+      setDeletedRowIds([]);
+      router.refresh(); 
+    }
+    setIsSaving(false);
+  };
+
+  const handleDropAssignment = (e: React.DragEvent, roleId: number) => {
+    e.preventDefault();
+    const actorId = parseInt(e.dataTransfer.getData("actorId"));
+    const actor = roster.find(r => r.id === actorId);
+    if (!actor) return;
+    setRows(prev => prev.map(row => (row.id === roleId && !row.person?.some(p => p.id === actor.id)) 
+      ? { ...row, person: [...(row.person || []), { id: actor.id, value: actor.name }], auditionInfo: actor.auditionInfo, auditionGrades: actor.auditionGrades } 
+      : row
+    ));
+  };
+
+  const handleRemoveActor = (roleId: number, actorId: number) => {
+    setRows(prev => prev.map(r => r.id === roleId ? { ...r, person: r.person.filter(p => p.id !== actorId) } : r));
+  };
+
+  const handlePromoteActor = (roleId: number, actorId: number) => {
+    setRows(prev => prev.map(r => r.id === roleId ? { ...r, person: [r.person?.find(p => p.id === actorId)!].filter(Boolean) } : r));
+  };
+
+  const handleToggleScene = (rowId: number, scene: Scene) => {
+    setRows(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      const currentList = getActiveScenes(row);
+      const isPresent = currentList.some(s => s.id === scene.id);
+      return { ...row, _pendingScenes: isPresent ? currentList.filter(s => s.id !== scene.id) : [...currentList, { id: scene.id, value: scene.name }] };
+    }));
+  };
+
+  // --- MAPPERS ---
+  const getChemistryData = () => rows.map(row => ({
+      id: row.id, name: row.role?.[0]?.value || "Unknown", type: blueprintRoles.find(b => b.id === row.role?.[0]?.id)?.type || "Role", 
+      actors: row.person?.map(p => {
+          const rData = roster.find(r => r.id === p.id);
+          return { id: p.id, name: p.value, headshot: rData?.avatar || row.auditionInfo?.avatar, vocalScore: rData?.vocalScore || row.auditionGrades?.vocal, actingScore: rData?.actingScore || row.auditionGrades?.acting, height: rData?.auditionInfo?.height || row.auditionInfo?.height, age: rData?.auditionInfo?.age || row.auditionInfo?.age, conflicts: (rData?.auditionInfo?.conflicts || row.auditionInfo?.conflicts)?.split(',') || [] };
+      }) || []
+  }));
+
+  const getStudentTimeline = (studentId: number) => {
+    const studentRoles = rows.filter(r => r.person?.some(p => p.id === studentId));
+    return allScenes.map(scene => {
+      const activeRoleRow = studentRoles.find(row => getActiveScenes(row).some(s => s.id === scene.id));
+      return { scene, roleName: activeRoleRow?.role?.[0]?.value || null, color: activeRoleRow ? `hsl(${(activeRoleRow.role?.[0]?.value.length * 40) % 360}, 70%, 50%)` : 'transparent' };
+    });
+  };
+
+  if (isLoading) return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4 text-zinc-400">
+         <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
+         <p className="text-xs uppercase tracking-widest">Initializing Grid...</p>
+      </div>
+  );
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] relative">
+      <div className="contents print:hidden">
+          <RosterSidebar students={roster} rows={rows} allScenes={allScenes} onSelect={setSelectedStudent} releasedIds={releasedIds} onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} />
+          
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
+            {/* TOOLBAR */}
+            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
+              <div className="flex items-center gap-6">
+                <div>
+                    <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
+                    <p className="text-xs text-zinc-500 font-mono mt-1">{rows.length} ROLES • {allScenes.length} SCENES</p>
+                </div>
+                 <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
+                    <button onClick={() => setViewMode("matrix")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={14} /> <span className="hidden md:inline">Matrix</span></button>
+                    <button onClick={() => setViewMode("chemistry")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Scale size={14} /> <span className="hidden md:inline">Chemistry</span></button>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => window.print()} className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Print Cast List"><Printer size={16} /></button>
+                <button onClick={handleAddRole} className="p-2 text-zinc-400 hover:text-emerald-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Add New Role"><Plus size={16} /></button>
+                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
+                <AutoCastButton rows={rows} roster={roster} blueprintRoles={blueprintRoles} allScenes={allScenes} releasedIds={releasedIds} onUpdateRows={setRows} />
+                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
+                <button onClick={handleDraftAutoFill} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all">Reset to Defaults</button>
+                <button onClick={handleSave} disabled={isSaving} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50">{isSaving ? "Saving..." : "Save Changes"}</button>
+              </div>
+            </div>
+
+            {viewMode === "matrix" ? (
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+                     <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                        <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                            <tr>
+                            <th className="p-3 border-b border-zinc-800 w-1/4 sticky left-0 bg-zinc-900 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">Role Identity</th>
+                            <th className="p-3 border-b border-zinc-800 w-1/4">Actor</th>
+                            <th className="p-3 border-b border-zinc-800">Scene Map ({allScenes.length})</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
+                            {rows.map((row) => {
+                            const effectiveList = getActiveScenes(row);
+                            const isDraft = !!row._pendingScenes;
+                            return (
+                                <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
+                                <td className="p-3 text-sm font-medium text-zinc-200 sticky left-0 bg-zinc-950 group-hover:bg-zinc-900 transition-colors z-10 border-r border-zinc-800/50">
+                                    <div className="flex justify-between items-center group/title">
+                                        <span>{row.role?.[0]?.value || <span className="text-red-500">No Role</span>}</span>
+                                        <button onClick={() => handleDeleteRole(row.id)} className="text-zinc-700 hover:text-red-500 opacity-0 group-hover/title:opacity-100 transition-opacity" title="Delete Role"><Trash2 size={12} /></button>
+                                    </div>
+                                </td>
+                                
+                                <td 
+                                    className="p-3 text-sm text-zinc-400 transition-colors relative"
+                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
+                                    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
+                                    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
+                                >
+                                    {row.person && row.person.length > 0 ? (
+                                        <div className="flex items-center pl-2">
+                                            {row.person.map((p) => {
+                                                const actorData = roster.find(r => r.id === p.id);
+                                                return (
+                                                    <div 
+                                                        key={p.id} 
+                                                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
+                                                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
+                                                    >
+                                                        <img src={actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png"} alt={p.value} className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm" title={p.value} />
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/avatar:flex flex-col items-center z-30">
+                                                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                                                                <span className="font-bold">{p.value}</span>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }} className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full transition-colors"><X size={10} /></button>
+                                                            </div>
+                                                            <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-800 rotate-45 -mt-1 transform translate-y-[-3px]"></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">Drop Actor</div>}
+                                </td>
+                                <td className="p-3">
+                                    <div className="flex items-center gap-[2px]">
+                                    {allScenes.map(scene => {
+                                        const isActive = effectiveList.some(s => s.id === scene.id);
+                                        const colorClass = isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] hover:bg-blue-400' : 'bg-emerald-500/80 hover:bg-emerald-400') : 'bg-zinc-800/50 hover:bg-zinc-600'; 
+                                        return <button key={scene.id} onClick={() => handleToggleScene(row.id, scene)} title={`${scene.name} • ${isActive ? 'Active' : 'Inactive'}`} className={`w-2.5 h-4 rounded-[1px] transition-all duration-150 ${colorClass}`} />;
+                                    })}
+                                    </div>
+                                </td>
+                                </tr>
+                            );
+                            })}
+                        </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <ChemistryWorkspace roles={getChemistryData()} onRemoveActor={handleRemoveActor} onPromoteActor={handlePromoteActor} onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))} />
+            )}
+          </div>
+      </div>
+      <CastingPrintView rows={rows} />
+      {selectedStudent && (
+        <CallbackActorModal
+          actor={{ name: selectedStudent.name, ...selectedStudent.auditionInfo }}
+          grades={selectedStudent.auditionGrades}
+          onClose={() => setSelectedStudent(null)}
+          timeline={
+            <div className="h-16 w-full flex rounded-lg overflow-hidden border border-zinc-700 mt-2">
+              {getStudentTimeline(selectedStudent.id).map((slot, i) => (
+                <div key={i} className="flex-1 h-full flex items-center justify-center group relative border-r border-black/10 last:border-0 hover:brightness-110 transition-all" style={{ backgroundColor: slot.roleName ? slot.color : '#18181b' }}>
+                  {slot.roleName && <span className="text-[10px] font-bold text-white/90 -rotate-90 whitespace-nowrap opacity-50 group-hover:opacity-100">{slot.roleName}</span>}
+                  <div className="absolute bottom-full mb-2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-20">
+                     {slot.scene.name}: {slot.roleName || "Offstage"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          }
+        />
+      )}
+    </div>
+  );
+}
+</file>
+
 <file path="app/components/schedule/AutoSchedulerModal.tsx">
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
@@ -18872,532 +20864,6 @@ export default function AutoSchedulerModal({ isOpen, onClose, scenes, people, co
             </div>
         </div>
     );
-}
-</file>
-
-<file path="app/components/casting/CastingClient.tsx">
-/* eslint-disable react-hooks/set-state-in-effect */
-"use client";
-
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { 
-  Users, Filter, X, Check, Ruler, Scale, AlertOctagon, 
-  LayoutGrid, Search, ArrowUpDown, MoreHorizontal,
-  Archive, Undo, AlertCircle, Printer, Trash2, Plus,
-  ArrowDownAZ, Music, Mic2, Theater, User, Users2
-} from "lucide-react";
-
-import { generateCastingRows, saveCastingGrid } from '@/app/lib/actions';
-import CallbackActorModal from './CallbackActorModal';
-import AutoCastButton from './AutoCastButton';
-import CastingPrintView from './CastingPrintView';
-import ChemistryWorkspace from './ChemistryWorkspace';
-
-// ============================================================================
-// 1. TYPES & CONFIG
-// ============================================================================
-
-type BaserowLink = { id: number; value: string };
-
-type AssignmentRow = {
-  id: number; 
-  role: BaserowLink[];   
-  person: BaserowLink[]; 
-  production: { id: number }[];
-  savedScenes?: BaserowLink[];   
-  _pendingScenes?: BaserowLink[]; 
-  auditionInfo?: any; 
-  auditionGrades?: any;
-};
-
-type RosterStudent = {
-  id: number;
-  name: string;
-  avatar: string | null;
-  vocalScore: number;
-  actingScore: number;
-  danceScore: number;
-  auditionInfo: any;
-  auditionGrades: any;
-};
-
-type BlueprintRole = { id: number; name: string; activeScenes: BaserowLink[]; type?: string; };
-type Scene = { id: number; name: string; order: number; act: string; };
-
-interface CastingClientProps {
-  assignments: AssignmentRow[];
-  blueprintRoles: BlueprintRole[];
-  allScenes: Scene[];
-  roster: RosterStudent[];
-  activeId: number; 
-}
-
-type ComplianceStatus = "uncast" | "at-risk" | "compliant";
-
-// ============================================================================
-// 2. HELPER FUNCTIONS (Extracted to remove component spaghetti)
-// ============================================================================
-
-const getActiveScenes = (row: AssignmentRow) => row._pendingScenes || row.savedScenes || [];
-
-function getStudentCompliance(studentId: number, rows: AssignmentRow[], allScenes: Scene[]) {
-  const myAssignments = rows.filter(r => r.person?.some(p => p.id === studentId));
-  
-  if (myAssignments.length === 0) {
-    return { status: "uncast" as ComplianceStatus, sceneCount: 0, hasAct1: false, hasAct2: false };
-  }
-
-  const mySceneIds = new Set<number>();
-  myAssignments.forEach(row => getActiveScenes(row).forEach(s => mySceneIds.add(s.id)));
-  
-  const sceneCount = mySceneIds.size;
-  let hasAct1 = false;
-  let hasAct2 = false;
-
-  mySceneIds.forEach(sId => {
-    const sceneDef = allScenes.find(s => s.id === sId);
-    if (sceneDef?.act.includes("1")) hasAct1 = true;
-    if (sceneDef?.act.includes("2")) hasAct2 = true;
-  });
-
-  const status: ComplianceStatus = (sceneCount < 3 || !hasAct1 || !hasAct2) ? "at-risk" : "compliant";
-  return { status, sceneCount, hasAct1, hasAct2 };
-}
-
-function extractGender(student: RosterStudent): string {
-  const info = student.auditionInfo || {};
-  let raw = info.gender || info.Gender || info.sex || info.Sex || info["Student Gender"] || (student as any).gender;
-  
-  if (raw && typeof raw === 'object') {
-    raw = Array.isArray(raw) ? (raw[0]?.value || raw[0]) : raw.value;
-  }
-  
-  return String(raw || "").toLowerCase().trim();
-}
-
-// ============================================================================
-// 3. SUB-COMPONENT: ROSTER SIDEBAR
-// ============================================================================
-
-function RosterSidebar({ 
-  students, rows, allScenes, onSelect, releasedIds, onToggleRelease
-}: { 
-  students: RosterStudent[], rows: AssignmentRow[], allScenes: Scene[],
-  onSelect: (s: RosterStudent) => void, releasedIds: number[], onToggleRelease: (id: number) => void
-}) {
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"to-cast" | "in-progress" | "done">("to-cast");
-  const [showReleased, setShowReleased] = useState(false);
-  const [sortBy, setSortBy] = useState<"name" | "vocal" | "acting" | "dance">("name");
-  const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
-
-  const complianceMap = useMemo(() => {
-    const map = new Map();
-    students.forEach(s => map.set(s.id, getStudentCompliance(s.id, rows, allScenes)));
-    return map;
-  }, [students, rows, allScenes]);
-
-  const filtered = useMemo(() => {
-    return students.filter(s => {
-        if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
-        
-        const isReleased = releasedIds.includes(s.id);
-        if (showReleased) return isReleased; 
-        if (isReleased) return false;        
-
-        const stats = complianceMap.get(s.id);
-        if (activeTab === "to-cast" && stats.status !== "uncast") return false;
-        if (activeTab === "in-progress" && stats.status !== "at-risk") return false;
-        if (activeTab === "done" && stats.status !== "compliant") return false;
-
-        if (genderFilter !== "all") {
-            const g = extractGender(s);
-            if (genderFilter === "F" && !(g.startsWith("f") || g === "girl" || g === "woman" || g.includes("she"))) return false;
-            if (genderFilter === "M" && !(g.startsWith("m") || g === "boy" || g === "man" || g.includes("he"))) return false;
-        }
-        return true;
-
-    }).sort((a, b) => {
-        if (sortBy === "name") return a.name.localeCompare(b.name);
-        return (b[`${sortBy}Score` as keyof RosterStudent] as number || 0) - (a[`${sortBy}Score` as keyof RosterStudent] as number || 0);
-    });
-  }, [students, search, showReleased, releasedIds, activeTab, complianceMap, genderFilter, sortBy]);
-
-  const counts = useMemo(() => {
-     let toCast = 0, inProgress = 0, done = 0;
-     students.forEach(s => {
-        if (releasedIds.includes(s.id)) return;
-        const status = complianceMap.get(s.id).status;
-        if (status === "uncast") toCast++;
-        else if (status === "at-risk") inProgress++;
-        else done++;
-     });
-     return { toCast, inProgress, done };
-  }, [students, complianceMap, releasedIds]);
-
-  return (
-    <aside className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0 h-full relative z-20">
-      
-      {/* TABS */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/50">
-         <button onClick={() => setActiveTab("to-cast")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'to-cast' ? 'border-red-500 text-white bg-red-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
-            To Cast <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'to-cast' ? 'bg-red-500 text-black' : 'bg-zinc-800'}`}>{counts.toCast}</span>
-         </button>
-         <button onClick={() => setActiveTab("in-progress")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'in-progress' ? 'border-yellow-500 text-white bg-yellow-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
-            Progress <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'in-progress' ? 'bg-yellow-500 text-black' : 'bg-zinc-800'}`}>{counts.inProgress}</span>
-         </button>
-         <button onClick={() => setActiveTab("done")} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all flex flex-col items-center gap-1 ${activeTab === 'done' ? 'border-emerald-500 text-white bg-emerald-500/5' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
-            Done <span className={`px-1.5 py-0.5 rounded text-[9px] ${activeTab === 'done' ? 'bg-emerald-500 text-black' : 'bg-zinc-800'}`}>{counts.done}</span>
-         </button>
-      </div>
-
-      {/* FILTERS */}
-      <div className="border-b border-zinc-800 bg-zinc-900/30">
-        <div className="p-3 pb-2">
-            <div className="relative">
-                <Search size={12} className="absolute left-2 top-2 text-zinc-600" />
-                <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs pl-7 py-1.5 text-white focus:outline-none focus:border-zinc-700" />
-            </div>
-        </div>
-        <div className="px-3 pb-3 flex items-center justify-between gap-2">
-            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
-                <button onClick={() => setSortBy("name")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><ArrowDownAZ size={12} /></button>
-                <button onClick={() => setSortBy("vocal")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Mic2 size={12} /></button>
-                <button onClick={() => setSortBy("acting")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'acting' ? 'bg-purple-500/20 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Theater size={12} /></button>
-                <button onClick={() => setSortBy("dance")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'dance' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Music size={12} /></button>
-            </div>
-            <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
-                <button onClick={() => setGenderFilter("all")} className={`px-2 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'all' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>ALL</button>
-                <button onClick={() => setGenderFilter("F")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>F</button>
-                <button onClick={() => setGenderFilter("M")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>M</button>
-            </div>
-        </div>
-      </div>
-
-      {/* LIST */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-zinc-950/50">
-        {filtered.length === 0 && <div className="text-center py-10 text-zinc-600 text-xs italic">No students match filter.</div>}
-        {filtered.map(student => {
-           const stats = complianceMap.get(student.id);
-           let borderClass = "border-zinc-800"; 
-           if (!showReleased) {
-               if (stats.status === "uncast") borderClass = "border-red-500/50 hover:border-red-500";
-               else if (stats.status === "at-risk") borderClass = "border-yellow-500/50 hover:border-yellow-500";
-               else borderClass = "border-emerald-500/50 hover:border-emerald-500";
-           }
-           return (
-            <div key={student.id} draggable={!showReleased} onClick={() => onSelect(student)} onDragStart={(e) => e.dataTransfer.setData("actorId", String(student.id))} className={`group bg-zinc-900 border-l-4 p-3 rounded-r-lg flex items-center gap-3 cursor-grab hover:bg-zinc-800 transition-all shadow-sm ${borderClass} ${showReleased ? 'opacity-60 grayscale' : ''}`}>
-                <div className="relative w-10 h-10 shrink-0">
-                    <img src={student.avatar || "https://placehold.co/100x100/222/888?text=?"} alt={student.name} className="w-full h-full rounded-full object-cover border border-white/10" />
-                    {sortBy !== 'name' && (
-                        <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border border-zinc-900 text-white ${sortBy === 'vocal' ? 'bg-blue-500' : sortBy === 'acting' ? 'bg-purple-500' : 'bg-pink-500'}`}>
-                            {Math.round(student[`${sortBy}Score` as keyof RosterStudent] as number || 0)}
-                        </div>
-                    )}
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                        <div className="text-xs font-bold text-zinc-200 truncate">{student.name}</div>
-                        <button onClick={(e) => { e.stopPropagation(); onToggleRelease(student.id); }} className="text-zinc-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                            {showReleased ? <Undo size={12} /> : <X size={12} />}
-                        </button>
-                    </div>
-                    {stats.status !== "uncast" && !showReleased && (
-                        <div className="flex items-center gap-3 mt-1.5">
-                            <div className={`text-[9px] font-mono font-bold px-1.5 rounded ${stats.sceneCount >= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                {stats.sceneCount}/3
-                            </div>
-                            <div className="flex gap-1">
-                                <div title="Act 1" className={`w-2 h-2 rounded-full border border-current ${stats.hasAct1 ? 'bg-blue-500 border-blue-500' : 'border-zinc-600'}`} />
-                                <div title="Act 2" className={`w-2 h-2 rounded-full border border-current ${stats.hasAct2 ? 'bg-blue-500 border-blue-500' : 'border-zinc-600'}`} />
-                            </div>
-                        </div>
-                    )}
-                    {(stats.status === "uncast" || showReleased) && <div className="text-[10px] text-zinc-500 mt-0.5">{showReleased ? "Released" : "Not yet assigned"}</div>}
-                </div>
-            </div>
-           );
-        })}
-      </div>
-      <div className="p-2 border-t border-zinc-800 bg-zinc-900/50">
-        <button onClick={() => setShowReleased(!showReleased)} className={`w-full flex items-center justify-center gap-2 py-2 rounded text-[10px] font-bold uppercase tracking-widest transition-colors ${showReleased ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-            <Archive size={12} /> {showReleased ? "View Active Pool" : "View Released"}
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-// ============================================================================
-// 4. MAIN CLIENT
-// ============================================================================
-
-export default function CastingClient({ assignments = [], blueprintRoles = [], allScenes = [], roster = [], activeId }: CastingClientProps) {
-  const router = useRouter();
-  
-  const [viewMode, setViewMode] = useState<"matrix" | "chemistry">("matrix");
-  const [rows, setRows] = useState<AssignmentRow[]>(assignments);
-  const [selectedStudent, setSelectedStudent] = useState<RosterStudent | null>(null);
-  const [releasedIds, setReleasedIds] = useState<number[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [deletedRowIds, setDeletedRowIds] = useState<number[]>([]);
-  const hasInitialized = useRef(false);
-
-  useEffect(() => { setRows(assignments); }, [assignments]);
-
-  useEffect(() => {
-    // If we have assignments, or if we already tried to initialize, do nothing
-    if (assignments.length > 0 || hasInitialized.current) {
-        setIsLoading(false);
-        return;
-    }
-    
-    hasInitialized.current = true;
-    setIsLoading(true);
-    
-    generateCastingRows(activeId).then(res => {
-      if (res.success) {
-          router.refresh(); 
-      }
-      // ALWAYS turn off the loading spinner when done, success or fail
-      setIsLoading(false); 
-    }).catch(() => {
-        setIsLoading(false);
-    });
-  }, [assignments.length, activeId, router]);
-
-  useEffect(() => { if (assignments.length > 0 && isLoading) setIsLoading(false); }, [assignments.length, isLoading]);
-
-  // --- ACTIONS ---
-
-  const handleAddRole = () => {
-    const name = prompt("Enter new Role Name (e.g. 'Marching Winkies')");
-    if (!name) return;
-    setRows([{ id: -Date.now(), role: [{ id: -1, value: name }], person: [], production: [{ id: activeId }], _pendingScenes: [] }, ...rows]); 
-  };
-
-  const handleDeleteRole = (id: number) => {
-    if (!confirm("Are you sure you want to delete this role?")) return;
-    if (id > 0) setDeletedRowIds(prev => [...prev, id]);
-    setRows(prev => prev.filter(r => r.id !== id));
-  };
-
-  const handleDraftAutoFill = () => {
-    setRows(rows.map((row) => {
-      const blueprint = blueprintRoles.find(bp => bp.id === row.role?.[0]?.id);
-      if (blueprint?.activeScenes?.length && (!row._pendingScenes || row._pendingScenes.length === 0)) {
-        return { ...row, _pendingScenes: blueprint.activeScenes };
-      }
-      return row;
-    }));
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    
-    const actorChanges = rows.filter(row => row.id > 0 && (row.person?.map(p => p.id).sort().join(',') !== assignments.find(a => a.id === row.id)?.person?.map(p => p.id).sort().join(',')))
-      .map(row => ({ assignmentId: row.id, studentIds: row.person?.map(p => p.id) || [] }));
-
-    const sceneChanges = rows.filter(row => row.id > 0 && row._pendingScenes).map(row => {
-        const pendingIds = row._pendingScenes!.map(s => s.id);
-        const savedIds = row.savedScenes?.map(s => s.id) || [];
-        const added = pendingIds.filter(id => !savedIds.includes(id));
-        const removed = savedIds.filter(id => !pendingIds.includes(id));
-        return (added.length || removed.length) ? { assignmentId: row.id, addedSceneIds: added, removedSceneIds: removed } : null;
-    }).filter(Boolean);
-
-    const createdRows = rows.filter(r => r.id < 0).map(r => ({
-        roleName: r.role[0].value, assignedStudentIds: r.person.map(p => p.id), sceneIds: r._pendingScenes?.map(s => s.id) || []
-    }));
-
-    if (actorChanges.length || sceneChanges.length || deletedRowIds.length || createdRows.length) {
-      await saveCastingGrid(activeId, actorChanges, sceneChanges, deletedRowIds, createdRows);
-      setDeletedRowIds([]);
-      router.refresh(); 
-    }
-    setIsSaving(false);
-  };
-
-  const handleDropAssignment = (e: React.DragEvent, roleId: number) => {
-    e.preventDefault();
-    const actorId = parseInt(e.dataTransfer.getData("actorId"));
-    const actor = roster.find(r => r.id === actorId);
-    if (!actor) return;
-    setRows(prev => prev.map(row => (row.id === roleId && !row.person?.some(p => p.id === actor.id)) 
-      ? { ...row, person: [...(row.person || []), { id: actor.id, value: actor.name }], auditionInfo: actor.auditionInfo, auditionGrades: actor.auditionGrades } 
-      : row
-    ));
-  };
-
-  const handleRemoveActor = (roleId: number, actorId: number) => {
-    setRows(prev => prev.map(r => r.id === roleId ? { ...r, person: r.person.filter(p => p.id !== actorId) } : r));
-  };
-
-  const handlePromoteActor = (roleId: number, actorId: number) => {
-    setRows(prev => prev.map(r => r.id === roleId ? { ...r, person: [r.person?.find(p => p.id === actorId)!].filter(Boolean) } : r));
-  };
-
-  const handleToggleScene = (rowId: number, scene: Scene) => {
-    setRows(prev => prev.map(row => {
-      if (row.id !== rowId) return row;
-      const currentList = getActiveScenes(row);
-      const isPresent = currentList.some(s => s.id === scene.id);
-      return { ...row, _pendingScenes: isPresent ? currentList.filter(s => s.id !== scene.id) : [...currentList, { id: scene.id, value: scene.name }] };
-    }));
-  };
-
-  // --- MAPPERS ---
-  const getChemistryData = () => rows.map(row => ({
-      id: row.id, name: row.role?.[0]?.value || "Unknown", type: blueprintRoles.find(b => b.id === row.role?.[0]?.id)?.type || "Role", 
-      actors: row.person?.map(p => {
-          const rData = roster.find(r => r.id === p.id);
-          return { id: p.id, name: p.value, headshot: rData?.avatar || row.auditionInfo?.avatar, vocalScore: rData?.vocalScore || row.auditionGrades?.vocal, actingScore: rData?.actingScore || row.auditionGrades?.acting, height: rData?.auditionInfo?.height || row.auditionInfo?.height, age: rData?.auditionInfo?.age || row.auditionInfo?.age, conflicts: (rData?.auditionInfo?.conflicts || row.auditionInfo?.conflicts)?.split(',') || [] };
-      }) || []
-  }));
-
-  const getStudentTimeline = (studentId: number) => {
-    const studentRoles = rows.filter(r => r.person?.some(p => p.id === studentId));
-    return allScenes.map(scene => {
-      const activeRoleRow = studentRoles.find(row => getActiveScenes(row).some(s => s.id === scene.id));
-      return { scene, roleName: activeRoleRow?.role?.[0]?.value || null, color: activeRoleRow ? `hsl(${(activeRoleRow.role?.[0]?.value.length * 40) % 360}, 70%, 50%)` : 'transparent' };
-    });
-  };
-
-  if (isLoading) return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4 text-zinc-400">
-         <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
-         <p className="text-xs uppercase tracking-widest">Initializing Grid...</p>
-      </div>
-  );
-
-  return (
-    <div className="flex h-[calc(100vh-4rem)] relative">
-      <div className="contents print:hidden">
-          <RosterSidebar students={roster} rows={rows} allScenes={allScenes} onSelect={setSelectedStudent} releasedIds={releasedIds} onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} />
-          
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
-            {/* TOOLBAR */}
-            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
-              <div className="flex items-center gap-6">
-                <div>
-                    <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
-                    <p className="text-xs text-zinc-500 font-mono mt-1">{rows.length} ROLES • {allScenes.length} SCENES</p>
-                </div>
-                 <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
-                    <button onClick={() => setViewMode("matrix")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={14} /> <span className="hidden md:inline">Matrix</span></button>
-                    <button onClick={() => setViewMode("chemistry")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Scale size={14} /> <span className="hidden md:inline">Chemistry</span></button>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Print Cast List"><Printer size={16} /></button>
-                <button onClick={handleAddRole} className="p-2 text-zinc-400 hover:text-emerald-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Add New Role"><Plus size={16} /></button>
-                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
-                <AutoCastButton rows={rows} roster={roster} blueprintRoles={blueprintRoles} allScenes={allScenes} releasedIds={releasedIds} onUpdateRows={setRows} />
-                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
-                <button onClick={handleDraftAutoFill} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all">Reset to Defaults</button>
-                <button onClick={handleSave} disabled={isSaving} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50">{isSaving ? "Saving..." : "Save Changes"}</button>
-              </div>
-            </div>
-
-            {viewMode === "matrix" ? (
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                     <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                        <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
-                            <tr>
-                            <th className="p-3 border-b border-zinc-800 w-1/4 sticky left-0 bg-zinc-900 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.5)]">Role Identity</th>
-                            <th className="p-3 border-b border-zinc-800 w-1/4">Actor</th>
-                            <th className="p-3 border-b border-zinc-800">Scene Map ({allScenes.length})</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800 bg-zinc-900/20">
-                            {rows.map((row) => {
-                            const effectiveList = getActiveScenes(row);
-                            const isDraft = !!row._pendingScenes;
-                            return (
-                                <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors group">
-                                <td className="p-3 text-sm font-medium text-zinc-200 sticky left-0 bg-zinc-950 group-hover:bg-zinc-900 transition-colors z-10 border-r border-zinc-800/50">
-                                    <div className="flex justify-between items-center group/title">
-                                        <span>{row.role?.[0]?.value || <span className="text-red-500">No Role</span>}</span>
-                                        <button onClick={() => handleDeleteRole(row.id)} className="text-zinc-700 hover:text-red-500 opacity-0 group-hover/title:opacity-100 transition-opacity" title="Delete Role"><Trash2 size={12} /></button>
-                                    </div>
-                                </td>
-                                
-                                <td 
-                                    className="p-3 text-sm text-zinc-400 transition-colors relative"
-                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/20'); }}
-                                    onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); }}
-                                    onDrop={(e) => { e.currentTarget.classList.remove('bg-blue-500/20'); handleDropAssignment(e, row.id); }}
-                                >
-                                    {row.person && row.person.length > 0 ? (
-                                        <div className="flex items-center pl-2">
-                                            {row.person.map((p) => {
-                                                const actorData = roster.find(r => r.id === p.id);
-                                                return (
-                                                    <div 
-                                                        key={p.id} 
-                                                        className={`relative group/avatar -ml-3 first:ml-0 hover:z-20 hover:scale-110 transition-transform cursor-pointer`}
-                                                        onClick={(e) => { e.stopPropagation(); if(actorData) setSelectedStudent(actorData); }}
-                                                    >
-                                                        <img src={actorData?.avatar || row.auditionInfo?.avatar || "/placeholder.png"} alt={p.value} className="w-10 h-10 rounded-full object-cover border-2 border-zinc-900 shadow-sm" title={p.value} />
-                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/avatar:flex flex-col items-center z-30">
-                                                            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 text-zinc-200 text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
-                                                                <span className="font-bold">{p.value}</span>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleRemoveActor(row.id, p.id); }} className="text-red-400 hover:text-red-300 bg-red-500/10 p-1 rounded-full transition-colors"><X size={10} /></button>
-                                                            </div>
-                                                            <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-800 rotate-45 -mt-1 transform translate-y-[-3px]"></div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : <div className="border-dashed border border-zinc-700 rounded px-2 py-2 text-[10px] text-zinc-600 text-center uppercase tracking-widest hover:border-zinc-500 transition-colors">Drop Actor</div>}
-                                </td>
-                                <td className="p-3">
-                                    <div className="flex items-center gap-[2px]">
-                                    {allScenes.map(scene => {
-                                        const isActive = effectiveList.some(s => s.id === scene.id);
-                                        const colorClass = isActive ? (isDraft ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] hover:bg-blue-400' : 'bg-emerald-500/80 hover:bg-emerald-400') : 'bg-zinc-800/50 hover:bg-zinc-600'; 
-                                        return <button key={scene.id} onClick={() => handleToggleScene(row.id, scene)} title={`${scene.name} • ${isActive ? 'Active' : 'Inactive'}`} className={`w-2.5 h-4 rounded-[1px] transition-all duration-150 ${colorClass}`} />;
-                                    })}
-                                    </div>
-                                </td>
-                                </tr>
-                            );
-                            })}
-                        </tbody>
-                        </table>
-                    </div>
-                </div>
-            ) : (
-                <ChemistryWorkspace roles={getChemistryData()} onRemoveActor={handleRemoveActor} onPromoteActor={handlePromoteActor} onDropActor={(e: React.DragEvent, roleIdStr: string) => handleDropAssignment(e, parseInt(roleIdStr))} />
-            )}
-          </div>
-      </div>
-      <CastingPrintView rows={rows} />
-      {selectedStudent && (
-        <CallbackActorModal
-          actor={{ name: selectedStudent.name, ...selectedStudent.auditionInfo }}
-          grades={selectedStudent.auditionGrades}
-          onClose={() => setSelectedStudent(null)}
-          timeline={
-            <div className="h-16 w-full flex rounded-lg overflow-hidden border border-zinc-700 mt-2">
-              {getStudentTimeline(selectedStudent.id).map((slot, i) => (
-                <div key={i} className="flex-1 h-full flex items-center justify-center group relative border-r border-black/10 last:border-0 hover:brightness-110 transition-all" style={{ backgroundColor: slot.roleName ? slot.color : '#18181b' }}>
-                  {slot.roleName && <span className="text-[10px] font-bold text-white/90 -rotate-90 whitespace-nowrap opacity-50 group-hover:opacity-100">{slot.roleName}</span>}
-                  <div className="absolute bottom-full mb-2 bg-black text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-20">
-                     {slot.scene.name}: {slot.roleName || "Offstage"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          }
-        />
-      )}
-    </div>
-  );
 }
 </file>
 
