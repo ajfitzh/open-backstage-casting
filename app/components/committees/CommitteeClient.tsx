@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { 
   Printer, Crown, Wand2, RotateCcw, X, 
-  Trash2, Sliders, Info, CheckCircle2, Save, Loader2
+  Trash2, Sliders, Info, CheckCircle2, Save, Loader2, Settings2, Lightbulb
 } from 'lucide-react';
 import { saveCommitteeAssignments } from '@/app/actions/committees';
 
@@ -30,16 +30,17 @@ const COMMITTEES: Record<string, string[]> = {
     'Show Week': ["Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
 };
 
+// Base baseline rules. These are used for the INITIAL calculation.
 const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
-    "Green Room": { type: 'ratio', val: 8, min: 2, reason: "Safety: 1 Adult per 8 Students" }, 
-    "Costumes": { type: 'ratio', val: 6, min: 3, reason: "Labor: 1 per 6 Actors" },   
-    "Makeup": { type: 'ratio', val: 7, min: 2, reason: "Speed: 1 per 7 Actors" },
+    "Green Room": { type: 'ratio', val: 8, min: 2, reason: "1 Adult per 8 Students" }, 
+    "Costumes": { type: 'ratio', val: 6, min: 3, reason: "1 per 6 Actors" },   
+    "Makeup": { type: 'ratio', val: 7, min: 2, reason: "1 per 7 Actors" },
     "Tech": { type: 'fixed', val: 5, reason: "Booth + Deck Crew" },              
     "Sets": { type: 'fixed', val: 8, reason: "Heavy Lifting Team" },              
     "Security": { type: 'fixed', val: 3, reason: "Door & Perimeter" },
-    "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window & Will Call" },
+    "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window" },
     "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
-    "Publicity": { type: 'fixed', val: 3, reason: "Social Media & Posters" },
+    "Publicity": { type: 'fixed', val: 4, reason: "Social Media & Posters" },
     "default": { type: 'fixed', val: 3, reason: "Standard Committee Size" }
 };
 
@@ -59,10 +60,30 @@ export default function CommitteeDashboard({
   const [assignments, setAssignments] = useState<Record<number, string>>({});
   const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
-  const [rules] = useState(DEFAULT_RULES);
+  
+  // NEW: State for editable targets (Keyed by `${Phase}-${Committee}` to prevent overlaps like Raffles)
+  const [targets, setTargets] = useState<Record<string, number>>({});
+  const [showSettings, setShowSettings] = useState(false);
+
   const [isPending, startTransition] = useTransition();
 
-  // --- 1. LOAD SAVED DATA FROM DB ON TAB SWITCH ---
+  // --- INITIALIZE TARGETS ON MOUNT ---
+  useEffect(() => {
+      const initialTargets: Record<string, number> = {};
+      const castSize = students.length || 40;
+
+      Object.entries(COMMITTEES).forEach(([phase, comms]) => {
+          comms.forEach(c => {
+              const rule = DEFAULT_RULES[c] || DEFAULT_RULES["default"];
+              let val = rule.type === 'fixed' ? rule.val : Math.ceil(castSize / rule.val);
+              if (rule.min && val < rule.min) val = rule.min;
+              initialTargets[`${phase}-${c}`] = val;
+          });
+      });
+      setTargets(initialTargets);
+  }, [students.length]);
+
+  // --- LOAD SAVED DATA FROM DB ON TAB SWITCH ---
   const initialAssignments = useMemo(() => {
       const acc: Record<number, string> = {};
       rawData.forEach(v => {
@@ -72,32 +93,20 @@ export default function CommitteeDashboard({
       return acc;
   }, [rawData, groupBy]);
 
-  // Reset local assignments to DB state whenever tab changes
   useEffect(() => {
       setAssignments(initialAssignments);
   }, [initialAssignments]);
 
-  // Check if current board differs from database
   const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments);
 
-  // --- HELPER: Get Preferences based on current View ---
+  // --- HELPERS ---
   const getPrefs = (p: Volunteer) => {
-      if (groupBy === 'Pre-Show') {
-          return { first: p.preShow1, second: p.preShow2, third: p.preShow3 };
-      } else {
-          return { first: p.showWeek1, second: p.showWeek2, third: p.showWeek3 };
-      }
+      return groupBy === 'Pre-Show' 
+          ? { first: p.preShow1, second: p.preShow2, third: p.preShow3 }
+          : { first: p.showWeek1, second: p.showWeek2, third: p.showWeek3 };
   };
 
-  // --- HELPER: CALCULATE TARGETS ---
-  const getCommitteeTarget = (committeeName: string) => {
-      const castSize = students.length || 40; 
-      const rule = rules[committeeName] || rules["default"];
-      if (rule.type === 'fixed') return rule.val;
-      let calculated = Math.ceil(castSize / rule.val);
-      if (rule.min && calculated < rule.min) calculated = rule.min;
-      return calculated;
-  };
+  const getCommitteeTarget = (committeeName: string) => targets[`${groupBy}-${committeeName}`] || 0;
 
   // --- ACTIONS ---
   const handleSave = () => {
@@ -112,7 +121,7 @@ export default function CommitteeDashboard({
   };
 
   const handleAutoBalance = () => {
-      if(!confirm(`Auto-Balance unassigned volunteers for ${groupBy}? (This will NOT overwrite people you have already assigned)`)) return;
+      if(!confirm(`Auto-Balance unassigned volunteers for ${groupBy}? (This will NOT overwrite existing assignments)`)) return;
       
       const newAssignments = { ...assignments };
       const currentCommittees = COMMITTEES[groupBy];
@@ -120,24 +129,42 @@ export default function CommitteeDashboard({
       const getCount = (comm: string) => rawData.filter(p => newAssignments[p.id] === comm).length;
       
       rawData.forEach(p => {
-          // Only auto-assign if they are currently unassigned
           if (!newAssignments[p.id] || newAssignments[p.id] === "Unassigned") {
               const prefs = getPrefs(p);
               const choices = [prefs.first, prefs.second, prefs.third].filter(Boolean) as string[];
               
-              // Try to put them in their 1st, then 2nd, then 3rd choice if there is room
               for (const choice of choices) {
                   if (currentCommittees.includes(choice)) {
                       const targetLimit = getCommitteeTarget(choice);
                       if (getCount(choice) < targetLimit) {
                           newAssignments[p.id] = choice;
-                          break; // Move to the next person once assigned
+                          break;
                       }
                   }
               }
           }
       });
       setAssignments(newAssignments);
+  };
+
+  // NEW: Mathematically scales targets so the sum equals the total number of available volunteers
+  const handleSuggestLimits = () => {
+      const currentComms = COMMITTEES[groupBy];
+      const totalVolunteers = rawData.length;
+      const currentTotalTargets = currentComms.reduce((sum, c) => sum + (targets[`${groupBy}-${c}`] || 0), 0);
+
+      if (currentTotalTargets === 0) return;
+
+      const scale = totalVolunteers / currentTotalTargets;
+      const newTargets = { ...targets };
+
+      currentComms.forEach(c => {
+          const key = `${groupBy}-${c}`;
+          // Scale it down, but never let a committee go below 1
+          newTargets[key] = Math.max(1, Math.round((targets[key] || 0) * scale));
+      });
+      
+      setTargets(newTargets);
   };
 
   // --- GROUP DATA FOR RENDER ---
@@ -153,7 +180,6 @@ export default function CommitteeDashboard({
           } else if (assignedVal === "Unassigned") {
               groups["Unassigned"].push(p);
           } else {
-             // If completely blank in DB and local state, leave them unassigned
              groups["Unassigned"].push(p);
           }
       });
@@ -172,8 +198,8 @@ export default function CommitteeDashboard({
                     {rawData.length} Volunteers • Cast Size: <span className="text-blue-400 font-bold">{students.length}</span>
                 </p>
             </div>
-            <div className="flex flex-wrap gap-2 w-full xl:w-auto">
-                <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner">
+            <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
+                <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner mr-2">
                     <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
                     <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
                 </div>
@@ -191,6 +217,7 @@ export default function CommitteeDashboard({
                     {hasChanges ? "Save Changes" : "Saved"}
                 </button>
 
+                <button onClick={() => setShowSettings(true)} className="bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Settings2 size={14}/> Limits</button>
                 <button onClick={handleAutoBalance} className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
                 <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><RotateCcw size={14}/> Revert</button>
                 <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
@@ -203,13 +230,19 @@ export default function CommitteeDashboard({
                 const team = groupedData[committee];
                 const target = getCommitteeTarget(committee);
                 const isUnderstaffed = team.length < target;
-                const statusColor = isUnderstaffed ? 'text-amber-500' : 'text-emerald-500';
+                const isOverstaffed = team.length > target;
+                
+                let statusColor = 'text-emerald-500';
+                if (isUnderstaffed) statusColor = 'text-amber-500';
+                if (isOverstaffed) statusColor = 'text-rose-500';
+                if (committee === "Unassigned") statusColor = 'text-emerald-500';
                 
                 const lKey = `${groupBy}:${committee}`;
                 const leaders = leadership[lKey] || { chair: null, coChair: null };
                 const chairName = rawData.find(p => p.id === leaders.chair)?.name;
                 
-                if (team.length === 0 && committee !== "Unassigned") return null;
+                // DELETED: Hiding empty committees
+                // if (team.length === 0 && committee !== "Unassigned") return null; 
                 
                 return (
                     <div key={committee} className={`break-inside-avoid mb-6 rounded-2xl overflow-hidden border shadow-2xl border-white/10 bg-zinc-900/40 print:border-black print:bg-white print:mb-8`}>
@@ -218,28 +251,85 @@ export default function CommitteeDashboard({
                                 <h3 className={`font-black uppercase text-sm tracking-widest ${statusColor} print:text-black`}>{committee}</h3>
                                 {chairName && <p className="text-[9px] text-blue-400 font-bold mt-0.5 flex items-center gap-1"><Crown size={10}/> {chairName}</p>}
                             </div>
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
+                            {committee !== "Unassigned" ? (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
+                            ) : (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 ${team.length > 0 ? 'text-amber-500 border-amber-500/30' : 'text-zinc-500'}`}>{team.length} Remaining</span>
+                            )}
                         </div>
                         
                         <div className="p-3 space-y-1">
-                            {team.slice(0, 3).map((p: Volunteer) => {
+                            {team.length === 0 && <div className="text-xs text-zinc-600 italic py-2 text-center">Empty</div>}
+                            {team.slice(0, 5).map((p: Volunteer) => {
                                 const prefs = getPrefs(p);
                                 return (
-                                    <div key={p.id} className="text-xs text-zinc-400 flex justify-between">
+                                    <div key={p.id} className="text-xs text-zinc-400 flex justify-between py-0.5 hover:text-white transition-colors">
                                         <span>{p.name}</span>
-                                        {prefs.first === committee && <CheckCircle2 size={10} className="text-emerald-500"/>}
+                                        {prefs.first === committee && <CheckCircle2 size={12} className="text-emerald-500"/>}
                                     </div>
                                 )
                             })}
-                            {team.length > 3 && <div className="text-[10px] text-zinc-600 italic pt-1">+{team.length - 3} more...</div>}
+                            {team.length > 5 && <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2 border-t border-white/5 mt-2">+{team.length - 5} more...</div>}
                         </div>
                     </div>
                 );
             })}
         </div>
 
-        {/* --- DRAWER --- */}
-        {selectedCommittee && (
+        {/* --- LIMITS SETTINGS MODAL --- */}
+        {showSettings && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+                <div className="relative w-full max-w-md bg-zinc-900 border border-white/10 shadow-2xl rounded-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-6 border-b border-white/10 flex justify-between items-start bg-zinc-950">
+                        <div>
+                            <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">Adjust Targets</h2>
+                            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">{groupBy} Phase</p>
+                        </div>
+                        <button onClick={() => setShowSettings(false)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-colors"><X size={18}/></button>
+                    </div>
+
+                    <div className="p-6 overflow-y-auto max-h-[60vh] custom-scrollbar bg-zinc-950/50 space-y-4">
+                        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h4 className="text-sm font-bold text-blue-400">Smart Distribution</h4>
+                                    <p className="text-xs text-blue-300/70 mt-1 pr-4">Automatically scales all targets down proportionally to match your {rawData.length} available volunteers.</p>
+                                </div>
+                                <button onClick={handleSuggestLimits} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded shadow-lg text-xs font-black uppercase flex items-center gap-2 transition-colors"><Lightbulb size={14}/> Suggest</button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {COMMITTEES[groupBy].map(c => {
+                                const key = `${groupBy}-${c}`;
+                                return (
+                                    <div key={c} className="flex justify-between items-center p-3 bg-zinc-900 border border-white/5 rounded-lg hover:border-white/10 transition-colors">
+                                        <span className="text-sm font-bold text-zinc-300">{c}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-zinc-600 font-medium">Target:</span>
+                                            <input 
+                                                type="number" 
+                                                min="0"
+                                                value={targets[key] || 0}
+                                                onChange={(e) => setTargets(prev => ({...prev, [key]: parseInt(e.target.value) || 0}))}
+                                                className="w-16 bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-center text-sm font-bold text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                    <div className="p-4 border-t border-white/10 bg-zinc-950 flex justify-end">
+                        <button onClick={() => setShowSettings(false)} className="bg-white text-black px-6 py-2 rounded-lg text-sm font-black uppercase hover:bg-zinc-200 transition-colors shadow-xl">Done</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- ASSIGNMENT DRAWER --- */}
+        {selectedCommittee && selectedCommittee !== "Unassigned" && (
             <div className="fixed inset-0 z-50 flex justify-end">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedCommittee(null)} />
                 <aside className="relative w-full max-w-3xl bg-zinc-900 border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
@@ -278,6 +368,11 @@ export default function CommitteeDashboard({
                                     </div>
                                 )
                             })}
+                            {currentTeam.length === 0 && (
+                                <div className="p-8 text-center text-zinc-600 text-sm italic">
+                                    No volunteers assigned to {selectedCommittee} yet.
+                                </div>
+                            )}
                          </div>
                     </div>
                 </aside>
