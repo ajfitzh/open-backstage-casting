@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { 
   Printer, Crown, Wand2, RotateCcw, X, 
-  Trash2, Sliders, Info, CheckCircle2, Save, Loader2, Settings2, Lightbulb
+  CheckCircle2, Save, Loader2, Settings2, Lightbulb,
+  LayoutGrid, LayoutList
 } from 'lucide-react';
 import { saveCommitteeAssignments } from '@/app/actions/committees';
 
@@ -26,31 +27,23 @@ interface Volunteer {
 
 // --- CONFIG ---
 const COMMITTEES: Record<string, string[]> = {
-    // Added "Show Chair" to the very front of both lists!
     'Pre-Show': ["Show Chair", "Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
     'Show Week': ["Show Chair", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
 };
 
 // Base baseline rules calibrated to Jenny's Word Doc targets
 const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
-    // The Boss
     "Show Chair": { type: 'fixed', val: 1, reason: "The Boss" },
-
-    // Scalable Committees (Derived from 73 cast members)
     "Green Room": { type: 'ratio', val: 13, min: 2, reason: "Jenny's Ratio: 1 per 13 Actors" }, 
     "Costumes": { type: 'ratio', val: 13, min: 3, reason: "Jenny's Ratio: 1 per 13 Actors" },   
     "Hair": { type: 'ratio', val: 15, min: 2, reason: "Jenny's Ratio: 1 per 15 Actors" },
     "Makeup": { type: 'ratio', val: 25, min: 2, reason: "Jenny's Ratio: 1 per 25 Actors" },
-
-    // Fixed Committees (Jenny's exact targets)
     "Publicity": { type: 'fixed', val: 9, reason: "Jenny's Target" },
     "Raffles": { type: 'fixed', val: 7, reason: "Jenny's Target" },
     "Sets": { type: 'fixed', val: 6, reason: "Jenny's Target" },              
     "Set Dressing": { type: 'fixed', val: 6, reason: "Jenny's Target" },
     "Props": { type: 'fixed', val: 5, reason: "Jenny's Target" },
     "Tech": { type: 'fixed', val: 2, reason: "Jenny's Target" },              
-
-    // Show Week Only (Standard baseline, editable in the Limits panel)
     "Security": { type: 'fixed', val: 3, reason: "Door & Perimeter" },
     "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window" },
     "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
@@ -69,16 +62,15 @@ export default function CommitteeDashboard({
 }) {
   
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [rawData] = useState<Volunteer[]>(volunteers);
   
   const [assignments, setAssignments] = useState<Record<number, string>>({});
   const [leadership, setLeadership] = useState<Record<string, { chair: number | null, coChair: number | null }>>({});
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   
-  // NEW: State for editable targets (Keyed by `${Phase}-${Committee}` to prevent overlaps like Raffles)
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
-
   const [isPending, startTransition] = useTransition();
 
   // --- INITIALIZE TARGETS ON MOUNT ---
@@ -161,7 +153,6 @@ export default function CommitteeDashboard({
       setAssignments(newAssignments);
   };
 
-  // NEW: Mathematically scales targets so the sum equals the total number of available volunteers
   const handleSuggestLimits = () => {
       const currentComms = COMMITTEES[groupBy];
       const totalVolunteers = rawData.length;
@@ -174,14 +165,13 @@ export default function CommitteeDashboard({
 
       currentComms.forEach(c => {
           const key = `${groupBy}-${c}`;
-          // Scale it down, but never let a committee go below 1
           newTargets[key] = Math.max(1, Math.round((targets[key] || 0) * scale));
       });
       
       setTargets(newTargets);
   };
 
-  // --- GROUP DATA FOR RENDER ---
+  // --- GROUP DATA FOR BOARD RENDER ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Volunteer[]> = {};
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
@@ -191,14 +181,23 @@ export default function CommitteeDashboard({
           const assignedVal = assignments[p.id];
           if (assignedVal && groups[assignedVal]) {
               groups[assignedVal].push(p);
-          } else if (assignedVal === "Unassigned") {
-              groups["Unassigned"].push(p);
           } else {
              groups["Unassigned"].push(p);
           }
       });
       return groups;
   }, [groupBy, rawData, assignments]);
+
+  // --- SORT DATA FOR LIST RENDER (Unassigned at the top) ---
+  const sortedListData = useMemo(() => {
+      return [...rawData].sort((a, b) => {
+          const aAssigned = assignments[a.id] || "Unassigned";
+          const bAssigned = assignments[b.id] || "Unassigned";
+          if (aAssigned === "Unassigned" && bAssigned !== "Unassigned") return -1;
+          if (aAssigned !== "Unassigned" && bAssigned === "Unassigned") return 1;
+          return a.name.localeCompare(b.name);
+      });
+  }, [rawData, assignments]);
 
   const currentTeam = selectedCommittee ? groupedData[selectedCommittee] : [];
 
@@ -213,15 +212,23 @@ export default function CommitteeDashboard({
                 </p>
             </div>
             <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
+                
+                {/* VIEW TOGGLE */}
                 <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner mr-2">
-                    <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
-                    <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
+                    <button onClick={() => setViewMode('board')} className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-2 ${viewMode === 'board' ? 'bg-zinc-700 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}><LayoutGrid size={14}/> Board</button>
+                    <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-zinc-700 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}><LayoutList size={14}/> List</button>
+                </div>
+
+                {/* PHASE TOGGLE */}
+                <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner mr-2">
+                    <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
+                    <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
                 </div>
                 
                 <button 
                     onClick={handleSave} 
                     disabled={!hasChanges || isPending}
-                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all border ${
+                    className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all border ${
                         hasChanges 
                             ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
                             : 'bg-zinc-900 text-zinc-500 border-white/10 cursor-not-allowed'
@@ -231,64 +238,123 @@ export default function CommitteeDashboard({
                     {hasChanges ? "Save Changes" : "Saved"}
                 </button>
 
-                <button onClick={() => setShowSettings(true)} className="bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Settings2 size={14}/> Limits</button>
-                <button onClick={handleAutoBalance} className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-600/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
-                <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><RotateCcw size={14}/> Revert</button>
-                <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
+                <button onClick={() => setShowSettings(true)} className="bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Settings2 size={14}/> Limits</button>
+                <button onClick={handleAutoBalance} className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-600/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
+                <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><RotateCcw size={14}/> Revert</button>
+                <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
             </div>
         </div>
 
-        {/* BOARD GRID */}
-        <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 print:block print:columns-2 pb-24">
-            {Object.keys(groupedData).map(committee => {
-                const team = groupedData[committee];
-                const target = getCommitteeTarget(committee);
-                const isUnderstaffed = team.length < target;
-                const isOverstaffed = team.length > target;
-                
-                let statusColor = 'text-emerald-500';
-                if (isUnderstaffed) statusColor = 'text-amber-500';
-                if (isOverstaffed) statusColor = 'text-rose-500';
-                if (committee === "Unassigned") statusColor = 'text-emerald-500';
-                
-                const lKey = `${groupBy}:${committee}`;
-                const leaders = leadership[lKey] || { chair: null, coChair: null };
-                const chairName = rawData.find(p => p.id === leaders.chair)?.name;
-                
-                // DELETED: Hiding empty committees
-                // if (team.length === 0 && committee !== "Unassigned") return null; 
-                
-                return (
-                    <div key={committee} className={`break-inside-avoid mb-6 rounded-2xl overflow-hidden border shadow-2xl border-white/10 bg-zinc-900/40 print:border-black print:bg-white print:mb-8`}>
-                        <div onClick={() => setSelectedCommittee(committee)} className="p-4 border-b border-white/5 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors">
-                            <div>
-                                <h3 className={`font-black uppercase text-sm tracking-widest ${statusColor} print:text-black`}>{committee}</h3>
-                                {chairName && <p className="text-[9px] text-blue-400 font-bold mt-0.5 flex items-center gap-1"><Crown size={10}/> {chairName}</p>}
+        {/* --- CONDITIONAL RENDER: BOARD OR LIST --- */}
+        {viewMode === 'board' ? (
+            <div className="columns-1 md:columns-2 xl:columns-3 gap-6 space-y-6 print:block print:columns-2 pb-24">
+                {Object.keys(groupedData).map(committee => {
+                    const team = groupedData[committee];
+                    const target = getCommitteeTarget(committee);
+                    const isUnderstaffed = team.length < target;
+                    const isOverstaffed = team.length > target;
+                    
+                    let statusColor = 'text-emerald-500';
+                    if (isUnderstaffed) statusColor = 'text-amber-500';
+                    if (isOverstaffed) statusColor = 'text-rose-500';
+                    if (committee === "Unassigned") statusColor = 'text-emerald-500';
+                    
+                    const lKey = `${groupBy}:${committee}`;
+                    const leaders = leadership[lKey] || { chair: null, coChair: null };
+                    const chairName = rawData.find(p => p.id === leaders.chair)?.name;
+                    
+                    return (
+                        <div key={committee} className={`break-inside-avoid mb-6 rounded-2xl overflow-hidden border shadow-2xl border-white/10 bg-zinc-900/40 print:border-black print:bg-white print:mb-8`}>
+                            <div onClick={() => setSelectedCommittee(committee)} className="p-4 border-b border-white/5 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors">
+                                <div>
+                                    <h3 className={`font-black uppercase text-sm tracking-widest ${statusColor} print:text-black`}>{committee}</h3>
+                                    {chairName && <p className="text-[9px] text-blue-400 font-bold mt-0.5 flex items-center gap-1"><Crown size={10}/> {chairName}</p>}
+                                </div>
+                                {committee !== "Unassigned" ? (
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
+                                ) : (
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 ${team.length > 0 ? 'text-amber-500 border-amber-500/30' : 'text-zinc-500'}`}>{team.length} Remaining</span>
+                                )}
                             </div>
-                            {committee !== "Unassigned" ? (
-                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
-                            ) : (
-                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 ${team.length > 0 ? 'text-amber-500 border-amber-500/30' : 'text-zinc-500'}`}>{team.length} Remaining</span>
-                            )}
+                            
+                            <div className="p-3 space-y-1">
+                                {team.length === 0 && <div className="text-xs text-zinc-600 italic py-2 text-center">Empty</div>}
+                                {team.slice(0, 5).map((p: Volunteer) => {
+                                    const prefs = getPrefs(p);
+                                    return (
+                                        <div key={p.id} className="text-xs text-zinc-400 flex justify-between py-0.5 hover:text-white transition-colors">
+                                            <span>{p.name}</span>
+                                            {prefs.first === committee && <CheckCircle2 size={12} className="text-emerald-500"/>}
+                                        </div>
+                                    )
+                                })}
+                                {team.length > 5 && <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2 border-t border-white/5 mt-2">+{team.length - 5} more...</div>}
+                            </div>
                         </div>
-                        
-                        <div className="p-3 space-y-1">
-                            {team.length === 0 && <div className="text-xs text-zinc-600 italic py-2 text-center">Empty</div>}
-                            {team.slice(0, 5).map((p: Volunteer) => {
-                                const prefs = getPrefs(p);
-                                return (
-                                    <div key={p.id} className="text-xs text-zinc-400 flex justify-between py-0.5 hover:text-white transition-colors">
-                                        <span>{p.name}</span>
-                                        {prefs.first === committee && <CheckCircle2 size={12} className="text-emerald-500"/>}
-                                    </div>
-                                )
-                            })}
-                            {team.length > 5 && <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2 border-t border-white/5 mt-2">+{team.length - 5} more...</div>}
-                        </div>
+                    );
+                })}
+            </div>
+        ) : (
+            <div className="pb-24 animate-in fade-in duration-300">
+                <div className="bg-zinc-900/40 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-zinc-950 border-b border-white/10 text-zinc-500 text-[10px] uppercase tracking-widest">
+                                <tr>
+                                    <th className="p-4 font-black whitespace-nowrap">Volunteer</th>
+                                    <th className="p-4 font-black whitespace-nowrap">Student</th>
+                                    <th className="p-4 font-black whitespace-nowrap">1st Choice</th>
+                                    <th className="p-4 font-black whitespace-nowrap">2nd Choice</th>
+                                    <th className="p-4 font-black whitespace-nowrap">3rd Choice</th>
+                                    <th className="p-4 font-black whitespace-nowrap">Assignment</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 text-sm">
+                                {sortedListData.map(p => {
+                                    const prefs = getPrefs(p);
+                                    const currentAssigned = assignments[p.id] || "Unassigned";
+                                    const isUnassigned = currentAssigned === "Unassigned";
+                                    
+                                    return (
+                                        <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : ''}`}>
+                                            <td className="p-4 font-bold text-zinc-200 whitespace-nowrap">{p.name}</td>
+                                            <td className="p-4 text-zinc-400 text-xs whitespace-nowrap">{p.studentName || "-"}</td>
+                                            
+                                            <td className="p-4 whitespace-nowrap">
+                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.first ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.first || "-"} {currentAssigned === prefs.first && <CheckCircle2 size={14}/>}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 whitespace-nowrap">
+                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.second ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.second || "-"} {currentAssigned === prefs.second && <CheckCircle2 size={14}/>}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 whitespace-nowrap">
+                                                <div className={`flex items-center gap-2 ${currentAssigned === prefs.third ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
+                                                    {prefs.third || "-"} {currentAssigned === prefs.third && <CheckCircle2 size={14}/>}
+                                                </div>
+                                            </td>
+                                            
+                                            <td className="p-4 whitespace-nowrap">
+                                                <select 
+                                                    className={`bg-zinc-950 border rounded-lg px-3 py-2 text-xs font-bold outline-none transition-colors shadow-sm cursor-pointer ${isUnassigned ? 'border-amber-500/50 text-amber-500 focus:border-amber-400 focus:ring-1 focus:ring-amber-400' : 'border-zinc-700 text-zinc-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500'}`}
+                                                    value={currentAssigned}
+                                                    onChange={(e) => setAssignments(prev => ({...prev, [p.id]: e.target.value}))}
+                                                >
+                                                    {COMMITTEES[groupBy].map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                                    <option value="Unassigned">Unassigned</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
                     </div>
-                );
-            })}
-        </div>
+                </div>
+            </div>
+        )}
 
         {/* --- LIMITS SETTINGS MODAL --- */}
         {showSettings && (
@@ -308,7 +374,7 @@ export default function CommitteeDashboard({
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h4 className="text-sm font-bold text-blue-400">Smart Distribution</h4>
-                                    <p className="text-xs text-blue-300/70 mt-1 pr-4">Automatically scales all targets down proportionally to match your {rawData.length} available volunteers.</p>
+                                    <p className="text-xs text-blue-300/70 mt-1 pr-4">Automatically scales targets to match your {rawData.length} volunteers.</p>
                                 </div>
                                 <button onClick={handleSuggestLimits} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded shadow-lg text-xs font-black uppercase flex items-center gap-2 transition-colors"><Lightbulb size={14}/> Suggest</button>
                             </div>
@@ -342,8 +408,8 @@ export default function CommitteeDashboard({
             </div>
         )}
 
-        {/* --- ASSIGNMENT DRAWER --- */}
-        {selectedCommittee && selectedCommittee !== "Unassigned" && (
+        {/* --- ASSIGNMENT DRAWER (BOARD VIEW ONLY) --- */}
+        {selectedCommittee && selectedCommittee !== "Unassigned" && viewMode === 'board' && (
             <div className="fixed inset-0 z-50 flex justify-end">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedCommittee(null)} />
                 <aside className="relative w-full max-w-3xl bg-zinc-900 border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
