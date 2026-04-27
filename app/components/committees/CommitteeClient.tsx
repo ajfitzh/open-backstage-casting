@@ -26,22 +26,36 @@ interface Volunteer {
 
 // --- CONFIG ---
 const COMMITTEES: Record<string, string[]> = {
-    'Pre-Show': ["Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
-    'Show Week': ["Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
+    // Added "Show Chair" to the very front of both lists!
+    'Pre-Show': ["Show Chair", "Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
+    'Show Week': ["Show Chair", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
 };
 
-// Base baseline rules. These are used for the INITIAL calculation.
+// Base baseline rules calibrated to Jenny's Word Doc targets
 const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
-    "Green Room": { type: 'ratio', val: 8, min: 2, reason: "1 Adult per 8 Students" }, 
-    "Costumes": { type: 'ratio', val: 6, min: 3, reason: "1 per 6 Actors" },   
-    "Makeup": { type: 'ratio', val: 7, min: 2, reason: "1 per 7 Actors" },
-    "Tech": { type: 'fixed', val: 5, reason: "Booth + Deck Crew" },              
-    "Sets": { type: 'fixed', val: 8, reason: "Heavy Lifting Team" },              
+    // The Boss
+    "Show Chair": { type: 'fixed', val: 1, reason: "The Boss" },
+
+    // Scalable Committees (Derived from 73 cast members)
+    "Green Room": { type: 'ratio', val: 13, min: 2, reason: "Jenny's Ratio: 1 per 13 Actors" }, 
+    "Costumes": { type: 'ratio', val: 13, min: 3, reason: "Jenny's Ratio: 1 per 13 Actors" },   
+    "Hair": { type: 'ratio', val: 15, min: 2, reason: "Jenny's Ratio: 1 per 15 Actors" },
+    "Makeup": { type: 'ratio', val: 25, min: 2, reason: "Jenny's Ratio: 1 per 25 Actors" },
+
+    // Fixed Committees (Jenny's exact targets)
+    "Publicity": { type: 'fixed', val: 9, reason: "Jenny's Target" },
+    "Raffles": { type: 'fixed', val: 7, reason: "Jenny's Target" },
+    "Sets": { type: 'fixed', val: 6, reason: "Jenny's Target" },              
+    "Set Dressing": { type: 'fixed', val: 6, reason: "Jenny's Target" },
+    "Props": { type: 'fixed', val: 5, reason: "Jenny's Target" },
+    "Tech": { type: 'fixed', val: 2, reason: "Jenny's Target" },              
+
+    // Show Week Only (Standard baseline, editable in the Limits panel)
     "Security": { type: 'fixed', val: 3, reason: "Door & Perimeter" },
     "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window" },
     "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
-    "Publicity": { type: 'fixed', val: 4, reason: "Social Media & Posters" },
-    "default": { type: 'fixed', val: 3, reason: "Standard Committee Size" }
+    "Ninjas/Set Movers": { type: 'fixed', val: 4, reason: "Deck Crew" },
+    "default": { type: 'fixed', val: 3, reason: "Standard Size" }
 };
 
 export default function CommitteeDashboard({ 
