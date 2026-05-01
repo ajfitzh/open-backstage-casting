@@ -2,6 +2,7 @@
 
 import { notFound } from "next/navigation";
 import { DB } from "@/app/lib/schema"; 
+import { getTenantTableConfig } from "@/app/lib/tenant-config";
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
@@ -50,27 +51,16 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
 
 function safeGet(field: any, fallback: string | number = ""): any {
   if (field === null || field === undefined) return fallback;
-  
-  // 1. Primitives
   if (typeof field === 'string' || typeof field === 'number' || typeof field === 'boolean') return field;
-  
-  // 2. Arrays (Crucial for Baserow Lookups like Gender)
   if (Array.isArray(field)) {
     if (field.length === 0) return fallback;
     const first = field[0];
-    
-    // Handle ["Male"]
     if (typeof first === 'string') return first;
-    
-    // Handle [{value: "Male"}] or [{name: "Male"}]
     return first.value || first.name || first.url || fallback;
   }
-  
-  // 3. Objects
   if (typeof field === 'object') {
     return field.value || field.name || fallback;
   }
-  
   return fallback;
 }
 
@@ -86,7 +76,6 @@ function extractName(field: any, fallback: string = ""): string {
   return fallback;
 }
 
-// Helper to reconstruct Age Range string from Min/Max integers
 function formatAgeRange(row: any): string {
     const min = parseInt(safeGet(row[DB.CLASSES.FIELDS.MINIMUM_AGE], 0));
     const max = parseInt(safeGet(row[DB.CLASSES.FIELDS.MAXIMUM_AGE], 0));
@@ -97,7 +86,9 @@ function formatAgeRange(row: any): string {
     return `${min} - ${max}`;
 }
 
-export async function deleteRow(tableId: string, rowId: number | string) {
+export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeof getTenantTableConfig>, rowId: number | string) {
+  const tables = getTenantTableConfig(tenant);
+  const tableId = tables[tableKey];
   const url = `/database/rows/table/${tableId}/${rowId}/`;
   const res = await fetchBaserow(url, { method: "DELETE" });
   return res !== null;
@@ -107,14 +98,15 @@ export async function deleteRow(tableId: string, rowId: number | string) {
 // 🎓 EDUCATION (CLASSES & VENUES)
 // ==============================================================================
 
-export async function getClasses() {
+export async function getClasses(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   let allRows: any[] = [];
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
     const data = await fetchBaserow(
-      `/database/rows/table/${DB.CLASSES.ID}/`, 
+      `/database/rows/table/${tables.CLASSES}/`, 
       {}, 
       { page: page.toString(), size: "200" } 
     );
@@ -139,19 +131,16 @@ return allRows.map((row: any) => ({
       day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
       time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
       type: safeGet(row[DB.CLASSES.FIELDS.TYPE], "General"),
-      
-      // ✅ NEW: Pass raw integers for filtering
       minAge: parseInt(safeGet(row[DB.CLASSES.FIELDS.MINIMUM_AGE], 0)),
       maxAge: parseInt(safeGet(row[DB.CLASSES.FIELDS.MAXIMUM_AGE], 99)),
-      
-      // Keep the pretty string for display
       ageRange: formatAgeRange(row),
       students: Array.isArray(row[DB.CLASSES.FIELDS.STUDENTS]) ? row[DB.CLASSES.FIELDS.STUDENTS].length : 0,
   }));
 }
 
-export async function getClassById(classId: string) {
-  const row = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`);
+export async function getClassById(tenant: string, classId: string) {
+  const tables = getTenantTableConfig(tenant);
+  const row = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`);
   if (!row || row.error) return null;
 
   const students = row[DB.CLASSES.FIELDS.STUDENTS] || []; 
@@ -165,14 +154,15 @@ export async function getClassById(classId: string) {
     day: safeGet(row[DB.CLASSES.FIELDS.DAY], "TBD"),
     time: safeGet(row[DB.CLASSES.FIELDS.TIME_SLOT], "TBD"),
     description: safeGet(row[DB.CLASSES.FIELDS.DESCRIPTION], ""), 
-    ageRange: formatAgeRange(row), // FIXED
+    ageRange: formatAgeRange(row),
     spaceName: safeGet(row[DB.CLASSES.FIELDS.SPACE]),
     students: Array.isArray(students) ? students.length : 0,
   };
 }
 
-export async function getClassRoster(classId: string) {
+export async function getClassRoster(tenant: string, classId: string) {
   if (!classId) return [];
+  const tables = getTenantTableConfig(tenant);
 
   const params = {
     filter_type: "OR",
@@ -181,7 +171,7 @@ export async function getClassRoster(classId: string) {
     size: "200"
   };
 
-  const students = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, params);
+  const students = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
   if (!Array.isArray(students)) return [];
 
   return students.map((s: any) => ({
@@ -195,42 +185,39 @@ export async function getClassRoster(classId: string) {
     medical: safeGet(s[DB.PEOPLE.FIELDS.MEDICAL_NOTES], "None"),
   }));
 }
-// app/lib/baserow.ts
 
-// app/lib/baserow.ts
-
-// app/lib/baserow.ts
-
-export async function getVenues() {
+export async function getVenues(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const data = await fetchBaserow(
-    `/database/rows/table/${DB.VENUES.ID}/`, 
+    `/database/rows/table/${tables.VENUES}/`, 
     {}, 
-    { size: "200" } // Removed user_field_names=true
+    { size: "200" }
   );
   
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    // 1. Safe extraction of the Select Object
     const typeField = row[DB.VENUES.FIELDS.TYPE];
-    const typeValue = typeField?.value || "Hybrid"; // Use optional chaining to be safe
+    const typeValue = typeField?.value || "Hybrid"; 
 
     return {
       id: row.id,
       name: row[DB.VENUES.FIELDS.VENUE_NAME] || "Unknown Venue",
       capacity: parseInt(row[DB.VENUES.FIELDS.SEATING_CAPACITY]) || 0,
       marketingName: row[DB.VENUES.FIELDS.PUBLIC_NAME_MARKETING],
-      type: typeValue, // <--- Use the safe value
+      type: typeValue, 
       historicalShows: row[DB.VENUES.FIELDS.PRODUCTIONS]?.length || 0 
     };
   });
 }
-export async function getVenueLogistics() {
+
+export async function getVenueLogistics(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
-    fetchBaserow(`/database/rows/table/${DB.VENUES.ID}/`, {}, { size: "200" }),
-    fetchBaserow(`/database/rows/table/${DB.SPACES.ID}/`, {}, { size: "200" }),
-    fetchBaserow(`/database/rows/table/${DB.RENTAL_RATES.ID}/`, {}, { size: "200" }),
-    getClasses()
+    fetchBaserow(`/database/rows/table/${tables.VENUES}/`, {}, { size: "200" }),
+    fetchBaserow(`/database/rows/table/${tables.SPACES}/`, {}, { size: "200" }),
+    fetchBaserow(`/database/rows/table/${tables.RENTAL_RATES}/`, {}, { size: "200" }),
+    getClasses(tenant)
   ]);
 
   if (!Array.isArray(venuesData) || !Array.isArray(spacesData)) return [];
@@ -287,16 +274,15 @@ function mapShow(row: any) {
     isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === "Active",
     image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
     productionSession: safeGet(row[DB.PRODUCTIONS.FIELDS.SESSION], ""),
-    // 🛠️ FIX: Separate Branch (Location) from Specific Venue
     branch: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"), 
-    venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "null"), // This grabs "Fredericksburg Academy"
-    
+    venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "null"), 
     workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
   };
 }
 
-export async function getActiveProduction() {
-  const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/`, {}, { size: "50" });
+export async function getActiveProduction(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "50" });
   if (!Array.isArray(data)) return null;
   
   const activeRow = data.find((r: any) => 
@@ -306,15 +292,14 @@ export async function getActiveProduction() {
 
   return activeRow ? mapShow(activeRow) : null;
 }
-// app/lib/baserow.ts
 
-export async function getSeasons() {
+export async function getSeasons(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const data = await fetchBaserow(
-    `/database/rows/table/${DB.SEASONS.ID}/`, 
+    `/database/rows/table/${tables.SEASONS}/`, 
     {}, 
     { 
       size: "200",
-      // Sort by start date (descending usually makes sense for UI, but we sort in client too)
       order_by: `${DB.SEASONS.FIELDS.START_DATE}` 
     }
   );
@@ -327,22 +312,21 @@ export async function getSeasons() {
     startDate: safeGet(row[DB.SEASONS.FIELDS.START_DATE]),
     endDate: safeGet(row[DB.SEASONS.FIELDS.END_DATE]),
     status: safeGet(row[DB.SEASONS.FIELDS.STATUS], "Planning"), 
-    // Count how many productions are linked to this season
     productionCount: Array.isArray(row[DB.SEASONS.FIELDS.PRODUCTIONS]) ? row[DB.SEASONS.FIELDS.PRODUCTIONS].length : 0
   })).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
-export async function getShowById(id: string | number) {
-  const data = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${id}/`);
+
+export async function getShowById(tenant: string, id: string | number) {
+  const tables = getTenantTableConfig(tenant);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${id}/`);
   if (!data || data.error) return null;
   return mapShow(data);
 }
 
-// app/lib/baserow.ts
-
-export async function getAllShows() {
-  // 1. Fetch raw data (NO user_field_names)
+export async function getAllShows(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const data = await fetchBaserow(
-    `/database/rows/table/${DB.PRODUCTIONS.ID}/`, 
+    `/database/rows/table/${tables.PRODUCTIONS}/`, 
     {}, 
     { size: "200" } 
   );
@@ -350,11 +334,8 @@ export async function getAllShows() {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-    // 2. ROBUST TYPE EXTRACTION 🛠️
     const typeObj = row[DB.PRODUCTIONS.FIELDS.TYPE];
     const typeValue = typeObj?.value || "Other"; 
-
-    // 3. STATUS EXTRACTION (Vital for Client Bucketing)
     const rawStatus = safeGet(row[DB.PRODUCTIONS.FIELDS.STATUS], "Archived");
 
     return {
@@ -362,20 +343,11 @@ export async function getAllShows() {
       title: safeGet(row[DB.PRODUCTIONS.FIELDS.TITLE] || row[DB.PRODUCTIONS.FIELDS.FULL_TITLE], "Untitled"),
       season: safeGet(row[DB.PRODUCTIONS.FIELDS.SEASON_LINKED], "Unknown Season"),
       type: typeValue,
-
-      // ✅ FIX 1: Add Status & Active State
-      // The client uses these to sort into "Current" vs "History"
       status: rawStatus,
       isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === 'Active',
-
-      // ✅ FIX 2: Add Location 
-      // The client uses this for the color dot (Emerald for Fredericksburg, Zinc for others)
       location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"),
-
       venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
       workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [],
-
-      // Legacy field support
       Performances: row['field_6177'] || row['Performances'] || null
     };
   }).sort((a: any, b: any) => b.id - a.id);
@@ -385,7 +357,8 @@ export async function getAllShows() {
 // 👯 CASTING & PEOPLE (READ & WRITE)
 // ==============================================================================
 
-export async function getPeople() {
+export async function getPeople(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
   let allRows: any[] = [];
@@ -394,12 +367,11 @@ export async function getPeople() {
 
   while (hasMore) {
     const data = await fetchBaserow(
-      `/database/rows/table/${DB.PEOPLE.ID}/`, 
+      `/database/rows/table/${tables.PEOPLE}/`, 
       {}, 
       { 
         size: "200", 
         page: page.toString() 
-        // 🟢 user_field_names is now REMOVED (defaults to false)
       }
     );
 
@@ -414,7 +386,6 @@ export async function getPeople() {
 
   return allRows.map((row: any) => ({
     id: row.id,
-    // 🟢 Using internal field IDs from your schema
     name: row[F.FULL_NAME] || `${row[F.FIRST_NAME] || ""} ${row[F.LAST_NAME] || ""}`.trim(),
     headshot: row[F.HEADSHOT]?.[0]?.url || null,
     email: row[F.CYT_ACCOUNT_PERSONAL_EMAIL] || row[F.CYT_NATIONAL_INDIVIDUAL_EMAIL],
@@ -422,34 +393,34 @@ export async function getPeople() {
   }));
 }
 
-export async function getRoles() {
-  // FIXED: Mapped to BLUEPRINT_ROLES
+export async function getRoles(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.BLUEPRINT_ROLES.FIELDS;
-  const data = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, { size: "200", user_field_names: "true" });
+  const data = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, { size: "200", user_field_names: "true" });
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
     id: row.id,
-    name: row[F.ROLE_NAME], // FIXED
-    type: row[F.ROLE_TYPE]  // FIXED
+    name: row[F.ROLE_NAME], 
+    type: row[F.ROLE_TYPE]  
   }));
 }
 
-
-
-export async function createCastAssignment(personId: number, roleId: number, productionId: number) {
+export async function createCastAssignment(tenant: string, personId: number, roleId: number, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const body = {
     [DB.ASSIGNMENTS.FIELDS.PERSON]: [personId],
     [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [roleId],
     [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId]
   };
-  return await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/`, { 
+  return await fetchBaserow(`/database/rows/table/${tables.ASSIGNMENTS}/`, { 
     method: "POST", 
     body: JSON.stringify(body) 
   });
 }
 
-export async function updateCastAssignment(assignmentId: number, personId: number | null, sceneIds?: number[]) {
+export async function updateCastAssignment(tenant: string, assignmentId: number, personId: number | null, sceneIds?: number[]) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.ASSIGNMENTS.FIELDS;
   const body: any = {};
 
@@ -461,7 +432,7 @@ export async function updateCastAssignment(assignmentId: number, personId: numbe
     body[F.SCENE_ASSIGNMENTS] = sceneIds; 
   }
 
-  return await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/${assignmentId}/`, {
+  return await fetchBaserow(`/database/rows/table/${tables.ASSIGNMENTS}/${assignmentId}/`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -472,22 +443,21 @@ export async function updateCastAssignment(assignmentId: number, personId: numbe
 // 📅 SCHEDULING & SCENES
 // ==============================================================================
 
-export async function getScheduleSlots(productionId: number) {
+export async function getScheduleSlots(tenant: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.SCHEDULE_SLOTS.FIELDS;
   
-  // 1. Get the Event IDs for this production
-  const events = await getProductionEvents(productionId);
+  const events = await getProductionEvents(tenant, productionId);
   if (events.length === 0) return [];
-  const eventIds = new Set(events.map((e: any) => e.id)); // Use Set for O(1) lookup
+  const eventIds = new Set(events.map((e: any) => e.id));
 
-  // 2. Fetch ALL slots (Pagination Loop)
   let allSlots: any[] = [];
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
     const data = await fetchBaserow(
-      `/database/rows/table/${DB.SCHEDULE_SLOTS.ID}/`, 
+      `/database/rows/table/${tables.SCHEDULE_SLOTS}/`, 
       {}, 
       { page: page.toString(), size: "200", user_field_names: "true" }
     );
@@ -495,7 +465,6 @@ export async function getScheduleSlots(productionId: number) {
     if (!Array.isArray(data) || data.length === 0) {
       hasMore = false;
     } else {
-      // Optimization: Only keep slots that match our events to save memory
       const relevantSlots = data.filter((row: any) => {
          const linkedEventId = row[F.EVENT_LINK]?.[0]?.id;
          return eventIds.has(linkedEventId);
@@ -503,7 +472,6 @@ export async function getScheduleSlots(productionId: number) {
       
       allSlots = [...allSlots, ...relevantSlots];
       
-      // If we got less than 200, we reached the end
       if (data.length < 200) hasMore = false;
       else page++;
     }
@@ -526,64 +494,43 @@ export async function getScheduleSlots(productionId: number) {
       };
     });
 }
-// inside app/lib/baserow.ts
 
-export async function getSceneAssignments(productionId: number) {
-  // Table 628: SCENE_ASSIGNMENTS
+export async function getSceneAssignments(tenant: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.SCENE_ASSIGNMENTS.FIELDS; 
   
   const params = {
     size: "200", 
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    "user_field_names": "true" // 🟢 Crucial: Allows the Client "washing machine" to read "Person" and "Scene" keys
+    "user_field_names": "true" 
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.SCENE_ASSIGNMENTS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SCENE_ASSIGNMENTS}/`, {}, params);
   
   if (!Array.isArray(data)) return [];
   return data;
 }
 
-// app/lib/baserow.ts
-
-// ... (keep existing code) ...
-
 // ==============================================================================
 // 💾 WRITING SCHEDULES (NEW)
 // ==============================================================================
 
-export async function saveScheduleBatch(productionId: number, newSlots: any[]) {
-  // Table: SCHEDULE_SLOTS (ID: 640)
-  const TABLE_ID = DB.SCHEDULE_SLOTS.ID;
+export async function saveScheduleBatch(tenant: string, productionId: number, newSlots: any[]) {
+  const tables = getTenantTableConfig(tenant);
+  const TABLE_ID = tables.SCHEDULE_SLOTS;
   const F = DB.SCHEDULE_SLOTS.FIELDS;
 
-  // 1. Format Payload for Baserow Batch Create
-  // Baserow allows creating multiple rows at once if we send an array
   const requests = newSlots.map((slot) => {
-    
-    // Convert relative "Fri/Sat" + "WeekOffset" into a real Calendar Date
-    // NOTE: You'll need to pass the actual 'startDate' of Week 1 from the client
-    // For now, we assume slot.startTime is a real ISO string or Timestamp if generated correctly, 
-    // OR we calculate it here if your AutoScheduler returns relative offsets.
-    
-    // Assuming AutoScheduler returns relative offsets, we need real dates:
-    // This logic usually happens on the Client before calling this function, 
-    // but here is the mapping schema:
-    
     return {
-      [F.SCENE]: [slot.sceneId], // Link to Scene Table
-      [F.TRACK]: slot.track,     // Single Select: "Music", "Dance", "Acting"
-      [F.START_TIME]: new Date(slot.startTime).toISOString(), // Must be ISO format
+      [F.SCENE]: [slot.sceneId], 
+      [F.TRACK]: slot.track,     
+      [F.START_TIME]: new Date(slot.startTime).toISOString(), 
       [F.END_TIME]: new Date(slot.endTime).toISOString(),
       [F.DURATION]: slot.duration,
       [F.ACTIVE]: true,
-      // We don't have a direct 'Production' link in Schedule Slots based on your schema,
-      // instead, it links to an Event or Scene. 
-      // Ensure your SCENE links correctly to the Production.
     };
   });
 
-  // Baserow Batch API limit is usually 200 rows. Chunk it if needed.
   const chunkSize = 50;
   for (let i = 0; i < requests.length; i += chunkSize) {
     const chunk = requests.slice(i, i + chunkSize);
@@ -597,36 +544,34 @@ export async function saveScheduleBatch(productionId: number, newSlots: any[]) {
   return true;
 }
 
-export async function clearSchedule(productionId: number) {
-  // Optional: Helper to wipe the board before auto-scheduling
-  // 1. Get all slots for this production
-  const slots = await getScheduleSlots(productionId);
+export async function clearSchedule(tenant: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
+  const slots = await getScheduleSlots(tenant, productionId);
   const ids = slots.map((s:any) => s.id);
   
-  // 2. Batch Delete
-  const TABLE_ID = DB.SCHEDULE_SLOTS.ID;
+  const TABLE_ID = tables.SCHEDULE_SLOTS;
   const chunkSize = 50;
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     await fetchBaserow(`/database/rows/table/${TABLE_ID}/batch/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: chunk.map((id:any) => id) }), // IDs to delete
+      body: JSON.stringify({ items: chunk.map((id:any) => id) }), 
     });
   }
 }
-export async function getScenes(productionId?: number) {
+
+export async function getScenes(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.SCENES.FIELDS;
 
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
-    // 🔴 WAS: params['order_by'] = `field_${F.ORDER}`;
-    // 🟢 FIXED: F.ORDER is already "field_XXXX"
     params['order_by'] = F.ORDER; 
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SCENES}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -648,17 +593,16 @@ export async function getScenes(productionId?: number) {
   })).sort((a: any, b: any) => a.order - b.order);
 }
 
-export async function getProductionEvents(productionId: number) {
+export async function getProductionEvents(tenant: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.EVENTS.FIELDS;
   const params = {
     size: "200",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    // 🔴 WAS: order_by: `field_${F.EVENT_DATE}`
-    // 🟢 FIXED:
     order_by: F.EVENT_DATE
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.EVENTS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.EVENTS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -675,14 +619,15 @@ export async function getProductionEvents(productionId: number) {
 // 🛠️ ASSETS & RESOURCES
 // ==============================================================================
 
-export async function getProductionAssets(productionId?: number) {
+export async function getProductionAssets(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.ASSETS.FIELDS;
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.ASSETS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.ASSETS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -693,14 +638,15 @@ export async function getProductionAssets(productionId?: number) {
   }));
 }
 
-export async function createProductionAsset(name: string, url: string, type: string, productionId: number) {
+export async function createProductionAsset(tenant: string, name: string, url: string, type: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const body = {
     [DB.ASSETS.FIELDS.NAME]: name,
     [DB.ASSETS.FIELDS.LINK]: url,
     [DB.ASSETS.FIELDS.TYPE]: type,
     [DB.ASSETS.FIELDS.PRODUCTION]: [productionId]
   };
-  return await fetchBaserow(`/database/rows/table/${DB.ASSETS.ID}/`, { 
+  return await fetchBaserow(`/database/rows/table/${tables.ASSETS}/`, { 
     method: "POST", 
     body: JSON.stringify(body) 
   });
@@ -710,8 +656,9 @@ export async function createProductionAsset(name: string, url: string, type: str
 // 👥 PEOPLE, STAFF & COMMITTEES
 // ==============================================================================
 
-export async function getCastDemographics() {
-  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, { size: "200" });
+export async function getCastDemographics(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -723,9 +670,11 @@ export async function getCastDemographics() {
     gender: safeGet(row[DB.PEOPLE.FIELDS.GENDER], "Unknown"),
   }));
 }
-export async function getAssignments(productionId?: number) {
+
+export async function getAssignments(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.ASSIGNMENTS.FIELDS;
-  const params: any = { size: "200" }; // user_field_names is OFF by default
+  const params: any = { size: "200" }; 
 
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
@@ -737,7 +686,7 @@ export async function getAssignments(productionId?: number) {
 
   while (hasMore) {
     const data = await fetchBaserow(
-      `/database/rows/table/${DB.ASSIGNMENTS.ID}/`, 
+      `/database/rows/table/${tables.ASSIGNMENTS}/`, 
       {}, 
       { ...params, page: page.toString() }
     );
@@ -752,18 +701,19 @@ export async function getAssignments(productionId?: number) {
   }
 
   return allRows.map((row: any) => {
-    const personObj = row[F.PERSON]?.[0]; // Link rows are always arrays of objects
+    const personObj = row[F.PERSON]?.[0]; 
     
     return {
       id: row.id,
-      assignment: row[F.ASSIGNMENT] || "Unknown Role", // Formula field
+      assignment: row[F.ASSIGNMENT] || "Unknown Role", 
       personId: personObj ? personObj.id : 0, 
       personName: personObj ? personObj.value : "Unknown Actor",
     };
   });
 }
 
-export async function getCreativeTeam(productionId?: number) {
+export async function getCreativeTeam(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.SHOW_TEAM.FIELDS;
   const params: any = { size: "100" };
   
@@ -771,7 +721,7 @@ export async function getCreativeTeam(productionId?: number) {
     params[`filter__${F.PRODUCTIONS}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
@@ -793,14 +743,15 @@ export async function getCreativeTeam(productionId?: number) {
     }).filter(Boolean); 
 }
 
-export async function getProductionConflicts(productionId: number) {
+export async function getProductionConflicts(tenant: string, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.CONFLICTS.FIELDS;
   const params = {
     size: "200",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.CONFLICTS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -814,13 +765,14 @@ export async function getProductionConflicts(productionId: number) {
   }));
 }
 
-export async function getCommitteeData(productionId?: number) {
+export async function getCommitteeData(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.COMMITTEE_PREFS.FIELDS;
   
   if(productionId) params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.COMMITTEE_PREFS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -837,45 +789,40 @@ export async function getCommitteeData(productionId?: number) {
   }));
 }
 
-export async function getCommitteePreferences() {
-  return fetchBaserow(`/database/rows/table/${DB.COMMITTEE_PREFS.ID}/`);
+export async function getCommitteePreferences(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
+  return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`);
 }
 
-export async function getConflicts(id?: any) {
-  return fetchBaserow(`/database/rows/table/${DB.CONFLICTS.ID}/`);
+export async function getConflicts(tenant: string, id?: any) {
+  const tables = getTenantTableConfig(tenant);
+  return fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`);
 }
 
-export async function getComplianceData(productionId?: number) {
-  return fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`);
+export async function getComplianceData(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
+  return fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`);
 }
 
 // ==============================================================================
 // 🎤 AUDITIONS (READ & WRITE)
 // ==============================================================================
 
-// app/lib/baserow.ts
-
-export async function getAuditionees(productionId?: number) {
-  // 1. Fetch RAW data (fast, robust, standard)
+export async function getAuditionees(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
   const params: any = { size: "200" }; 
   const F = DB.AUDITIONS.FIELDS;
   
   if(productionId) params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   
-  const data = await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
       id: row.id,
-      name: extractName(row[F.PERFORMER], "Unknown Actor"), // Uses field_6052
+      name: extractName(row[F.PERFORMER], "Unknown Actor"),
       studentId: safeId(row[F.PERFORMER]),
-      
-      // ✅ This now works. 
-      // F.GENDER maps to "field_6080" (from your schema).
-      // Baserow returns { "field_6080": ["Male"], ... }
       gender: safeGet(row[F.GENDER], "Unknown"), 
-      
-      // ... (rest of your mapping)
       date: row[F.DATE] || null, 
       headshot: row[F.HEADSHOT]?.[0]?.url || null,
       video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
@@ -895,7 +842,9 @@ export async function getAuditionees(productionId?: number) {
       monologue: safeGet(row[F.MONOLOGUE], ""),
   }));
 }
-export async function submitAudition(studentId: number, productionId: number, extraData: any) {
+
+export async function submitAudition(tenant: string, studentId: number, productionId: number, extraData: any) {
+    const tables = getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
     const payload: any = {
@@ -909,24 +858,25 @@ export async function submitAudition(studentId: number, productionId: number, ex
         [F.ACTING_NOTES]: extraData.notes || "" 
     };
     
-    return await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/`, {
+    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
     });
 }
 
-export async function updateAuditionSlot(rowId: number, data: any) {
-    return await fetchBaserow(`/database/rows/table/${DB.AUDITIONS.ID}/${rowId}/?user_field_names=true`, {
+export async function updateAuditionSlot(tenant: string, rowId: number, data: any) {
+    const tables = getTenantTableConfig(tenant);
+    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${rowId}/?user_field_names=true`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
     });
 }
 
-export async function updateRole(roleId: number, data: any) {
-  // FIXED: Mapped to BLUEPRINT_ROLES
-  return await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/${roleId}/`, { 
+export async function updateRole(tenant: string, roleId: number, data: any) {
+  const tables = getTenantTableConfig(tenant);
+  return await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/${roleId}/`, { 
     method: "PATCH", 
     body: JSON.stringify(data) 
   });
@@ -936,7 +886,8 @@ export async function updateRole(roleId: number, data: any) {
 // 🔐 AUTHENTICATION & USER
 // ==============================================================================
 
-export async function findUserByEmail(email: string) {
+export async function findUserByEmail(tenant: string, email: string) {
+  const tables = getTenantTableConfig(tenant);
   const params = {
     filter_type: "OR",
     size: "1",
@@ -944,7 +895,7 @@ export async function findUserByEmail(email: string) {
     [`filter__${DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
   };
 
-  const results = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, params);
+  const results = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
   
   if (!results || results.length === 0) return null;
   
@@ -958,14 +909,15 @@ export async function findUserByEmail(email: string) {
   };
 }
 
-export async function verifyUserCredentials(email: string, password: string) {
-  const user = await findUserByEmail(email);
+export async function verifyUserCredentials(tenant: string, email: string, password: string) {
+  const user = await findUserByEmail(tenant, email);
   if (!user) return null;
   return user; 
 }
 
-export async function getUserProfile(email: string) {
-  const userRows = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
+export async function getUserProfile(tenant: string, email: string) {
+  const tables = getTenantTableConfig(tenant);
+  const userRows = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
     filter_type: "OR",
     size: "1",
     [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
@@ -990,7 +942,7 @@ export async function getUserProfile(email: string) {
 
   if (Array.isArray(familyLink) && familyLink.length > 0) {
     const familyId = familyLink[0].id;
-    const familyData = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, {
+    const familyData = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
       [`filter__${DB.PEOPLE.FIELDS.FAMILIES}__link_row_has`]: familyId,
       size: "20"
     });
@@ -1011,60 +963,52 @@ export async function getUserProfile(email: string) {
   return profile;
 }
 
-export async function getUserProductionRole(userId: number, productionId: number) {
+export async function getUserProductionRole(tenant: string, userId: number, productionId: number) {
+  const tables = getTenantTableConfig(tenant);
   const params = {
     filter_type: "AND",
     [`filter__${DB.SHOW_TEAM.FIELDS.PERSON}__link_row_has`]: userId,
     [`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`]: productionId,
   };
 
-  const rows = await fetchBaserow(`/database/rows/table/${DB.SHOW_TEAM.ID}/`, {}, params);
+  const rows = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params);
 
   if (!rows || rows.length === 0) return null;
   return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
 }
 
-// ... existing imports
-
-export async function getTeacherApplicants() {
+export async function getTeacherApplicants(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
-  // Filter for anyone with an "Applicant" or "Interviewing" tag
   const params = {
     filter_type: "OR",
     size: "200",
     [`filter__${F.STATUS}__multiple_select_has`]: "Faculty Applicant",
     [`filter__${F.STATUS}__multiple_select_has`]: "Faculty Interviewing",
-    // We optionally include 'Active Faculty' if you want to see recent hires on the board
     [`filter__${F.STATUS}__multiple_select_has`]: "Active Faculty",
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
     id: row.id,
     name: safeGet(row[F.FULL_NAME] || row[F.FIRST_NAME]),
     email: safeGet(row[F.CYT_ACCOUNT_PERSONAL_EMAIL]),
-    // We map the raw status array to find the one relevant to hiring
-    // This helps if they are also a "Parent" - we just want to know their hiring status
     status: row[F.STATUS]?.map((s:any) => s.value) || [],
     headshot: row[F.HEADSHOT]?.[0]?.url || null,
-    notes: safeGet(row[F.ORIGINAL_BIO], ""), // FIXED
+    notes: safeGet(row[F.ORIGINAL_BIO], ""),
   }));
 }
 
-// Function to move them between columns
-export async function updateApplicantStatus(personId: number, currentTags: string[], newStatus: string) {
-  // We need to be careful not to remove "Parent/Guardian" when we change "Applicant" to "Interviewing"
-  // 1. Remove old hiring tags
+export async function updateApplicantStatus(tenant: string, personId: number, currentTags: string[], newStatus: string) {
+  const tables = getTenantTableConfig(tenant);
   const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
   const keptTags = currentTags.filter(tag => !hiringTags.includes(tag));
-  
-  // 2. Add the new status
   const finalTags = [...keptTags, newStatus];
 
-  return await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/${personId}/`, {
+  return await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1073,100 +1017,101 @@ export async function updateApplicantStatus(personId: number, currentTags: strin
   });
 }
 
-// ... existing imports
-
-export async function getTeacherClasses(teacherName: string) {
+export async function getTeacherClasses(tenant: string, teacherName: string) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.CLASSES.FIELDS;
-  // Fetch classes where Teacher Name matches
   const params = {
     size: "200",
     [`filter__${F.TEACHER}__contains`]: teacherName,
     "user_field_names": "true"
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
       id: row.id,
       name: safeGet(row[F.CLASS_NAME], "Untitled"),
       session: safeGet(row[F.SESSION], "Unknown"),
-      status: safeGet(row[F.STATUS], "Active"), // "Active", "Completed", "Proposed"
+      status: safeGet(row[F.STATUS], "Active"),
       students: Array.isArray(row[F.STUDENTS]) ? row[F.STUDENTS].length : 0,
       description: safeGet(row[F.DESCRIPTION], ""),
       objectives: safeGet(row[F.OBJECTIVES], ""),
-      ageRange: formatAgeRange(row), // FIXED
+      ageRange: formatAgeRange(row),
       type: safeGet(row[F.TYPE], "General"),
   }));
 }
 
-export async function getOpenBounties() {
+export async function getOpenBounties(tenant: string) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.CLASSES.FIELDS;
   const params = {
     size: "50",
-    [`filter__${F.STATUS}__equal`]: "Seeking Instructor", // The "Bounty" tag
+    [`filter__${F.STATUS}__equal`]: "Seeking Instructor",
     "user_field_names": "true"
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
       id: row.id,
       name: safeGet(row[F.CLASS_NAME], "Untitled Core Class"),
       session: safeGet(row[F.SESSION], "Next Season"),
-      ageRange: formatAgeRange(row), // FIXED
+      ageRange: formatAgeRange(row), 
       day: safeGet(row[F.DAY], "TBD"),
       time: safeGet(row[F.TIME_SLOT], "TBD"),
       isCore: true
   }));
 }
 
-export async function submitClassProposal(data: any) {
+export async function submitClassProposal(tenant: string, data: any) {
+    const tables = getTenantTableConfig(tenant);
     const F = DB.CLASSES.FIELDS;
     const payload = {
         [F.CLASS_NAME]: data.name,
         [F.TEACHER]: data.teacher,
         [F.SESSION]: data.session,
-        [F.STATUS]: "Proposed", // <--- Enters the pipeline here
+        [F.STATUS]: "Proposed", 
         [F.DESCRIPTION]: data.description,
         [F.OBJECTIVES]: data.objectives,
-        // FIXED: Using Min/Max now
         [F.MINIMUM_AGE]: parseInt(data.minAge || 0), 
         [F.MAXIMUM_AGE]: parseInt(data.maxAge || 0),
         [F.TYPE]: data.type
     };
-    return await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/`, {
+    return await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
     });
 }
 
-export async function claimBounty(classId: number, teacherName: string) {
+export async function claimBounty(tenant: string, classId: number, teacherName: string) {
+    const tables = getTenantTableConfig(tenant);
     const F = DB.CLASSES.FIELDS;
-    return await fetchBaserow(`/database/rows/table/${DB.CLASSES.ID}/${classId}/`, {
+    return await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             [F.TEACHER]: teacherName,
-            [F.STATUS]: "Drafting" // Moves from 'Seeking' to 'Drafting'
+            [F.STATUS]: "Drafting"
         })
     });
 }
+
 // ==============================================================================
 // 📊 ANALYTICS
 // ==============================================================================
 
-export async function getPerformanceAnalytics(productionId?: number) {
-  const data = await fetchBaserow(`/database/rows/table/${DB.PERFORMANCES.ID}/`, {}, { size: "200" });
+export async function getPerformanceAnalytics(tenant: string, productionId?: number) {
+  const tables = getTenantTableConfig(tenant);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PERFORMANCES}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
 return data.map((row: any) => {
     const sold = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TICKETS_SOLD], 0));
     const capacity = parseFloat(safeGet(row[DB.PERFORMANCES.FIELDS.TOTAL_INVENTORY], 0));
     return {
-      // ✅ ADD THIS: Get the Link ID so we can match it to the Production Type
       productionId: safeId(row[DB.PERFORMANCES.FIELDS.PRODUCTION]), 
       name: safeGet(row[DB.PERFORMANCES.FIELDS.PERFORMANCE], "Show"),
       sold: sold,
@@ -1177,8 +1122,8 @@ return data.map((row: any) => {
   });
 }
 
-export async function getGlobalSalesSummary() {
-  const data = await getPerformanceAnalytics();
+export async function getGlobalSalesSummary(tenant: string) {
+  const data = await getPerformanceAnalytics(tenant);
   if (data.length === 0) return { totalSold: 0, avgFill: 0 };
   
   const totalSold = data.reduce((sum: number, p: any) => sum + p.sold, 0);
@@ -1189,32 +1134,24 @@ export async function getGlobalSalesSummary() {
 
 export { DB };
 
-// app/lib/baserow.ts
-
-// ... existing code ...
-
-export async function createGoogleUser(googleUser: any) {
+export async function createGoogleUser(tenant: string, googleUser: any) {
+  const tables = getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
-  // 1. Split Name (Google gives "Austin Fitzhugh", we want "Austin" and "Fitzhugh")
   const fullName = googleUser.name || "Unknown User";
   const nameParts = fullName.split(' ');
   const firstName = nameParts[0];
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : "";
 
-  // 2. Prepare the data for Baserow
   const payload = {
     [F.FIRST_NAME]: firstName,
     [F.LAST_NAME]: lastName,
-    // We map Google's email to your personal email field
     [F.CYT_ACCOUNT_PERSONAL_EMAIL]: googleUser.email,
-    // 🟢 CRITICAL: Default them to "Guest" so they have limited access
     [F.STATUS]: ["Guest"], 
     [F.ORIGINAL_BIO]: "Created via Google Login Auto-Registration",
   };
 
-  // 3. Send the "Create Row" command to Baserow
-  const res = await fetchBaserow(`/database/rows/table/${DB.PEOPLE.ID}/`, {
+  const res = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
