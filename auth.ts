@@ -13,8 +13,8 @@ const cookiePrefix = useSecureCookies ? "__Secure-" : ""
 const sharedDomain = process.env.NODE_ENV === "production" ? ".open-backstage.org" : undefined;
 // --- TENANT HELPER ---
 // Dynamically extracts the tenant so auth knows which database to query
-function getTenantContext() {
-  const hostList = headers();
+async function getTenantContext() {
+  const hostList = await headers();
   const host = hostList.get("host") || "";
 
   // 🟢 DEV BYPASS: Google OAuth hates subdomains on localhost.
@@ -156,7 +156,7 @@ Credentials({
         
         // Fallback for a NEWLY registered Google user
         if (account?.provider === "google" && !token.role) {
-            const tenant = getTenantContext();
+            const tenant = await getTenantContext();
             if (tenant) {
               const baserowUser = await findUserByEmail(tenant, user.email || "");
               if (baserowUser) {
