@@ -286,20 +286,21 @@ export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
   
-  // 🟢 ATTEMPT 1: Filter by the boolean formula field
-  // We use 'equal' here as it's often more reliable for formulas than 'boolean_equal'
+  // 🟢 FIX 1: Use 'equal' instead of 'boolean_equal' for Formula fields
   const activeParams = {
     [`filter__${F.IS_ACTIVE}__equal`]: "true",
     size: "1"
   };
 
+  console.log(`🔍 [Sync] Checking for Active Show in ${tenant}...`);
   let data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, activeParams);
   
   if (Array.isArray(data) && data.length > 0) {
+    console.log(`✅ [Sync] Found Active Show: ${data[0][F.TITLE]}`);
     return mapShow(data[0]);
   }
 
-  // 🟢 ATTEMPT 2: Fallback to checking the Status dropdown for "Active"
+  // 🟢 FIX 2: Fallback to the Status field if the Formula check fails
   const statusParams = {
     [`filter__${F.STATUS}__equal`]: "Active",
     size: "1"
@@ -311,13 +312,18 @@ export async function getActiveProduction(tenant: string) {
     return mapShow(data[0]);
   }
 
-  // 🟢 FINAL FALLBACK: Get the show with the highest ID (Mary Poppins in your case)
-  const fallbackData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, {
-    order_by: "-id",
-    size: "1"
-  });
+  // 🟢 FIX 3: Robust Fallback. Fetch the latest productions and sort in JavaScript
+  // This avoids the 'order_by=-id' 400 error.
+  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" });
   
-  return fallbackData?.[0] ? mapShow(fallbackData[0]) : null;
+  if (Array.isArray(allData) && allData.length > 0) {
+    // Sort by ID descending in JS to find the most recently created show
+    const latest = allData.sort((a, b) => b.id - a.id)[0];
+    console.log(`⚠️ [Sync] No Active show found. Defaulting to: ${latest[F.TITLE]}`);
+    return mapShow(latest);
+  }
+
+  return null;
 }
 
 export async function getSeasons(tenant: string) {
