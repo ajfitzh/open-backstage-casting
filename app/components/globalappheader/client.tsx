@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from "next-auth/react";
 import { switchProduction } from '@/app/actions';
 import { useSimulation } from '@/app/context/SimulationContext'; 
 import { hasPermission } from '@/app/lib/permissions';
@@ -303,7 +302,7 @@ export default function GlobalHeaderClient({
             
             {/* FOOTER */}
             <div className="p-4 border-t border-white/5 bg-zinc-950/50">
-               <button onClick={() => signOut({ callbackUrl: "/login" })} className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
+               <button onClick={() => handleLogout()} className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
                   <LogOut size={16} /> <span className="text-xs font-bold uppercase">Sign Out</span>
                </button>
             </div>
