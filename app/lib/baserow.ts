@@ -280,17 +280,36 @@ function mapShow(row: any) {
   };
 }
 
+// app/lib/baserow.ts
+
 export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
-  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "50" });
-  if (!Array.isArray(data)) return null;
+  const F = DB.PRODUCTIONS.FIELDS;
   
-  const activeRow = data.find((r: any) => 
-    safeGet(r[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || 
-    safeGet(r[DB.PRODUCTIONS.FIELDS.STATUS]) === 'Active'
-  ) || data[0];
+  // 🟢 THE FIX: Filter by the IS_ACTIVE field (field_6083) from your schema
+  // Baserow boolean filters use 'boolean_equal' with "true"
+  const params = {
+    [`filter__${F.IS_ACTIVE}__boolean_equal`]: "true",
+    size: "1" // We only need the top one
+  };
 
-  return activeRow ? mapShow(activeRow) : null;
+  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, params);
+  
+  if (Array.isArray(data) && data.length > 0) {
+    return {
+      id: data[0].id,
+      title: data[0][F.TITLE] || "Unknown Show"
+    };
+  }
+
+  // Fallback: If NO show is marked active, get the most recent one instead of the oldest
+  const fallbackParams = {
+    order_by: "-id", // Get the newest ID
+    size: "1"
+  };
+  const fallbackData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, fallbackParams);
+  
+  return fallbackData?.[0] ? { id: fallbackData[0].id, title: fallbackData[0][F.TITLE] } : null;
 }
 
 export async function getSeasons(tenant: string) {

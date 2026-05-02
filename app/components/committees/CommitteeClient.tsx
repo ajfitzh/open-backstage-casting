@@ -4,11 +4,11 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { 
   Printer, Crown, Wand2, RotateCcw, X, 
-  CheckCircle2, Save, Loader2, Settings2, Lightbulb,
-  LayoutGrid, LayoutList
+  Save, Loader2, Settings2, Lightbulb,
+  LayoutGrid, LayoutList 
 } from 'lucide-react';
 import { saveCommitteeAssignments } from '@/app/actions/committees';
-import { useTenant } from '@/app/components/TenantProvider'; // 🟢 Added Tenant Hook
+import { useTenant } from '@/app/components/TenantProvider'; 
 
 // --- TYPES ---
 interface Volunteer {
@@ -34,7 +34,6 @@ const COMMITTEES: Record<string, string[]> = {
     'Show Week': ["Show Chair", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
 };
 
-// Base baseline rules calibrated to Jenny's Word Doc targets
 const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
     "Show Chair": { type: 'fixed', val: 1, reason: "The Boss" },
     "Green Room": { type: 'ratio', val: 13, min: 2, reason: "Jenny's Ratio: 1 per 13 Actors" }, 
@@ -64,15 +63,13 @@ export default function CommitteeDashboard({
     activeId: number 
 }) {
   
-const tenant = useTenant(); // 🟢 Grab the active tenant from context
+  const tenant = useTenant(); 
   
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   
-  // 🟢 FIX 1: Don't trap props in a dead useState. Use them dynamically!
   const rawData = volunteers;
   
-  // 🟢 FIX 2: Calculate the assignments synchronously so the server and client match
   const initialAssignments = useMemo(() => {
       const acc: Record<number, string> = {};
       rawData.forEach(v => {
@@ -88,16 +85,21 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
       return acc;
   }, [rawData]);
 
-  // 🟢 FIX 3: Feed the calculated assignments directly into the initial state
   const [assignments, setAssignments] = useState<Record<number, string>>(initialAssignments);
   const [chairs, setChairs] = useState<Record<number, boolean>>(initialChairs);
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   
+  const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
+
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
+  
+  const [balanceReport, setBalanceReport] = useState<{ 
+      first: number, second: number, third: number, other: number, unassigned: number 
+  } | null>(null);
+
   const [isPending, startTransition] = useTransition();
 
-  // --- INITIALIZE TARGETS ON MOUNT ---
   useEffect(() => {
       const initialTargets: Record<string, number> = {};
       const castSize = students.length || 40;
@@ -113,7 +115,6 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
       setTargets(initialTargets);
   }, [students.length]);
 
-  // --- SYNC DATA ON TAB SWITCH ---
   useEffect(() => {
       setAssignments(initialAssignments);
       setChairs(initialChairs);
@@ -122,7 +123,6 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
   const hasChanges = JSON.stringify(assignments) !== JSON.stringify(initialAssignments) ||
                      JSON.stringify(chairs) !== JSON.stringify(initialChairs);
 
-  // --- HELPERS ---
   const getPrefs = (p: Volunteer) => {
       return groupBy === 'Pre-Show' 
           ? { first: p.preShow1, second: p.preShow2, third: p.preShow3 }
@@ -131,10 +131,8 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
 
   const getCommitteeTarget = (committeeName: string) => targets[`${groupBy}-${committeeName}`] || 0;
 
-  // --- ACTIONS ---
   const handleSave = () => {
       startTransition(async () => {
-          // 🟢 Pass tenant as the first argument
           await saveCommitteeAssignments(tenant, groupBy, assignments, chairs);
       });
   };
@@ -150,7 +148,6 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
       
       const newAssignments = { ...assignments };
       const currentCommittees = COMMITTEES[groupBy];
-      
       const getCount = (comm: string) => rawData.filter(p => newAssignments[p.id] === comm).length;
       
       rawData.forEach(p => {
@@ -169,28 +166,55 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
               }
           }
       });
+
+      let first = 0, second = 0, third = 0, other = 0, unassigned = 0;
+      rawData.forEach(p => {
+          const assigned = newAssignments[p.id] || "Unassigned";
+          const prefs = getPrefs(p);
+          if (assigned === "Unassigned") unassigned++;
+          else if (assigned === prefs.first) first++;
+          else if (assigned === prefs.second) second++;
+          else if (assigned === prefs.third) third++;
+          else other++; 
+      });
+
       setAssignments(newAssignments);
+      setBalanceReport({ first, second, third, other, unassigned });
+  };
+
+  const handleForceFill = () => {
+      if (!confirm("This will ignore your Limits and assign the remaining volunteers to their 1st choice. Proceed?")) return;
+      const newAssignments = { ...assignments };
+      const currentCommittees = COMMITTEES[groupBy];
+
+      rawData.forEach(p => {
+          if (!newAssignments[p.id] || newAssignments[p.id] === "Unassigned") {
+              const prefs = getPrefs(p);
+              const topChoice = [prefs.first, prefs.second, prefs.third].find(c => c && currentCommittees.includes(c));
+              if (topChoice) {
+                  newAssignments[p.id] = topChoice;
+              }
+          }
+      });
+      
+      setAssignments(newAssignments);
+      setBalanceReport(null); 
   };
 
   const handleSuggestLimits = () => {
       const currentComms = COMMITTEES[groupBy];
       const totalVolunteers = rawData.length;
       const currentTotalTargets = currentComms.reduce((sum, c) => sum + (targets[`${groupBy}-${c}`] || 0), 0);
-
       if (currentTotalTargets === 0) return;
-
       const scale = totalVolunteers / currentTotalTargets;
       const newTargets = { ...targets };
-
       currentComms.forEach(c => {
           const key = `${groupBy}-${c}`;
           newTargets[key] = Math.max(1, Math.round((targets[key] || 0) * scale));
       });
-      
       setTargets(newTargets);
   };
 
-  // --- GROUP DATA FOR BOARD RENDER ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Volunteer[]> = {};
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
@@ -207,7 +231,6 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
       return groups;
   }, [groupBy, rawData, assignments]);
 
-  // --- SORT DATA FOR LIST RENDER (Unassigned at the top) ---
   const sortedListData = useMemo(() => {
       return [...rawData].sort((a, b) => {
           const aAssigned = assignments[a.id] || "Unassigned";
@@ -232,13 +255,11 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
             </div>
             <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
                 
-                {/* VIEW TOGGLE */}
                 <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner mr-2">
                     <button onClick={() => setViewMode('board')} className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-2 ${viewMode === 'board' ? 'bg-zinc-700 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}><LayoutGrid size={14}/> Board</button>
                     <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-zinc-700 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}><LayoutList size={14}/> List</button>
                 </div>
 
-                {/* PHASE TOGGLE */}
                 <div className="bg-zinc-900 border border-white/10 rounded-lg p-1 flex shadow-inner mr-2">
                     <button onClick={() => setGroupBy('Pre-Show')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Pre-Show' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Pre-Show</button>
                     <button onClick={() => setGroupBy('Show Week')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase transition-all ${groupBy === 'Show Week' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Show Week</button>
@@ -273,9 +294,10 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                     const isUnderstaffed = team.length < target;
                     const isOverstaffed = team.length > target;
                     
+                    // 🟢 UX FIX: Overstaffed is now a pleasant Blue (surplus is good!)
                     let statusColor = 'text-emerald-500';
                     if (isUnderstaffed) statusColor = 'text-amber-500';
-                    if (isOverstaffed) statusColor = 'text-rose-500';
+                    if (isOverstaffed) statusColor = 'text-blue-400';
                     if (committee === "Unassigned") statusColor = 'text-emerald-500';
                     
                     const chairName = team.find(p => chairs[p.id])?.name;
@@ -288,7 +310,7 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                                     {chairName && <p className="text-[9px] text-amber-400 font-bold mt-0.5 flex items-center gap-1 drop-shadow-[0_0_5px_rgba(251,191,36,0.3)]"><Crown size={10}/> {chairName}</p>}
                                 </div>
                                 {committee !== "Unassigned" ? (
-                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 text-zinc-400`}>{team.length} / {target}</span>
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 ${isUnderstaffed ? 'text-amber-500' : isOverstaffed ? 'text-blue-400' : 'text-zinc-400'}`}>{team.length} / {target}</span>
                                 ) : (
                                     <span className={`text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 bg-zinc-950 ${team.length > 0 ? 'text-amber-500 border-amber-500/30' : 'text-zinc-500'}`}>{team.length} Remaining</span>
                                 )}
@@ -296,16 +318,20 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                             
                             <div className="p-3 space-y-1">
                                 {team.length === 0 && <div className="text-xs text-zinc-600 italic py-2 text-center">Empty</div>}
-                                {team.slice(0, 5).map((p: Volunteer) => {
-                                    const prefs = getPrefs(p);
-                                    return (
-                                        <div key={p.id} className="text-xs text-zinc-400 flex justify-between py-0.5 hover:text-white transition-colors">
-                                            <span>{p.name}</span>
-                                            {prefs.first === committee && <CheckCircle2 size={12} className="text-emerald-500"/>}
+                                {team.slice(0, 7).map((p: Volunteer) => (
+                                    <div 
+                                        key={p.id} 
+                                        onClick={(e) => { e.stopPropagation(); setSelectedVolunteer(p); }}
+                                        className="text-xs flex justify-between items-center py-0.5 cursor-pointer transition-colors text-zinc-300 hover:text-white"
+                                    >
+                                        <span className="truncate pr-2">{p.name}</span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            {/* 🟢 UX FIX: Neutral Badges Instead of Checkmarks/Triangles */}
+                                            <ChoiceBadge assigned={committee} prefs={getPrefs(p)} />
                                         </div>
-                                    )
-                                })}
-                                {team.length > 5 && <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2 border-t border-white/5 mt-2">+{team.length - 5} more...</div>}
+                                    </div>
+                                ))}
+                                {team.length > 7 && <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2 border-t border-white/5 mt-2">+{team.length - 7} more...</div>}
                             </div>
                         </div>
                     );
@@ -335,8 +361,12 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                                     
                                     return (
                                         <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : isChair ? 'bg-amber-500/10' : ''}`}>
-                                            <td className="px-3 py-2 font-bold text-zinc-200 text-xs leading-tight">
-                                                <div className="flex items-center gap-2">
+                                            <td 
+                                                className="px-3 py-2 font-bold text-xs leading-tight cursor-pointer hover:underline"
+                                                onClick={() => setSelectedVolunteer(p)}
+                                            >
+                                                <div className="flex items-center gap-2 text-zinc-200">
+                                                    <ChoiceBadge assigned={currentAssigned} prefs={prefs} />
                                                     {p.name}
                                                     {isChair && <Crown size={14} className="text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]" />}
                                                 </div>
@@ -344,18 +374,18 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                                             <td className="px-3 py-2 text-zinc-400 text-[10px] leading-tight pr-4">{p.studentName || "-"}</td>
                                             
                                             <td className="px-3 py-2 whitespace-nowrap">
-                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.first ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.first || "-"} {currentAssigned === prefs.first && <CheckCircle2 size={12}/>}
+                                                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                                                    {prefs.first || "-"}
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap">
-                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.second ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.second || "-"} {currentAssigned === prefs.second && <CheckCircle2 size={12}/>}
+                                                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                                                    {prefs.second || "-"}
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2 whitespace-nowrap">
-                                                <div className={`flex items-center gap-1.5 text-xs ${currentAssigned === prefs.third ? 'text-emerald-400 font-bold' : 'text-zinc-500'}`}>
-                                                    {prefs.third || "-"} {currentAssigned === prefs.third && <CheckCircle2 size={12}/>}
+                                                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                                                    {prefs.third || "-"}
                                                 </div>
                                             </td>
                                             
@@ -448,8 +478,119 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
             </div>
         )}
 
+        {/* --- AUTO-BALANCE SATISFACTION REPORT MODAL --- */}
+        {balanceReport && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setBalanceReport(null)} />
+                <div className="relative w-full max-w-sm bg-zinc-900 border border-white/10 shadow-2xl rounded-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-6 border-b border-white/10 bg-zinc-950 text-center">
+                        <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                            <Wand2 size={24} />
+                        </div>
+                        <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">Auto-Balance Complete</h2>
+                        <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">Board Health Report</p>
+                    </div>
+
+                    <div className="p-6 space-y-3 bg-zinc-950/50">
+                        <div className="flex justify-between items-center p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                            <span className="text-sm font-bold text-emerald-400">Got 1st Choice</span>
+                            <span className="text-lg font-black text-emerald-400">{balanceReport.first}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <span className="text-sm font-bold text-blue-400">Got 2nd Choice</span>
+                            <span className="text-lg font-black text-blue-400">{balanceReport.second}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                            <span className="text-sm font-bold text-purple-400">Got 3rd Choice</span>
+                            <span className="text-lg font-black text-purple-400">{balanceReport.third}</span>
+                        </div>
+                        
+                        {balanceReport.other > 0 && (
+                            <div className="flex justify-between items-center p-3 bg-zinc-800 border border-zinc-700 rounded-lg">
+                                <span className="text-sm font-bold text-zinc-400">Assigned (Not Requested)</span>
+                                <span className="text-lg font-black text-zinc-300">{balanceReport.other}</span>
+                            </div>
+                        )}
+                        
+                        <div className="flex justify-between items-center p-3 bg-zinc-900 border border-white/5 rounded-lg mt-2">
+                            <span className="text-sm font-bold text-zinc-400">Still Unassigned</span>
+                            <span className="text-lg font-black text-zinc-300">{balanceReport.unassigned}</span>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border-t border-white/10 bg-zinc-950 flex gap-3">
+                        {balanceReport.unassigned > 0 && (
+                            <button 
+                                onClick={handleForceFill} 
+                                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-3 rounded-lg text-sm font-black uppercase transition-colors"
+                            >
+                                Force-Fill Rest
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => setBalanceReport(null)} 
+                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg text-sm font-black uppercase transition-colors shadow-lg"
+                        >
+                            Awesome
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- VOLUNTEER PROFILE MODAL (TAP ON MOBILE) --- */}
+        {selectedVolunteer && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedVolunteer(null)} />
+                <div className="relative w-full max-w-sm bg-zinc-900 border border-white/10 shadow-2xl rounded-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-6 border-b border-white/10 bg-zinc-950 flex justify-between items-start">
+                        <div>
+                            <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">{selectedVolunteer.name}</h2>
+                            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">Parent of {selectedVolunteer.studentName || "Unknown"}</p>
+                        </div>
+                        <button onClick={() => setSelectedVolunteer(null)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-colors"><X size={18}/></button>
+                    </div>
+
+                    <div className="p-6 space-y-5 bg-zinc-950/50">
+                        <div>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Contact Info</h4>
+                            <div className="space-y-1">
+                                <p className="text-sm text-zinc-300 font-medium">Email: <span className="text-zinc-400 font-normal">{selectedVolunteer.email || "N/A"}</span></p>
+                                <p className="text-sm text-zinc-300 font-medium">Phone: <span className="text-zinc-400 font-normal">{selectedVolunteer.phone || "N/A"}</span></p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">{groupBy} Preferences</h4>
+                            <div className="space-y-2">
+                                {(() => {
+                                    const prefs = getPrefs(selectedVolunteer);
+                                    return (
+                                        <>
+                                            <div className="flex items-center gap-3">
+                                                <span className="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-black">1</span> 
+                                                <span className="text-sm font-bold text-zinc-200">{prefs.first || "None"}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">2</span> 
+                                                <span className="text-sm font-bold text-zinc-200">{prefs.second || "None"}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-black">3</span> 
+                                                <span className="text-sm font-bold text-zinc-200">{prefs.third || "None"}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* --- ASSIGNMENT DRAWER (BOARD VIEW ONLY) --- */}
-        {selectedCommittee && selectedCommittee !== "Unassigned" && viewMode === 'board' && (
+        {selectedCommittee && viewMode === 'board' && (
             <div className="fixed inset-0 z-50 flex justify-end">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedCommittee(null)} />
                 <aside className="relative w-full max-w-3xl bg-zinc-900 border-l border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
@@ -466,11 +607,15 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                             {currentTeam.map((p: Volunteer) => {
                                 const prefs = getPrefs(p);
                                 const isChair = chairs[p.id];
-
+                                
                                 return (
                                     <div key={p.id} className={`p-3 hover:bg-white/5 transition-colors group flex justify-between items-center ${isChair ? 'bg-amber-500/10' : ''}`}>
-                                        <div>
-                                            <div className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                                        <div 
+                                            className="cursor-pointer hover:underline"
+                                            onClick={() => setSelectedVolunteer(p)}
+                                        >
+                                            <div className="text-sm font-bold flex items-center gap-2 text-zinc-200">
+                                                <ChoiceBadge assigned={selectedCommittee} prefs={prefs} />
                                                 {p.name}
                                                 {isChair && <Crown size={14} className="text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]" />}
                                             </div>
@@ -482,7 +627,7 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                                                 <PreferenceBadge rank="2" value={prefs.second} current={selectedCommittee}/>
                                             </div>
                                             <select 
-                                                className={`bg-zinc-900 border rounded px-2 py-1 text-[10px] outline-none ${isChair ? 'border-amber-500 text-amber-400' : 'border-zinc-800 text-zinc-400 focus:text-white'}`}
+                                                className={`bg-zinc-900 border rounded px-2 py-1 text-[10px] outline-none cursor-pointer ${isChair ? 'border-amber-500 text-amber-400' : 'border-zinc-800 text-zinc-400 focus:text-white'}`}
                                                 value={assignments[p.id] || "Unassigned"}
                                                 onChange={(e) => {
                                                     setAssignments(prev => ({...prev, [p.id]: e.target.value}));
@@ -495,10 +640,10 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
                                                 <option value="Unassigned">Unassigned</option>
                                             </select>
                                             
-                                            {selectedCommittee !== "Show Chair" && (
+                                            {selectedCommittee !== "Show Chair" && selectedCommittee !== "Unassigned" && (
                                                 <button 
                                                     onClick={() => setChairs(prev => ({...prev, [p.id]: !prev[p.id]}))}
-                                                    className={`p-1.5 rounded transition-all ${isChair ? 'bg-amber-500 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-amber-400'}`}
+                                                    className={`p-1.5 rounded transition-all flex-shrink-0 ${isChair ? 'bg-amber-500 text-white shadow-[0_0_10px_rgba(251,191,36,0.3)]' : 'bg-zinc-800 text-zinc-500 hover:text-amber-400 hover:bg-zinc-700'}`}
                                                     title={isChair ? "Remove as Chair" : "Make Chair"}
                                                 >
                                                     <Crown size={14} />
@@ -520,6 +665,17 @@ const tenant = useTenant(); // 🟢 Grab the active tenant from context
         )}
     </div>
   );
+}
+
+// 🟢 NEW: Clean, neutral Choice Badge generator
+function ChoiceBadge({ assigned, prefs }: { assigned: string | null, prefs: any }) {
+    if (!assigned || assigned === "Unassigned" || assigned === "Show Chair") return null;
+    
+    if (assigned === prefs.first) return <span title="1st Choice" className="w-4 h-4 shrink-0 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[9px] font-black">1</span>;
+    if (assigned === prefs.second) return <span title="2nd Choice" className="w-4 h-4 shrink-0 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-[9px] font-black">2</span>;
+    if (assigned === prefs.third) return <span title="3rd Choice" className="w-4 h-4 shrink-0 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[9px] font-black">3</span>;
+    
+    return <span title="Not Requested" className="w-4 h-4 shrink-0 rounded-full bg-zinc-800 text-zinc-500 flex items-center justify-center text-[9px] font-black">-</span>;
 }
 
 function PreferenceBadge({ rank, value, current }: any) {

@@ -6,7 +6,25 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
   const pathname = nextUrl.pathname
 
-  // --- 1. DOMAIN & TENANT EXTRACTION ---
+  // ==========================================
+  // 1. TOP-LEVEL ROUTES (Bypass Rewrites)
+  // ==========================================
+  // Because /sandbox is in the root `app/sandbox` folder, it cannot be rewritten
+  // to /home or /[tenant]. We must handle it first and pass it through.
+  if (pathname.startsWith("/sandbox")) {
+    if (pathname !== "/sandbox/login") {
+      const sandboxAuth = req.cookies.get("sandbox_access")?.value;
+      if (sandboxAuth !== process.env.SANDBOX_PASSWORD) {
+        return NextResponse.redirect(new URL("/sandbox/login", req.url));
+      }
+    }
+    // Let Next.js render app/sandbox/... directly without path alterations
+    return NextResponse.next();
+  }
+
+  // ==========================================
+  // 2. DOMAIN & TENANT EXTRACTION
+  // ==========================================
   const hostname = req.headers.get('host') || '';
   const mainDomain = process.env.NODE_ENV === 'production' 
     ? 'open-backstage.org' 
@@ -21,30 +39,23 @@ export default auth((req) => {
     ? currentHost.replace(`.${baseHost}`, '')
     : null;
 
-  // --- 2. PUBLIC MARKETING SITE LOGIC ---
+  // ==========================================
+  // 3. PUBLIC MARKETING SITE LOGIC
+  // ==========================================
   if (isMainDomain || currentHost === `www.${baseHost}`) {
     // Bypass auth entirely for the public marketing site.
-    // 🟢 FIXED: Rewrite to the /home folder to avoid dynamic route conflicts
+    // Rewrite to the /home folder to avoid dynamic route conflicts
     return NextResponse.rewrite(new URL(`/home${pathname}${nextUrl.search}`, req.url));
   }
 
-  // --- 3. TENANT DASHBOARD LOGIC (Subdomains) ---
+  // ==========================================
+  // 4. TENANT DASHBOARD LOGIC (Subdomains)
+  // ==========================================
   if (tenant) {
     const isOnLoginPage = pathname.startsWith("/login");
-    const isOnSandbox = pathname.startsWith("/sandbox");
-    const isOnSandboxLogin = pathname === "/sandbox/login";
 
-    // A. Sandbox Auth Checks
-    if (isOnSandbox && !isOnSandboxLogin) {
-      const sandboxAuth = req.cookies.get("sandbox_access")?.value;
-      if (sandboxAuth !== process.env.SANDBOX_PASSWORD) {
-        return NextResponse.redirect(new URL("/sandbox/login", req.url));
-      }
-    }
-
-    // B. Standard Auth Checks
-    // Protect all tenant routes EXCEPT the login pages
-    if (!isLoggedIn && !isOnLoginPage && !isOnSandboxLogin) {
+    // Protect all standard tenant routes
+    if (!isLoggedIn && !isOnLoginPage) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
@@ -53,8 +64,8 @@ export default auth((req) => {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // C. The Final Rewrite
-    // If they passed all auth checks, secretly render the [tenant] folder!
+    // --- THE FINAL REWRITE ---
+    // Secretly render the [tenant] folder!
     return NextResponse.rewrite(new URL(`/${tenant}${pathname}${nextUrl.search}`, req.url));
   }
 

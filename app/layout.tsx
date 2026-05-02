@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           2. NO Header here: This ensures the Login page gets the full, empty screen.
       */}
       <body 
-        className="bg-zinc-950 text-zinc-100 h-screen w-screen overflow-hidden"
+        className="bg-zinc-950 text-zinc-100 min-h-screen antialiased"
         suppressHydrationWarning={true}
       >
         {children}
