@@ -1,4 +1,5 @@
 "use server";
+import { signOut } from "@/auth" // Import the SERVER version from your auth config
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,6 +24,10 @@ const TBL_SESSIONS = 632;
 const TBL_PEOPLE = 599;
 // --- HELPERS ---
 
+export async function handleLogout() {
+  // Use 'redirectTo' instead of 'callbackUrl' for the server-side signOut
+  await signOut({ redirectTo: "/login" });
+}
 export async function getSeasonBoard(seasonId: string) {
   try {
     const seasonRes = await fetchBaserow(

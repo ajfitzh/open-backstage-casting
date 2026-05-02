@@ -1,5 +1,5 @@
 "use client";
-
+import { handleLogout } from '@/app/lib/actions'; // Import your new action
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
@@ -227,7 +227,7 @@ export default function GlobalHeaderClient({
                   <Settings size={14} /> Settings
                 </Link>
                 <button 
-                  onClick={() => signOut({ callbackUrl: "/login" })} 
+                  onClick={() => handleLogout()} 
                   className="flex items-center gap-2 w-full p-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                 >
                   <LogOut size={14} /> Sign Out
