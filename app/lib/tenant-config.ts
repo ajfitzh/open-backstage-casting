@@ -21,9 +21,9 @@ export async function getTenantTableConfig(tenantSlug: string) {
     throw new Error("Missing NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID");
   }
 
-  // 🟢 1. CATCH MARKETING & SYSTEM ROUTES
-  // If the middleware feeds us (marketing), return the dummy config to prevent a crash
-  if (!tenantSlug || tenantSlug === "(marketing)" || tenantSlug === "marketing" || tenantSlug === "www") {
+// 🟢 1. CATCH MARKETING & SYSTEM ROUTES
+  // If the middleware feeds us these system routes, return the dummy config
+  if (!tenantSlug || ["(marketing)", "marketing", "www", "home", "login", "api"].includes(tenantSlug)) {
     return SYSTEM_DUMMY_CONFIG;
   }
 
