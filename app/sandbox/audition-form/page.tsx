@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, User, Sparkles, Mic, 
   CalendarCheck, Send, CalendarX, UploadCloud, Music, FileAudio, 
   Search, Ruler, AlertTriangle, Youtube, Camera, X, Image as ImageIcon,
-  Clock, Users, MapPin, Info, Ticket, MessageSquare
+  Clock, Users, MapPin, Info, Ticket, MessageSquare, Printer
 } from "lucide-react";
 
 // --- Types ---
@@ -50,14 +50,14 @@ const REHEARSAL_DATES = [
 ];
 
 const AUDITION_SLOTS = [
-  { id: "t_500", day: "Thursday", time: "5:00 PM" },
-  { id: "t_530", day: "Thursday", time: "5:30 PM" },
-  { id: "t_630", day: "Thursday", time: "6:30 PM" },
-  { id: "t_700", day: "Thursday", time: "7:00 PM" },
-  { id: "f_500", day: "Friday", time: "5:00 PM" },
-  { id: "f_530", day: "Friday", time: "5:30 PM" },
-  { id: "f_630", day: "Friday", time: "6:30 PM" },
-  { id: "f_700", day: "Friday", time: "7:00 PM" },
+  { id: "t_500", day: "Thursday", time: "5:00 PM", capacity: 10, taken: 10 },
+  { id: "t_530", day: "Thursday", time: "5:30 PM", capacity: 10, taken: 5 },
+  { id: "t_630", day: "Thursday", time: "6:30 PM", capacity: 10, taken: 7 },
+  { id: "t_700", day: "Thursday", time: "7:00 PM", capacity: 10, taken: 8 },
+  { id: "f_500", day: "Friday", time: "5:00 PM", capacity: 10, taken: 7 },
+  { id: "f_530", day: "Friday", time: "5:30 PM", capacity: 10, taken: 8 },
+  { id: "f_630", day: "Friday", time: "6:30 PM", capacity: 10, taken: 7 },
+  { id: "f_700", day: "Friday", time: "7:00 PM", capacity: 10, taken: 8 },
 ];
 
 const PRESET_SONGS = [
@@ -84,7 +84,6 @@ export default function AuditionWizard() {
   const [lookupData, setLookupData] = useState({ email: "", dob: "" });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [lookupError, setLookupError] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -157,21 +156,75 @@ export default function AuditionWizard() {
     setTimeout(() => {
       setIsProcessing(false);
       setIsSuccess(true);
-      localStorage.removeItem(STORAGE_KEY);
+      // We don't clear localStorage immediately so the "Print" function 
+      // can still see the data, we'll clear it when they exit.
     }, 2000);
   };
 
   const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
   const calculatedAge = calculateAge(formData.dob);
+  
+  // Logic for features:
+  const selectedSlot = AUDITION_SLOTS.find(s => s.id === formData.auditionSlotId);
+  const firstName = formData.fullName.split(" ")[0] || "Actor";
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-6">
-        <div className="bg-white dark:bg-zinc-900 p-12 rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800">
-          <CheckCircle2 size={80} className="text-green-500 mx-auto mb-6" />
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center p-6">
+        {/* Success Message Card */}
+        <div className="bg-white dark:bg-zinc-900 p-12 rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800 print:shadow-none print:border-none">
+          <CheckCircle2 size={80} className="text-green-500 mx-auto mb-6 print:hidden" />
+          
           <h2 className="text-4xl font-black dark:text-white mb-4 uppercase italic tracking-tighter">Wish Granted!</h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-10 text-lg">Your audition spot is secured. Break a leg!</p>
-          <Link href="/sandbox" className="block w-full bg-blue-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest shadow-xl">Dashboard</Link>
+          
+          <div className="space-y-4 mb-10">
+            <p className="text-blue-600 dark:text-blue-400 font-black text-2xl uppercase italic tracking-tight">
+              {firstName} is set up for {selectedSlot?.time}!
+            </p>
+            
+            <p className="text-zinc-600 dark:text-zinc-400 text-sm font-medium">
+              A confirmation email has been sent to:<br/>
+              <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email || "afitzhugh@gmail.com"}</span>
+            </p>
+          </div>
+
+          <div className="space-y-3 print:hidden">
+            <Link 
+              href="/sandbox" 
+              onClick={() => localStorage.removeItem(STORAGE_KEY)}
+              className="block w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-5 rounded-2xl uppercase tracking-widest shadow-xl"
+            >
+              Back to Dashboard
+            </Link>
+            
+            <button 
+              onClick={() => window.print()}
+              className="w-full flex items-center justify-center gap-2 text-zinc-400 font-bold hover:text-blue-600 text-xs uppercase tracking-widest transition-colors py-2"
+            >
+              <Printer size={14} /> Print Audition Form for Records
+            </button>
+          </div>
+        </div>
+
+        {/* Hidden Printable Content (Only visible during print) */}
+        <div className="hidden print:block fixed inset-0 bg-white p-10 text-zinc-900">
+           <h1 className="text-3xl font-black uppercase italic border-b-4 border-black pb-4 mb-6">Audition Record: {formData.fullName}</h1>
+           <div className="grid grid-cols-2 gap-8 text-sm">
+              <div className="space-y-2">
+                 <p><strong>Actor:</strong> {formData.fullName}</p>
+                 <p><strong>Grade:</strong> {formData.grade}</p>
+                 <p><strong>Slot:</strong> {selectedSlot?.day}, {selectedSlot?.time}</p>
+                 <p><strong>Song:</strong> {formData.songTitle}</p>
+              </div>
+              <div className="space-y-2">
+                 <p><strong>Parent:</strong> {formData.parentSignature}</p>
+                 <p><strong>Email:</strong> {lookupData.email}</p>
+                 <p><strong>Height:</strong> {formData.heightFt}'{formData.heightIn}"</p>
+              </div>
+           </div>
+           <div className="mt-8 pt-8 border-t border-zinc-200">
+              <p className="text-[10px] uppercase font-bold text-zinc-400">Confirmation Code: CYT-ITW-{Math.random().toString(36).substr(2, 9).toUpperCase()}</p>
+           </div>
         </div>
       </div>
     );
@@ -218,7 +271,7 @@ export default function AuditionWizard() {
                     type="button"
                     disabled={i > maxStepReached}
                     onClick={() => setCurrentStep(i)}
-                    className={`h-2 w-12 rounded-full transition-all duration-300 ${i === currentStep ? "bg-blue-600 scale-y-125" : i < currentStep ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:bg-zinc-800"} ${i <= maxStepReached ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`} 
+                    className={`h-2 w-12 rounded-full transition-all duration-300 ${i === currentStep ? "bg-blue-600 scale-y-125" : i < currentStep ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:border-zinc-800"} ${i <= maxStepReached ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`} 
                    />
                  ))}
                </div>
@@ -284,13 +337,13 @@ export default function AuditionWizard() {
                                   </div>
                                </div>
                                <div>
-                                <label className="block text-xs font-black uppercase text-zinc-400 tracking-widest mb-3">Grade</label>
-                                <div className="grid grid-cols-4 gap-1.5">
-                                  {GRADES.map(g => (
-                                    <button key={g} type="button" onClick={() => updateForm({ grade: g })} className={`py-3 rounded-xl font-black text-[10px] transition-all ${formData.grade === g ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"}`}>{g}</button>
-                                  ))}
-                                </div>
-                              </div>
+                                 <label className="block text-xs font-black uppercase text-zinc-400 tracking-widest mb-3">Grade</label>
+                                 <div className="grid grid-cols-4 gap-1.5">
+                                   {GRADES.map(g => (
+                                     <button key={g} type="button" onClick={() => updateForm({ grade: g })} className={`py-3 rounded-xl font-black text-[10px] transition-all ${formData.grade === g ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"}`}>{g}</button>
+                                   ))}
+                                 </div>
+                               </div>
                             </div>
                          </div>
                       </div>
@@ -356,7 +409,6 @@ export default function AuditionWizard() {
                       </div>
                     )}
 
-                    {/* RESTORED MUSIC HUB */}
                     <div className="pt-12 border-t border-zinc-100 dark:border-zinc-800">
                       <label className="block text-xs font-black uppercase text-zinc-400 tracking-widest mb-8">Audition Music Hub</label>
                       {formData.usePresetSong && selectedPreset ? (
@@ -387,15 +439,45 @@ export default function AuditionWizard() {
                 {/* STEP 4: SLOT */}
                 {currentStep === 4 && (
                   <div className="space-y-12 animate-in slide-in-from-right-8 duration-500">
-                    <h2 className="text-4xl font-black dark:text-white uppercase italic tracking-tighter leading-tight">Choose Your Time</h2>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                      <div>
+                        <h2 className="text-4xl font-black dark:text-white uppercase italic tracking-tighter leading-tight">Choose Your Time</h2>
+                        <p className="text-zinc-500 dark:text-zinc-400 font-medium">Limited spots available per group.</p>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                      {AUDITION_SLOTS.map(slot => (
-                        <button key={slot.id} type="button" onClick={() => updateForm({ auditionSlotId: slot.id })} className={`p-8 rounded-[2.5rem] border-2 text-left relative transition-all ${formData.auditionSlotId === slot.id ? "bg-blue-600 border-blue-600 text-white shadow-2xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-blue-400"}`}>
-                           <Clock className={`mb-6 ${formData.auditionSlotId === slot.id ? "text-blue-200" : "text-zinc-300"}`} size={32} />
-                           <p className="font-black text-3xl tracking-tighter italic leading-none mb-1">{slot.time}</p>
-                           <span className="text-[10px] font-black uppercase tracking-widest opacity-50">{slot.day}</span>
-                        </button>
-                      ))}
+                      {AUDITION_SLOTS.map(slot => {
+                        const remaining = slot.capacity - slot.taken;
+                        const isFull = remaining === 0;
+                        const isSelected = formData.auditionSlotId === slot.id;
+
+                        return (
+                          <button 
+                            key={slot.id} 
+                            type="button" 
+                            disabled={isFull}
+                            onClick={() => updateForm({ auditionSlotId: slot.id })} 
+                            className={`p-8 rounded-[2.5rem] border-2 text-left relative transition-all group ${
+                              isSelected 
+                                ? "bg-blue-600 border-blue-600 text-white shadow-2xl scale-105" 
+                                : isFull 
+                                  ? "bg-zinc-100 dark:bg-zinc-800 opacity-50 cursor-not-allowed border-zinc-200 dark:border-zinc-800"
+                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-blue-400"
+                            }`}
+                          >
+                            <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black uppercase italic ${
+                              isSelected ? "bg-white text-blue-600" : isFull ? "bg-red-600 text-white" : "bg-blue-100 text-blue-600"
+                            }`}>
+                              {isFull ? "Full" : `${remaining} Left`}
+                            </div>
+                            
+                            <Clock className={`mb-6 ${isSelected ? "text-blue-200" : isFull ? "text-zinc-400" : "text-zinc-300"}`} size={32} />
+                            <p className="font-black text-3xl tracking-tighter italic leading-none mb-1">{slot.time}</p>
+                            <span className="text-[10px] font-black uppercase tracking-widest opacity-50">{slot.day}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -406,7 +488,6 @@ export default function AuditionWizard() {
                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                         <div>
                           <h2 className="text-4xl font-black dark:text-white uppercase italic tracking-tighter leading-tight">Availability</h2>
-                          <p className="text-zinc-500 dark:text-zinc-400 font-medium">Be honest about conflicts to help our casting team.</p>
                         </div>
                         <button type="button" onClick={markAllAvailable} className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Mark All Free</button>
                      </div>
@@ -419,11 +500,10 @@ export default function AuditionWizard() {
                           <div key={d.id} className={`p-6 rounded-[2.5rem] border transition-all ${curr.level === "available" ? "bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"}`}>
                               <div className="flex flex-col lg:flex-row lg:items-center gap-6">
                                 <div className="flex-1">
-                                   <p className={`font-black text-xl tracking-tighter flex items-center gap-3 ${curr.level === "available" ? "text-green-900 dark:text-green-400" : "dark:text-white"}`}>
-                                     {d.label}
-                                     {d.type === "critical" && <span className="text-[8px] bg-red-600 text-white px-2 py-0.5 rounded-full uppercase italic">Sets</span>}
-                                   </p>
-                                   <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest italic">{d.time}</p>
+                                    <p className={`font-black text-xl tracking-tighter flex items-center gap-3 ${curr.level === "available" ? "text-green-900 dark:text-green-400" : "dark:text-white"}`}>
+                                      {d.label}
+                                    </p>
+                                    <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest italic">{d.time}</p>
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
                                    {[
@@ -453,7 +533,7 @@ export default function AuditionWizard() {
                   </div>
                 )}
 
-                {/* STEP 6: SIGNATURES & RESTORED AGREEMENTS */}
+                {/* STEP 6: SIGNATURES */}
                 {currentStep === 6 && (
                   <div className="space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-4xl font-black dark:text-white uppercase italic tracking-tighter leading-tight">The Commitment</h2>
@@ -468,9 +548,6 @@ export default function AuditionWizard() {
                       </label>
                       
                       <label className="flex items-start p-10 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 rounded-[3rem] cursor-pointer hover:border-blue-400 transition-all shadow-lg relative overflow-hidden">
-                          <div className="absolute top-4 right-4 bg-amber-500 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase italic tracking-widest flex items-center gap-1 shadow-lg">
-                             <Ticket size={12} /> Volunteer Requirement
-                          </div>
                           <input type="checkbox" required checked={formData.parentCommitteeAgreement} onChange={e => updateForm({ parentCommitteeAgreement: e.target.checked })} className="h-10 w-10 text-zinc-600 rounded-2xl mt-1 shrink-0" />
                           <div className="ml-8 space-y-4">
                              <h4 className="text-2xl font-black dark:text-white italic uppercase tracking-tighter">Parent Committee</h4>
@@ -482,11 +559,11 @@ export default function AuditionWizard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 pt-10 border-t border-zinc-100 dark:border-zinc-800">
                       <div className="space-y-4">
                          <label className="block text-xs font-black uppercase text-zinc-400 tracking-widest">Student Signature</label>
-                         <input type="text" required value={formData.studentSignature} onChange={e => updateForm({studentSignature: e.target.value})} placeholder="Full Name" className="w-full p-8 rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 font-black text-3xl italic shadow-inner outline-none focus:border-blue-600 transition-colors" />
+                         <input type="text" required value={formData.studentSignature} onChange={e => updateForm({studentSignature: e.target.value})} placeholder="Full Name" className="w-full p-8 rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 font-black text-3xl italic shadow-inner outline-none" />
                       </div>
                       <div className="space-y-4">
                          <label className="block text-xs font-black uppercase text-zinc-400 tracking-widest">Parent Signature</label>
-                         <input type="text" required value={formData.parentSignature} onChange={e => updateForm({parentSignature: e.target.value})} placeholder="Full Name" className="w-full p-8 rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 font-black text-3xl italic shadow-inner outline-none focus:border-blue-600 transition-colors" />
+                         <input type="text" required value={formData.parentSignature} onChange={e => updateForm({parentSignature: e.target.value})} placeholder="Full Name" className="w-full p-8 rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 font-black text-3xl italic shadow-inner outline-none" />
                       </div>
                     </div>
                   </div>
@@ -517,8 +594,13 @@ export default function AuditionWizard() {
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 10px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4d4d8; }
+        @media print {
+          body * { visibility: hidden; }
+          .print\:block, .print\:block * { visibility: visible; }
+          .print\:block { position: absolute; left: 0; top: 0; width: 100%; }
+        }
       `}</style>
     </div>
   );
