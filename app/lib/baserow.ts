@@ -280,29 +280,42 @@ function mapShow(row: any) {
   };
 }
 
+// app/lib/baserow.ts
+
 export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
   
-  // Baserow boolean filters use 'boolean_equal' with "true"
-  const params = {
-    [`filter__${F.IS_ACTIVE}__boolean_equal`]: "true",
-    size: "1" // We only need the top one
+  // 🟢 ATTEMPT 1: Filter by the boolean formula field
+  // We use 'equal' here as it's often more reliable for formulas than 'boolean_equal'
+  const activeParams = {
+    [`filter__${F.IS_ACTIVE}__equal`]: "true",
+    size: "1"
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, params);
+  let data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, activeParams);
   
   if (Array.isArray(data) && data.length > 0) {
-    // 🟢 FIX: Return the full mapped object so workflowOverrides is included!
     return mapShow(data[0]);
   }
 
-  // Fallback: If NO show is marked active, get the most recent one instead of the oldest
-  const fallbackParams = {
-    order_by: "-id", // Get the newest ID
+  // 🟢 ATTEMPT 2: Fallback to checking the Status dropdown for "Active"
+  const statusParams = {
+    [`filter__${F.STATUS}__equal`]: "Active",
     size: "1"
   };
-  const fallbackData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, fallbackParams);
+
+  data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, statusParams);
+  
+  if (Array.isArray(data) && data.length > 0) {
+    return mapShow(data[0]);
+  }
+
+  // 🟢 FINAL FALLBACK: Get the show with the highest ID (Mary Poppins in your case)
+  const fallbackData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, {
+    order_by: "-id",
+    size: "1"
+  });
   
   return fallbackData?.[0] ? mapShow(fallbackData[0]) : null;
 }
