@@ -1,7 +1,6 @@
 import React from 'react';
 import { getAssignments, getShowById } from '@/app/lib/baserow';
 import Modal from '@/app/components/Modal'; 
-import { User } from 'lucide-react';
 
 export default async function InterceptedCastPage({ params }: { params: { tenant: string, id: string } }) {
   const tenant = params.tenant;
@@ -13,7 +12,6 @@ export default async function InterceptedCastPage({ params }: { params: { tenant
   ]);
 
   const castList = assignments.map((assignment: any) => {
-    // 🟢 SAFE EXTRACTOR: Converts Baserow arrays/objects into clean strings
     const extractString = (val: any) => {
       if (!val) return "";
       if (typeof val === 'string') return val;
@@ -22,7 +20,6 @@ export default async function InterceptedCastPage({ params }: { params: { tenant
       return String(val);
     };
 
-    // 🟢 HEADSHOT EXTRACTOR: Baserow files are arrays containing a URL
     let headshotUrl = null;
     const rawHeadshot = assignment.headshot || assignment.Headshot;
     if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) {
@@ -31,13 +28,25 @@ export default async function InterceptedCastPage({ params }: { params: { tenant
       headshotUrl = rawHeadshot;
     }
 
+    // 🟢 THE ROLE FIX
+    const rawRole = extractString(assignment.assignment || assignment.Performance_Identity) || "Unknown Role";
+    const cleanRoleName = rawRole.split(" - ")[0].trim();
+
     return { 
         ...assignment, 
         name: extractString(assignment.personName || assignment.Person) || "Unknown Actor",
-        roleName: extractString(assignment.assignment || assignment.Performance_Identity) || "Unknown Role",
+        roleName: cleanRoleName,
         headshot: headshotUrl
     };
   });
+
+  // 🟢 THE INITIALS FIX
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (!parts.length || !parts[0]) return "?";
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   return (
     <Modal>
@@ -55,7 +64,11 @@ export default async function InterceptedCastPage({ params }: { params: { tenant
                <div className="w-10 h-10 bg-zinc-800 rounded-md overflow-hidden shrink-0">
                   {actor.headshot ? (
                     <img src={actor.headshot} className="w-full h-full object-cover"/>
-                  ) : <div className="w-full h-full flex items-center justify-center"><User size={16} className="text-zinc-600"/></div>}
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-zinc-600 tracking-wider">
+                      {getInitials(actor.name)}
+                    </div>
+                  )}
                </div>
                <div className="min-w-0">
                   <div className="text-sm font-bold text-white truncate">{actor.name}</div>

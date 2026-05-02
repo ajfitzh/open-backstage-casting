@@ -22,7 +22,6 @@ export default async function CastListPage({ params }: { params: { tenant: strin
       return String(val);
     };
 
-    // 🟢 HEADSHOT EXTRACTOR
     let headshotUrl = null;
     const rawHeadshot = assignment.headshot || assignment.Headshot;
     if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) {
@@ -31,15 +30,27 @@ export default async function CastListPage({ params }: { params: { tenant: strin
       headshotUrl = rawHeadshot;
     }
 
+    // 🟢 THE ROLE FIX: Split by " - " and grab only the first part
+    const rawRole = extractString(assignment.assignment || assignment.Performance_Identity) || "Unknown Role";
+    const cleanRoleName = rawRole.split(" - ")[0].trim();
+
     return {
       ...assignment,
       name: extractString(assignment.personName || assignment.Person) || "Unknown Actor",
-      roleName: extractString(assignment.assignment || assignment.Performance_Identity) || "Unknown Role",
+      roleName: cleanRoleName,
       headshot: headshotUrl,
       email: extractString(assignment.email || assignment.Email),
       phone: extractString(assignment.phone || assignment.Phone)
     };
   });
+
+  // 🟢 THE INITIALS FIX: Get the first letter of the first and last names
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (!parts.length || !parts[0]) return "?";
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-8 pb-20">
@@ -67,8 +78,8 @@ export default async function CastListPage({ params }: { params: { tenant: strin
               {actor.headshot ? (
                 <img src={actor.headshot} alt={actor.name} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-600 uppercase">
-                   {actor.name?.substring(0,2)}
+                <div className="w-full h-full flex items-center justify-center text-sm font-black text-zinc-600 tracking-wider">
+                   {getInitials(actor.name)}
                 </div>
               )}
             </div>
