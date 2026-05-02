@@ -1,5 +1,4 @@
 // app/[tenant]/(main)/page.tsx
-
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
@@ -10,7 +9,7 @@ import {
   UserCog 
 } from 'lucide-react';
 
-// 1. Import Baserow Fetchers
+// 🟢 1. Import getCommitteeData
 import { 
   getActiveProduction, 
   getShowById, 
@@ -21,29 +20,26 @@ import {
   getScenes,        
   getProductionEvents,
   getSeasons,
-  getAllShows
+  getAllShows,
+  getCommitteeData 
 } from '@/app/lib/baserow';
 
-// 2. Import Components
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
 import SeasonContext from '@/app/components/dashboard/SeasonContext';
 import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress'; 
 
 export const dynamic = 'force-dynamic';
 
-// 🟢 Update signature to receive params for multi-tenant routing
 export default async function DashboardPage({ params }: { params: { tenant: string } }) {
-  const { tenant } = params; // Extract the current tenant subdomain
+  const { tenant } = params; 
   
   const session = await auth();
   const userRole = (session?.user as any)?.role || "Guest";
 
-  // --- RESOLVE SHOW ---
   const cookieStore = await cookies();
   const cookieId = cookieStore.get('active_production_id')?.value;
   let show = null;
   
-  // 🟢 Pass tenant to resolve the show dynamically from the correct database
   if (cookieId) show = await getShowById(tenant, cookieId);
   if (!show) show = await getActiveProduction(tenant);
 
@@ -51,8 +47,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
-  // --- PARALLEL FETCH ---
-  // 🟢 Pass the tenant string to EVERY data fetcher
+  // 🟢 2. Add committeeData to the parallel fetch
   const [
     assignments, 
     creativeTeam, 
@@ -61,7 +56,8 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
     scenes,
     events,
     allSeasons,
-    allShows 
+    allShows,
+    committeeData 
   ] = await Promise.all([
       getAssignments(tenant, show.id),
       getCreativeTeam(tenant, show.id),
@@ -70,25 +66,33 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       getScenes(tenant, show.id),
       getProductionEvents(tenant, show.id),
       getSeasons(tenant),
-      getAllShows(tenant)
+      getAllShows(tenant),
+      getCommitteeData(tenant, show.id) // Fetch registration data
   ]);
   
-  // --- FIX: ROBUST CAST COUNT ---
-  // If Baserow IDs are missing (0), fallback to unique Person Names.
-  const uniqueCast = new Set();
-  assignments.forEach((a: any) => {
-      if (a.personId && a.personId !== 0) uniqueCast.add(a.personId);
-      else if (a.personName && a.personName !== "Unknown Actor") uniqueCast.add(a.personName);
-  });
-  const castCount = uniqueCast.size;
+  // 🟢 3. SMART PHASE DETECTION
+  const uniqueCast = new Set(assignments.filter((a: any) => a.personId).map((a: any) => a.personId));
+  const uniqueAuditionees = new Set(auditionees.filter((a: any) => a.studentId).map((a: any) => a.studentId));
+  const uniqueRegistered = new Set(committeeData.filter((c: any) => c.studentName).map((c: any) => c.studentName));
 
-  // --- WORKFLOW STATUS ---
-  // We just pass the raw tags to the client now. 
-  // The Client Component handles the logic for "Pre-Pro" vs "Grind" vs "Tech".
+  let displayCount = 0;
+  let displayLabel = "Cast";
+
+  if (uniqueCast.size > 0) {
+      displayCount = uniqueCast.size;
+      displayLabel = "Cast";
+  } else if (uniqueAuditionees.size > 0) {
+      displayCount = uniqueAuditionees.size;
+      displayLabel = "Auditioning";
+  } else {
+      // Fallback to the ~73 kids from the committee registrations
+      displayCount = uniqueRegistered.size;
+      displayLabel = "Registered";
+  }
+
   const rawTags = show.workflowOverrides?.map((tag: any) => tag.value) || [];
   const workflowStatus = { tags: rawTags };
 
-  // --- THEME ENGINE ---
   const getShowTheme = (title: string) => {
     const t = (title || "").toLowerCase();
     if (t.includes('lion')) return { icon: <Cat size={220} />, color: 'text-orange-500', bg: 'from-orange-900/40 to-red-900/20', accent: 'text-orange-400' };
@@ -115,21 +119,19 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">{show?.title}</h1>
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
                 
-                {/* ACTION BUTTONS */}
                 <div className="flex gap-2 shrink-0">
                     
-                    {/* CAST BUTTON */}
+                    {/* 🟢 4. DYNAMIC BUTTON LABEL */}
                     <Link 
                         href={`/production/${show.id}/cast`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
                     >
                         <Users size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
                         <span className="text-sm font-black text-white group-hover:underline decoration-white/30 underline-offset-4">
-                            {castCount} Cast
+                            {displayCount} {displayLabel}
                         </span>
                     </Link>
 
-                    {/* TEAM BUTTON */}
                     <Link 
                         href={`/production/${show.id}/team`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
@@ -148,15 +150,10 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
         </div>
       </div>
 
-      {/* 2. WORKFLOW TRACKER */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-         <WorkflowProgress 
-           status={workflowStatus} 
-           productionId={show.id} 
-         />
+         <WorkflowProgress status={workflowStatus} productionId={show.id} />
       </div>
 
-      {/* 3. ACTION GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
@@ -178,16 +175,14 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
         </div>
       </div>
 
-      {/* 4. SEASON CONTEXT */}
       <SeasonContext 
           activeSeasonName={show?.season} 
           seasons={allSeasons}
           allClasses={allClasses} 
           allShows={allShows} 
-          activeShowStats={{ castCount }}
+          activeShowStats={{ castCount: displayCount }}
       />
 
-      {/* FOOTER */}
       <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">
           <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
           <div className="flex gap-2">

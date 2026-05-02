@@ -1,29 +1,25 @@
+// app/[tenant]/(main)/production/[id]/cast/page.tsx
 import React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Mail, Phone, MapPin } from 'lucide-react';
-import { getAssignments, getShowById, getPeople } from '@/app/lib/baserow';
+import { ArrowLeft, User } from 'lucide-react';
+import { getAssignments, getShowById } from '@/app/lib/baserow'; // 🟢 Removed getPeople
 
-// 🟢 1. Add tenant to the params type
 export default async function CastListPage({ params }: { params: { tenant: string, id: string } }) {
-  // 🟢 2. Extract the tenant
   const tenant = params.tenant;
   const productionId = parseInt(params.id);
   
-  // 🟢 3. Pass the tenant string to ALL baserow fetchers
-  const [show, assignments, people] = await Promise.all([
+  // 🟢 Removed the massive getPeople() pull to prevent 504 Timeouts
+  const [show, assignments] = await Promise.all([
     getShowById(tenant, productionId),
-    getAssignments(tenant, productionId),
-    getPeople(tenant) // Needed to get headshots/emails
+    getAssignments(tenant, productionId)
   ]);
 
-  // 2. Merge Assignment Data with People Data
-  // We need to combine the role info (Assignment) with the contact info (People)
+  // 🟢 We use the personName directly from the assignment object
   const castList = assignments.map((assignment: any) => {
-    const person = people.find((p: any) => p.id === assignment.personId) || {};
     return {
       ...assignment,
-      ...person, // Merges name, headshot, email, etc.
-      roleName: assignment.assignment // The character name (e.g. "Sky Masterson")
+      name: assignment.personName,
+      roleName: assignment.assignment 
     };
   });
 
@@ -36,10 +32,10 @@ export default async function CastListPage({ params }: { params: { tenant: strin
           <ArrowLeft size={16} className="mr-2" /> Back to Dashboard
         </Link>
         <h1 className="text-4xl font-black uppercase tracking-tighter text-white mb-2">
-          {show?.title} <span className="text-zinc-600">Cast</span>
+          {show?.title || "Unknown Show"} <span className="text-zinc-600">Cast</span>
         </h1>
         <p className="text-zinc-500 font-medium">
-          {castList.length} Cast Members found
+          {castList.length} Cast Members assigned
         </p>
       </div>
 
@@ -49,14 +45,8 @@ export default async function CastListPage({ params }: { params: { tenant: strin
           <div key={actor.id + actor.roleName} className="flex items-start gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-xl hover:bg-zinc-900 hover:border-white/10 transition-all">
             
             {/* Avatar */}
-            <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5">
-              {actor.headshot ? (
-                <img src={actor.headshot} alt={actor.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-600 uppercase">
-                   {actor.name?.substring(0,2)}
-                </div>
-              )}
+            <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5 flex items-center justify-center text-zinc-600">
+               <User size={24} />
             </div>
 
             {/* Info */}
@@ -65,24 +55,17 @@ export default async function CastListPage({ params }: { params: { tenant: strin
               <p className="text-blue-400 text-xs font-bold uppercase tracking-wider mb-2 truncate">
                 {actor.roleName}
               </p>
-              
-              {/* Contacts */}
-              <div className="flex flex-col gap-1">
-                 {actor.email && (
-                   <a href={`mailto:${actor.email}`} className="flex items-center text-xs text-zinc-500 hover:text-white transition-colors">
-                     <Mail size={12} className="mr-1.5"/> {actor.email}
-                   </a>
-                 )}
-                 {actor.phone && (
-                   <div className="flex items-center text-xs text-zinc-500">
-                     <Phone size={12} className="mr-1.5"/> {actor.phone}
-                   </div>
-                 )}
-              </div>
             </div>
 
           </div>
         ))}
+        
+        {castList.length === 0 && (
+           <div className="col-span-full p-12 text-center border border-dashed border-white/10 rounded-2xl">
+              <h3 className="text-zinc-400 font-bold mb-2">No roles assigned yet</h3>
+              <p className="text-zinc-600 text-sm">Once the director finalizes the cast list, it will appear here.</p>
+           </div>
+        )}
       </div>
     </div>
   );
