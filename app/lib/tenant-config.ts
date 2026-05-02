@@ -1,48 +1,68 @@
 // app/lib/tenant-config.ts
 
-export const TENANT_CONFIG = {
-  cytfred: {
-    tables: {
-      CLASSES: process.env.NEXT_PUBLIC_CYTFRED_CLASSES_TABLE_ID || "REPLACE_WITH_ID",
-      PEOPLE: process.env.NEXT_PUBLIC_CYTFRED_PEOPLE_TABLE_ID || "REPLACE_WITH_ID",
-      VENUES: process.env.NEXT_PUBLIC_CYTFRED_VENUES_TABLE_ID || "REPLACE_WITH_ID",
-      SPACES: process.env.NEXT_PUBLIC_CYTFRED_SPACES_TABLE_ID || "REPLACE_WITH_ID",
-      RENTAL_RATES: process.env.NEXT_PUBLIC_CYTFRED_RENTAL_RATES_TABLE_ID || "REPLACE_WITH_ID",
-      PRODUCTIONS: process.env.NEXT_PUBLIC_CYTFRED_PRODUCTIONS_TABLE_ID || "REPLACE_WITH_ID",
-      SEASONS: process.env.NEXT_PUBLIC_CYTFRED_SEASONS_TABLE_ID || "REPLACE_WITH_ID",
-      BLUEPRINT_ROLES: process.env.NEXT_PUBLIC_CYTFRED_BLUEPRINT_ROLES_TABLE_ID || "REPLACE_WITH_ID",
-      ASSIGNMENTS: process.env.NEXT_PUBLIC_CYTFRED_ASSIGNMENTS_TABLE_ID || "REPLACE_WITH_ID",
-      SCHEDULE_SLOTS: process.env.NEXT_PUBLIC_CYTFRED_SCHEDULE_SLOTS_TABLE_ID || "REPLACE_WITH_ID",
-      SCENE_ASSIGNMENTS: process.env.NEXT_PUBLIC_CYTFRED_SCENE_ASSIGNMENTS_TABLE_ID || "REPLACE_WITH_ID",
-      SCENES: process.env.NEXT_PUBLIC_CYTFRED_SCENES_TABLE_ID || "REPLACE_WITH_ID",
-      EVENTS: process.env.NEXT_PUBLIC_CYTFRED_EVENTS_TABLE_ID || "REPLACE_WITH_ID",
-      ASSETS: process.env.NEXT_PUBLIC_CYTFRED_ASSETS_TABLE_ID || "REPLACE_WITH_ID",
-      SHOW_TEAM: process.env.NEXT_PUBLIC_CYTFRED_SHOW_TEAM_TABLE_ID || "REPLACE_WITH_ID",
-      CONFLICTS: process.env.NEXT_PUBLIC_CYTFRED_CONFLICTS_TABLE_ID || "REPLACE_WITH_ID",
-      COMMITTEE_PREFS: "620", // The hardcoded ID from your committees.ts
-      AUDITIONS: process.env.NEXT_PUBLIC_CYTFRED_AUDITIONS_TABLE_ID || "REPLACE_WITH_ID",
-      PERFORMANCES: process.env.NEXT_PUBLIC_CYTFRED_PERFORMANCES_TABLE_ID || "REPLACE_WITH_ID",
-    }
-  },
-  // Add other tenants here as you expand...
-  /* demo_tenant: {
-    tables: { ... }
-  }
-  */
-};
+const MASTER_REGISTRY_TABLE_ID = process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID; 
+const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
+const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
 
-/**
- * Retrieves the specific Baserow Table IDs for the given tenant.
- * @param tenant The tenant subdomain or slug (e.g., 'cytfred')
- * @returns The table mapping object for that tenant.
- * @throws Error if the tenant is not found in the configuration.
- */
-export function getTenantTableConfig(tenant: string) {
-  const config = TENANT_CONFIG[tenant as keyof typeof TENANT_CONFIG];
-  
-  if (!config || !config.tables) {
-    throw new Error(`[Tenant Config Error] Invalid or missing configuration for tenant: "${tenant}"`);
+export async function getTenantTableConfig(tenantSlug: string) {
+  if (!MASTER_REGISTRY_TABLE_ID) {
+    throw new Error("Missing NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID");
   }
-  
-  return config.tables;
+
+  const url = `${BASE_URL}/api/database/rows/table/${MASTER_REGISTRY_TABLE_ID}/?filter__Slug__equal=${tenantSlug}&user_field_names=true`;
+
+  const res = await fetch(url, {
+    headers: { "Authorization": `Token ${API_TOKEN}` },
+    next: { revalidate: 3600 } 
+  });
+
+  if (!res.ok) throw new Error(`Failed to fetch tenant registry for ${tenantSlug}`);
+
+  const data = await res.json();
+
+  if (!data.results || data.results.length === 0) {
+    throw new Error(`[Tenant Config Error] Tenant "${tenantSlug}" not found in Master Registry.`);
+  }
+
+  const tenantRow = data.results[0];
+
+  // Perfectly mapped to your specific schema keys
+// Perfectly mapped to your specific schema keys, while aliasing to match baserow.ts
+  return {
+    // Direct matches
+    PEOPLE: tenantRow.PEOPLE || null,
+    PRODUCTIONS: tenantRow.PRODUCTIONS || null,
+    ASSIGNMENTS: tenantRow.ASSIGNMENTS || null,
+    COMMITTEE_PREFS: tenantRow.COMMITTEE_PREFS || null,
+    CONFLICTS: tenantRow.CONFLICTS || null,
+    EVENTS: tenantRow.EVENTS || null,
+    SCENES: tenantRow.SCENES || null,
+    SCENE_ASSIGNMENTS: tenantRow.SCENE_ASSIGNMENTS || null,
+    AUDITIONS: tenantRow.AUDITIONS || null,
+    CLASSES: tenantRow.CLASSES || null,
+    VENUES: tenantRow.VENUES || null,
+    PERFORMANCES: tenantRow.PERFORMANCES || null,
+    SPACES: tenantRow.SPACES || null,
+
+    // 🟢 ALIASES (These fix the TypeScript errors!)
+    RENTAL_RATES: tenantRow.RATES || null,
+    SEASONS: tenantRow.SESSIONS || null,
+    BLUEPRINT_ROLES: tenantRow.ROLES || null,
+    SCHEDULE_SLOTS: tenantRow.SLOTS || null,
+    ASSETS: tenantRow.RESOURCES || null,
+    SHOW_TEAM: tenantRow.TEAM_ASSIGNMENTS || null,
+
+    // Extras you might need later
+    MASTER_SHOW_DB: tenantRow.MASTER_SHOW_DB || null,
+    SIGNATURES: tenantRow.SIGNATURES || null,
+    STATS: tenantRow.STATS || null,
+    ROLES_POSITIONS: tenantRow.ROLES_POSITIONS || null,
+    MEASUREMENTS: tenantRow.MEASUREMENTS || null,
+    GARMENT_INVENTORY: tenantRow.GARMENT_INVENTORY || null,
+    STUDENT_BIO: tenantRow.STUDENT_BIO || null,
+    ATTENDANCE: tenantRow.ATTENDANCE || null,
+    REQUIREMENTS: tenantRow.REQUIREMENTS || null,
+    FAMILIES: tenantRow.FAMILIES || null,
+    SEATS: tenantRow.SEATS || null,
+  };
 }

@@ -87,8 +87,8 @@ function formatAgeRange(row: any): string {
 }
 
 export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeof getTenantTableConfig>, rowId: number | string) {
-  const tables = getTenantTableConfig(tenant);
-  const tableId = tables[tableKey];
+  const tables = await getTenantTableConfig(tenant);
+  const tableId = tables[tableKey as keyof typeof tables];
   const url = `/database/rows/table/${tableId}/${rowId}/`;
   const res = await fetchBaserow(url, { method: "DELETE" });
   return res !== null;
@@ -99,7 +99,7 @@ export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeo
 // ==============================================================================
 
 export async function getClasses(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   let allRows: any[] = [];
   let page = 1;
   let hasMore = true;
@@ -139,7 +139,7 @@ return allRows.map((row: any) => ({
 }
 
 export async function getClassById(tenant: string, classId: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const row = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`);
   if (!row || row.error) return null;
 
@@ -162,7 +162,7 @@ export async function getClassById(tenant: string, classId: string) {
 
 export async function getClassRoster(tenant: string, classId: string) {
   if (!classId) return [];
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
 
   const params = {
     filter_type: "OR",
@@ -187,7 +187,7 @@ export async function getClassRoster(tenant: string, classId: string) {
 }
 
 export async function getVenues(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
     `/database/rows/table/${tables.VENUES}/`, 
     {}, 
@@ -212,7 +212,7 @@ export async function getVenues(tenant: string) {
 }
 
 export async function getVenueLogistics(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
     fetchBaserow(`/database/rows/table/${tables.VENUES}/`, {}, { size: "200" }),
     fetchBaserow(`/database/rows/table/${tables.SPACES}/`, {}, { size: "200" }),
@@ -281,7 +281,7 @@ function mapShow(row: any) {
 }
 
 export async function getActiveProduction(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "50" });
   if (!Array.isArray(data)) return null;
   
@@ -294,7 +294,7 @@ export async function getActiveProduction(tenant: string) {
 }
 
 export async function getSeasons(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
     `/database/rows/table/${tables.SEASONS}/`, 
     {}, 
@@ -317,14 +317,14 @@ export async function getSeasons(tenant: string) {
 }
 
 export async function getShowById(tenant: string, id: string | number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${id}/`);
-  if (!data || data.error) return null;
+  if (!data || data.error || Array.isArray(data)) return null;
   return mapShow(data);
 }
 
 export async function getAllShows(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
     `/database/rows/table/${tables.PRODUCTIONS}/`, 
     {}, 
@@ -358,7 +358,7 @@ export async function getAllShows(tenant: string) {
 // ==============================================================================
 
 export async function getPeople(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
   let allRows: any[] = [];
@@ -394,7 +394,7 @@ export async function getPeople(tenant: string) {
 }
 
 export async function getRoles(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.BLUEPRINT_ROLES.FIELDS;
   const data = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, { size: "200", user_field_names: "true" });
   if (!Array.isArray(data)) return [];
@@ -407,7 +407,7 @@ export async function getRoles(tenant: string) {
 }
 
 export async function createCastAssignment(tenant: string, personId: number, roleId: number, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const body = {
     [DB.ASSIGNMENTS.FIELDS.PERSON]: [personId],
     [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [roleId],
@@ -420,7 +420,7 @@ export async function createCastAssignment(tenant: string, personId: number, rol
 }
 
 export async function updateCastAssignment(tenant: string, assignmentId: number, personId: number | null, sceneIds?: number[]) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.ASSIGNMENTS.FIELDS;
   const body: any = {};
 
@@ -444,7 +444,7 @@ export async function updateCastAssignment(tenant: string, assignmentId: number,
 // ==============================================================================
 
 export async function getScheduleSlots(tenant: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.SCHEDULE_SLOTS.FIELDS;
   
   const events = await getProductionEvents(tenant, productionId);
@@ -496,7 +496,7 @@ export async function getScheduleSlots(tenant: string, productionId: number) {
 }
 
 export async function getSceneAssignments(tenant: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.SCENE_ASSIGNMENTS.FIELDS; 
   
   const params = {
@@ -516,7 +516,7 @@ export async function getSceneAssignments(tenant: string, productionId: number) 
 // ==============================================================================
 
 export async function saveScheduleBatch(tenant: string, productionId: number, newSlots: any[]) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const TABLE_ID = tables.SCHEDULE_SLOTS;
   const F = DB.SCHEDULE_SLOTS.FIELDS;
 
@@ -545,7 +545,7 @@ export async function saveScheduleBatch(tenant: string, productionId: number, ne
 }
 
 export async function clearSchedule(tenant: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const slots = await getScheduleSlots(tenant, productionId);
   const ids = slots.map((s:any) => s.id);
   
@@ -562,7 +562,7 @@ export async function clearSchedule(tenant: string, productionId: number) {
 }
 
 export async function getScenes(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.SCENES.FIELDS;
 
@@ -594,7 +594,7 @@ export async function getScenes(tenant: string, productionId?: number) {
 }
 
 export async function getProductionEvents(tenant: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.EVENTS.FIELDS;
   const params = {
     size: "200",
@@ -620,7 +620,7 @@ export async function getProductionEvents(tenant: string, productionId: number) 
 // ==============================================================================
 
 export async function getProductionAssets(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.ASSETS.FIELDS;
   if (productionId) {
@@ -639,7 +639,7 @@ export async function getProductionAssets(tenant: string, productionId?: number)
 }
 
 export async function createProductionAsset(tenant: string, name: string, url: string, type: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const body = {
     [DB.ASSETS.FIELDS.NAME]: name,
     [DB.ASSETS.FIELDS.LINK]: url,
@@ -657,7 +657,7 @@ export async function createProductionAsset(tenant: string, name: string, url: s
 // ==============================================================================
 
 export async function getCastDemographics(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
@@ -672,7 +672,7 @@ export async function getCastDemographics(tenant: string) {
 }
 
 export async function getAssignments(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.ASSIGNMENTS.FIELDS;
   const params: any = { size: "200" }; 
 
@@ -713,7 +713,7 @@ export async function getAssignments(tenant: string, productionId?: number) {
 }
 
 export async function getCreativeTeam(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.SHOW_TEAM.FIELDS;
   const params: any = { size: "100" };
   
@@ -744,7 +744,7 @@ export async function getCreativeTeam(tenant: string, productionId?: number) {
 }
 
 export async function getProductionConflicts(tenant: string, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.CONFLICTS.FIELDS;
   const params = {
     size: "200",
@@ -766,7 +766,7 @@ export async function getProductionConflicts(tenant: string, productionId: numbe
 }
 
 export async function getCommitteeData(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
   const F = DB.COMMITTEE_PREFS.FIELDS;
   
@@ -790,17 +790,17 @@ export async function getCommitteeData(tenant: string, productionId?: number) {
 }
 
 export async function getCommitteePreferences(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`);
 }
 
 export async function getConflicts(tenant: string, id?: any) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`);
 }
 
 export async function getComplianceData(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`);
 }
 
@@ -809,7 +809,7 @@ export async function getComplianceData(tenant: string, productionId?: number) {
 // ==============================================================================
 
 export async function getAuditionees(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" }; 
   const F = DB.AUDITIONS.FIELDS;
   
@@ -844,7 +844,7 @@ export async function getAuditionees(tenant: string, productionId?: number) {
 }
 
 export async function submitAudition(tenant: string, studentId: number, productionId: number, extraData: any) {
-    const tables = getTenantTableConfig(tenant);
+    const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
     const payload: any = {
@@ -866,7 +866,7 @@ export async function submitAudition(tenant: string, studentId: number, producti
 }
 
 export async function updateAuditionSlot(tenant: string, rowId: number, data: any) {
-    const tables = getTenantTableConfig(tenant);
+    const tables = await getTenantTableConfig(tenant);
     return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${rowId}/?user_field_names=true`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -875,7 +875,7 @@ export async function updateAuditionSlot(tenant: string, rowId: number, data: an
 }
 
 export async function updateRole(tenant: string, roleId: number, data: any) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   return await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/${roleId}/`, { 
     method: "PATCH", 
     body: JSON.stringify(data) 
@@ -887,7 +887,7 @@ export async function updateRole(tenant: string, roleId: number, data: any) {
 // ==============================================================================
 
 export async function findUserByEmail(tenant: string, email: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params = {
     filter_type: "OR",
     size: "1",
@@ -916,7 +916,7 @@ export async function verifyUserCredentials(tenant: string, email: string, passw
 }
 
 export async function getUserProfile(tenant: string, email: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const userRows = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
     filter_type: "OR",
     size: "1",
@@ -964,7 +964,7 @@ export async function getUserProfile(tenant: string, email: string) {
 }
 
 export async function getUserProductionRole(tenant: string, userId: number, productionId: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const params = {
     filter_type: "AND",
     [`filter__${DB.SHOW_TEAM.FIELDS.PERSON}__link_row_has`]: userId,
@@ -978,7 +978,7 @@ export async function getUserProductionRole(tenant: string, userId: number, prod
 }
 
 export async function getTeacherApplicants(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
   const params = {
@@ -1003,7 +1003,7 @@ export async function getTeacherApplicants(tenant: string) {
 }
 
 export async function updateApplicantStatus(tenant: string, personId: number, currentTags: string[], newStatus: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
   const keptTags = currentTags.filter(tag => !hiringTags.includes(tag));
   const finalTags = [...keptTags, newStatus];
@@ -1018,7 +1018,7 @@ export async function updateApplicantStatus(tenant: string, personId: number, cu
 }
 
 export async function getTeacherClasses(tenant: string, teacherName: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.CLASSES.FIELDS;
   const params = {
     size: "200",
@@ -1043,7 +1043,7 @@ export async function getTeacherClasses(tenant: string, teacherName: string) {
 }
 
 export async function getOpenBounties(tenant: string) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.CLASSES.FIELDS;
   const params = {
     size: "50",
@@ -1066,7 +1066,7 @@ export async function getOpenBounties(tenant: string) {
 }
 
 export async function submitClassProposal(tenant: string, data: any) {
-    const tables = getTenantTableConfig(tenant);
+    const tables = await getTenantTableConfig(tenant);
     const F = DB.CLASSES.FIELDS;
     const payload = {
         [F.CLASS_NAME]: data.name,
@@ -1087,7 +1087,7 @@ export async function submitClassProposal(tenant: string, data: any) {
 }
 
 export async function claimBounty(tenant: string, classId: number, teacherName: string) {
-    const tables = getTenantTableConfig(tenant);
+    const tables = await getTenantTableConfig(tenant);
     const F = DB.CLASSES.FIELDS;
     return await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`, {
         method: "PATCH",
@@ -1104,7 +1104,7 @@ export async function claimBounty(tenant: string, classId: number, teacherName: 
 // ==============================================================================
 
 export async function getPerformanceAnalytics(tenant: string, productionId?: number) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PERFORMANCES}/`, {}, { size: "200" });
   if (!Array.isArray(data)) return [];
 
@@ -1135,7 +1135,7 @@ export async function getGlobalSalesSummary(tenant: string) {
 export { DB };
 
 export async function createGoogleUser(tenant: string, googleUser: any) {
-  const tables = getTenantTableConfig(tenant);
+  const tables = await getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
   
   const fullName = googleUser.name || "Unknown User";
