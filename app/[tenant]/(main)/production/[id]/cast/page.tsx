@@ -1,25 +1,43 @@
-// app/[tenant]/(main)/production/[id]/cast/page.tsx
 import React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, User } from 'lucide-react';
-import { getAssignments, getShowById } from '@/app/lib/baserow'; // 🟢 Removed getPeople
+import { ArrowLeft, Mail, Phone } from 'lucide-react';
+import { getAssignments, getShowById } from '@/app/lib/baserow';
 
 export default async function CastListPage({ params }: { params: { tenant: string, id: string } }) {
   const tenant = params.tenant;
   const productionId = parseInt(params.id);
   
-  // 🟢 Removed the massive getPeople() pull to prevent 504 Timeouts
   const [show, assignments] = await Promise.all([
     getShowById(tenant, productionId),
     getAssignments(tenant, productionId)
   ]);
 
-  // 🟢 We use the personName directly from the assignment object
   const castList = assignments.map((assignment: any) => {
+    // 🟢 SAFE EXTRACTOR
+    const extractString = (val: any) => {
+      if (!val) return "";
+      if (typeof val === 'string') return val;
+      if (Array.isArray(val)) return val.map((item: any) => item.value || item).join(", ");
+      if (typeof val === 'object') return val.value || "";
+      return String(val);
+    };
+
+    // 🟢 HEADSHOT EXTRACTOR
+    let headshotUrl = null;
+    const rawHeadshot = assignment.headshot || assignment.Headshot;
+    if (Array.isArray(rawHeadshot) && rawHeadshot.length > 0) {
+      headshotUrl = rawHeadshot[0].url;
+    } else if (typeof rawHeadshot === 'string') {
+      headshotUrl = rawHeadshot;
+    }
+
     return {
       ...assignment,
-      name: assignment.personName,
-      roleName: assignment.assignment 
+      name: extractString(assignment.personName || assignment.Person) || "Unknown Actor",
+      roleName: extractString(assignment.assignment || assignment.Performance_Identity) || "Unknown Role",
+      headshot: headshotUrl,
+      email: extractString(assignment.email || assignment.Email),
+      phone: extractString(assignment.phone || assignment.Phone)
     };
   });
 
@@ -32,40 +50,52 @@ export default async function CastListPage({ params }: { params: { tenant: strin
           <ArrowLeft size={16} className="mr-2" /> Back to Dashboard
         </Link>
         <h1 className="text-4xl font-black uppercase tracking-tighter text-white mb-2">
-          {show?.title || "Unknown Show"} <span className="text-zinc-600">Cast</span>
+          {show?.title} <span className="text-zinc-600">Cast</span>
         </h1>
         <p className="text-zinc-500 font-medium">
-          {castList.length} Cast Members assigned
+          {castList.length} Cast Members found
         </p>
       </div>
 
       {/* CAST GRID */}
       <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {castList.map((actor: any) => (
-          <div key={actor.id + actor.roleName} className="flex items-start gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-xl hover:bg-zinc-900 hover:border-white/10 transition-all">
+        {castList.map((actor: any, idx: number) => (
+          <div key={`${actor.id}-${idx}`} className="flex items-start gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-xl hover:bg-zinc-900 hover:border-white/10 transition-all">
             
             {/* Avatar */}
-            <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5 flex items-center justify-center text-zinc-600">
-               <User size={24} />
+            <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5">
+              {actor.headshot ? (
+                <img src={actor.headshot} alt={actor.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-600 uppercase">
+                   {actor.name?.substring(0,2)}
+                </div>
+              )}
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-white truncate">{actor.name || "Unknown Actor"}</h3>
+              <h3 className="font-bold text-white truncate">{actor.name}</h3>
               <p className="text-blue-400 text-xs font-bold uppercase tracking-wider mb-2 truncate">
                 {actor.roleName}
               </p>
+              
+              {/* Contacts */}
+              <div className="flex flex-col gap-1">
+                 {actor.email && (
+                   <a href={`mailto:${actor.email}`} className="flex items-center text-xs text-zinc-500 hover:text-white transition-colors">
+                     <Mail size={12} className="mr-1.5"/> {actor.email}
+                   </a>
+                 )}
+                 {actor.phone && (
+                   <div className="flex items-center text-xs text-zinc-500">
+                     <Phone size={12} className="mr-1.5"/> {actor.phone}
+                   </div>
+                 )}
+              </div>
             </div>
-
           </div>
         ))}
-        
-        {castList.length === 0 && (
-           <div className="col-span-full p-12 text-center border border-dashed border-white/10 rounded-2xl">
-              <h3 className="text-zinc-400 font-bold mb-2">No roles assigned yet</h3>
-              <p className="text-zinc-600 text-sm">Once the director finalizes the cast list, it will appear here.</p>
-           </div>
-        )}
       </div>
     </div>
   );
