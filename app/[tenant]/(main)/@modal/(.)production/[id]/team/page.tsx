@@ -3,12 +3,16 @@ import Link from 'next/link';
 import { ArrowLeft, UserCog } from 'lucide-react';
 import { getShowById, getCreativeTeam } from '@/app/lib/baserow';
 
-export default async function TeamListPage({ params }: { params: { id: string } }) {
+// 🟢 1. Add tenant to the params type
+export default async function TeamListPage({ params }: { params: { tenant: string, id: string } }) {
+  // 🟢 2. Extract tenant and productionId
+  const tenant = params.tenant;
   const productionId = parseInt(params.id);
   
+  // 🟢 3. Pass tenant to all Baserow fetchers
   const [show, team] = await Promise.all([
-    getShowById(productionId),
-    getCreativeTeam(productionId)
+    getShowById(tenant, productionId),
+    getCreativeTeam(tenant, productionId)
   ]);
 
   return (

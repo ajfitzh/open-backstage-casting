@@ -5,7 +5,11 @@ import ClassPlanner from "@/app/components/education/ClassPlanner";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClassPlanningPage() {
+// 🟢 1. Add params to the page signature
+export default async function ClassPlanningPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+
   const session = await auth();
   const email = session?.user?.email;
 
@@ -13,8 +17,8 @@ export default async function ClassPlanningPage() {
      return <div className="p-10 text-zinc-500">Please log in to view the planner.</div>;
   }
 
-  // 🟢 THE FIX: Ask Baserow for your true, live role! Don't trust the stale cookie.
-  const userProfile = await BaserowClient.findUserByEmail(email);
+  // 🟢 3. Pass the tenant string to the user fetcher
+  const userProfile = await BaserowClient.findUserByEmail(tenant, email);
   const liveRole = userProfile?.role || "Guest";
   
   const allowedRoles = ['admin', 'executive director', 'education coordinator'];
@@ -31,8 +35,8 @@ export default async function ClassPlanningPage() {
      );
   }
 
-  // Fetch ALL classes cleanly
-  const classes = await BaserowClient.getAllClasses();
+  // 🟢 4. Pass the tenant string to fetch the classes
+  const classes = await BaserowClient.getAllClasses(tenant);
 
   return <ClassPlanner classes={classes} />;
 }

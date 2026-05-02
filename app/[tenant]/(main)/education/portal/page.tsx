@@ -5,21 +5,25 @@ import TeacherPortalClient from "@/app/components/education/TeacherPortalClient"
 
 export const dynamic = "force-dynamic";
 
-export default async function TeacherPortalPage() {
+// 🟢 1. Add params to the page signature
+export default async function TeacherPortalPage({ params }: { params: { tenant: string } }) {
+    // 🟢 2. Extract the tenant
+    const tenant = params.tenant;
+
     const session = await auth();
     if (!session?.user?.email) redirect("/login");
     
     // 1. Identify the Teacher
     const teacherName = session.user.name || "Unknown Teacher";
     
-    // 2. Fetch ALL classes cleanly
-    const allClasses = await BaserowClient.getAllClasses();
+    // 🟢 3. Pass the tenant string to fetch ALL classes cleanly
+    const allClasses = await BaserowClient.getAllClasses(tenant);
 
     // 3. Filter them for this specific teacher
-    const myClasses = allClasses.filter(c => c.teacher === teacherName);
+    const myClasses = allClasses.filter((c: any) => c.teacher === teacherName);
     
     // 4. Filter them for Open Bounties
-    const bounties = allClasses.filter(c => c.status === "Seeking Instructor" && c.teacher === "TBA");
+    const bounties = allClasses.filter((c: any) => c.status === "Seeking Instructor" && c.teacher === "TBA");
 
     return (
         <div className="flex flex-col h-full bg-zinc-950 text-white overflow-y-auto custom-scrollbar">

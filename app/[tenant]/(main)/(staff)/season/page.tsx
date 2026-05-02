@@ -2,7 +2,11 @@ import { cookies } from 'next/headers';
 import { getActiveProduction, getAssignments, getPeople, getComplianceData } from '@/app/lib/baserow';
 import StaffClient from '@/app/components/staff/StaffClient';
 
-export default async function StaffPage() {
+// 🟢 1. Add params to the page signature
+export default async function StaffPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+  
   const cookieStore = await cookies();
   
   // 1. Try to get ID from cookie
@@ -12,21 +16,22 @@ export default async function StaffPage() {
   let productionTitle = "Production Team";
   
   if (!productionId) {
-     const activeProd = await getActiveProduction();
+     // 🟢 3. Pass tenant to Baserow fetchers
+     const activeProd = await getActiveProduction(tenant);
      if (activeProd) {
         productionId = activeProd.id; // ✅ This saves you! Sets ID to 23 (or actual ID)
         productionTitle = activeProd.title;
      }
   } else {
      // We have an ID, but we still need the title
-     const activeProd = await getActiveProduction();
+     const activeProd = await getActiveProduction(tenant);
      if (activeProd) productionTitle = activeProd.title;
   }
 
-  // 3. Now fetch data using the GUARANTEED valid productionId
-  const assignments = await getAssignments(productionId); // ✅ Now filters properly
-  const people = await getPeople();
-  const compliance = await getComplianceData(productionId);
+  // 3. Now fetch data using the GUARANTEED valid productionId and tenant!
+  const assignments = await getAssignments(tenant, productionId); // ✅ Now filters properly
+  const people = await getPeople(tenant);
+  const compliance = await getComplianceData(tenant, productionId);
 
   return (
     <main className="h-screen bg-zinc-950 overflow-hidden">

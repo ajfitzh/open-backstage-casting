@@ -5,8 +5,13 @@ import ConflictsClient from '@/app/components/conflicts/ConflictsClient';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ConflictsPage() {
-  const cookieStore = cookies();
+// 🟢 1. Add params to the page signature
+export default async function ConflictsPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+
+  // 🟢 3. Await cookies
+  const cookieStore = await cookies();
   
   // 1. Unify the Global State logic
   const savedShowId = cookieStore.get('active_production_id')?.value;
@@ -16,15 +21,18 @@ export default async function ConflictsPage() {
     return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
   }
 
-  // 2. Fetch the perfect, typed data using our client
+  // 🟢 4. Pass the tenant down into your Client methods!
   const [production, conflicts, roster] = await Promise.all([
-    BaserowClient.getProduction(showId),
-    BaserowClient.getConflictsForShow(showId),
-    BaserowClient.getRosterForShow(showId)
+    BaserowClient.getProduction(tenant, showId),
+    BaserowClient.getConflictsForShow(tenant, showId),
+    BaserowClient.getRosterForShow(tenant, showId)
   ]);
 
   // 3. Map the roster into a simple array for the sidebar dropdown
   const actors = roster.map(r => ({ id: r.id, name: r.name }));
+
+  // Safely cast title for TypeScript
+  const safeTitle = (production?.title as string) || "Active Production";
 
   return (
     <main className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
@@ -37,7 +45,7 @@ export default async function ConflictsPage() {
             Conflict Matrix
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-             Managing attendance for <span className="text-white font-bold">{production?.title || "Active Production"}</span>
+             Managing attendance for <span className="text-white font-bold">{safeTitle}</span>
           </p>
         </div>
         
@@ -54,7 +62,7 @@ export default async function ConflictsPage() {
       <ConflictsClient 
         initialConflicts={conflicts} 
         actors={actors} 
-        showTitle={production?.title || "Active Production"}
+        showTitle={safeTitle}
         events={[]}
       />
     </main>

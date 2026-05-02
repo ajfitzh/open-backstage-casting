@@ -4,9 +4,14 @@ import ProposalsClient from "@/app/components/education/ProposalsClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProposalsPage() {
+// 🟢 1. Add params to the page signature
+export default async function ProposalsPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+
+  // 🟢 3. Pass the tenant string to the fetcher
   // Use the clean, type-safe client!
-  const proposals = await BaserowClient.getProposals();
+  const proposals = await BaserowClient.getProposals(tenant);
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden">

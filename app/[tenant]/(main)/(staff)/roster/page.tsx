@@ -1,10 +1,11 @@
 import { cookies } from 'next/headers';
 import { BaserowClient } from '@/app/lib/BaserowClient';
-// Assuming StaffClient wraps ComplianceDashboard, but let's just use ComplianceDashboard directly to keep it clean!
 import ComplianceDashboard from '@/app/components/ComplianceDashboard'; 
 
-export default async function RosterPage() {
-  const cookieStore = cookies();
+export default async function RosterPage({ params }: { params: { tenant: string } }) {
+  const tenant = params.tenant;
+  
+  const cookieStore = await cookies();
   const savedShowId = cookieStore.get('active_production_id')?.value;
   const showId = parseInt(savedShowId || "94", 10);
 
@@ -12,16 +13,16 @@ export default async function RosterPage() {
     return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
   }
 
-  // Fetch only the two things we need!
   const [production, roster] = await Promise.all([
-      BaserowClient.getProduction(showId),
-      BaserowClient.getRosterForShow(showId)
+      BaserowClient.getProduction(tenant, showId),
+      BaserowClient.getRosterForShow(tenant, showId)
   ]);
 
   return (
     <main className="h-full bg-zinc-950">
       <ComplianceDashboard 
-        productionTitle={production?.title || "Active Production"} 
+        // 🟢 FIX: Safely cast the title to a string to satisfy TypeScript
+        productionTitle={(production?.title as string) || "Active Production"} 
         students={roster}
       />
     </main>

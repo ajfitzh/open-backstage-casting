@@ -2,20 +2,26 @@ import { cookies } from 'next/headers';
 import { getShowById, getActiveProduction } from '@/app/lib/baserow';
 import AuditionsClient from '@/app/components/auditions/AuditionsClient';
 
-export default async function AuditionsPage() {
+// 🟢 1. Add params to the page signature
+export default async function AuditionsPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+  
   const cookieStore = await cookies();
   let activeId = Number(cookieStore.get('active_production_id')?.value);
   let showTitle = "Select a Production";
 
   if (activeId) {
-    const showData = await getShowById(activeId);
+    // 🟢 3. Pass tenant to fetcher
+    const showData = await getShowById(tenant, activeId);
     if (showData) {
       showTitle = showData.title; // Fixed case
     }
   } 
   
   if (!activeId || showTitle === "Select a Production") {
-    const defaultShow = await getActiveProduction();
+    // 🟢 4. Pass tenant to fallback fetcher
+    const defaultShow = await getActiveProduction(tenant);
     if (defaultShow) {
       activeId = defaultShow.id;
       showTitle = defaultShow.title; // Fixed case

@@ -3,9 +3,14 @@ import EducationGrid from "./EducationGrid";
 
 export const dynamic = "force-dynamic";
 
-export default async function EducationPage() {
-  // 🟢 Use the clean, type-safe BaserowClient
-  const classes = await BaserowClient.getAllClasses();
+// 🟢 1. Add params to the page signature
+export default async function EducationPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+
+  // 🟢 3. Pass the tenant string to the fetcher
+  // Use the clean, type-safe BaserowClient
+  const classes = await BaserowClient.getAllClasses(tenant);
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden">

@@ -3,14 +3,17 @@ import Link from 'next/link';
 import { ArrowLeft, Mail, Phone, MapPin } from 'lucide-react';
 import { getAssignments, getShowById, getPeople } from '@/app/lib/baserow';
 
-export default async function CastListPage({ params }: { params: { id: string } }) {
+// 🟢 1. Add tenant to the params type
+export default async function CastListPage({ params }: { params: { tenant: string, id: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
   const productionId = parseInt(params.id);
   
-  // 1. Fetch Data
+  // 🟢 3. Pass the tenant string to ALL baserow fetchers
   const [show, assignments, people] = await Promise.all([
-    getShowById(productionId),
-    getAssignments(productionId),
-    getPeople() // Needed to get headshots/emails
+    getShowById(tenant, productionId),
+    getAssignments(tenant, productionId),
+    getPeople(tenant) // Needed to get headshots/emails
   ]);
 
   // 2. Merge Assignment Data with People Data

@@ -5,17 +5,23 @@ import { getAuditionees, getAssignments, getProductionEvents } from '@/app/lib/b
 
 export const dynamic = 'force-dynamic';
 
-export default async function ProductionHubPage() {
-  const production = await getActiveProduction();
+// 🟢 1. Add params to the page signature
+export default async function ProductionHubPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+  
+  // 🟢 3. Pass the tenant string to the initial fetcher
+  const production = await getActiveProduction(tenant);
   
   if (!production) return <div className="p-10 text-zinc-500">No Active Production</div>;
 
+  // 🟢 4. Pass the tenant string to ALL the parallel fetchers
   const [scenes, demographics, auditionees, assignments, events] = await Promise.all([
-      getScenes(production.id),
-      getCastDemographics(),
-      getAuditionees(production.id),
-      getAssignments(production.id),
-      getProductionEvents(production.id)
+      getScenes(tenant, production.id),
+      getCastDemographics(tenant),
+      getAuditionees(tenant, production.id),
+      getAssignments(tenant, production.id),
+      getProductionEvents(tenant, production.id)
   ]);
 
   const hasOverride = (key: string) => {

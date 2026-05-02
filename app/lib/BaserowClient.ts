@@ -58,7 +58,6 @@ async function getCommitteePrefsForShow(tenant: string, showId: number) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.COMMITTEE_PREFS.FIELDS;
   
-  // 🟢 FIXED: Using dynamic Table ID and field_XXXX filter
   const endpoint = `/database/rows/table/${tables.COMMITTEE_PREFS}/?filter__${F.PRODUCTION}__link_row_has=${showId}&size=200`;
   
   const result = await fetchAndValidate(endpoint, z.any()); 
@@ -70,7 +69,6 @@ async function getCommitteePrefsForShow(tenant: string, showId: number) {
 
     return {
       id: row.id,
-      // 🟢 FIXED: Using strictly-typed field IDs from your new schema
       name: extractArray(row[F.PARENT_GUARDIAN_NAME]),
       email: extractArray(row[F.EMAIL]),
       phone: extractArray(row[F.PHONE]),
@@ -105,14 +103,12 @@ async function getProduction(tenant: string, showId: number) {
   return res ? { id: res.id, title: res[F.TITLE] || "Unknown Show" } : null;
 }
 
-// 🟢 Simplified export for all other functions (Repeat the pattern: take tenant, get tables)
 export const BaserowClient = {
   findUserByEmail,
   getCommitteePrefsForShow,
   getRosterForShow,
   getProduction,
   
-  // Helper to wrap old functions that need tenant awareness
   async getRolesForShow(tenant: string, showId: number) {
     const t = await getTenantTableConfig(tenant);
     return await fetchAndValidate(`/database/rows/table/${t.ROLES_POSITIONS}/?filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has=${showId}&size=200`, RoleListSchema) ?? [];
@@ -133,8 +129,71 @@ export const BaserowClient = {
     return await fetchAndValidate(`/database/rows/table/${t.CONFLICTS}/?filter__${DB.CONFLICTS.FIELDS.PRODUCTION}__link_row_has=${showId}&size=200`, ConflictListSchema) ?? [];
   },
 
+  async getAssignmentsForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.ASSIGNMENTS}/?filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has=${showId}&size=200`, AssignmentListSchema) ?? [];
+  },
+
   async getAllSeasons(tenant: string) {
     const t = await getTenantTableConfig(tenant);
     return await fetchAndValidate(`/database/rows/table/${t.SEASONS}/?size=200`, GenericListSchema) ?? [];
+  },
+
+  async getAllProductions(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.PRODUCTIONS}/?size=200`, GenericListSchema) ?? [];
+  },
+
+  async getAllVenues(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.VENUES}/?size=200`, GenericListSchema) ?? [];
+  },
+
+  async getPerformances(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.PERFORMANCES}/?size=200`, GenericListSchema) ?? [];
+  },
+
+  async getTeacherApplicants(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    const F = DB.PEOPLE.FIELDS;
+    const params = new URLSearchParams();
+    params.append("size", "200");
+    params.append("filter_type", "OR");
+    params.append(`filter__${F.STATUS}__multiple_select_has`, "Faculty Applicant");
+    params.append(`filter__${F.STATUS}__multiple_select_has`, "Faculty Interviewing");
+    params.append(`filter__${F.STATUS}__multiple_select_has`, "Active Faculty");
+    const result = await fetchAndValidate(`/database/rows/table/${t.PEOPLE}/?${params.toString()}`, z.any());
+    if (!result) return [];
+    return result.map((row: any) => ({
+      id: row.id,
+      name: row[F.FULL_NAME] || row[F.FIRST_NAME] || "Unknown",
+      email: row[F.CYT_ACCOUNT_PERSONAL_EMAIL] || "",
+      status: row[F.STATUS]?.map((s:any) => s.value) || [],
+      headshot: row[F.HEADSHOT]?.[0]?.url || null,
+      notes: row[F.ORIGINAL_BIO] || "",
+    }));
+  },
+
+  // 🟢 NEW: Education - Fetch all classes for Planning and Academy views
+  async getAllClasses(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.CLASSES}/?size=200`, ClassListSchema) ?? [];
+  },
+
+  // 🟢 NEW: Education - Fetch proposals
+  async getProposals(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    const F = DB.CLASSES.FIELDS;
+    const endpoint = `/database/rows/table/${t.CLASSES}/?filter__${F.STATUS}__equal=Proposed&size=200`;
+    return await fetchAndValidate(endpoint, ClassListSchema) ?? [];
+  },
+
+  // 🟢 NEW: Scheduling - Fetch slots for the specific show
+  async getSlotsForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    // Note: Since Slots link to Events which link to Productions, 
+    // we fetch all slots for the workspace and filter in the page.
+    return await fetchAndValidate(`/database/rows/table/${t.SCHEDULE_SLOTS}/?size=200`, SlotListSchema) ?? [];
   }
 };

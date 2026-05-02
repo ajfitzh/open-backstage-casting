@@ -20,12 +20,17 @@ function parseLegacySales(jsonString: string) {
   }
 }
 
-export default async function AnalyticsPage() {
+// 🟢 1. Add params to the page signature
+export default async function AnalyticsPage({ params }: { params: { tenant: string } }) {
+  // 🟢 2. Extract the tenant
+  const tenant = params.tenant;
+
+  // 🟢 3. Pass the tenant string to ALL BaserowClient fetchers
   const [rawData, allShows, allVenuesRaw, allSeasons] = await Promise.all([
-    BaserowClient.getPerformances(),
-    BaserowClient.getAllProductions(),
-    BaserowClient.getAllVenues(),
-    BaserowClient.getAllSeasons()
+    BaserowClient.getPerformances(tenant),
+    BaserowClient.getAllProductions(tenant),
+    BaserowClient.getAllVenues(tenant),
+    BaserowClient.getAllSeasons(tenant)
   ]);
 
   const allVenues = allVenuesRaw.map((v: any) => ({

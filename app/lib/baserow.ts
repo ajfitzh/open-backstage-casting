@@ -280,13 +280,10 @@ function mapShow(row: any) {
   };
 }
 
-// app/lib/baserow.ts
-
 export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
   
-  // 🟢 THE FIX: Filter by the IS_ACTIVE field (field_6083) from your schema
   // Baserow boolean filters use 'boolean_equal' with "true"
   const params = {
     [`filter__${F.IS_ACTIVE}__boolean_equal`]: "true",
@@ -296,10 +293,8 @@ export async function getActiveProduction(tenant: string) {
   const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, params);
   
   if (Array.isArray(data) && data.length > 0) {
-    return {
-      id: data[0].id,
-      title: data[0][F.TITLE] || "Unknown Show"
-    };
+    // 🟢 FIX: Return the full mapped object so workflowOverrides is included!
+    return mapShow(data[0]);
   }
 
   // Fallback: If NO show is marked active, get the most recent one instead of the oldest
@@ -309,7 +304,7 @@ export async function getActiveProduction(tenant: string) {
   };
   const fallbackData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, fallbackParams);
   
-  return fallbackData?.[0] ? { id: fallbackData[0].id, title: fallbackData[0][F.TITLE] } : null;
+  return fallbackData?.[0] ? mapShow(fallbackData[0]) : null;
 }
 
 export async function getSeasons(tenant: string) {

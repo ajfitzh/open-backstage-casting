@@ -3,14 +3,17 @@ import { getAssignments, getShowById, getPeople } from '@/app/lib/baserow';
 import Modal from '@/app/components/Modal'; // Import the wrapper we just made
 import { Mail, Phone, User } from 'lucide-react';
 
-export default async function InterceptedCastPage({ params }: { params: { id: string } }) {
+// 🟢 1. Add tenant to the params type
+export default async function InterceptedCastPage({ params }: { params: { tenant: string, id: string } }) {
+  // 🟢 2. Extract tenant and productionId
+  const tenant = params.tenant;
   const productionId = parseInt(params.id);
   
-  // 1. Fetch Data (Same as the full page)
+  // 🟢 3. Pass tenant to all Baserow fetchers
   const [show, assignments, people] = await Promise.all([
-    getShowById(productionId),
-    getAssignments(productionId),
-    getPeople() 
+    getShowById(tenant, productionId),
+    getAssignments(tenant, productionId),
+    getPeople(tenant) 
   ]);
 
   const castList = assignments.map((assignment: any) => {
