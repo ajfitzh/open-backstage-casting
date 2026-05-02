@@ -1187,7 +1187,7 @@ export async function getGlobalSalesSummary(tenant: string) {
   return { totalSold, avgFill, performanceCount: data.length };
 }
 
-export { DB };
+export { DB, getTenantTableConfig };
 
 export async function createGoogleUser(tenant: string, googleUser: any) {
   const tables = await getTenantTableConfig(tenant);
