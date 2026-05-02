@@ -1,21 +1,47 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
+import { headers } from "next/headers"
 
-// 1. USE THE NEW, VALIDATED CLIENT
-// We keep 'createGoogleUser' for now, as it handles writing/creating a new user.
-import { BaserowClient } from "@/app/lib/BaserowClient"
-import { createGoogleUser } from "@/app/lib/baserow"
+// 🟢 Use the updated standalone functions from our refactored baserow.ts
+import { findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
+
+// --- COOKIE SHARING CONFIG ---
+const useSecureCookies = process.env.NODE_ENV === "production"
+const cookiePrefix = useSecureCookies ? "__Secure-" : ""
+const sharedDomain = process.env.NODE_ENV === "production" ? ".open-backstage.org" : "localhost"
+
+// --- TENANT HELPER ---
+// Dynamically extracts the tenant so auth knows which database to query
+function getTenantContext() {
+  const hostList = headers();
+  const host = hostList.get("host") || "";
+
+  // 🟢 DEV BYPASS: Google OAuth hates subdomains on localhost.
+  // This forces local dev to always check the 'cytfred' database so you can log in at localhost:3000
+  if (process.env.NODE_ENV === "development" && host.includes("localhost")) {
+    return "cytfred";
+  }
+
+  // Prod extraction
+  const mainDomain = process.env.NODE_ENV === "production" ? "open-backstage.org" : "localhost:3000";
+  const currentHost = host.split(":")[0];
+  const baseHost = mainDomain.split(":")[0];
+
+  if (currentHost === baseHost || currentHost === `www.${baseHost}`) {
+    return null; // They are on the marketing site
+  }
+
+  return currentHost.replace(`.${baseHost}`, "");
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    // Google Provider (unchanged)
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
 
-    // Credentials Provider (updated)
     Credentials({
       name: "Casting Portal",
       credentials: {
@@ -25,16 +51,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // 2. USE THE NEW, VALIDATED FUNCTION
-        // The old `verifyUserCredentials` likely handled both finding the user and checking the password.
-        // We now use our clean client to find the user.
-        // NOTE: You will need to re-implement the password check itself,
-        // likely by comparing `credentials.password` against a hashed password field
-        // that you can now add to the `UserProfileSchema`.
-        const user = await BaserowClient.findUserByEmail(credentials.email as string);
+        const tenant = getTenantContext();
+        if (!tenant) throw new Error("Cannot log in directly from the marketing site.");
 
-        // For now, we'll assume if the user is found, the login is valid.
-        // TODO: Add password verification logic here.
+        // 🟢 Fetch user from the specific tenant's database
+        const user = await findUserByEmail(tenant, credentials.email as string);
+
+        // TODO: Add password verification logic here (bcrypt compare)
         if (user) {
             return user;
         }
@@ -43,14 +66,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     })
   ],
+  // 🟢 CROSS-DOMAIN COOKIES: This allows the session to jump between subdomains
+  cookies: {
+    sessionToken: {
+      name: `${cookiePrefix}authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+        domain: sharedDomain, 
+      },
+    },
+  },
   callbacks: {
     // SECURITY GATE: Check if Google user exists in Baserow
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const email = user.email || "";
+        const tenant = getTenantContext();
+        if (!tenant) return false; // Deny if no tenant context
 
-        // 3. USE THE NEW CLIENT HERE TOO
-        const baserowUser = await BaserowClient.findUserByEmail(email);
+        const email = user.email || "";
+        const baserowUser = await findUserByEmail(tenant, email);
 
         if (baserowUser) {
           // A. User Exists: Attach Baserow ID/Role to the transient user object
@@ -60,12 +97,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else {
           // B. User DOES NOT Exist: Auto-Register them!
           try {
-            console.log(`🆕 New Google User: ${email}. Auto-registering...`);
-            await createGoogleUser(user);
-            return true; // Allow them in!
+            console.log(`🆕 New Google User: ${email}. Auto-registering to ${tenant}...`);
+            await createGoogleUser(tenant, user);
+            return true; 
           } catch (error) {
             console.error("❌ Auto-registration failed:", error);
-            return false; // Deny access only if creation fails
+            return false; 
           }
         }
       }
@@ -78,21 +115,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = (user as any).role;
         
-        // This fallback is helpful for a NEWLY registered Google user,
-        // as their role isn't attached to the initial 'user' object from the provider.
+        // Fallback for a NEWLY registered Google user
         if (account?.provider === "google" && !token.role) {
-            // 4. USE THE NEW CLIENT FOR THE FALLBACK CHECK
-            const baserowUser = await BaserowClient.findUserByEmail(user.email || "");
-            if (baserowUser) {
-              token.id = baserowUser.id; // Ensure ID is synced
-              token.role = baserowUser.role;
+            const tenant = getTenantContext();
+            if (tenant) {
+              const baserowUser = await findUserByEmail(tenant, user.email || "");
+              if (baserowUser) {
+                token.id = baserowUser.id; 
+                token.role = baserowUser.role;
+              }
             }
         }
       }
       return token;
     },
 
-    // SESSION: Pass the ID/Role from Token to the Client (unchanged)
+    // SESSION: Pass the ID/Role from Token to the Client
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id;
