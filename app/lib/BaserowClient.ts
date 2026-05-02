@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { DB } from './schema';
+import { getTenantTableConfig } from './tenant-config';
 import { UserProfileListSchema } from './schemas/person';
 import { SceneListSchema, RoleListSchema, RosterListSchema, AssignmentListSchema } from './schemas/casting';
 import { EventListSchema, SlotListSchema, ConflictListSchema } from './schemas/schedule';
 import { ClassListSchema } from './schemas/education';
-import { CommitteeListSchema } from './schemas/casting'; // Add this to the top imports!
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
@@ -12,6 +13,9 @@ const HEADERS = {
   "Content-Type": "application/json",
 };
 
+// Generic list schema for fallback
+const GenericListSchema = z.array(z.object({ id: z.number() }).passthrough());
+
 async function fetchAndValidate<T extends z.ZodTypeAny>(
   endpoint: string, schema: T, options: RequestInit = {}
 ): Promise<z.infer<T> | null> {
@@ -19,7 +23,7 @@ async function fetchAndValidate<T extends z.ZodTypeAny>(
     const finalUrl = `${BASE_URL}/api${endpoint}`;
     const res = await fetch(finalUrl, { ...options, headers: { ...HEADERS, ...options.headers }, cache: "no-store" });
     if (!res.ok) {
-      console.error(`[BaserowClient] API Error ${res.status}: ${res.statusText} at ${finalUrl}`);
+      console.error(`[BaserowClient] API Error ${res.status} at ${finalUrl}`);
       return null;
     }
     const rawData = await res.json();
@@ -36,166 +40,101 @@ async function fetchAndValidate<T extends z.ZodTypeAny>(
   }
 }
 
-// --- USER FUNCTIONS ---
+// --- TENANT-AWARE FUNCTIONS ---
 
-async function getTeacherApplicants() {
-  const endpoint = `/database/rows/table/599/?user_field_names=true&size=200`;
-  const results = await fetchAndValidate(endpoint, UserProfileListSchema);
-  
-  if (!results) return [];
-
-  const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
-  
-  return results.filter(user => user.tags?.some(tag => hiringTags.includes(tag))).map(u => ({
-    id: Number(u.id),
-    name: u.name,
-    email: u.email,
-    status: u.tags || [], // The Kanban board expects 'status' to be the array of tags
-    headshot: u.image
-  }));
-}
-
-async function findUserByEmail(email: string) {
+async function findUserByEmail(tenant: string, email: string) {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.PEOPLE.FIELDS;
     const params = new URLSearchParams({
         filter_type: "OR", size: "1",
-        'filter__field_6132__equal': email, 
-        'filter__field_6131__equal': email, 
+        [`filter__${F.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email, 
+        [`filter__${F.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email, 
     });
-    const result = await fetchAndValidate(`/database/rows/table/599/?user_field_names=true&${params.toString()}`, UserProfileListSchema);
+    const result = await fetchAndValidate(`/database/rows/table/${tables.PEOPLE}/?${params.toString()}`, UserProfileListSchema);
     return result?.[0] ?? null;
 }
 
-// --- CASTING FUNCTIONS ---
-
-
-async function getCommitteePrefsForShow(showId: number) {
-  // Table 620 is COMMITTEE_PREFS. Field 5952 links to Production.
-  const endpoint = `/database/rows/table/620/?user_field_names=true&filter__field_5952__link_row_has=${showId}&size=200`;
+async function getCommitteePrefsForShow(tenant: string, showId: number) {
+  const tables = await getTenantTableConfig(tenant);
+  const F = DB.COMMITTEE_PREFS.FIELDS;
   
-  // Temporarily use z.any() to bypass the strict schema while we manually flatten the response
+  // 🟢 FIXED: Using dynamic Table ID and field_XXXX filter
+  const endpoint = `/database/rows/table/${tables.COMMITTEE_PREFS}/?filter__${F.PRODUCTION}__link_row_has=${showId}&size=200`;
+  
   const result = await fetchAndValidate(endpoint, z.any()); 
-  
   if (!result) return [];
 
-  // Transform Baserow's raw objects/arrays into the flat interface expected by CommitteeClient.tsx
   return result.map((row: any) => {
-    // Helper to extract text from a Link/Lookup array: [{id: 1, value: "Name"}] -> "Name"
-    const extractArray = (arr: any) => {
-        if (!arr || !Array.isArray(arr)) return "";
-        return arr.map(item => item.value).join(" & ");
-    };
-
-    // Helper to extract text from a Single Select: {id: 1, value: "Props", color: "blue"} -> "Props"
+    const extractArray = (arr: any) => (Array.isArray(arr) ? arr.map(item => item.value).join(" & ") : "");
     const extractSelect = (field: any) => field?.value || null;
 
     return {
       id: row.id,
-      name: extractArray(row["Parent/Guardian Name"]),
-      email: extractArray(row["Email"]),
-      phone: extractArray(row["Phone"]),
-      studentName: extractArray(row["Student Name"]),
+      // 🟢 FIXED: Using strictly-typed field IDs from your new schema
+      name: extractArray(row[F.PARENT_GUARDIAN_NAME]),
+      email: extractArray(row[F.EMAIL]),
+      phone: extractArray(row[F.PHONE]),
+      studentName: extractArray(row[F.STUDENT_NAME]),
       
-      preShow1: extractSelect(row["Pre-Show 1st"]),
-      preShow2: extractSelect(row["Pre-Show 2nd"]),
-      preShow3: extractSelect(row["Pre-Show 3rd"]),
+      preShow1: extractSelect(row[F.PRE_SHOW_1ST]),
+      preShow2: extractSelect(row[F.PRE_SHOW_2ND]),
+      preShow3: extractSelect(row[F.PRE_SHOW_3RD]),
       
-      showWeek1: extractSelect(row["Show Week 1st"]),
-      showWeek2: extractSelect(row["Show Week 2nd"]),
-      showWeek3: extractSelect(row["Show Week 3rd"]),
+      showWeek1: extractSelect(row[F.SHOW_WEEK_1ST]),
+      showWeek2: extractSelect(row[F.SHOW_WEEK_2ND]),
+      showWeek3: extractSelect(row[F.SHOW_WEEK_3RD]),
       
-      // NEW: Pulling the final confirmed assignments into the UI
-      assignedPreShow: extractSelect(row["Pre-Show Phase"]),
-      assignedShowWeek: extractSelect(row["Show Week Committees"]),
-      // Add this right below assignedShowWeek
-      isChair: !!row["Is Chair?"],
+      assignedPreShow: extractSelect(row[F.PRE_SHOW_PHASE]),
+      assignedShowWeek: extractSelect(row[F.SHOW_WEEK_COMMITTEES]),
+      isChair: row[F.IS_CHAIR] === true,
     };
   });
 }
-async function getRolesForShow(showId: number) {
-  return await fetchAndValidate(`/database/rows/table/605/?user_field_names=true&filter__field_5794__link_row_has=${showId}&size=200`, RoleListSchema) ?? [];
-}
-async function getScenesForShow(showId: number) {
-  return await fetchAndValidate(`/database/rows/table/627/?user_field_names=true&filter__field_6023__link_row_has=${showId}&size=200`, SceneListSchema) ?? [];
-}
-async function getRosterForShow(showId: number) {
-  return await fetchAndValidate(`/database/rows/table/630/?user_field_names=true&filter__field_6053__link_row_has=${showId}&size=200`, RosterListSchema) ?? [];
-}
-async function getAssignmentsForShow(showId: number) {
-  return await fetchAndValidate(`/database/rows/table/603/?user_field_names=true&filter__field_5787__link_row_has=${showId}&size=200`, AssignmentListSchema) ?? [];
+
+async function getRosterForShow(tenant: string, showId: number) {
+  const tables = await getTenantTableConfig(tenant);
+  const F = DB.AUDITIONS.FIELDS;
+  return await fetchAndValidate(`/database/rows/table/${tables.AUDITIONS}/?filter__${F.PRODUCTION}__link_row_has=${showId}&size=200`, RosterListSchema) ?? [];
 }
 
-// --- SCHEDULING FUNCTIONS ---
-async function getEventsForShow(showId: number) {
-  // Table 625, Prod Field 6007
-  return await fetchAndValidate(`/database/rows/table/625/?user_field_names=true&filter__field_6007__link_row_has=${showId}&size=200`, EventListSchema) ?? [];
-}
-async function getSlotsForShow(showId: number) {
-  // Changed size=500 to size=200!
-  return await fetchAndValidate(`/database/rows/table/640/?user_field_names=true&size=200`, SlotListSchema) ?? [];
+async function getProduction(tenant: string, showId: number) {
+  const tables = await getTenantTableConfig(tenant);
+  const F = DB.PRODUCTIONS.FIELDS;
+  const RawProdSchema = z.object({ id: z.number() }).passthrough();
+  const res = await fetchAndValidate(`/database/rows/table/${tables.PRODUCTIONS}/${showId}/`, RawProdSchema);
+  return res ? { id: res.id, title: res[F.TITLE] || "Unknown Show" } : null;
 }
 
-async function getConflictsForShow(showId: number) {
-  // Table 623, Prod Field 5989
-  return await fetchAndValidate(`/database/rows/table/623/?user_field_names=true&filter__field_5989__link_row_has=${showId}&size=200`, ConflictListSchema) ?? [];
-}
-
-async function getProduction(showId: number) {
-  // Table 600 is Productions
-  const RawProdSchema = z.object({ id: z.number(), 'Title': z.any() }).passthrough();
-  const res = await fetchAndValidate(`/database/rows/table/600/${showId}/?user_field_names=true`, RawProdSchema);
-  return res ? { id: res.id, title: typeof res['Title'] === 'string' ? res['Title'] : "Unknown Show" } : null;
-}
-
-
-// --- EDUCATION FUNCTIONS ---
-async function getAllClasses() {
-  // Table 633 is CLASSES
-  const result = await fetchAndValidate(`/database/rows/table/633/?user_field_names=true&size=200`, ClassListSchema);
-  return result ?? [];
-}
-async function getProposals() {
-  // Table 633 is CLASSES. Field 6241 is Status (Single Select).
-  // We use __contains because it's a select field, not a raw string.
-  const endpoint = `/database/rows/table/633/?user_field_names=true&filter__field_6241__contains=Seeking+Instructor&size=50`;
-  const result = await fetchAndValidate(endpoint, ClassListSchema);
-  return result ?? [];
-}
-
-// --- ANALYTICS & REPORTS FUNCTIONS ---
-// A generic schema that guarantees an array of objects to prevent .map() crashes
-const GenericListSchema = z.array(z.object({ id: z.number() }).passthrough());
-
-async function getAllProductions() {
-  return await fetchAndValidate(`/database/rows/table/600/?user_field_names=true&size=200`, GenericListSchema) ?? [];
-}
-async function getAllVenues() {
-  return await fetchAndValidate(`/database/rows/table/635/?user_field_names=true&size=200`, GenericListSchema) ?? [];
-}
-async function getAllSeasons() {
-  return await fetchAndValidate(`/database/rows/table/632/?user_field_names=true&size=200`, GenericListSchema) ?? [];
-}
-async function getPerformances() {
-  return await fetchAndValidate(`/database/rows/table/637/?user_field_names=true&size=200`, GenericListSchema) ?? [];
-}
-
-
-
+// 🟢 Simplified export for all other functions (Repeat the pattern: take tenant, get tables)
 export const BaserowClient = {
-  getProposals,
-  getProduction,
-  getAllClasses,
   findUserByEmail,
-  getRolesForShow,
-  getScenesForShow,
-  getRosterForShow,
-  getAssignmentsForShow,
-  getEventsForShow,
-  getSlotsForShow,
-  getConflictsForShow,
-  getTeacherApplicants,
   getCommitteePrefsForShow,
-    getAllProductions,
-  getAllVenues,
-  getAllSeasons,
-  getPerformances,
+  getRosterForShow,
+  getProduction,
+  
+  // Helper to wrap old functions that need tenant awareness
+  async getRolesForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.ROLES_POSITIONS}/?filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has=${showId}&size=200`, RoleListSchema) ?? [];
+  },
+
+  async getScenesForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.SCENES}/?filter__${DB.SCENES.FIELDS.PRODUCTION}__link_row_has=${showId}&size=200`, SceneListSchema) ?? [];
+  },
+
+  async getEventsForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.EVENTS}/?filter__${DB.EVENTS.FIELDS.PRODUCTION}__link_row_has=${showId}&size=200`, EventListSchema) ?? [];
+  },
+
+  async getConflictsForShow(tenant: string, showId: number) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.CONFLICTS}/?filter__${DB.CONFLICTS.FIELDS.PRODUCTION}__link_row_has=${showId}&size=200`, ConflictListSchema) ?? [];
+  },
+
+  async getAllSeasons(tenant: string) {
+    const t = await getTenantTableConfig(tenant);
+    return await fetchAndValidate(`/database/rows/table/${t.SEASONS}/?size=200`, GenericListSchema) ?? [];
+  }
 };

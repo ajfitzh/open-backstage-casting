@@ -9,8 +9,8 @@ import { findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
 // --- COOKIE SHARING CONFIG ---
 const useSecureCookies = process.env.NODE_ENV === "production"
 const cookiePrefix = useSecureCookies ? "__Secure-" : ""
-const sharedDomain = process.env.NODE_ENV === "production" ? ".open-backstage.org" : "localhost"
-
+// 🟢 FIXED: Use undefined in local dev so the browser doesn't reject the cookie!
+const sharedDomain = process.env.NODE_ENV === "production" ? ".open-backstage.org" : undefined;
 // --- TENANT HELPER ---
 // Dynamically extracts the tenant so auth knows which database to query
 function getTenantContext() {
@@ -42,26 +42,50 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
 
-    Credentials({
+Credentials({
       name: "Casting Portal",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email) return null;
+
+        // Clean up autofill spaces!
+        const email = (credentials.email as string).trim();
+        console.log(`\n🔐 --- LOGIN ATTEMPT ---`);
+        console.log(`📧 Email: "${email}"`);
 
         const tenant = getTenantContext();
-        if (!tenant) throw new Error("Cannot log in directly from the marketing site.");
+        console.log(`🏢 Tenant Context: "${tenant}"`);
 
-        // 🟢 Fetch user from the specific tenant's database
-        const user = await findUserByEmail(tenant, credentials.email as string);
-
-        // TODO: Add password verification logic here (bcrypt compare)
-        if (user) {
-            return user;
+        if (!tenant) {
+            console.log("❌ Failed: No tenant context found.");
+            return null;
         }
+
+        // Fetch user from the specific tenant's database
+        const user = await findUserByEmail(tenant, email);
+
+        if (user) {
+            console.log(`✅ Success! Found user in Baserow: ${user.name}`);
+            return user;
+        } 
         
+        console.log(`❌ Failed: Email not found in Baserow PEOPLE table.`);
+        
+        // 🟢 THE MASTER KEY (DEV ONLY)
+        // If Baserow rejects you, this forces you in anyway so you can build the UI!
+        if (process.env.NODE_ENV === "development") {
+            console.log(`⚠️ DEV MODE: Bypassing database check. Forcing login!`);
+            return { 
+                id: "1", // Fake ID
+                name: "Local Admin Override", 
+                email: email, 
+                role: "Admin" 
+            };
+        }
+
         return null;
       }
     })
@@ -80,6 +104,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
+    // 🟢 NEW: Allow NextAuth to redirect across your subdomains!
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      
+      // Allows callback URLs on the same origin
+      if (new URL(url).origin === baseUrl) return url;
+      
+      // Whitelist your local and production domains
+      if (url.includes("localhost:3001") || url.includes("open-backstage.org")) {
+        return url;
+      }
+      
+      return baseUrl;
+    },
     // SECURITY GATE: Check if Google user exists in Baserow
     async signIn({ user, account }) {
       if (account?.provider === "google") {

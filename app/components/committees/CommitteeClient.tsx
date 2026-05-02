@@ -64,14 +64,33 @@ export default function CommitteeDashboard({
     activeId: number 
 }) {
   
-  const tenant = useTenant(); // 🟢 Grab the active tenant from context
+const tenant = useTenant(); // 🟢 Grab the active tenant from context
   
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
-  const [rawData] = useState<Volunteer[]>(volunteers);
   
-  const [assignments, setAssignments] = useState<Record<number, string>>({});
-  const [chairs, setChairs] = useState<Record<number, boolean>>({});
+  // 🟢 FIX 1: Don't trap props in a dead useState. Use them dynamically!
+  const rawData = volunteers;
+  
+  // 🟢 FIX 2: Calculate the assignments synchronously so the server and client match
+  const initialAssignments = useMemo(() => {
+      const acc: Record<number, string> = {};
+      rawData.forEach(v => {
+          const val = groupBy === 'Pre-Show' ? v.assignedPreShow : v.assignedShowWeek;
+          if (val) acc[v.id] = val;
+      });
+      return acc;
+  }, [rawData, groupBy]);
+
+  const initialChairs = useMemo(() => {
+      const acc: Record<number, boolean> = {};
+      rawData.forEach(v => { if (v.isChair) acc[v.id] = true; });
+      return acc;
+  }, [rawData]);
+
+  // 🟢 FIX 3: Feed the calculated assignments directly into the initial state
+  const [assignments, setAssignments] = useState<Record<number, string>>(initialAssignments);
+  const [chairs, setChairs] = useState<Record<number, boolean>>(initialChairs);
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   
   const [targets, setTargets] = useState<Record<string, number>>({});
@@ -94,22 +113,7 @@ export default function CommitteeDashboard({
       setTargets(initialTargets);
   }, [students.length]);
 
-  // --- LOAD SAVED DATA FROM DB ON TAB SWITCH ---
-  const initialAssignments = useMemo(() => {
-      const acc: Record<number, string> = {};
-      rawData.forEach(v => {
-          const val = groupBy === 'Pre-Show' ? v.assignedPreShow : v.assignedShowWeek;
-          if (val) acc[v.id] = val;
-      });
-      return acc;
-  }, [rawData, groupBy]);
-
-  const initialChairs = useMemo(() => {
-      const acc: Record<number, boolean> = {};
-      rawData.forEach(v => { if (v.isChair) acc[v.id] = true; });
-      return acc;
-  }, [rawData]);
-
+  // --- SYNC DATA ON TAB SWITCH ---
   useEffect(() => {
       setAssignments(initialAssignments);
       setChairs(initialChairs);

@@ -1,6 +1,7 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Run `python3 get-schema.py` to update.
+//    Generated on: 5/2/2026, 9:24:58 AM
+//    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
 export const DB = {
@@ -71,6 +72,7 @@ export const DB = {
       "FAMILIES": "field_6153", // link_row
       "APP_PASSWORD": "field_6195", // text
       "STAFF_INTEREST": "field_6256", // link_row
+      "FORM_COMMITTEE_PREFERENCES_PARENT_GUARDIAN_NAME": "field_7482", // link_row
     }
   },
   PRODUCTIONS: {
@@ -282,12 +284,13 @@ export const DB = {
       "SHOW_WEEK_3RD": "field_6093", // single_select
       "DATE_OF_BIRTH": "field_6094", // date
       "AGE": "field_6095", // formula
-      "PARENT_GUARDIAN_NAME": "field_6096", // text
-      "EMAIL": "field_6097", // email
-      "PHONE": "field_6098", // phone_number
+      "PARENT_GUARDIAN_NAME": "field_6096", // link_row
+      "EMAIL": "field_6097", // lookup
+      "PHONE": "field_6098", // lookup
       "STUDENT_ID": "field_6099", // link_row
       "STUDENT_NAME": "field_6103", // lookup
       "PRODUCTION_NAME": "field_6104", // lookup
+      "IS_CHAIR": "field_7483", // boolean
     }
   },
   ATTENDANCE: {
@@ -348,7 +351,7 @@ export const DB = {
   SCENES: {
     ID: "627",
     FIELDS: {
-      "SCENE_NAME_SHOW": "field_6021", // autonumber
+      "SCENE_NAME_SHOW": "field_6021", // formula
       "SCENE_NAME": "field_6022", // text
       "PRODUCTION": "field_6023", // link_row
       "ACT": "field_6025", // single_select
@@ -568,6 +571,43 @@ export const DB = {
       "AVAILABILITY_JSON": "field_6258", // long_text
       "ROLE_PREFERENCES": "field_6259", // link_row
       "CONSTRAINTS": "field_6261", // long_text
+    }
+  },
+  TENANT_REGISTRY: {
+    ID: "771",
+    FIELDS: {
+      "SLUG": "field_7892", // text
+      "NAME": "field_7893", // text
+      "PEOPLE": "field_7894", // text
+      "PRODUCTIONS": "field_7895", // text
+      "MASTER_SHOW_DB": "field_7896", // text
+      "ASSIGNMENTS": "field_7897", // text
+      "ROLES": "field_7898", // text
+      "SIGNATURES": "field_7899", // text
+      "STATS": "field_7900", // text
+      "ROLES_POSITIONS": "field_7901", // text
+      "TEAM_ASSIGNMENTS": "field_7902", // text
+      "MEASUREMENTS": "field_7903", // text
+      "GARMENT_INVENTORY": "field_7904", // text
+      "STUDENT_BIO": "field_7905", // text
+      "COMMITTEE_PREFS": "field_7906", // text
+      "ATTENDANCE": "field_7907", // text
+      "CONFLICTS": "field_7908", // text
+      "REQUIREMENTS": "field_7909", // text
+      "EVENTS": "field_7910", // text
+      "SCENES": "field_7911", // text
+      "SCENE_ASSIGNMENTS": "field_7912", // text
+      "AUDITIONS": "field_7913", // text
+      "RESOURCES": "field_7914", // text
+      "SESSIONS": "field_7915", // text
+      "CLASSES": "field_7916", // text
+      "FAMILIES": "field_7917", // text
+      "VENUES": "field_7918", // text
+      "SEATS": "field_7919", // text
+      "PERFORMANCES": "field_7920", // text
+      "SPACES": "field_7921", // text
+      "RATES": "field_7922", // text
+      "SLOTS": "field_7923", // text
     }
   },
 };

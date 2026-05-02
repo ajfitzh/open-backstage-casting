@@ -298,10 +298,8 @@ export async function getSeasons(tenant: string) {
   const data = await fetchBaserow(
     `/database/rows/table/${tables.SEASONS}/`, 
     {}, 
-    { 
-      size: "200",
-      order_by: `${DB.SEASONS.FIELDS.START_DATE}` 
-    }
+    // 🟢 FIXED: Removed order_by so we don't trigger ghost-field crashes
+    { size: "200" } 
   );
 
   if (!Array.isArray(data)) return [];
@@ -568,7 +566,7 @@ export async function getScenes(tenant: string, productionId?: number) {
 
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
-    params['order_by'] = F.ORDER; 
+    // 🟢 FIXED: Removed params['order_by'] = F.ORDER;
   }
 
   const data = await fetchBaserow(`/database/rows/table/${tables.SCENES}/`, {}, params);
@@ -590,7 +588,7 @@ export async function getScenes(tenant: string, productionId?: number) {
         dance: parseInt(safeGet(row[F.DANCE_LOAD], 0)),
         block: parseInt(safeGet(row[F.BLOCKING_LOAD], 0)),
       }
-  })).sort((a: any, b: any) => a.order - b.order);
+  })).sort((a: any, b: any) => a.order - b.order); // JS handles the sort natively!
 }
 
 export async function getProductionEvents(tenant: string, productionId: number) {
@@ -599,12 +597,13 @@ export async function getProductionEvents(tenant: string, productionId: number) 
   const params = {
     size: "200",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    order_by: F.EVENT_DATE
+    // 🟢 FIXED: Removed order_by: F.EVENT_DATE
   };
 
   const data = await fetchBaserow(`/database/rows/table/${tables.EVENTS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
+  // 🟢 FIXED: Added JS sort to ensure chronological order
   return data.map((row: any) => ({
     id: row.id,
     date: row[F.EVENT_DATE],
@@ -612,7 +611,7 @@ export async function getProductionEvents(tenant: string, productionId: number) 
     endTime: row[F.END_TIME],
     type: safeGet(row[F.EVENT_TYPE], "Rehearsal"),
     isRequired: safeGet(row[F.IS_REQUIRED]),
-  }));
+  })).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 // ==============================================================================
@@ -764,31 +763,54 @@ export async function getProductionConflicts(tenant: string, productionId: numbe
       date: Array.isArray(row[F.DATE]) ? row[F.DATE][0]?.value : row[F.DATE],
   }));
 }
+// app/lib/baserow.ts
 
 export async function getCommitteeData(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
-  const F = DB.COMMITTEE_PREFS.FIELDS;
+  const F = DB.COMMITTEE_PREFS.FIELDS; // 🟢 Strictly typed to your new schema
   
-  if(productionId) params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
+  if (productionId) {
+    params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
+  }
 
   const data = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params);
-  if (!Array.isArray(data)) return [];
+  
+  if (!Array.isArray(data)) {
+    console.error(`[Baserow] Failed to fetch committee data for tenant: ${tenant}`);
+    return [];
+  }
+
+  // 🔍 DEBUG: Check the first row to ensure we are seeing the fields we expect
+  if (data.length > 0) {
+    console.log(`\n📂 [Sync] Pulling from Table ID: ${tables.COMMITTEE_PREFS} (${tenant})`);
+    console.log(`📝 [Sample Row] ID ${data[0].id}: Pre-Show Phase Key (${F.PRE_SHOW_PHASE}) Value:`, data[0][F.PRE_SHOW_PHASE]);
+  }
 
   return data.map((row: any) => ({
     id: row.id,
-    name: extractName(row[F.STUDENT_NAME] || row[F.STUDENT_ID]),
-    studentName: extractName(row[F.STUDENT_NAME] || row[F.STUDENT_ID]),
+    name: extractName(row[F.PARENT_GUARDIAN_NAME], "Unknown Parent"),
+    studentName: extractName(row[F.STUDENT_NAME] || row[F.STUDENT_ID], "Unknown"),
+    
+    // Mapping all 6 preference slots from your generated field IDs
     preShow1: safeGet(row[F.PRE_SHOW_1ST]),
-    preShow2: safeGet(row[F.PRE_SHOW_2ND]), 
+    preShow2: safeGet(row[F.PRE_SHOW_2ND]),
+    preShow3: safeGet(row[F.PRE_SHOW_3RD]), 
     showWeek1: safeGet(row[F.SHOW_WEEK_1ST]),
     showWeek2: safeGet(row[F.SHOW_WEEK_2ND]),
+    showWeek3: safeGet(row[F.SHOW_WEEK_3RD]), 
+    
     email: safeGet(row[F.EMAIL]),
     phone: safeGet(row[F.PHONE]),
-    assigned: safeGet(row[F.SHOW_WEEK_COMMITTEES], ""), 
+    
+    // 🟢 KEY FIX: Use the exact keys from your generated schema.ts
+    assignedPreShow: safeGet(row[F.PRE_SHOW_PHASE]) || null,
+    assignedShowWeek: safeGet(row[F.SHOW_WEEK_COMMITTEES]) || null,
+    
+    // 🟢 CROWN FIX: Now uses the IS_CHAIR boolean found by your script
+    isChair: safeGet(row[F.IS_CHAIR]) === true
   }));
 }
-
 export async function getCommitteePreferences(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`);
