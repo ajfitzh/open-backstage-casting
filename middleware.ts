@@ -23,9 +23,9 @@ export default auth((req) => {
 
   // --- 2. PUBLIC MARKETING SITE LOGIC ---
   if (isMainDomain || currentHost === `www.${baseHost}`) {
-    // Bypass auth entirely for the public marketing site and rewrite to (marketing) folder
-    // Note: We include nextUrl.search to preserve any query parameters like ?ref=twitter
-    return NextResponse.rewrite(new URL(`/(marketing)${pathname}${nextUrl.search}`, req.url));
+    // Bypass auth entirely for the public marketing site.
+    // 🟢 FIXED: Rewrite to the /home folder to avoid dynamic route conflicts
+    return NextResponse.rewrite(new URL(`/home${pathname}${nextUrl.search}`, req.url));
   }
 
   // --- 3. TENANT DASHBOARD LOGIC (Subdomains) ---
