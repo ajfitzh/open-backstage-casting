@@ -7,6 +7,7 @@ import {
   LayoutGrid, LayoutList
 } from 'lucide-react';
 import { saveCommitteeAssignments } from '@/app/actions/committees';
+import { useTenant } from '@/app/components/TenantProvider'; // 🟢 Added Tenant Hook
 
 // --- TYPES ---
 interface Volunteer {
@@ -61,6 +62,8 @@ export default function CommitteeDashboard({
     students?: any[], 
     activeId: number 
 }) {
+  
+  const tenant = useTenant(); // 🟢 Grab the active tenant from context
   
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
@@ -126,7 +129,8 @@ export default function CommitteeDashboard({
   // --- ACTIONS ---
   const handleSave = () => {
       startTransition(async () => {
-          await saveCommitteeAssignments(groupBy, assignments, chairs);
+          // 🟢 Pass tenant as the first argument
+          await saveCommitteeAssignments(tenant, groupBy, assignments, chairs);
       });
   };
 

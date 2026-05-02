@@ -1,3 +1,5 @@
+// app/[tenant]/(main)/page.tsx
+
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
@@ -5,7 +7,7 @@ import {
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog // 🟢 Added this import
+  UserCog 
 } from 'lucide-react';
 
 // 1. Import Baserow Fetchers
@@ -29,7 +31,10 @@ import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
+// 🟢 Update signature to receive params for multi-tenant routing
+export default async function DashboardPage({ params }: { params: { tenant: string } }) {
+  const { tenant } = params; // Extract the current tenant subdomain
+  
   const session = await auth();
   const userRole = (session?.user as any)?.role || "Guest";
 
@@ -37,14 +42,17 @@ export default async function DashboardPage() {
   const cookieStore = await cookies();
   const cookieId = cookieStore.get('active_production_id')?.value;
   let show = null;
-  if (cookieId) show = await getShowById(cookieId);
-  if (!show) show = await getActiveProduction();
+  
+  // 🟢 Pass tenant to resolve the show dynamically from the correct database
+  if (cookieId) show = await getShowById(tenant, cookieId);
+  if (!show) show = await getActiveProduction(tenant);
 
   if (!show) {
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
   // --- PARALLEL FETCH ---
+  // 🟢 Pass the tenant string to EVERY data fetcher
   const [
     assignments, 
     creativeTeam, 
@@ -55,14 +63,14 @@ export default async function DashboardPage() {
     allSeasons,
     allShows 
   ] = await Promise.all([
-      getAssignments(show.id),
-      getCreativeTeam(show.id),
-      getClasses(),
-      getAuditionees(show.id),
-      getScenes(show.id),
-      getProductionEvents(show.id),
-      getSeasons(),
-      getAllShows()
+      getAssignments(tenant, show.id),
+      getCreativeTeam(tenant, show.id),
+      getClasses(tenant),
+      getAuditionees(tenant, show.id),
+      getScenes(tenant, show.id),
+      getProductionEvents(tenant, show.id),
+      getSeasons(tenant),
+      getAllShows(tenant)
   ]);
   
   // --- FIX: ROBUST CAST COUNT ---
@@ -107,7 +115,7 @@ export default async function DashboardPage() {
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">{show?.title}</h1>
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
                 
-                {/* 🟢 ACTION BUTTONS (Replaced Static Pills) */}
+                {/* ACTION BUTTONS */}
                 <div className="flex gap-2 shrink-0">
                     
                     {/* CAST BUTTON */}

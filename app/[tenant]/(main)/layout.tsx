@@ -1,84 +1,71 @@
+// app/[tenant]/(main)/layout.tsx
+
 import React from 'react';
-import { auth } from "@/auth"; 
+import { auth } from "@/auth";
 import { cookies } from "next/headers";
-import { getUserProfile, getUserProductionRole, getActiveProduction } from "@/app/lib/baserow"; 
-import { SimulationProvider } from '@/app/context/SimulationContext'; 
-
-// 🟢 1. Import the new Tenant Provider
+import { getUserProfile, getUserProductionRole, getActiveProduction, getShowById } from "@/app/lib/baserow";
+import { SimulationProvider } from '@/app/context/SimulationContext';
 import { TenantProvider } from '@/app/components/TenantProvider';
-
 import GlobalHeader from '@/app/components/globalappheader/globalappheader';
 import StaffSidebar from '@/app/components/StaffSidebar';
-import SidebarShell from '@/app/components/SidebarShell'; 
+import SidebarShell from '@/app/components/SidebarShell';
 
 export default async function MainLayout({ 
   children,
-  modal, // 🟢 Add the modal prop here
-  params // 🟢 2. Add params to read the subdomain
+  modal,
+  params 
 }: { 
   children: React.ReactNode,
   modal: React.ReactNode, 
-  params: { tenant: string } // 🟢 Define the tenant param
+  params: { tenant: string } 
 }) {
-  // 1. Fetch Session & User
+  const currentTenant = params.tenant; // 🟢 Extract tenant
+  
   const session = await auth();
   const email = session?.user?.email;
-  const userProfile = email ? await getUserProfile(email) : null;
+  
+  // 🟢 Pass tenant to getUserProfile
+  const userProfile = email ? await getUserProfile(currentTenant, email) : null; 
 
-  // 2. Determine Active Production (Context)
   const cookieStore = await cookies();
   const cookieVal = cookieStore.get('active_production_id')?.value;
-  const activeId = cookieVal ? Number(cookieVal) : 94; // Default to Little Mermaid
   
-  // 3. Fetch Context-Aware Role
+  // 🟢 Resolve production context using tenant
+  let activeProduction = null;
+  if (cookieVal) {
+      activeProduction = await getShowById(currentTenant, cookieVal);
+  }
+  if (!activeProduction) {
+      activeProduction = await getActiveProduction(currentTenant);
+  }
+
+  const activeId = activeProduction?.id;
+  
   let productionRole = null;
-  
-  if (userProfile) {
-      if (activeId) {
-          productionRole = await getUserProductionRole(Number(userProfile.id), activeId);
-      } else {
-          const defaultShow = await getActiveProduction();
-          if (defaultShow) {
-              productionRole = await getUserProductionRole(Number(userProfile.id), defaultShow.id);
-          }
-      }
+  if (userProfile && activeId) {
+      // 🟢 Pass tenant to getUserProductionRole
+      productionRole = await getUserProductionRole(currentTenant, Number(userProfile.id), activeId);
   }
 
   const globalRole = userProfile?.role || "Student";
   
-  // 🟢 3. Extract the tenant from the URL params
-  const currentTenant = params.tenant; 
-
   return (
-    // 🟢 4. Wrap the entire app in the TenantProvider!
     <TenantProvider tenant={currentTenant}>
       <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-        
-        {/* 🚀 WRAPPER: Makes God Mode possible across the entire app */}
         <SimulationProvider realGlobalRole={globalRole} realProductionRole={productionRole}>
-        
-            {/* 1. COLLAPSIBLE SIDEBAR SHELL */}
             <SidebarShell>
               <StaffSidebar />
             </SidebarShell>
 
-            {/* 2. MAIN CONTENT AREA */}
             <div className="flex-1 flex flex-col min-w-0 relative">
-              
               <div className="shrink-0 z-30">
                 <GlobalHeader />
               </div>
-              
               <main className="flex-1 overflow-y-auto relative custom-scrollbar bg-zinc-950">
                 {children}
               </main>
-
-              {/* 🟢 3. Render the Modal Slot here */}
-              {/* It sits on top of the main content because of z-index in the Modal component */}
-              {modal} 
-              
+              {modal}
             </div>
-
         </SimulationProvider>
       </div>
     </TenantProvider>
