@@ -30,10 +30,25 @@ export default async function TeamListPage({ params }: { params: { tenant: strin
       headshotUrl = rawHeadshot;
     }
 
+    // 🟢 BULLETPROOF TEAM EXTRACTOR
+    // 1. Try every possible key name your baserow.ts file might be using
+    let extractedName = extractString(member.personName || member.Person || member.person || member.name);
+    let extractedRole = extractString(member.position || member.Position || member.role || member.roleName);
+
+    // 2. ULTIMATE FALLBACK: Split the raw formula string ("Connor - Director - Show")
+    if (!extractedName || !extractedRole) {
+       const rawAssignment = extractString(member.assignment || member.Assignment || member.field_5847);
+       if (rawAssignment) {
+          const parts = rawAssignment.split(" - ");
+          if (!extractedName && parts.length > 0) extractedName = parts[0].trim();
+          if (!extractedRole && parts.length > 1) extractedRole = parts[1].trim();
+       }
+    }
+
     return {
       ...member,
-      name: extractString(member.personName || member.Person) || "Unknown Team Member",
-      roleName: extractString(member.position || member.Position) || "Unknown Role",
+      name: extractedName || "Unknown Team Member",
+      roleName: extractedRole || "Unknown Role",
       headshot: headshotUrl,
       email: extractString(member.email || member.Email),
       phone: extractString(member.phone || member.Phone)

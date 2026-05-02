@@ -1,8 +1,6 @@
-// app/[tenant]/(main)/@modal/(.)production/[id]/team/page.tsx
 import React from 'react';
-import { getCreativeTeam, getShowById } from '@/app/lib/baserow'; // 🟢 Removed getPeople
+import { getCreativeTeam, getShowById } from '@/app/lib/baserow'; 
 import Modal from '@/app/components/Modal'; 
-import { User } from 'lucide-react';
 
 export default async function InterceptedTeamPage({ params }: { params: { tenant: string, id: string } }) {
   const tenant = params.tenant;
@@ -14,7 +12,6 @@ export default async function InterceptedTeamPage({ params }: { params: { tenant
   ]);
 
   const teamList = team.map((member: any) => {
-    // 🟢 SAFE EXTRACTOR
     const extractString = (val: any) => {
       if (!val) return "";
       if (typeof val === 'string') return val;
@@ -31,10 +28,23 @@ export default async function InterceptedTeamPage({ params }: { params: { tenant
       headshotUrl = rawHeadshot;
     }
 
+    // 🟢 BULLETPROOF TEAM EXTRACTOR
+    let extractedName = extractString(member.personName || member.Person || member.person || member.name);
+    let extractedRole = extractString(member.position || member.Position || member.role || member.roleName);
+
+    if (!extractedName || !extractedRole) {
+       const rawAssignment = extractString(member.assignment || member.Assignment || member.field_5847);
+       if (rawAssignment) {
+          const parts = rawAssignment.split(" - ");
+          if (!extractedName && parts.length > 0) extractedName = parts[0].trim();
+          if (!extractedRole && parts.length > 1) extractedRole = parts[1].trim();
+       }
+    }
+
     return { 
         ...member, 
-        name: extractString(member.personName || member.Person) || "Unknown Team Member",
-        roleName: extractString(member.position || member.Position) || "Unknown Role",
+        name: extractedName || "Unknown Team Member",
+        roleName: extractedRole || "Unknown Role",
         headshot: headshotUrl
     };
   });
@@ -49,7 +59,6 @@ export default async function InterceptedTeamPage({ params }: { params: { tenant
   return (
     <Modal>
       <div className="p-8 text-white">
-        {/* 🟢 Removed the <Link href="/"> Back button from here! */}
         <h2 className="text-2xl font-black uppercase tracking-tighter mb-1">
           {show?.title} <span className="text-zinc-600">Team</span>
         </h2>
