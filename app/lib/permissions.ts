@@ -6,7 +6,7 @@ export type Permission =
   | 'view_cast_list'
   | 'view_billing'
   | 'view_auditions'
-  | 'manage_committees'; // 👈 NEW!
+  | 'manage_committees';
 
 // 1. GLOBAL ROLES
 const GLOBAL_ROLES: Record<string, Permission[]> = {
@@ -69,16 +69,32 @@ const PRODUCTION_ROLES: Record<string, Permission[]> = {
 };
 
 export function hasPermission(
-  globalRole: string, 
-  productionRole: string | null, 
+  globalRole: string | string[], 
+  productionRole: string | string[] | null, 
   permission: Permission
 ): boolean {
-  const globalPerms = GLOBAL_ROLES[globalRole] || [];
-  if (globalPerms.includes(permission)) return true;
+  
+  // 🟢 FIX: Split comma-separated roles so "Committee Team,Admin" becomes ["Committee Team", "Admin"]
+  const globalRolesArray = Array.isArray(globalRole) 
+    ? globalRole 
+    : (globalRole || '').split(',').map(r => r.trim());
 
+  // Check if ANY of the user's global roles have the permission
+  for (const role of globalRolesArray) {
+    const globalPerms = GLOBAL_ROLES[role] || [];
+    if (globalPerms.includes(permission)) return true;
+  }
+
+  // 🟢 FIX: Do the same for production roles just in case!
   if (productionRole) {
-    const prodPerms = PRODUCTION_ROLES[productionRole] || [];
-    if (prodPerms.includes(permission)) return true;
+    const prodRolesArray = Array.isArray(productionRole) 
+      ? productionRole 
+      : (productionRole || '').split(',').map(r => r.trim());
+
+    for (const role of prodRolesArray) {
+      const prodPerms = PRODUCTION_ROLES[role] || [];
+      if (prodPerms.includes(permission)) return true;
+    }
   }
 
   return false;
