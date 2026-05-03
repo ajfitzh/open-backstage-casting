@@ -53,9 +53,9 @@ export default async function MainLayout({
     <TenantProvider tenant={currentTenant}>
       <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
         <SimulationProvider realGlobalRole={globalRole} realProductionRole={productionRole}>
-            <SidebarShell>
-              <StaffSidebar />
-            </SidebarShell>
+<SidebarShell>
+  <StaffSidebar activeProductionId={activeId} />
+</SidebarShell>
 
             <div className="flex-1 flex flex-col min-w-0 relative">
               <div className="shrink-0 z-30">
