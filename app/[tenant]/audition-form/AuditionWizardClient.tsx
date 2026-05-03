@@ -261,7 +261,11 @@ const [isCanceling, setIsCanceling] = useState<number | null>(null);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
-    
+    // 🟢 NEW: Ensure they clicked both buttons!
+    if (!formData.studentSignature || !formData.parentSignature) {
+      alert("Please ensure both the Student and Parent have clicked to sign the agreement.");
+      return;
+    }
     try {
       let finalHeadshotUrl = formData.headshotUrl;
       let finalMusicUrl = null;
