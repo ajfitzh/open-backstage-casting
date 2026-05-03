@@ -25,8 +25,8 @@ type AuditionFormData = {
   conflicts: Record<string, ConflictEntry>;
   offBookAgreement: boolean; 
   parentCommitteeAgreement: boolean;
-  studentSignature: boolean; // 🟢 Clickwrap boolean
-  parentSignature: boolean;  // 🟢 Clickwrap boolean
+  studentSignature: boolean; 
+  parentSignature: boolean;  
 };
 
 interface AuditionSlot {
@@ -96,7 +96,7 @@ const PRESET_SONGS = [
 ];
 
 const INITIAL_DATA: AuditionFormData = {
-  fullName: "", dob: "", sex: "", grade: "",
+  fullName: "", dob: "2010-01-01", sex: "", grade: "",
   hairColor: "", heightFt: "5", heightIn: "0", headshotUrl: null,
   preferredRoles: "", acceptAnyRole: false,
   songTitle: "", musicFileName: "", usePresetSong: false,
@@ -132,6 +132,10 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const headshotInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-scroll refs
+  const sigSectionRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+
   const totalSteps = 6;
 
   const calculateAge = useCallback((dob: string) => {
@@ -160,12 +164,18 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   }, [view]);
 
+  // FIX: Wrapped in try-catch and omit headshotUrl to prevent QuotaExceeded crashes
   useEffect(() => {
     if (view === "wizard" && currentStep > maxStepReached) setMaxStepReached(currentStep);
     if (view === "wizard" && currentStep > 0 && !isSuccess) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+      try {
+        const safeData = { ...formData, headshotUrl: null }; 
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
+      } catch (e) {
+        console.warn("Could not save to localStorage. Exceeded quota.");
+      }
     }
-  }, [formData, currentStep, isSuccess, maxStepReached, view]);
+  }, [formData, currentStep, isSuccess, maxStepReached, view, STORAGE_KEY]);
 
   const updateForm = (fields: Partial<AuditionFormData>) => {
     setFormData((prev) => ({ ...prev, ...fields }));
@@ -231,13 +241,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   };
 
-  const dataURLtoBlob = (dataurl: string) => {
-    let arr = dataurl.split(','), match = arr[0].match(/:(.*?);/), mime = match ? match[1] : 'image/jpeg',
-    bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
-    while(n--){ u8arr[n] = bstr.charCodeAt(n); }
-    return new Blob([u8arr], {type:mime});
-  }
-
   const uploadToSpaces = async (file: File | Blob, filename: string, type: string) => {
     const res = await fetch('/api/upload', {
       method: 'POST',
@@ -258,7 +261,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 🟢 REQUIRE CLICKWRAP SIGNATURES
     if (!formData.studentSignature || !formData.parentSignature) {
       alert("Please ensure both the Student and Parent have clicked to sign the agreement.");
       return;
@@ -270,20 +272,21 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       let finalHeadshotUrl = formData.headshotUrl;
       let finalMusicUrl = null;
 
+      // FIX: Use native fetch.blob() to prevent atob() array crashes on large files
       if (formData.headshotUrl && formData.headshotUrl.startsWith('data:')) {
-        const blob = dataURLtoBlob(formData.headshotUrl);
-        finalHeadshotUrl = await uploadToSpaces(blob, `headshot-${Date.now()}.jpg`, 'image/jpeg');
+        const res = await fetch(formData.headshotUrl);
+        const blob = await res.blob();
+        finalHeadshotUrl = await uploadToSpaces(blob, `headshot-${Date.now()}.jpg`, blob.type || 'image/jpeg');
       }
 
       if (!formData.usePresetSong && audioFile) {
-        finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type);
+        finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type || 'audio/mpeg');
       }
 
       const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
         musicFileUrl: finalMusicUrl,
-        // Map boolean to string for the director's notes
         studentSignature: formData.studentSignature ? "Agreed via Click" : "Missing",
         parentSignature: formData.parentSignature ? "Agreed via Click" : "Missing",
       };
@@ -462,7 +465,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                            <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
                          </div>
                          
-                         {/* CANCEL BUTTON */}
                          <button 
                            onClick={() => handleCancelAudition(audition.id, audition.name)}
                            disabled={isCanceling === audition.id}
@@ -759,7 +761,12 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                 {currentStep === 5 && (
                   <div className="space-y-8 sm:space-y-10 animate-in slide-in-from-right-8 duration-500">
                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                        <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Availability</h2>
+                        <div>
+                          <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Rehearsal Availability</h2>
+                          <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm sm:text-base font-medium leading-relaxed">
+                            If available for all rehearsals, click next. If not, click on your conflicts below.
+                          </p>
+                        </div>
                         <button type="button" onClick={markAllAvailable} className="bg-blue-600 text-white px-5 py-2 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Mark All Free</button>
                      </div>
                      <div className="space-y-3 sm:space-y-4">
@@ -777,7 +784,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                                    {[
                                      { id: "available", label: "Free", color: "bg-green-600" },
                                      { id: "late", label: "Late", color: "bg-amber-500" },
-                                     { id: "tentative", label: "Tent", color: "bg-orange-400" },
+                                     { id: "tentative", label: "Partial", color: "bg-orange-400" },
                                      { id: "absent", label: "Absent", color: "bg-red-600" }
                                    ].map(l => (
                                      <button key={l.id} type="button" onClick={() => updateForm({ conflicts: {...formData.conflicts, [d.id]: {level: l.id as ConflictLevel, notes: curr.notes} } })} className={`px-2 sm:px-4 py-2 sm:py-3 text-[8px] sm:text-[9px] font-black uppercase rounded-lg sm:rounded-xl transition-all ${curr.level === l.id ? `${l.color} text-white shadow-md` : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}>
@@ -801,20 +808,35 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                   </div>
                 )}
 
-                {/* 🟢 CLICK-TO-SIGN UI */}
+                {/* 泙 CLICK-TO-SIGN UI */}
                 {currentStep === 6 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Commitment</h2>
                     
                     <div className="space-y-4 sm:space-y-6">
-                      <label className="flex items-start p-6 sm:p-10 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer">
+                      <label 
+                        onClick={() => {
+                          if (!formData.offBookAgreement) {
+                             setTimeout(() => sigSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+                          }
+                        }}
+                        className="flex items-start p-6 sm:p-10 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer"
+                      >
                           <input type="checkbox" required checked={formData.offBookAgreement} onChange={e => updateForm({ offBookAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-blue-600 rounded-lg mt-1 shrink-0" />
                           <div className="ml-4 sm:ml-8 space-y-2 sm:space-y-4">
                              <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter">OFF-BOOK</h4>
                              <p className="text-blue-900/80 dark:text-blue-400/80 text-xs sm:text-lg font-medium leading-relaxed">I commit to being **OFF BOOK** (lines and music memorized) by July 6.</p>
                           </div>
                       </label>
-                      <label className="flex items-start p-6 sm:p-10 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer">
+
+                      <label 
+                        onClick={() => {
+                          if (!formData.parentCommitteeAgreement) {
+                             setTimeout(() => sigSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+                          }
+                        }}
+                        className="flex items-start p-6 sm:p-10 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer"
+                      >
                           <input type="checkbox" required checked={formData.parentCommitteeAgreement} onChange={e => updateForm({ parentCommitteeAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-zinc-600 rounded-lg mt-1 shrink-0" />
                           <div className="ml-4 sm:ml-8 space-y-2 sm:space-y-4">
                              <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter">Parent Help</h4>
@@ -823,12 +845,16 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                       </label>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 pt-6 sm:pt-10 border-t border-zinc-100 dark:border-zinc-800">
+                    <div ref={sigSectionRef} className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 pt-6 sm:pt-10 border-t border-zinc-100 dark:border-zinc-800">
                       <div className="space-y-3">
                          <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Student Signature</label>
                          <button 
                            type="button" 
-                           onClick={() => updateForm({ studentSignature: !formData.studentSignature })}
+                           onClick={() => {
+                             const newVal = !formData.studentSignature;
+                             updateForm({ studentSignature: newVal });
+                             if (newVal) setTimeout(() => footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+                           }}
                            className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
                              formData.studentSignature 
                                ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
@@ -848,7 +874,11 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                          <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Parent / Guardian Signature</label>
                          <button 
                            type="button" 
-                           onClick={() => updateForm({ parentSignature: !formData.parentSignature })}
+                           onClick={() => {
+                             const newVal = !formData.parentSignature;
+                             updateForm({ parentSignature: newVal });
+                             if (newVal) setTimeout(() => footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+                           }}
                            className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
                              formData.parentSignature 
                                ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
@@ -870,7 +900,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               </form>
             </div>
 
-            <div className="mt-auto p-4 sm:p-6 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
+            <div ref={footerRef} className="mt-auto p-4 sm:p-6 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
                 <button type="button" onClick={() => currentStep === 1 ? setView("hub") : handlePrev()} className="px-4 sm:px-10 py-3 sm:py-5 rounded-xl sm:rounded-[1.5rem] font-black uppercase text-[10px] sm:text-sm text-zinc-400 hover:text-blue-600 transition-all flex items-center gap-2">
                   <ChevronLeft size={18} /> {currentStep === 1 ? "Cancel" : "Back"}
                 </button>
