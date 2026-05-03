@@ -4,7 +4,6 @@
 import { fetchBaserow, DB, getTenantTableConfig, getShowById } from "@/app/lib/baserow";
 import { Resend } from 'resend';
 
-// Initialize Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function submitRealAudition(tenant: string, productionId: number, formData: any, lookupEmail: string) {
@@ -16,26 +15,55 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     const firstName = nameParts[0];
     const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : "";
 
+// 🟢 CRITICAL FIX: Require the email to match to prevent strangers from overwriting kids
+    // or exposing audition times to unauthorized parents.
     const studentSearchParams = {
       filter_type: "AND",
       [`filter__${DB.PEOPLE.FIELDS.FIRST_NAME}__equal`]: firstName,
       [`filter__${DB.PEOPLE.FIELDS.LAST_NAME}__equal`]: lastName,
+      [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: lookupEmail,
     };
     
     const existingStudents = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, studentSearchParams);
     
     let personId;
     
+    // Calculate total height in inches for the Master Database
+    const heightInches = (parseInt(formData.heightFt) || 0) * 12 + (parseInt(formData.heightIn) || 0);
+
     if (existingStudents && existingStudents.length > 0) {
+      // 🟢 EXISTING KID: Grab their ID and UPDATE their master profile!
       personId = existingStudents[0].id;
+      
+      const updatePayload: any = {
+        [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
+        [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches
+      };
+
+      // Baserow can automatically pull in an image if we pass it a public URL!
+      if (formData.headshotUrl && !formData.headshotUrl.startsWith('data:')) {
+          updatePayload[DB.PEOPLE.FIELDS.HEADSHOT] = [{ url: formData.headshotUrl }];
+      }
+
+      await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(updatePayload)
+      });
+
     } else {
-      const newPersonPayload = {
+      // 🟢 NEW KID: Create them from scratch
+      const newPersonPayload: any = {
         [DB.PEOPLE.FIELDS.FIRST_NAME]: firstName,
         [DB.PEOPLE.FIELDS.LAST_NAME]: lastName,
         [DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL]: lookupEmail,
         [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
+        [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
         [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], 
       };
+
+      if (formData.headshotUrl && !formData.headshotUrl.startsWith('data:')) {
+          newPersonPayload[DB.PEOPLE.FIELDS.HEADSHOT] = [{ url: formData.headshotUrl }];
+      }
       
       const newPerson = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
         method: "POST",
@@ -49,7 +77,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     let slotLabel = "your scheduled time";
 
     if (formData.auditionSlotId) {
-      // Grab the exact slot row from Baserow
       const slotData = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/${formData.auditionSlotId}/`);
       if (slotData && !slotData.error) {
         slotLabel = slotData[DB.AUDITION_SLOTS.FIELDS.TIME_LABEL] || slotLabel;
@@ -70,7 +97,8 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
       [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
       [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-      [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Height: ${formData.heightFt}'${formData.heightIn}"\nGender: ${formData.sex || 'N/A'}\n\nConflicts:\n${conflictString || "None"}\n\nHeadshot: ${formData.headshotUrl || 'None'}\nTrack: ${formData.musicFileUrl || 'None'}`,
+      // We dump all the transient stuff here so Directors can easily read it
+      [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Height: ${formData.heightFt}'${formData.heightIn}"\nGender: ${formData.sex || 'N/A'}\n\nConflicts:\n${conflictString || "None"}\n\nTrack: ${formData.musicFileUrl || 'None'}`,
     };
 
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
@@ -89,7 +117,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
 
-        // Build Schema.org JSON-LD for Gmail Calendar integration
         let jsonLd = "";
         if (slotDateTime) {
             jsonLd = `
@@ -153,25 +180,21 @@ export async function submitRealAudition(tenant: string, productionId: number, f
   }
 }
 
+// Ensure getExistingAuditions is at the bottom of this file!
 export async function getExistingAuditions(tenant: string, email: string, productionId: number) {
   if (!email) return [];
-  
   try {
     const tables = await getTenantTableConfig(tenant);
     if (!tables.PEOPLE || !tables.AUDITIONS) return [];
 
-    // 1. Find all family members linked to this parent email
     const people = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
       filter_type: "AND",
       [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email
     });
 
     if (!people || people.length === 0) return [];
-    
-    // Baserow lets us search multiple IDs using a comma-separated list!
     const peopleIds = people.map((p: any) => p.id).join(',');
 
-    // 2. Find any auditions for these kids in this specific show
     const auditions = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, {
       filter_type: "AND",
       [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
@@ -180,7 +203,6 @@ export async function getExistingAuditions(tenant: string, email: string, produc
 
     if (!auditions || !Array.isArray(auditions)) return [];
 
-    // 3. Format it beautifully for the UI
     return auditions.map((a: any) => ({
       id: a.id,
       name: a[DB.AUDITIONS.FIELDS.PERFORMER]?.[0]?.value || "Student",
