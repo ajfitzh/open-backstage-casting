@@ -13,7 +13,6 @@ import JudgeSetupModal from "./JudgeSetupModal";
 import ScoringSidebar from "./ScoringSidebar";
 
 // --- TYPES ---
-// 🟢 CHANGED: Replaced specific days with a future-proof "Scheduled" tab
 export type AuditionSession = "Scheduled" | "Video/Remote" | "Walk-In";
 export type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 
@@ -45,6 +44,7 @@ export interface Performer {
   dropInNotes: string;
   adminNotes: string;
   isWalkIn: boolean;
+  isCheckedIn: boolean; // 🟢 Added to track check-in status
 }
 
 export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
@@ -79,7 +79,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
   const [isReady, setIsReady] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-  // 🟢 CHANGED: Default tab is now "Scheduled"
   const [activeSession, setActiveSession] = useState<AuditionSession>("Scheduled");
   const [selectedPerson, setSelectedPerson] = useState<Performer | null>(null);
   const [inspectingActor, setInspectingActor] = useState<Performer | null>(null);
@@ -115,11 +114,16 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     }
   }, []);
 
+  // 🟢 Live-Polling Effect
   useEffect(() => {
-    const loadData = async () => {
+    let intervalId: NodeJS.Timeout;
+
+    const loadData = async (isBackgroundPoll = false) => {
       if (!isReady || !productionId) return;
       
-      setLoading(true);
+      if (!isBackgroundPoll) {
+        setLoading(true);
+      }
       
       try {
         const slots = await getAuditionees(tenant, productionId);
@@ -136,7 +140,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
            let session: AuditionSession = "Video/Remote";
            let displayTime = "TBD";
 
-           // 🟢 CHANGED: All dates are now grouped into "Scheduled", making it dynamic!
            if (row.date) {
              const dateObj = new Date(row.date);
              session = "Scheduled"; 
@@ -146,6 +149,9 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
            }
 
            if (row.status === "Walk-In") session = "Walk-In";
+
+           // 🟢 Determine check-in status (Modify this check if your Baserow field name is different)
+           const actorIsCheckedIn = row.status === "Checked In" || row.checkedIn === true || row.status === "Walk-In";
 
            return {
              id: row.id,
@@ -174,7 +180,8 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              choreoNotes: row.choreoNotes || "",
              dropInNotes: row.dropInNotes || "",
              adminNotes: row.adminNotes || "",
-             isWalkIn: row.status === "Walk-In"
+             isWalkIn: row.status === "Walk-In",
+             isCheckedIn: actorIsCheckedIn // 🟢 Set the boolean here
            };
         });
 
@@ -190,11 +197,25 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
       } catch (err) {
         console.error("❌ CRITICAL LOAD ERROR:", err);
       } finally {
-        setLoading(false);
+        if (!isBackgroundPoll) {
+          setLoading(false);
+        }
       }
     };
 
-    loadData();
+    // Initial explicit load
+    loadData(false);
+
+    // Set up background polling
+    if (isReady && productionId) {
+      intervalId = setInterval(() => {
+        loadData(true);
+      }, 15000); // 15 seconds
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [isReady, productionId, productionTitle, tenant]);
 
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
@@ -316,6 +337,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
           timeSlot: "WALK-IN", 
           session: "Walk-In" as AuditionSession, 
           isWalkIn: true,
+          isCheckedIn: true, // 🟢 Walk-ins are inherently checked in
           vocal: 0, acting: 0, dance: 0, presence: 0, 
           actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
           height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null
@@ -359,7 +381,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                     Exit Dance Mode
                 </button>
                 <div className="flex gap-2">
-                      {/* 🟢 CHANGED: Choreo Header Tabs */}
                       {(["Scheduled", "Walk-In"] as const).map((s) => (
                         <button
                           key={s}
@@ -399,7 +420,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                 </button>
 
                 <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar mask-linear-fade">
-                  {/* 🟢 CHANGED: Main Header Tabs */}
                   {(["Scheduled", "Video/Remote", "Walk-In"] as const).map((s) => (
                     <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border border-transparent ${activeSession === s ? "bg-white text-black" : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-white/5"}`}>
                       {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
@@ -427,10 +447,21 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                   {people.map((person) => {
                     const parsedNotes = parseAdminNotes(person.adminNotes);
                     
+                    // 🟢 CONDITIONAL IDENTITY OBSCURING
+                    const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
+                    const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Waiting in Lobby...";
+                    const displayAvatar = person.isCheckedIn ? person.avatar : null;
+                    
                     return (
                     <div key={person.id} className="flex gap-2 mb-3 group">
                         <button
                           onClick={() => {
+                            // 🟢 BLOCK SCORING IF NOT CHECKED IN
+                            if (!person.isCheckedIn) {
+                              alert("This actor has not been checked in yet.");
+                              return;
+                            }
+                            
                             setSelectedPerson(person);
                             const saved = grades[person.id] || {};
                             let loadedNote = "";
@@ -454,10 +485,10 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                                 notes: loadedNote || "", 
                             });
                           }}
-                          className={`flex-1 flex items-center gap-3 md:gap-4 p-3 rounded-xl transition-all border min-w-0 ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"}`}
+                          className={`flex-1 flex items-center gap-3 md:gap-4 p-3 rounded-xl transition-all border min-w-0 ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"} ${!person.isCheckedIn ? "opacity-60 grayscale" : ""}`}
                         >
                             <div className="relative flex-shrink-0">
-                                {person.avatar ? <img src={person.avatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
+                                {displayAvatar ? <img src={displayAvatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
                                 {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
                                 
                                 {parsedNotes.lobbyNote && !grades[person.id] && (
@@ -466,11 +497,11 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                             </div>
                             <div className="text-left min-w-0 flex-1">
                                 <p className="font-bold text-sm flex items-center gap-2 truncate">
-                                  <span className="truncate">{person.name}</span>
+                                  <span className="truncate">{displayName}</span>
                                   {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
                                   {parsedNotes.track && <Music size={12} className="text-purple-500 shrink-0" />}
                                 </p>
-                                <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : `Age ${person.age}`}</p>
+                                <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : displayAge}</p>
                             </div>
                         </button>
                         
@@ -485,8 +516,14 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                         )}
                         
                         <button 
-                          onClick={() => setInspectingActor(person)} 
-                          className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white shrink-0" 
+                          onClick={() => {
+                            if (!person.isCheckedIn) {
+                              alert("Profile locked until actor checks in.");
+                              return;
+                            }
+                            setInspectingActor(person);
+                          }} 
+                          className={`w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center shrink-0 ${person.isCheckedIn ? "text-zinc-400 hover:text-white" : "text-zinc-700 cursor-not-allowed"}`} 
                         >
                           <User size={18} />
                         </button>

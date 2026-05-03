@@ -7,27 +7,24 @@ export async function saveCheckIn(tenant: string, auditionId: number, status: st
   try {
     const tables = await getTenantTableConfig(tenant);
 
-    // 1. Fetch current Admin Notes so we don't overwrite the Grade/Hair/Conflicts
+    // 1. Fetch current Admin Notes so we preserve existing data (Grade, Hair, etc.)
     const row = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`);
     if (!row || row.error) return { success: false };
 
     let adminNotes = row[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "";
 
-    // 2. Remove old STATUS and LOBBY lines if they already exist
-    adminNotes = adminNotes.replace(/\n\nSTATUS:.*$/m, '');
-    adminNotes = adminNotes.replace(/\n\nLOBBY:.*$/m, '');
+    // 2. Clean out old Status/Lobby tags using a cleaner regex
+    // This prevents the field from growing infinitely with redundant tags
+    adminNotes = adminNotes.replace(/STATUS:.*$/gm, '').replace(/LOBBY:.*$/gm, '').trim();
 
-    // 3. Append the new real-time status from the Check-In table
-    adminNotes += `\n\nSTATUS: ${status}`;
-    if (lobbyNote) {
-        adminNotes += `\n\nLOBBY: ${lobbyNote}`;
-    }
+    // 3. Append the new tags on fresh lines
+    const updatedNotes = `${adminNotes}\n\nSTATUS: ${status}${lobbyNote ? `\nLOBBY: ${lobbyNote}` : ''}`;
 
-    // 4. Save it back to Baserow
+    // 4. Update Baserow
     const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
        method: "PATCH",
        body: JSON.stringify({
-           [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: adminNotes
+           [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: updatedNotes
        })
     });
 
