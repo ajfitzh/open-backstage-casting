@@ -12,7 +12,6 @@ import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 import JudgeSetupModal from "./JudgeSetupModal";
 import ScoringSidebar from "./ScoringSidebar";
 
-// --- TYPES ---
 export type AuditionSession = "Scheduled" | "Video/Remote" | "Walk-In";
 export type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 
@@ -45,6 +44,8 @@ export interface Performer {
   adminNotes: string;
   isWalkIn: boolean;
   isCheckedIn: boolean;
+  backingTrack: string; // 🟢 Added
+  lobbyNote: string;    // 🟢 Added
 }
 
 export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
@@ -53,20 +54,6 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Choreographer: { color: "border-emerald-500", text: "text-emerald-400", glow: "shadow-emerald-500/20", weight: "Dance 100%" },
   "Drop-In": { color: "border-amber-500", text: "text-amber-400", glow: "shadow-amber-500/20", weight: "Impression Only" },
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
-};
-
-// 🟢 Simplified parse note (only looks for Track and Lobby alerts now)
-export const parseAdminNotes = (notes: string) => {
-  const parsed = { track: "", lobbyNote: "" };
-  if (!notes) return parsed;
-  
-  const trackMatch = notes.match(/Track:\s*([^\r\n]+)/i);
-  if (trackMatch && trackMatch[1] !== "None") parsed.track = trackMatch[1].trim();
-  
-  const lobbyMatch = notes.match(/LOBBY:\s*([^\r\n]+)/i);
-  if (lobbyMatch) parsed.lobbyNote = lobbyMatch[1].trim();
-  
-  return parsed;
 };
 
 interface AuditionsClientProps {
@@ -139,16 +126,14 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
           return `${Math.floor(num / 12)}'${num % 12}"`;
         };
 
-const formattedSchedule: Performer[] = slots.map((row: any) => {
+        const formattedSchedule: Performer[] = slots.map((row: any) => {
            let session: AuditionSession = "Video/Remote";
            let displayTime = "TBD";
 
-           // 🟢 Use the Linked Slot label for the grouping and display!
            if (row.timeSlotLabel) {
              session = "Scheduled";
              displayTime = row.timeSlotLabel; 
            } else if (row.date) {
-             // Fallback for older entries
              const dateObj = new Date(row.date);
              session = "Scheduled"; 
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -176,7 +161,7 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
              pastRoles: row.pastRoles || [],
              song: row.song || "",
              monologue: row.monologue || "",
-             timeSlot: displayTime, // 🟢 Group by the new label
+             timeSlot: displayTime,
              session: session,
              vocal: parseFloat(row.vocalScore) || 0,
              acting: parseFloat(row.actingScore) || 0,
@@ -188,7 +173,9 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
              dropInNotes: row.dropInNotes || "",
              adminNotes: row.adminNotes || "",
              isWalkIn: row.status === "Walk-In",
-             isCheckedIn: actorIsCheckedIn
+             isCheckedIn: actorIsCheckedIn,
+             backingTrack: row.backingTrack || "", // 🟢 Mapped cleanly
+             lobbyNote: row.lobbyNote || ""        // 🟢 Mapped cleanly
            };
         });
 
@@ -345,7 +332,8 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
           isCheckedIn: true,
           vocal: 0, acting: 0, dance: 0, presence: 0, 
           actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
-          height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null
+          height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null,
+          backingTrack: "", lobbyNote: ""
         }));
     }
     return scheduledPerformers.filter((p) => {
@@ -450,7 +438,6 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
                 <div key={time}>
                   {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
                   {people.map((person) => {
-                    const parsedNotes = parseAdminNotes(person.adminNotes);
                     
                     const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
                     const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Waiting in Lobby...";
@@ -494,7 +481,8 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
                                 {displayAvatar ? <img src={displayAvatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
                                 {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
                                 
-                                {parsedNotes.lobbyNote && !grades[person.id] && (
+                                {/* 🟢 Replaced parsedNotes logic with direct field read */}
+                                {person.lobbyNote && !grades[person.id] && (
                                   <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
                                 )}
                             </div>
@@ -502,7 +490,9 @@ const formattedSchedule: Performer[] = slots.map((row: any) => {
                                 <p className="font-bold text-sm flex items-center gap-2 truncate">
                                   <span className="truncate">{displayName}</span>
                                   {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
-                                  {parsedNotes.track && <Music size={12} className="text-purple-500 shrink-0" />}
+                                  
+                                  {/* 🟢 Replaced parsedNotes logic with direct field read */}
+                                  {person.backingTrack && <Music size={12} className="text-purple-500 shrink-0" />}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : displayAge}</p>
                             </div>

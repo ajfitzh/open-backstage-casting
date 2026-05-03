@@ -6,12 +6,27 @@ import Link from "next/link";
 import { ChevronLeft, Search, Check, Clock, X, AlertTriangle } from "lucide-react";
 import { saveCheckIn } from "@/app/actions/checkin";
 
+const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
+  'Medical Release': { 
+    title: 'Emergency Medical Release', 
+    text: 'I hereby give my consent for emergency medical care, hospitalization, or surgery for my child in the event of an emergency where I cannot be reached. I understand that I am responsible for all costs related to such treatment.' 
+  },
+  'Code of Conduct': { 
+    title: 'Student Code of Conduct', 
+    text: 'CYT expects students to exhibit respectful, safe behavior at all times. Bullying, harassment, or unsafe use of props/set pieces will result in immediate disciplinary action or removal from the production without refund.' 
+  }
+};
+
 export default function CheckInBoard({ tenant, productionTitle, initialCast }: { tenant: string, productionTitle: string, initialCast: any[] }) {
   const [students, setStudents] = useState<any[]>(initialCast);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStudent, setActiveStudent] = useState<any | null>(null);
+  
+  // Modal States
   const [currentNote, setCurrentNote] = useState("");
   const [maximizedImage, setMaximizedImage] = useState<string | null>(null);
+  const [sentLinks, setSentLinks] = useState<string[]>([]);
+  const [viewingForm, setViewingForm] = useState<string | null>(null);
 
   const stats = useMemo(() => {
     const total = students.length;
@@ -28,17 +43,28 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
-    // 1. Optimistically update the UI so the check-in mom doesn't have to wait
+    // 1. Optimistically update the UI
     setStudents(students.map(s => s.id === id ? { ...s, status: newStatus, lobbyNote: currentNote } : s));
     setActiveStudent(null);
+    setSentLinks([]);
 
-    // 2. Save it to Baserow in the background
+    // 2. Save Check-in state to Baserow
     await saveCheckIn(tenant, parseInt(id), newStatus, currentNote);
+    
+    // NOTE: In the next step, we will expand saveCheckIn to also patch the edited name/phone/email!
   };
+
+  const handleReassign = (id: string, field: string, value: string) => {
+    // Locally update the UI for edits before saving
+    setStudents(students.map(s => s.id === id ? { ...s, [field]: value } : s));
+    setActiveStudent((prev: any) => prev ? { ...prev, [field]: value } : null);
+  };
+
+  const handleSendLink = (linkId: string) => setSentLinks([...sentLinks, linkId]);
 
   const filteredStudents = students.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.role.toLowerCase().includes(searchQuery.toLowerCase())
+    (s.role && s.role.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const getStatusBadge = (status: string) => {
@@ -113,7 +139,12 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-white font-black text-lg truncate tracking-tighter">{student.name}</h3>
-                      <p className="text-slate-400 text-xs font-bold mt-0.5 truncate">{student.role} • {student.timeSlot}</p>
+                      <p className="text-slate-400 text-xs font-bold mt-0.5 truncate">{student.role || 'Auditionee'} • {student.timeSlot}</p>
+                      {student.conflicts && (
+                        <p className="text-amber-500 text-[10px] font-bold mt-1 flex items-center gap-1">
+                          <AlertTriangle size={10} /> {student.conflicts}
+                        </p>
+                      )}
                     </div>
                   </div>
                   {getStatusBadge(student.status)}
@@ -134,8 +165,13 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
               <div className="flex gap-4 items-center w-full">
                 <img src={activeStudent.avatar} alt="Avatar" onClick={() => setMaximizedImage(activeStudent.avatar)} className="w-16 h-16 rounded-full border-2 border-slate-700 shadow-lg cursor-zoom-in hover:border-indigo-400 transition-colors" />
                 <div className="space-y-1 w-full pr-4">
-                  <h2 className="text-2xl md:text-3xl font-black text-white leading-none">{activeStudent.name}</h2>
-                  <p className="text-indigo-400 font-bold text-sm">{activeStudent.timeSlot} Block • {activeStudent.auditionDay}</p>
+                  <input 
+                    type="text" 
+                    value={activeStudent.name} 
+                    onChange={(e) => handleReassign(activeStudent.id, 'name', e.target.value)} 
+                    className="bg-transparent border-none text-2xl md:text-3xl font-black text-white leading-none outline-none focus:ring-1 ring-indigo-500 rounded w-full" 
+                  />
+                  <p className="text-indigo-400 font-bold text-sm">{activeStudent.timeSlot} Block {activeStudent.auditionDay ? `• ${activeStudent.auditionDay}` : ''}</p>
                 </div>
               </div>
               <button onClick={() => setActiveStudent(null)} className="text-slate-500 hover:text-white text-4xl leading-none">&times;</button>
@@ -144,6 +180,45 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
             {/* Modal Body */}
             <div className={`p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar ${activeStudent.status !== 'Pending' ? 'opacity-40 pointer-events-none' : ''}`}>
               
+              {/* Context Block */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activeStudent.isFirstShow ? (
+                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 text-emerald-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-1">🎉 New Family</p>
+                    <p className="text-xs opacity-80">Point out the parent orientation table.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20 text-indigo-400 flex flex-col justify-center">
+                    <p className="font-black text-[10px] uppercase tracking-widest mb-2">✨ Welcome Back</p>
+                    <div className="space-y-1 border-t border-indigo-500/20 pt-2 mt-1">
+                      {activeStudent.showHistory?.length > 0 ? activeStudent.showHistory.slice(0,2).map((show: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center text-xs">
+                          <span className="truncate pr-2 opacity-80">{show.title}</span>
+                          <span className="font-bold whitespace-nowrap">{show.role}</span>
+                        </div>
+                      )) : <span className="text-xs opacity-80">Returning Student</span>}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-xl">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-1">Guardians</span>
+                    <p className="text-sm font-medium">{activeStudent.family?.parents?.join(' & ') || 'Unknown'}</p>
+                  </div>
+                  {activeStudent.family?.siblings?.length > 0 && (
+                    <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+                      <span className="text-[9px] text-indigo-400/60 font-black uppercase tracking-widest block mb-1">CYT Siblings</span>
+                      <div className="flex flex-wrap gap-2">
+                        {activeStudent.family.siblings.map((sib: string) => (
+                          <span key={sib} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20">{sib}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Lobby Note */}
               <div className="p-4 border border-slate-800 rounded-xl bg-slate-950/30">
                 <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center gap-2">
@@ -161,15 +236,53 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col justify-center shadow-inner">
                   <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Monologue</p>
-                  <p className="text-sm font-bold">{activeStudent.auditionPrep.monologue}</p>
+                  <p className="text-sm font-bold">{activeStudent.auditionPrep?.monologue || 'None Listed'}</p>
                 </div>
-                <div className={`border p-4 rounded-xl flex flex-col justify-center shadow-inner ${activeStudent.auditionPrep.musicProvided ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-amber-500/5 border-amber-500/20'}`}>
+                <div className={`border p-4 rounded-xl flex flex-col justify-center shadow-inner ${activeStudent.auditionPrep?.musicProvided ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
                   <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Audition Song</p>
-                  <p className={`text-sm font-bold ${activeStudent.auditionPrep.musicProvided ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {activeStudent.auditionPrep.songTitle} 
-                    <span className="text-[10px] ml-1 opacity-70">({activeStudent.auditionPrep.musicProvided ? 'LOADED' : 'UNVERIFIED'})</span>
+                  <p className={`text-sm font-bold ${activeStudent.auditionPrep?.musicProvided ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {activeStudent.auditionPrep?.songTitle || 'None Listed'} 
+                    <span className="text-[10px] ml-1 opacity-70">
+                      ({activeStudent.auditionPrep?.musicProvided ? 'LOADED' : 'MISSING'})
+                    </span>
                   </p>
                 </div>
+              </div>
+
+              {/* Contact Info Editing */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Phone</label>
+                  <input type="text" value={activeStudent.phone || ''} onChange={(e) => handleReassign(activeStudent.id, 'phone', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Email</label>
+                  <input type="email" value={activeStudent.email || ''} onChange={(e) => handleReassign(activeStudent.id, 'email', e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white px-4 py-2.5 rounded-xl text-sm focus:ring-1 ring-indigo-500 outline-none" />
+                </div>
+              </div>
+
+              {/* Paperwork Logic */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Outstanding Paperwork</p>
+                {!activeStudent.missingForms || activeStudent.missingForms.length === 0 ? (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold text-center">All Forms Complete</div>
+                ) : (
+                  activeStudent.missingForms.map((form: string) => {
+                    const isSent = sentLinks.includes(form);
+                    return (
+                      <div key={form} className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950 border border-rose-500/20 p-3 rounded-xl gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div>
+                          <span className="text-sm font-bold text-rose-100">{form}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors flex-1 md:flex-none">Preview</button>
+                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-lg'}`}>{isSent ? 'Sent' : 'Re-send Link'}</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
             </div>
@@ -192,6 +305,20 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
                 <button onClick={() => handleUpdateStatus(activeStudent.id, 'Pending')} className="px-6 py-2 rounded-xl font-black text-rose-500 border border-rose-500/20 text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Undo Check-In</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Form Overlay */}
+      {viewingForm && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[100]" onClick={() => setViewingForm(null)}>
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl md:text-2xl font-black text-white mb-4 border-b border-white/5 pb-4">{FORM_TEMPLATES[viewingForm].title}</h3>
+            <p className="text-slate-400 text-sm leading-relaxed mb-8">{FORM_TEMPLATES[viewingForm].text}</p>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em]">Signature Required</span>
+              <button onClick={() => setViewingForm(null)} className="px-6 py-3 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700">Close Preview</button>
+            </div>
           </div>
         </div>
       )}

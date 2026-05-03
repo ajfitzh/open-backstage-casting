@@ -1,39 +1,52 @@
-// app/actions/checkin.ts
 "use server";
 
 import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
 
-export async function saveCheckIn(tenant: string, auditionId: number, status: string, lobbyNote: string) {
+export async function saveCheckIn(
+  tenant: string, 
+  auditionId: number, 
+  status: string, 
+  lobbyNote: string,
+  performerId?: number | null,
+  updatedName?: string,
+  updatedPhone?: string,
+  updatedEmail?: string
+) {
   try {
     const tables = await getTenantTableConfig(tenant);
-
-    // 1. Fetch current Admin Notes (using secure internal IDs again)
-    const row = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`);
-    if (!row || row.error) return { success: false };
-
-    let adminNotes = row[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "";
-
-    // 2. Remove old LOBBY lines if they already exist
-    adminNotes = adminNotes.replace(/\n\nLOBBY:.*$/im, '');
-
-    // 3. Append the new real-time lobby note
-    if (lobbyNote) {
-        adminNotes += `\n\nLOBBY: ${lobbyNote}`;
-    }
-
-    // 4. Calculate the boolean (True if Checked In OR Late)
+    
+    // 1. Calculate Check-In Boolean
     const isCheckedIn = status === "Checked In" || status === "Late";
 
-    // 5. Save back to Baserow patching BOTH fields
-    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+    // 2. Patch the Audition Table (Check-In Status & Lobby Notes)
+    const auditionRes = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
        method: "PATCH",
        body: JSON.stringify({
-           [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: adminNotes,
+           [DB.AUDITIONS.FIELDS.LOBBY_NOTE]: lobbyNote || "",
            [DB.AUDITIONS.FIELDS.CHECKED_IN]: isCheckedIn
        })
     });
 
-    return { success: !res.error };
+    // 3. If they edited contact info, Patch the Master People Table!
+    if (performerId && (updatedPhone || updatedEmail || updatedName)) {
+        const peopleUpdate: any = {};
+        
+        // Split name back into First/Last for Baserow
+        if (updatedName) {
+            const parts = updatedName.split(' ');
+            peopleUpdate[DB.PEOPLE.FIELDS.FIRST_NAME] = parts[0];
+            peopleUpdate[DB.PEOPLE.FIELDS.LAST_NAME] = parts.slice(1).join(' ');
+        }
+        if (updatedPhone) peopleUpdate[DB.PEOPLE.FIELDS.PHONE_NUMBER] = updatedPhone;
+        if (updatedEmail) peopleUpdate[DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL] = updatedEmail;
+
+        await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${performerId}/`, {
+            method: "PATCH",
+            body: JSON.stringify(peopleUpdate)
+        });
+    }
+
+    return { success: !auditionRes.error };
   } catch (e) {
     console.error("Check-In Save Error:", e);
     return { success: false };

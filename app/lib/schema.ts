@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/3/2026, 5:57:25 PM
+//    Generated on: 5/3/2026, 6:12:34 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -422,6 +422,14 @@ export const DB = {
       "MEASUREMENTS_TAKEN": "field_6108", // boolean
       "AUDITION_SLOTS": "field_7931", // link_row
       "CHECKED_IN": "field_7936", // boolean
+      "GRADE": "field_7937", // single_select
+      "HAIR_COLOR": "field_7938", // text
+      "ACCEPT_ANY_ROLE": "field_7939", // boolean
+      "OFF_BOOK_AGREEMENT": "field_7940", // boolean
+      "PARENT_HELP_AGREEMENT": "field_7941", // boolean
+      "SIGNATURES": "field_7942", // text
+      "BACKING_TRACK": "field_7943", // text
+      "LOBBY_NOTE": "field_7944", // text
     }
   },
   ASSETS: {

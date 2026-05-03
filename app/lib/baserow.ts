@@ -912,34 +912,70 @@ export async function getAuditionees(tenant: string, productionId?: number) {
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
-      // 🟢 Read the new Audition Slot linked row!
       const linkedSlot = row[F.AUDITION_SLOTS]?.[0]?.value;
       const isWalkIn = !row[F.DATE] && !linkedSlot;
 
+      // Extract Person ID for the Contact Info Patching
+      const performerId = row[F.PERFORMER]?.[0]?.id || null;
+      const performerName = row[F.PERFORMER]?.[0]?.value || "Unknown Actor";
+
+      // Missing Forms Logic (Based on your new Signatures field)
+      const signatures = row[F.SIGNATURES] || "";
+      const missingForms = [];
+      if (!signatures.includes("Medical") && !signatures.includes("S")) missingForms.push("Medical Release");
+      if (!signatures.includes("Conduct") && !signatures.includes("P")) missingForms.push("Code of Conduct");
+
+      // Check-In Board Status Logic
+      let currentStatus = "Pending";
+      if (row[F.CHECKED_IN]) {
+         currentStatus = row[F.LOBBY_NOTE]?.toLowerCase().includes("late") ? "Late" : "Checked In";
+      }
+
       return {
           id: row.id,
-          name: extractName(row[F.PERFORMER], "Unknown Actor"),
+          performerId: performerId, 
+          name: performerName,
           studentId: safeId(row[F.PERFORMER]),
-          gender: safeGet(row[F.GENDER], "Unknown"), 
-          date: row[F.DATE] || null, 
-          timeSlotLabel: linkedSlot || null, // 🟢 Export the new time slot string
-          headshot: row[F.HEADSHOT]?.[0]?.url || null,
+          role: "Auditionee",
+          status: currentStatus,
+          timeSlot: linkedSlot || "WALK-IN",
+          auditionDay: row[F.DATE] ? new Date(row[F.DATE]).toLocaleDateString('en-US', { weekday: 'long' }) : "",
+          avatar: row[F.HEADSHOT]?.[0]?.url || null,
           video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
+
+          // 🟢 Check-In Prep Block Data
+          auditionPrep: {
+              monologue: safeGet(row[F.MONOLOGUE], "None Listed"),
+              songTitle: safeGet(row[F.SONG], "None Listed"),
+              musicProvided: !!row[F.BACKING_TRACK]
+          },
+
+          lobbyNote: safeGet(row[F.LOBBY_NOTE], ""),
+          conflicts: safeGet(row[F.CONFLICTS], ""),
+
+          // 🟢 Context Block Data
+          isFirstShow: !row[F.PAST_PRODUCTIONS] || row[F.PAST_PRODUCTIONS].length === 0,
+          showHistory: (row[F.PAST_PRODUCTIONS] || []).map((p: any) => ({ title: p.value, role: "Cast Member" })),
+          missingForms: missingForms,
+          
+          // These require deep lookups, stubbing safely so UI doesn't break
+          family: { parents: ["Guardian on File"], siblings: [] },
+          phone: "", 
+          email: "", 
+
+          // Standard Deck Data
+          checkedIn: row[F.CHECKED_IN] === true,
           vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
           actingScore: safeGet(row[F.ACTING_SCORE], 0),
           danceScore: safeGet(row[F.DANCE_SCORE], 0),
           presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
           age: safeGet(row[F.AGE], "?"),
           height: safeGet(row[F.HEIGHT], ""),
-          conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
           actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
           musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
           choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
-          status: isWalkIn ? "Walk-In" : "Scheduled", // 🟢 Accurate Status
-          vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
-          song: safeGet(row[F.SONG], ""),
-          monologue: safeGet(row[F.MONOLOGUE], ""),
-          checkedIn: row[F.CHECKED_IN] === true 
+          vocalRange: safeGet(row[F.VOCAL_RANGE], ""),
+          backingTrack: safeGet(row[F.BACKING_TRACK], "")
       };
   });
 }
