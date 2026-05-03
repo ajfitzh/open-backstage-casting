@@ -251,7 +251,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
           </div>
           <div className="space-y-3 print:hidden">
             <Link 
-              href={`/${tenant}`} 
+              href={`/`} 
               className="block w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm"
             >
               Back to Dashboard
@@ -288,7 +288,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     <div className="py-4 px-2 sm:px-4 flex flex-col items-center justify-center font-sans overflow-x-hidden">
       <div className="max-w-3xl w-full space-y-4">
         <div className="flex items-center justify-between px-2 shrink-0">
-          <Link href={`/${tenant}`} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
+          <Link href={`/`} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
             <ChevronLeft size={16} /> Exit
           </Link>
           <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>

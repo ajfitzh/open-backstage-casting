@@ -5,7 +5,8 @@ import {
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog 
+  UserCog, 
+  Mic
 } from 'lucide-react';
 
 import { 
@@ -139,7 +140,15 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                             Production Team
                          </span>
                     </Link>
-
+<Link 
+    href="/audition-form"
+    className="group flex items-center gap-2.5 px-4 py-2 bg-blue-600/80 rounded-full border border-blue-400/30 backdrop-blur-xl shadow-[0_0_15px_rgba(37,99,235,0.4)] hover:bg-blue-600 hover:scale-105 transition-all cursor-pointer animate-pulse"
+>
+    <Mic size={18} className="text-white"/>
+    <span className="text-sm font-black text-white group-hover:underline decoration-white/30 underline-offset-4">
+        Sign Up To Audition
+    </span>
+</Link>
                 </div>
 
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
