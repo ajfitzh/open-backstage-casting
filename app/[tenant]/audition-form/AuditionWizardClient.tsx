@@ -6,9 +6,9 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
   Send, UploadCloud, Music, FileAudio, Download, 
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
-  Clock, MessageSquare, Printer, Plus, User
+  Clock, MessageSquare, Printer, Plus, User, Trash2
 } from "lucide-react";
-import { submitRealAudition } from "@/app/actions/auditions";
+import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 // 🟢 FIXED IMPORT: Moved to lib/baserow to prevent 500 error!
 import { getExistingAuditions } from "@/app/lib/baserow"; 
 import { upgradeGuestToUser } from "@/app/actions/auth";
@@ -198,7 +198,22 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setView("hub");
     setIsProcessing(false);
   };
+const [isCanceling, setIsCanceling] = useState<number | null>(null);
 
+  const handleCancelAudition = async (auditionId: number, name: string) => {
+    // Safety check so parents don't accidentally click it
+    if (!window.confirm(`Are you sure you want to cancel the audition for ${name}? This cannot be undone.`)) return;
+
+    setIsCanceling(auditionId);
+    const res = await cancelAudition(tenant, auditionId);
+    if (res.success) {
+       // Remove the deleted student from the Hub view instantly
+       setExistingAuditions(prev => prev.filter(a => a.id !== auditionId));
+    } else {
+       alert("Failed to cancel. Please try again.");
+    }
+    setIsCanceling(null);
+  };
   const markAllAvailable = () => {
     const allAvailable: Record<string, ConflictEntry> = {};
     REHEARSAL_DATES.forEach(date => {
@@ -430,10 +445,22 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                            <Clock size={12} className="text-blue-500" /> {audition.time}
                          </p>
                        </div>
-                       <div className="hidden sm:block text-right">
-                         <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Song</span>
-                         <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
-                       </div>
+<div className="flex items-center gap-4 text-right">
+     <div className="hidden sm:block">
+       <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Song</span>
+       <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
+     </div>
+     
+     {/* 🟢 THE CANCEL BUTTON */}
+     <button 
+       onClick={() => handleCancelAudition(audition.id, audition.name)}
+       disabled={isCanceling === audition.id}
+       className="p-3 bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-xl transition-all disabled:opacity-50"
+       title="Cancel Audition"
+     >
+       <Trash2 size={16} />
+     </button>
+   </div>
                     </div>
                   ))}
                 </>
