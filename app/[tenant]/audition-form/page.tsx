@@ -1,9 +1,23 @@
-import { getActiveProduction, getAuditionSlots } from '@/app/lib/baserow';
+import { cookies } from 'next/headers';
+import { getActiveProduction, getShowById, getAuditionSlots } from '@/app/lib/baserow';
 import AuditionWizardClient from './AuditionWizardClient';
 
 export default async function PublicAuditionPage({ params }: { params: { tenant: string } }) {
   const tenant = params.tenant;
-  const activeProduction = await getActiveProduction(tenant);
+  
+  // 1. Try to get the show from your local admin cookie first (for testing)
+  const cookieStore = await cookies();
+  const cookieId = cookieStore.get('active_production_id')?.value;
+  
+  let activeProduction = null;
+  if (cookieId) {
+    activeProduction = await getShowById(tenant, cookieId);
+  }
+  
+  // 2. If no cookie (how parents will experience it), grab the globally active show
+  if (!activeProduction) {
+    activeProduction = await getActiveProduction(tenant);
+  }
 
   if (!activeProduction) {
     return (
@@ -18,7 +32,7 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
     );
   }
 
-  // 🟢 Fetch the dynamic slots directly from your new Baserow table!
+  // Fetch the dynamic slots directly from your new Baserow table
   const dynamicSlots = await getAuditionSlots(tenant, activeProduction.id);
 
   return (

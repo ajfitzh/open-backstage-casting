@@ -280,50 +280,37 @@ function mapShow(row: any) {
   };
 }
 
-// app/lib/baserow.ts
-
 export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
+
+  console.log(`🔍 [Sync] Checking for Upcoming/Active Show in ${tenant}...`);
   
-  // 🟢 FIX 1: Use 'equal' instead of 'boolean_equal' for Formula fields
-  const activeParams = {
-    [`filter__${F.IS_ACTIVE}__equal`]: "true",
-    size: "1"
-  };
-
-  console.log(`🔍 [Sync] Checking for Active Show in ${tenant}...`);
-  let data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, activeParams);
-  
-  if (Array.isArray(data) && data.length > 0) {
-    console.log(`✅ [Sync] Found Active Show: ${data[0][F.TITLE]}`);
-    return mapShow(data[0]);
-  }
-
-  // 🟢 FIX 2: Fallback to the Status field if the Formula check fails
-  const statusParams = {
-    [`filter__${F.STATUS}__equal`]: "Active",
-    size: "1"
-  };
-
-  data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, statusParams);
-  
-  if (Array.isArray(data) && data.length > 0) {
-    return mapShow(data[0]);
-  }
-
-  // 🟢 FIX 3: Robust Fallback. Fetch the latest productions and sort in JavaScript
-  // This avoids the 'order_by=-id' 400 error.
+  // 🟢 OPTIMIZATION: Fetch the latest 10 productions to evaluate their status locally.
+  // This is much faster than making 3 sequential API calls to Baserow!
   const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" });
   
-  if (Array.isArray(allData) && allData.length > 0) {
-    // Sort by ID descending in JS to find the most recently created show
-    const latest = allData.sort((a, b) => b.id - a.id)[0];
-    console.log(`⚠️ [Sync] No Active show found. Defaulting to: ${latest[F.TITLE]}`);
-    return mapShow(latest);
+  if (!Array.isArray(allData) || allData.length === 0) return null;
+
+  // Sort by ID descending to process the most recently created shows first
+  const sortedShows = allData.sort((a, b) => b.id - a.id);
+
+  // 1. Look for a show that is either "Upcoming" (Auditions) OR "Active" (Rehearsals)
+  const currentShow = sortedShows.find(row => {
+    const status = safeGet(row[F.STATUS]);
+    const isActiveForm = safeGet(row[F.IS_ACTIVE]) === true;
+    return status === "Upcoming" || status === "Active" || isActiveForm;
+  });
+
+  if (currentShow) {
+     console.log(`✅ [Sync] Found Current Show: ${currentShow[F.TITLE]} (Status: ${safeGet(currentShow[F.STATUS])})`);
+     return mapShow(currentShow);
   }
 
-  return null;
+  // 2. Robust Fallback: Just return the most recent one if nothing matches
+  const latest = sortedShows[0];
+  console.log(`⚠️ [Sync] No Active/Upcoming show found. Defaulting to latest: ${latest[F.TITLE]}`);
+  return mapShow(latest);
 }
 
 export async function getSeasons(tenant: string) {
@@ -883,7 +870,7 @@ export async function getAuditionSlots(tenant: string, productionId: number) {
     taken: row['Taken'],
     isFull: row['Is Full?']
   }));
-}
+} 
 export async function getAuditionees(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" }; 
