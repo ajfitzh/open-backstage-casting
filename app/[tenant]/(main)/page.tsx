@@ -5,8 +5,7 @@ import {
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog, 
-  Mic
+  UserCog, Mic 
 } from 'lucide-react';
 
 import { 
@@ -46,7 +45,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
-  // 🟢 2. Add committeeData to the parallel fetch
   const [
     assignments, 
     creativeTeam, 
@@ -66,10 +64,13 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       getProductionEvents(tenant, show.id),
       getSeasons(tenant),
       getAllShows(tenant),
-      getCommitteeData(tenant, show.id) // Fetch registration data
+      getCommitteeData(tenant, show.id)
   ]);
   
-  // 🟢 3. SMART PHASE DETECTION
+  // 🟢 Isolate the Upcoming show specifically for the Audition Banner
+  const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
+
+  // SMART PHASE DETECTION
   const uniqueCast = new Set(assignments.filter((a: any) => a.personId).map((a: any) => a.personId));
   const uniqueAuditionees = new Set(auditionees.filter((a: any) => a.studentId).map((a: any) => a.studentId));
   const uniqueRegistered = new Set(committeeData.filter((c: any) => c.studentName).map((c: any) => c.studentName));
@@ -84,7 +85,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       displayCount = uniqueAuditionees.size;
       displayLabel = "Auditioning";
   } else {
-      // Fallback to the ~73 kids from the committee registrations
       displayCount = uniqueRegistered.size;
       displayLabel = "Registered";
   }
@@ -119,8 +119,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
                 
                 <div className="flex gap-2 shrink-0">
-                    
-                    {/* 🟢 4. DYNAMIC BUTTON LABEL */}
                     <Link 
                         href={`/${tenant}/production/${show.id}/cast`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
@@ -140,15 +138,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                             Production Team
                          </span>
                     </Link>
-<Link 
-    href="/audition-form"
-    className="group flex items-center gap-2.5 px-4 py-2 bg-blue-600/80 rounded-full border border-blue-400/30 backdrop-blur-xl shadow-[0_0_15px_rgba(37,99,235,0.4)] hover:bg-blue-600 hover:scale-105 transition-all cursor-pointer animate-pulse"
->
-    <Mic size={18} className="text-white"/>
-    <span className="text-sm font-black text-white group-hover:underline decoration-white/30 underline-offset-4">
-        Sign Up To Audition
-    </span>
-</Link>
                 </div>
 
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
@@ -160,6 +149,35 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
          <WorkflowProgress status={workflowStatus} productionId={show.id} />
       </div>
+
+      {/* 🟢 THE NEW UPCOMING AUDITIONS BANNER */}
+      {upcomingShow && (
+        <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl animate-in slide-in-from-bottom-4">
+           <div className="absolute -right-10 -top-10 opacity-10 text-blue-400 rotate-12 transition-transform group-hover:rotate-45 duration-700 pointer-events-none">
+              <Mic size={180} />
+           </div>
+           <div className="relative z-10 flex items-center gap-5">
+              <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)] shrink-0">
+                 <Mic size={28} className="text-white animate-pulse" />
+              </div>
+              <div>
+                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Upcoming Auditions
+                 </h3>
+                 <h2 className="text-2xl md:text-3xl font-black text-white italic tracking-tighter">{upcomingShow.title}</h2>
+              </div>
+           </div>
+           
+           <div className="relative z-10 w-full md:w-auto shrink-0 mt-2 md:mt-0">
+              <Link 
+                  href="/audition-form"
+                  className="flex items-center justify-center gap-2.5 px-8 py-4 bg-white text-blue-900 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-50 hover:scale-105 hover:-translate-y-1 transition-all w-full md:w-auto text-xs"
+              >
+                  Sign Up <ChevronRight size={16} />
+              </Link>
+           </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">

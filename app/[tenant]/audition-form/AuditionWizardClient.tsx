@@ -41,7 +41,8 @@ interface Props {
   tenant: string;
   productionId: number;
   productionTitle: string;
-  slots: AuditionSlot[]; // 🟢 Injected directly from Baserow
+  slots: AuditionSlot[]; 
+  initialEmail?: string; //// 🟢 Injected directly from Baserow
 }
 
 // --- Constants ---
@@ -83,14 +84,15 @@ const INITIAL_DATA: AuditionFormData = {
   studentSignature: "", parentSignature: ""
 };
 
-export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots }: Props) {
+export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
-
-  // 🟢 ALL HOOKS MUST BE INSIDE THE COMPONENT
-  const [currentStep, setCurrentStep] = useState(0); 
-  const [maxStepReached, setMaxStepReached] = useState(0);
+// 🟢 If they are logged in, skip Step 0 and go straight to the form!
+  const [currentStep, setCurrentStep] = useState(initialEmail ? 1 : 0); 
+  const [maxStepReached, setMaxStepReached] = useState(initialEmail ? 1 : 0);
+  
+  // 🟢 Pre-fill the lookupData with their logged-in email
+  const [lookupData, setLookupData] = useState({ email: initialEmail || "", dob: "" });
   const [formData, setFormData] = useState<AuditionFormData>(INITIAL_DATA);
-  const [lookupData, setLookupData] = useState({ email: "", dob: "" });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);

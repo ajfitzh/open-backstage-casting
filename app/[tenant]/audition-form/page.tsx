@@ -1,23 +1,16 @@
-import { cookies } from 'next/headers';
-// 🟢 Swap getActiveProduction for getAuditionProduction
-import { getAuditionProduction, getShowById, getAuditionSlots } from '@/app/lib/baserow';
+import { auth } from "@/auth";
+import { getAuditionProduction, getAuditionSlots } from '@/app/lib/baserow';
 import AuditionWizardClient from './AuditionWizardClient';
 
 export default async function PublicAuditionPage({ params }: { params: { tenant: string } }) {
   const tenant = params.tenant;
   
-  const cookieStore = await cookies();
-  const cookieId = cookieStore.get('active_production_id')?.value;
-  
-  let activeProduction = null;
-  if (cookieId) {
-    activeProduction = await getShowById(tenant, cookieId);
-  }
-  
-  // 🟢 Use the new strict function here!
-  if (!activeProduction) {
-    activeProduction = await getAuditionProduction(tenant);
-  }
+  // 🟢 1. Grab the User's Identity (if they are logged in)
+  const session = await auth();
+  const userEmail = session?.user?.email || "";
+
+  // 🟢 2. ALWAYS lock the form to the Upcoming show (Ignore the staff show cookie!)
+  const activeProduction = await getAuditionProduction(tenant);
 
   if (!activeProduction) {
     return (
@@ -41,6 +34,7 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
         productionId={activeProduction.id} 
         productionTitle={activeProduction.title} 
         slots={dynamicSlots} 
+        initialEmail={userEmail} // 🟢 3. Pass the email to the client!
       />
     </main>
   );
