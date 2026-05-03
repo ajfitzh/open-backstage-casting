@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-// 🟢 REMOVED: useSession (This was the cause of the crash)
 import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react';
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -14,7 +13,7 @@ import { useSidebar } from '@/app/components/SidebarShell';
 
 interface StaffSidebarProps {
   activeProductionId?: string | number;
-  userGroups?: string[]; // 🟢 Added this prop
+  userGroups?: string[];
 }
 
 export default function StaffSidebar({ activeProductionId, userGroups = [] }: StaffSidebarProps) {
@@ -24,11 +23,34 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
+  // 🟢 FIX 1: A bulletproof RBAC evaluation helper to stop truthy/falsy bugs
+  const canSee = (entity: any) => {
+      // If it has neither, everyone sees it
+      if (!entity.permission && !entity.group) return true;
+      
+      // If it has a permission and you pass it, you see it
+      if (entity.permission && hasPermission(globalRole, productionRole, entity.permission as Permission)) return true;
+      
+      // If it has a group and you are in it, you see it
+      if (entity.group && userGroups.includes(entity.group)) return true;
+      
+      // Otherwise, hide it.
+      return false;
+  };
+
+  // 🟢 FIX 2: Helper to accurately determine if a path is active, even in multi-tenant URLs
+  const isPathActive = (href: string) => {
+      if (!pathname) return false;
+      if (href === '/') return pathname === '/';
+      return pathname.includes(href);
+  };
+
   useEffect(() => {
     NAV_CONFIG.forEach(section => {
         section.items.forEach((item: any) => {
             if (item.children) {
-                const isChildActive = item.children.some((child: any) => pathname.includes(child.href));
+                // Now uses the safer isPathActive check
+                const isChildActive = item.children.some((child: any) => isPathActive(child.href));
                 if (isChildActive) {
                     setOpenGroups(prev => ({ ...prev, [item.label]: true }));
                 }
@@ -71,12 +93,12 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
 
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
         {NAV_CONFIG.map((section, idx) => {
-           if (section.permission && !hasPermission(globalRole, productionRole, section.permission as Permission)) return null;
+           if (!canSee(section)) return null;
 
            if (section.title === "Dashboard") {
                return (
                   <div key={idx} className="space-y-1">
-                     <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={pathname === '/'} isCollapsed={isCollapsed} />
+                     <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={isPathActive('/')} isCollapsed={isCollapsed} />
                   </div>
                )
            }
@@ -92,23 +114,17 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
 
                 <div className="space-y-1">
                     {section.items.map((item: any) => {
-                        // 🟢 USE THE PROPS: Check permissions and groups
-                        const canSeeByPermission = !item.permission || hasPermission(globalRole, productionRole, item.permission as Permission);
-                        const canSeeByGroup = item.group && userGroups.includes(item.group);
-
-                        if (!canSeeByPermission && !canSeeByGroup) return null;
+                        // Using the new helper
+                        if (!canSee(item)) return null;
 
                         const itemHref = getFinalHref(item.href);
 
                         if (item.isCollapsible && item.children) {
                             const isGroupOpen = openGroups[item.label] || false;
-                            const isGroupActive = item.children.some((child: any) => pathname.includes(child.href));
+                            const isGroupActive = item.children.some((child: any) => isPathActive(child.href));
 
-                            const validChildren = item.children.filter((child: any) => {
-                                const childPermission = !child.permission || hasPermission(globalRole, productionRole, child.permission as Permission);
-                                const childGroup = child.group && userGroups.includes(child.group);
-                                return childPermission || childGroup;
-                            });
+                            // Validate children using the new helper
+                            const validChildren = item.children.filter((child: any) => canSee(child));
 
                             if (validChildren.length === 0) return null;
 
@@ -140,7 +156,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
                                     {isGroupOpen && (
                                         <div className="mt-1 space-y-1 ml-4 pl-4 border-l border-white/10 animate-in slide-in-from-left-2 duration-200">
                                             {validChildren.map((child: any) => (
-                                                <SubNavItem key={child.href} href={getFinalHref(child.href)} icon={<child.icon size={14}/>} label={child.label} active={pathname === getFinalHref(child.href)} isCollapsed={false} />
+                                                <SubNavItem key={child.href} href={getFinalHref(child.href)} icon={<child.icon size={14}/>} label={child.label} active={isPathActive(child.href)} isCollapsed={false} />
                                             ))}
                                         </div>
                                     )}
@@ -149,7 +165,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
                         }
 
                         return (
-                            <NavItem key={itemHref} href={itemHref} icon={<item.icon size={18}/>} label={item.label} active={pathname === itemHref} isCollapsed={isCollapsed} />
+                            <NavItem key={itemHref} href={itemHref} icon={<item.icon size={18}/>} label={item.label} active={isPathActive(item.href)} isCollapsed={isCollapsed} />
                         );
                     })}
                 </div>
@@ -159,13 +175,13 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       </div>
 
       <div className="p-3 border-t border-white/5">
-        <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={pathname === '/settings'} isCollapsed={isCollapsed} />
+        <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={isPathActive('/settings')} isCollapsed={isCollapsed} />
       </div>
     </nav>
   );
 }
 
-// ... (Sub-components: NavItem, FlyoutMenu, etc. remain the same)
+// ... Sub-components Below ...
 function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     const [isOpen, setIsOpen] = useState(false);
     const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -174,12 +190,11 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     const handleMouseEnter = (e: React.MouseEvent) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         const rect = e.currentTarget.getBoundingClientRect();
-        setCoords({ x: rect.right + 8, y: rect.top }); // Position to the right
+        setCoords({ x: rect.right + 8, y: rect.top });
         setIsOpen(true);
     };
 
     const handleMouseLeave = () => {
-        // Add a small delay so user can bridge the gap between button and menu
         timeoutRef.current = setTimeout(() => setIsOpen(false), 100); 
     };
 
@@ -205,14 +220,12 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
                     style={{ top: coords.y, left: coords.x }}
                     className="fixed z-[9999] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl p-2 w-48 animate-in fade-in zoom-in-95 duration-100"
                 >
-                    {/* Header */}
                     <div className="px-3 py-2 text-xs font-black text-zinc-500 uppercase tracking-widest border-b border-white/5 mb-1">
                         {label}
                     </div>
-                    {/* Links */}
                     <div className="flex flex-col gap-1">
                         {items.map((child: any) => {
-                            const isActive = pathname === child.href;
+                            const isActive = pathname?.includes(child.href);
                             const ChildIcon = child.icon;
                             return (
                                 <Link 
@@ -232,21 +245,13 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
                             )
                         })}
                     </div>
-                    
-                    {/* Left Arrow to point at sidebar */}
-                    <div 
-                        className="absolute top-4 -left-1 w-2 h-2 bg-zinc-900 border-l border-b border-zinc-700 rotate-45" 
-                    />
+                    <div className="absolute top-4 -left-1 w-2 h-2 bg-zinc-900 border-l border-b border-zinc-700 rotate-45" />
                 </div>,
                 document.body
             )}
         </div>
     );
 }
-
-// ----------------------------------------------------------------------
-// STANDARD COMPONENTS
-// ----------------------------------------------------------------------
 
 function NavItem({ href, icon, label, active, isCollapsed }: any) {
     return (
@@ -297,7 +302,6 @@ function SidebarTooltip({ children, text, isCollapsed }: { children: React.React
 
     if (!isCollapsed) return children;
 
-    // Remove the onMouseEnter/onMouseLeave injection and use a wrapper div instead
     return (
         <div 
             onMouseEnter={(e: React.MouseEvent) => {
@@ -309,7 +313,6 @@ function SidebarTooltip({ children, text, isCollapsed }: { children: React.React
             className="w-full relative"
         >
             {children}
-            
             {isHovered && coords && createPortal(
                 <div 
                     className="fixed z-[9999] px-2 py-1 bg-zinc-900 text-white text-[10px] font-bold rounded border border-white/10 shadow-xl animate-in fade-in zoom-in-95 duration-100 whitespace-nowrap pointer-events-none"
