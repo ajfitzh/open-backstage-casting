@@ -13,7 +13,8 @@ import JudgeSetupModal from "./JudgeSetupModal";
 import ScoringSidebar from "./ScoringSidebar";
 
 // --- TYPES ---
-export type AuditionSession = "Thursday" | "Friday" | "Video/Remote" | "Walk-In";
+// 🟢 CHANGED: Replaced specific days with a future-proof "Scheduled" tab
+export type AuditionSession = "Scheduled" | "Video/Remote" | "Walk-In";
 export type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 
 export interface Performer {
@@ -37,7 +38,7 @@ export interface Performer {
   vocal: number;
   acting: number;
   dance: number;
-  presence: number; // Kept in state for the UI slider, but not saved to DB
+  presence: number;
   actingNotes: string;
   musicNotes: string;
   choreoNotes: string;
@@ -54,7 +55,6 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
 
-// 🟢 HELPER: Extracts the Lobby Note and Audio Track from the raw database notes
 export const parseAdminNotes = (notes: string) => {
   const parsed = { track: "", lobbyNote: "" };
   if (!notes) return parsed;
@@ -66,7 +66,7 @@ export const parseAdminNotes = (notes: string) => {
 };
 
 interface AuditionsClientProps {
-  tenant: string; // 🟢 Added tenant prop to fix TypeScript errors
+  tenant: string;
   productionId: number;
   productionTitle: string;
 }
@@ -74,24 +74,21 @@ interface AuditionsClientProps {
 export default function AuditionsClient({ tenant, productionId, productionTitle }: AuditionsClientProps) {
   const [isMounted, setIsMounted] = useState(false); 
   
-  // Judge State 
   const [judgeName, setJudgeName] = useState("");
   const [judgeRole, setJudgeRole] = useState<JudgeRole | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-  // App State
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeSession, setActiveSession] = useState<AuditionSession>("Thursday");
+  // 🟢 CHANGED: Default tab is now "Scheduled"
+  const [activeSession, setActiveSession] = useState<AuditionSession>("Scheduled");
   const [selectedPerson, setSelectedPerson] = useState<Performer | null>(null);
   const [inspectingActor, setInspectingActor] = useState<Performer | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Data
   const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>([]);
   const [allStudents, setAllStudents] = useState<any[]>([]); 
   const [grades, setGrades] = useState<Record<number, any>>({});
   
-  // Current Editing Score
   const [currentScores, setCurrentScores] = useState({
     vocal: 0, acting: 0, dance: 0, presence: 0, notes: "",
   });
@@ -118,18 +115,14 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     }
   }, []);
 
-/* ---------- Data Fetching ---------- */
   useEffect(() => {
     const loadData = async () => {
       if (!isReady || !productionId) return;
       
       setLoading(true);
-      console.log(`🚀 Loading Auditions for ${productionTitle} (ID: ${productionId})...`);
       
       try {
-        // 🟢 Pass tenant explicitly
         const slots = await getAuditionees(tenant, productionId);
-        console.log(`✅ Loaded ${slots.length} actors.`);
         
         const formatHeight = (val: any) => {
           if (!val) return "N/A";
@@ -143,13 +136,10 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
            let session: AuditionSession = "Video/Remote";
            let displayTime = "TBD";
 
+           // 🟢 CHANGED: All dates are now grouped into "Scheduled", making it dynamic!
            if (row.date) {
              const dateObj = new Date(row.date);
-             const dayOfWeek = dateObj.getDay(); 
-             
-             if (dayOfWeek === 4) session = "Thursday";
-             else if (dayOfWeek === 5) session = "Friday";
-             
+             session = "Scheduled"; 
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
            } else if (row.video) {
                session = "Video/Remote";
@@ -178,7 +168,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              vocal: parseFloat(row.vocalScore) || 0,
              acting: parseFloat(row.actingScore) || 0,
              dance: parseFloat(row.danceScore) || 0,
-             presence: 0, // Removed from DB schema, keeping it 0 for local UI compatibility
+             presence: 0, 
              actingNotes: row.actingNotes || "",
              musicNotes: row.musicNotes || "",
              choreoNotes: row.choreoNotes || "",
@@ -231,7 +221,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
         payload["Dance Video"] = videoUrl; 
     }
     
-    // 🟢 Pass tenant explicitly
     updateAuditionSlot(tenant, actorId, payload).catch(err => console.error("Auto-save failed", err));
   };
 
@@ -265,7 +254,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     });
 
     try {
-      // 🟢 Stage Presence omitted from payload to prevent 400 errors
       const payload: any = {
           "Vocal Score": scoresToSave.vocal > 0 ? scoresToSave.vocal : null,
           "Acting Score": scoresToSave.acting > 0 ? scoresToSave.acting : null,
@@ -285,11 +273,9 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
       }
 
       if (isWalkIn) {
-        // 🟢 Pass tenant explicitly
         await submitAudition(tenant, originalId, productionId, payload);
         alert("Walk-In Created!");
       } else {
-        // 🟢 Pass tenant explicitly
         await updateAuditionSlot(tenant, personId, payload);
       }
       
@@ -373,7 +359,8 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                     Exit Dance Mode
                 </button>
                 <div className="flex gap-2">
-                      {(["Thursday", "Friday", "Walk-In"] as const).map((s) => (
+                      {/* 🟢 CHANGED: Choreo Header Tabs */}
+                      {(["Scheduled", "Walk-In"] as const).map((s) => (
                         <button
                           key={s}
                           onClick={() => setActiveSession(s)}
@@ -399,7 +386,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
         <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
           <div className="flex-1 flex flex-col min-w-0">
             
-            {/* HEADER */}
             <header className={`p-4 md:p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color} shrink-0`}>
               <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <button onClick={reopenJudgeSetup} className="text-left group shrink-0">
@@ -412,9 +398,9 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                   </div>
                 </button>
 
-                {/* SCROLLABLE TABS */}
                 <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar mask-linear-fade">
-                  {(["Thursday", "Friday", "Video/Remote", "Walk-In"] as const).map((s) => (
+                  {/* 🟢 CHANGED: Main Header Tabs */}
+                  {(["Scheduled", "Video/Remote", "Walk-In"] as const).map((s) => (
                     <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border border-transparent ${activeSession === s ? "bg-white text-black" : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-white/5"}`}>
                       {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
                     </button>
@@ -428,7 +414,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
               </div>
             </header>
 
-            {/* LIST AREA */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
               {loading && <div className="text-center text-zinc-500 mt-20"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Auditions...</div>}
 
@@ -440,7 +425,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                 <div key={time}>
                   {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
                   {people.map((person) => {
-                    // 🟢 PULL THE LOBBY NOTES AND AUDIO TRACKS FOR THE LIST VIEW
                     const parsedNotes = parseAdminNotes(person.adminNotes);
                     
                     return (
@@ -476,7 +460,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                                 {person.avatar ? <img src={person.avatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
                                 {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
                                 
-                                {/* 🟢 THE BOUNCING LOBBY ALERT DOT */}
                                 {parsedNotes.lobbyNote && !grades[person.id] && (
                                   <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
                                 )}
@@ -485,7 +468,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                                 <p className="font-bold text-sm flex items-center gap-2 truncate">
                                   <span className="truncate">{person.name}</span>
                                   {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
-                                  {/* 🟢 THE BACKING TRACK INDICATOR */}
                                   {parsedNotes.track && <Music size={12} className="text-purple-500 shrink-0" />}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : `Age ${person.age}`}</p>
