@@ -3,12 +3,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { 
-  ChevronLeft, ChevronRight, CheckCircle2, User, Sparkles, Mic, 
-  CalendarCheck, Send, CalendarX, UploadCloud, Music, FileAudio, 
-  Search, Ruler, AlertTriangle, Youtube, Camera, X, Image as ImageIcon,
-  Clock, Users, MapPin, Info, Ticket, MessageSquare, Printer
+  ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
+  Send, UploadCloud, Music, FileAudio, 
+  Search, Ruler, Youtube, Camera, Image as ImageIcon,
+  Clock, MessageSquare, Printer
 } from "lucide-react";
 import { submitRealAudition } from "@/app/actions/auditions";
+import { upgradeGuestToUser } from "@/app/actions/auth";
 
 // --- Types ---
 type ConflictLevel = "available" | "absent" | "late" | "tentative";
@@ -85,6 +86,7 @@ const INITIAL_DATA: AuditionFormData = {
 export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
 
+  // 🟢 ALL HOOKS MUST BE INSIDE THE COMPONENT
   const [currentStep, setCurrentStep] = useState(0); 
   const [maxStepReached, setMaxStepReached] = useState(0);
   const [formData, setFormData] = useState<AuditionFormData>(INITIAL_DATA);
@@ -93,6 +95,11 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
+  // Opt-in account creation state
+  const [password, setPassword] = useState("");
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false);
+
   // Track the actual File object for S3 upload
   const [audioFile, setAudioFile] = useState<File | null>(null);
 
@@ -236,7 +243,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 pb-20">
         <div className="bg-white dark:bg-zinc-900 p-8 sm:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800 print:shadow-none print:border-none">
           <CheckCircle2 size={64} className="text-green-500 mx-auto mb-6 print:hidden" />
           <h2 className="text-2xl sm:text-4xl font-black dark:text-white mb-4 uppercase italic tracking-tighter">Wish Granted!</h2>
@@ -249,10 +256,48 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email || "your email"}</span>
             </p>
           </div>
+
+          {/* 🟢 THE OPT-IN ACCOUNT UPGRADE */}
+          {!upgradeSuccess ? (
+            <div className="bg-zinc-50 dark:bg-zinc-950 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 mb-8 print:hidden animate-in fade-in slide-in-from-bottom-4">
+               <div className="flex items-center gap-3 mb-4 justify-center">
+                  <Sparkles size={18} className="text-blue-600" />
+                  <h3 className="font-black text-zinc-900 dark:text-white uppercase italic tracking-widest text-sm">Skip This Next Time</h3>
+               </div>
+               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">Set a password to save your family's profile for future shows and classes.</p>
+               <div className="flex gap-2">
+                 <input 
+                   type="password" 
+                   placeholder="Create a password" 
+                   value={password}
+                   onChange={(e) => setPassword(e.target.value)}
+                   className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 text-sm font-bold outline-none"
+                 />
+                 <button 
+                   onClick={async () => {
+                     setIsUpgrading(true);
+                     const res = await upgradeGuestToUser(tenant, lookupData.email, password);
+                     if (res.success) setUpgradeSuccess(true);
+                     setIsUpgrading(false);
+                   }}
+                   disabled={password.length < 6 || isUpgrading}
+                   className="bg-blue-600 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all"
+                 >
+                   {isUpgrading ? "Saving..." : "Save"}
+                 </button>
+               </div>
+            </div>
+          ) : (
+             <div className="bg-green-50 dark:bg-green-900/10 p-6 rounded-3xl border border-green-200 dark:border-green-800/30 mb-8 print:hidden flex items-center justify-center gap-3 animate-in zoom-in-95">
+                <CheckCircle2 size={20} className="text-green-600" />
+                <p className="font-black text-green-800 dark:text-green-400 text-sm uppercase italic tracking-widest">Profile Saved!</p>
+             </div>
+          )}
+
           <div className="space-y-3 print:hidden">
             <Link 
-              href={`/`} 
-              className="block w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm"
+              href="/" 
+              className="block w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-transform active:scale-95 text-center"
             >
               Back to Dashboard
             </Link>
@@ -264,6 +309,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </button>
           </div>
         </div>
+        
+        {/* Print Layout */}
         <div className="hidden print:block fixed inset-0 bg-white p-10 text-zinc-900">
            <h1 className="text-3xl font-black uppercase italic border-b-4 border-black pb-4 mb-6">Audition Record: {formData.fullName}</h1>
            <div className="grid grid-cols-2 gap-8 text-sm">
