@@ -1,10 +1,56 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from "react";
+import Link from "next/link";
+import { ChevronLeft, Search, Check, Clock, X, AlertTriangle } from "lucide-react";
 
-const AUDITION_DAYS = ['Thursday', 'Friday', 'Video/Remote', 'Walk-In'];
-const ALL_TIME_SLOTS = ['5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM'];
-const SLOT_LIMIT = 15;
+// --- EXPANDED MOCK DATA (Ready for Baserow Wiring) ---
+const MOCK_CAST = [
+  { 
+    id: "1", name: "Tommy Fitzhugh", role: "Oliver", 
+    avatar: "https://i.pravatar.cc/150?u=tommy",
+    status: "Pending", timeSlot: "5:00 PM", auditionDay: "Thursday",
+    isFirstShow: false, phone: "(540) 555-0198", email: "parents@fitzhugh.com",
+    family: { parents: ["Austin", "Caitlin"], siblings: ["Jenny"] },
+    missingForms: [],
+    showHistory: [{ title: "The Wizard of Oz", role: "Munchkin" }],
+    auditionPrep: { monologue: "Dramatic 1", songTitle: "Consider Yourself", musicProvided: true },
+    lobbyNote: "", conflicts: ""
+  },
+  { 
+    id: "2", name: "Jenny Fitzhugh", role: "Ensemble", 
+    avatar: "https://i.pravatar.cc/150?u=jenny",
+    status: "Pending", timeSlot: "5:00 PM", auditionDay: "Thursday",
+    isFirstShow: true, phone: "(540) 555-0198", email: "parents@fitzhugh.com",
+    family: { parents: ["Austin", "Caitlin"], siblings: ["Tommy"] },
+    missingForms: ["Medical Release", "Code of Conduct"],
+    showHistory: [],
+    auditionPrep: { monologue: "Comedic 2", songTitle: "Tomorrow (Annie)", musicProvided: false },
+    lobbyNote: "Nervous, first audition!", conflicts: "Leaving early at 7:30"
+  },
+  { 
+    id: "3", name: "Jake Ramirez", role: "Fagin", 
+    avatar: "https://i.pravatar.cc/150?u=jake",
+    status: "Pending", timeSlot: "5:30 PM", auditionDay: "Thursday",
+    isFirstShow: false, phone: "(540) 555-8822", email: "ramirez.fam@example.com",
+    family: { parents: ["Maria & Jose"], siblings: [] },
+    missingForms: ["Code of Conduct"],
+    showHistory: [{ title: "Beauty and the Beast", role: "Lumiere" }],
+    auditionPrep: { monologue: "Villain", songTitle: "Reviewing the Situation", musicProvided: true },
+    lobbyNote: "", conflicts: "Late arrival (6:15)"
+  },
+  { 
+    id: "4", name: "Griblit Jones", role: "Artful Dodger", 
+    avatar: "https://i.pravatar.cc/150?u=griblit",
+    status: "Pending", timeSlot: "5:30 PM", auditionDay: "Thursday",
+    isFirstShow: false, phone: "(540) 555-1133", email: "jones@example.com",
+    family: { parents: ["Sarah"], siblings: [] },
+    missingForms: [],
+    showHistory: [{ title: "Peter Pan", role: "Lost Boy" }],
+    auditionPrep: { monologue: "Comedic 1", songTitle: "Custom Track", musicProvided: true },
+    lobbyNote: "Severe Peanut Allergy", conflicts: ""
+  },
+];
 
 const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   'Medical Release': { 
@@ -17,116 +63,29 @@ const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   }
 };
 
-const generateMassiveRoster = () => {
-  const firstNames = ['Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Oliver', 'Isabella', 'Elijah', 'Sophia', 'James', 'Charlotte', 'William', 'Mia', 'Benjamin', 'Amelia', 'Lucas', 'Harper', 'Henry', 'Evelyn', 'Theodore', 'Abigail', 'Jack', 'Emily', 'Levi', 'Elizabeth', 'Alexander', 'Mila', 'Jackson', 'Ella', 'Mateo', 'Avery', 'Daniel', 'Sofia', 'Michael', 'Camila', 'Mason', 'Aria', 'Sebastian', 'Scarlett', 'Ethan', 'Victoria', 'Logan', 'Madison', 'Owen', 'Luna', 'Samuel', 'Grace', 'Jacob', 'Chloe', 'Asher', 'Penelope', 'Aiden', 'Layla', 'John', 'Riley', 'Joseph', 'Zoey', 'Wyatt', 'Nora', 'David', 'Lily', 'Leo', 'Eleanor', 'Luke', 'Hannah', 'Julian', 'Lillian', 'Hudson', 'Addison', 'Grayson', 'Aubrey', 'Matthew', 'Ellie', 'Ezra', 'Stella', 'Gabriel'];
-  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson', 'Walker', 'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores', 'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell', 'Carter', 'Roberts'];
-  
-  const roster = [];
-  for (let i = 0; i < 76; i++) {
-    const fName = firstNames[i % firstNames.length];
-    const lName = lastNames[i % lastNames.length];
-    const isFirst = Math.random() > 0.8;
-    const hasForms = Math.random() > 0.7;
-    const timeSlot = ALL_TIME_SLOTS[i % ALL_TIME_SLOTS.length];
-    const siblings = [];
-    const siblingCount = Math.floor(Math.random() * 3); 
-    for (let s = 0; s < siblingCount; s++) {
-      siblings.push(firstNames[(i + (s + 1) * 12) % firstNames.length]);
-    }
-    
-    roster.push({
-      id: (1000 + i).toString(),
-      name: `${fName} ${lName}`,
-      avatar: `https://i.pravatar.cc/400?u=${1000 + i}`,
-      status: Math.random() > 0.9 ? 'Checked In' : 'Pending',
-      timeSlot: timeSlot,
-      auditionDay: 'Thursday',
-      isFirstShow: isFirst,
-      preferredName: fName,
-      phone: '(540) 555-' + Math.floor(1000 + Math.random() * 9000),
-      email: `${fName.toLowerCase()}.${lName.toLowerCase()}@example.com`,
-      family: { parents: [`${firstNames[(i + 5) % firstNames.length]} ${lName}`], siblings: siblings },
-      completedForms: hasForms ? ['Registration Fee'] : ['Registration Fee', 'Medical Release', 'Code of Conduct'],
-      missingForms: hasForms ? ['Medical Release', 'Code of Conduct'] : [],
-      showHistory: isFirst ? [] : [{ title: 'The Little Mermaid', role: 'Ensemble', year: '2024' }],
-      auditionPrep: { monologue: i % 2 === 0 ? 'Comedic 1' : 'Dramatic 2', songTitle: i % 3 === 0 ? 'Tomorrow (Annie)' : 'Stars (Les Mis)', musicProvided: Math.random() > 0.3 },
-      lobbyNote: ''
-    });
-  }
-  return roster;
-};
-
-export default function SandboxCheckIn() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [hasMounted, setHasMounted] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+export default function CheckInBoard({ productionTitle }: { productionTitle: string }) {
+  const [students, setStudents] = useState<any[]>(MOCK_CAST);
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeStudent, setActiveStudent] = useState<any | null>(null);
+  
+  // Modal States
   const [sentLinks, setSentLinks] = useState<string[]>([]);
-  const [activeDayFilter, setActiveDayFilter] = useState('Thursday');
-  const [activeTimeFilter, setActiveTimeFilter] = useState('All');
-  const [currentNote, setCurrentNote] = useState('');
+  const [currentNote, setCurrentNote] = useState("");
   const [viewingForm, setViewingForm] = useState<string | null>(null);
   const [maximizedImage, setMaximizedImage] = useState<string | null>(null);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStudents(generateMassiveRoster());
-    setHasMounted(true);
-  }, []);
-
-  // --- STATS CALCULATIONS ---
+  // --- STATS ---
   const stats = useMemo(() => {
     const total = students.length;
     const checkedIn = students.filter(s => s.status === 'Checked In').length;
+    const late = students.filter(s => s.status === 'Late').length;
     const noShow = students.filter(s => s.status === 'No Show').length;
-    const pending = total - checkedIn - noShow;
-    const percent = total > 0 ? (checkedIn / total) * 100 : 0;
-    return { total, checkedIn, noShow, pending, percent };
+    const pending = total - checkedIn - late - noShow;
+    const percent = total > 0 ? ((checkedIn + late) / total) * 100 : 0;
+    return { total, checkedIn, late, noShow, pending, percent };
   }, [students]);
 
-  // --- CSV EXPORT ---
-  const handleExportCSV = () => {
-    const headers = ['Name', 'Day', 'Time', 'Status', 'Phone', 'Monologue', 'Note'];
-    const rows = students.map(s => [
-      s.name, s.auditionDay, s.timeSlot, s.status, s.phone, s.auditionPrep.monologue, s.lobbyNote
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `audition_roster_${new Date().toLocaleDateString()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // --- WALK-IN HANDLER ---
-  const handleAddWalkIn = () => {
-    const newId = Date.now().toString();
-    const newStudent = {
-      id: newId,
-      name: 'New Walk-In',
-      avatar: `https://i.pravatar.cc/400?u=${newId}`,
-      status: 'Pending',
-      timeSlot: activeTimeFilter === 'All' ? '5:00 PM' : activeTimeFilter,
-      auditionDay: activeDayFilter,
-      isFirstShow: true,
-      preferredName: '',
-      phone: '',
-      email: '',
-      family: { parents: ['Needs Contact Info'], siblings: [] },
-      completedForms: [],
-      missingForms: ['Medical Release', 'Code of Conduct'],
-      showHistory: [],
-      auditionPrep: { monologue: 'TBD', songTitle: 'TBD', musicProvided: false },
-      lobbyNote: 'WALK-IN REGISTRATION'
-    };
-    setStudents([newStudent, ...students]);
-    setActiveStudent(newStudent);
-  };
-
-  const getSlotCount = (slot: string, day: string) => students.filter(s => s.timeSlot === slot && s.auditionDay === day).length;
-
+  // --- HANDLERS ---
   const handleOpenModal = (student: any) => {
     setActiveStudent(student);
     setCurrentNote(student.lobbyNote || '');
@@ -138,7 +97,6 @@ export default function SandboxCheckIn() {
     setSentLinks([]); 
   };
 
-  // Changed field type to string to support email and phone modifications
   const handleReassign = (id: string, field: string, value: string) => {
     setStudents(students.map(s => s.id === id ? { ...s, [field]: value } : s));
     setActiveStudent((prev: any) => prev ? { ...prev, [field]: value } : null);
@@ -147,120 +105,93 @@ export default function SandboxCheckIn() {
   const handleSendLink = (linkId: string) => setSentLinks([...sentLinks, linkId]);
 
   const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    s.auditionDay === activeDayFilter &&
-    (activeTimeFilter === 'All' || s.timeSlot === activeTimeFilter)
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const groupedStudents = filteredStudents.reduce((acc, student) => {
-    if (!acc[student.timeSlot]) acc[student.timeSlot] = [];
-    acc[student.timeSlot].push(student);
-    return acc;
-  }, {} as Record<string, any[]>);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
       case 'Checked In': return <div className="px-4 py-1.5 rounded-md font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 text-[10px] shrink-0">✓ CHECKED IN</div>;
       case 'Late': return <div className="px-4 py-1.5 rounded-md font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 text-[10px] shrink-0">⏰ LATE</div>;
-      case 'No Show': return <div className="px-4 py-1.5 rounded-md font-bold text-slate-400 bg-slate-800 border border-slate-700 text-[10px] shrink-0">✕ NO SHOW</div>;
+      case 'No Show': return <div className="px-4 py-1.5 rounded-md font-bold text-rose-400 bg-rose-950 border border-rose-900 text-[10px] shrink-0">✕ NO SHOW</div>;
       default: return <div className="px-5 py-2 rounded-lg font-bold text-indigo-400 flex items-center gap-2 group-hover:text-white transition-colors text-xs shrink-0">REVIEW &rarr;</div>;
     }
   };
 
-  if (!hasMounted) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 font-black tracking-widest text-xs uppercase">Loading Sandbox...</div>;
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-8 font-sans relative text-slate-200">
-      
-      {/* HEADER & TOP TOOLS */}
-      <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        <div className="flex items-center space-x-2 select-none">
-          <span className="font-black text-white tracking-widest text-2xl">CYT</span>
-          <span className="text-indigo-500 font-light text-2xl">|</span>
-          <span className="text-slate-400 font-normal lowercase text-xl">open-backstage</span>
-        </div>
+    <div className="min-h-screen bg-slate-950 p-4 md:p-8 font-sans text-slate-200">
+      <div className="max-w-5xl mx-auto space-y-6 md:space-y-8 flex flex-col max-h-[90vh]">
         
-        <div className="flex gap-2">
-          <button onClick={handleExportCSV} className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:text-white transition-colors">Export List</button>
-          <button onClick={handleAddWalkIn} className="px-5 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-indigo-500 shadow-lg shadow-indigo-500/20">+ Add Walk-In</button>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        
-        {/* PROGRESS BAR (The "Go Home" Indicator) */}
-        <div className="bg-slate-950 border-b border-slate-800 p-4">
-          <div className="flex justify-between items-end mb-2">
-            <div className="flex gap-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400">{stats.checkedIn} In</div>
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stats.pending} Waiting</div>
-              <div className="text-[10px] font-black uppercase tracking-widest text-rose-500">{stats.noShow} No-Show</div>
-            </div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">{Math.round(stats.percent)}% Complete</div>
+        {/* HEADER & STATS */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 shrink-0">
+          <div>
+            <Link href={`/`} className="text-xs font-bold text-slate-500 hover:text-white flex items-center gap-1 transition-colors w-fit mb-4">
+              <ChevronLeft size={16} /> Back to Dashboard
+            </Link>
+            <h1 className="text-3xl md:text-5xl font-black text-white uppercase italic tracking-tighter leading-none">
+              Check-In
+            </h1>
+            <p className="text-indigo-400 font-bold mt-1 text-lg">{productionTitle}</p>
           </div>
-          <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 transition-all duration-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" style={{ width: `${stats.percent}%` }}></div>
+          
+          <div className="flex gap-2 bg-slate-900 p-2 rounded-2xl border border-slate-800">
+             <div className="px-4 py-2 bg-slate-950 rounded-xl text-center">
+               <span className="block text-2xl font-black text-emerald-400">{stats.checkedIn}</span>
+               <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">In</span>
+             </div>
+             <div className="px-4 py-2 bg-slate-950 rounded-xl text-center">
+               <span className="block text-2xl font-black text-amber-400">{stats.late}</span>
+               <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Late</span>
+             </div>
+             <div className="px-4 py-2 bg-slate-950 rounded-xl text-center">
+               <span className="block text-2xl font-black text-slate-600">{stats.pending}</span>
+               <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Wait</span>
+             </div>
           </div>
         </div>
 
-        <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900 shrink-0 z-20 space-y-4">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar border-b border-slate-800 pb-4">
-            {AUDITION_DAYS.map(day => (
-              <button key={day} onClick={() => setActiveDayFilter(day)} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${activeDayFilter === day ? 'bg-white text-slate-900 border-white shadow-xl scale-105' : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'}`}>
-                {day}
-              </button>
+        {/* SEARCH BAR */}
+        <div className="relative shrink-0">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+          <input 
+            type="text" 
+            placeholder="Search by name or role..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 text-white p-5 pl-12 rounded-2xl text-lg font-bold outline-none focus:border-indigo-500 focus:ring-1 ring-indigo-500 transition-colors"
+          />
+        </div>
+
+        {/* CAST GRID */}
+        <div className="overflow-y-auto custom-scrollbar flex-1 pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3">
+            {filteredStudents.map(student => (
+              <div 
+                key={student.id} 
+                onClick={() => handleOpenModal(student)} 
+                className={`flex justify-between items-center p-4 rounded-2xl transition-all group cursor-pointer border hover:border-indigo-500/50 ${
+                  student.status !== 'Pending' ? 'opacity-50 bg-slate-900/50 border-slate-800' : 'bg-slate-900 border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-4 min-w-0 pr-4">
+                  <div className="shrink-0 relative">
+                    <img src={student.avatar} alt={student.name} className="w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-slate-700 bg-slate-800 object-cover" />
+                    {student.lobbyNote && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 border-2 border-slate-900 rounded-full bg-indigo-500 animate-pulse"></div>}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-white font-black text-lg truncate tracking-tighter">{student.name}</h3>
+                    <p className="text-slate-400 text-xs font-bold mt-0.5 truncate">{student.role} • {student.timeSlot}</p>
+                    {student.conflicts && (
+                      <p className="text-amber-500 text-[10px] font-bold mt-1 flex items-center gap-1">
+                        <AlertTriangle size={10} /> {student.conflicts}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {getStatusBadge(student.status)}
+              </div>
             ))}
           </div>
-
-          <div className="flex flex-col md:flex-row justify-between gap-4">
-            <div className="relative w-full md:max-w-xs shrink-0">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40 text-xs">🔍</span>
-              <input type="text" placeholder="Search roster..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-slate-950 border border-slate-800 text-white pl-10 pr-4 py-3 rounded-lg focus:ring-1 ring-indigo-500 outline-none w-full text-sm"/>
-            </div>
-            
-            <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
-              <button onClick={() => setActiveTimeFilter('All')} className={`px-4 py-2.5 rounded-lg text-[10px] font-bold uppercase transition-all border ${activeTimeFilter === 'All' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-950 text-slate-500 border-slate-800'}`}>All Slots</button>
-              {ALL_TIME_SLOTS.map(slot => (
-                <button key={slot} onClick={() => setActiveTimeFilter(slot)} className={`px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap ${activeTimeFilter === slot ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg' : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-200'}`}>
-                  {slot} <span className="opacity-40 ml-1">({getSlotCount(slot, activeDayFilter)})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-2 md:p-4 overflow-y-auto flex-1 custom-scrollbar">
-          {Object.keys(groupedStudents).length === 0 ? (
-            <div className="text-center py-20 opacity-30 italic text-sm">No students found.</div>
-          ) : (
-            Object.keys(groupedStudents).sort().map(slot => (
-              <div key={slot} className="mb-8">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400 mb-3 flex justify-between items-center sticky top-0 bg-slate-900/95 backdrop-blur py-2 z-10 pr-2">
-                  <span>{slot} BLOCK</span>
-                  <span className="opacity-50">{getSlotCount(slot, activeDayFilter)} / {SLOT_LIMIT}</span>
-                </h3>
-                <div className="space-y-1.5">
-                  {groupedStudents[slot].map((student: any) => (
-                    <div key={student.id} onClick={() => handleOpenModal(student)} className={`flex justify-between items-center p-3 md:p-4 rounded-xl transition-all group cursor-pointer bg-slate-900/50 border border-white/5 hover:border-indigo-500/50 ${student.status !== 'Pending' ? 'opacity-50' : ''}`}>
-                      <div className="flex items-center gap-4 min-w-0 pr-4">
-                        <div className="shrink-0 relative">
-                          <img src={student.avatar} alt={student.name} onClick={(e) => { e.stopPropagation(); setMaximizedImage(student.avatar); }} className="w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-slate-700 bg-slate-800 object-cover shadow-md cursor-zoom-in hover:border-indigo-400 transition-colors" />
-                          {student.lobbyNote && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 border-2 border-slate-900 rounded-full bg-indigo-500 animate-pulse"></div>}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-white font-bold text-base md:text-lg truncate">{student.name}</h3>
-                          <p className="text-slate-500 text-[10px] md:text-xs uppercase font-bold tracking-wider mt-0.5">{student.auditionPrep.monologue}</p>
-                        </div>
-                      </div>
-                      {getStatusBadge(student.status)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
         </div>
       </div>
 
@@ -268,27 +199,23 @@ export default function SandboxCheckIn() {
       {activeStudent && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-2 md:p-4 z-40" onClick={() => setActiveStudent(null)}>
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
+            
+            {/* Modal Header */}
             <div className="p-4 md:p-6 border-b border-slate-800 flex justify-between items-start shrink-0 bg-slate-900/50">
-              <div className="flex gap-4 items-center">
-                <img src={activeStudent.avatar} alt="Avatar" onClick={() => setMaximizedImage(activeStudent.avatar)} className="w-16 h-16 rounded-full border-2 border-slate-700 shadow-lg hidden md:block cursor-zoom-in hover:border-indigo-400 transition-colors" />
-                <div className="space-y-2">
-                  <input type="text" value={activeStudent.name} onChange={(e) => handleReassign(activeStudent.id, 'name', e.target.value)} className="bg-transparent border-none text-2xl md:text-3xl font-black text-white leading-none outline-none focus:ring-1 ring-indigo-500 rounded px-1 -ml-1 w-full" />
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <select value={activeStudent.auditionDay} onChange={(e) => handleReassign(activeStudent.id, 'auditionDay', e.target.value)} className="bg-slate-950 border border-slate-800 text-indigo-400 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest outline-none shadow-inner">
-                      {AUDITION_DAYS.map(day => <option key={day} value={day}>{day}</option>)}
-                    </select>
-                    <select value={activeStudent.timeSlot} onChange={(e) => handleReassign(activeStudent.id, 'timeSlot', e.target.value)} className="bg-slate-950 border border-slate-800 text-indigo-400 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest outline-none shadow-inner">
-                      {ALL_TIME_SLOTS.map(slot => <option key={slot} value={slot}>{slot}</option>)}
-                    </select>
-                  </div>
+              <div className="flex gap-4 items-center w-full">
+                <img src={activeStudent.avatar} alt="Avatar" onClick={() => setMaximizedImage(activeStudent.avatar)} className="w-16 h-16 rounded-full border-2 border-slate-700 shadow-lg cursor-zoom-in hover:border-indigo-400 transition-colors" />
+                <div className="space-y-1 w-full pr-4">
+                  <input type="text" value={activeStudent.name} onChange={(e) => handleReassign(activeStudent.id, 'name', e.target.value)} className="bg-transparent border-none text-2xl md:text-3xl font-black text-white leading-none outline-none focus:ring-1 ring-indigo-500 rounded w-full" />
+                  <p className="text-indigo-400 font-bold text-sm">{activeStudent.timeSlot} Block</p>
                 </div>
               </div>
-              <button onClick={() => setActiveStudent(null)} className="text-slate-500 hover:text-white text-4xl leading-none p-2">&times;</button>
+              <button onClick={() => setActiveStudent(null)} className="text-slate-500 hover:text-white text-4xl leading-none">&times;</button>
             </div>
 
+            {/* Modal Body */}
             <div className={`p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar ${activeStudent.status !== 'Pending' ? 'opacity-40 pointer-events-none' : ''}`}>
               
-              {/* Context Block (Now with Show History) */}
+              {/* Context Block */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {activeStudent.isFirstShow ? (
                   <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 text-emerald-400 flex flex-col justify-center">
@@ -317,7 +244,11 @@ export default function SandboxCheckIn() {
                   {activeStudent.family.siblings.length > 0 && (
                     <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
                       <span className="text-[9px] text-indigo-400/60 font-black uppercase tracking-widest block mb-1">CYT Siblings</span>
-                      <div className="flex flex-wrap gap-2">{activeStudent.family.siblings.map((sib: string) => <span key={sib} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20">{sib}</span>)}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeStudent.family.siblings.map((sib: string) => (
+                          <span key={sib} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20">{sib}</span>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -326,19 +257,23 @@ export default function SandboxCheckIn() {
               {/* Lobby Note */}
               <div className="p-4 border border-slate-800 rounded-xl bg-slate-950/30">
                 <p className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center gap-2">
-                  <i className="fas fa-comment-dots text-indigo-500"></i> Director Situational Alert
+                  Director / Admin Note
                 </p>
-                <textarea value={currentNote} onChange={(e) => setCurrentNote(e.target.value)} placeholder="Scared, cough, peanut allergy, stressed parent..." className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-xl focus:ring-1 ring-indigo-500 outline-none text-sm min-h-[70px] resize-none placeholder:opacity-30"/>
+                <textarea 
+                  value={currentNote} 
+                  onChange={(e) => setCurrentNote(e.target.value)} 
+                  placeholder="Scared, cough, peanut allergy, stressed parent..." 
+                  className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-xl focus:ring-1 ring-indigo-500 outline-none text-sm min-h-[70px] resize-none placeholder:opacity-30"
+                />
               </div>
 
-              {/* Audition Material (Now with Song Title) */}
+              {/* Audition Material */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex justify-between items-center shadow-inner">
                   <div>
                     <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Monologue</p>
                     <p className="text-sm font-bold">{activeStudent.auditionPrep.monologue}</p>
                   </div>
-                  <button className="text-[10px] font-black text-indigo-400 hover:text-white uppercase tracking-widest p-2">Re-send</button>
                 </div>
                 <div className={`border p-4 rounded-xl flex justify-between items-center shadow-inner ${activeStudent.auditionPrep.musicProvided ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
                   <div>
@@ -348,11 +283,10 @@ export default function SandboxCheckIn() {
                       <span className="text-[10px] ml-1 opacity-70">({activeStudent.auditionPrep.musicProvided ? 'LOADED' : 'MISSING'})</span>
                     </p>
                   </div>
-                  {!activeStudent.auditionPrep.musicProvided && <button className="text-[10px] font-black text-rose-400 hover:text-white uppercase tracking-widest p-2">Send Link</button>}
                 </div>
               </div>
 
-              {/* Contact Info Editing (Phone & Email Restored) */}
+              {/* Contact Info Editing */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Parent Phone</label>
@@ -368,16 +302,19 @@ export default function SandboxCheckIn() {
               <div className="space-y-3">
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Outstanding Paperwork</p>
                 {activeStudent.missingForms.length === 0 ? (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold text-center">Complete</div>
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold text-center">All Forms Complete</div>
                 ) : (
                   activeStudent.missingForms.map((form: string) => {
                     const isSent = sentLinks.includes(form);
                     return (
                       <div key={form} className="flex flex-col md:flex-row md:items-center justify-between bg-slate-950 border border-rose-500/20 p-3 rounded-xl gap-3">
-                        <div className="flex items-center gap-3"><div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div><span className="text-sm font-bold text-rose-100">{form}</span></div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></div>
+                          <span className="text-sm font-bold text-rose-100">{form}</span>
+                        </div>
                         <div className="flex gap-2">
-                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors flex-1 md:flex-none">View File</button>
-                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-lg'}`}>{isSent ? 'Sent' : 'Re-send'}</button>
+                          <button onClick={() => setViewingForm(form)} className="px-4 py-2 bg-slate-800 text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-widest hover:text-white transition-colors flex-1 md:flex-none">Preview</button>
+                          <button onClick={() => handleSendLink(form)} disabled={isSent} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none ${isSent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-lg'}`}>{isSent ? 'Sent' : 'Re-send Link'}</button>
                         </div>
                       </div>
                     );
@@ -386,22 +323,22 @@ export default function SandboxCheckIn() {
               </div>
             </div>
 
-            {/* Footer Action Bar */}
+            {/* Modal Footer Actions */}
             {activeStudent.status === 'Pending' ? (
               <div className="p-4 md:p-6 border-t border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
-                <div className="flex gap-1 md:gap-2">
-                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'No Show')} className="px-3 md:px-4 py-3 rounded-xl font-black text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 text-[10px] uppercase tracking-widest transition-all hidden md:block">No-Show</button>
-                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Late')} className="px-3 md:px-4 py-3 rounded-xl font-black text-amber-500/60 hover:text-amber-400 hover:bg-amber-400/10 text-[10px] uppercase tracking-widest transition-all">Mark Late</button>
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'No Show')} className="px-4 py-3 rounded-xl font-black text-slate-500 hover:text-rose-400 hover:bg-rose-400/10 text-[10px] uppercase tracking-widest transition-all">No-Show</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Late')} className="px-4 py-3 rounded-xl font-black text-amber-500/60 hover:text-amber-400 hover:bg-amber-400/10 text-[10px] uppercase tracking-widest transition-all">Mark Late</button>
                 </div>
-                <div className="flex gap-3 md:gap-4 items-center">
+                <div className="flex gap-4 items-center">
                   <button onClick={() => setActiveStudent(null)} className="font-bold text-slate-500 hover:text-white text-xs transition-colors p-2 hidden md:block">Cancel</button>
-                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Checked In')} className="px-6 md:px-10 py-3.5 rounded-xl font-black text-white bg-indigo-600 text-[10px] uppercase tracking-[0.2em] shadow-2xl shadow-indigo-500/40 hover:bg-indigo-500 transition-all active:scale-95 w-full md:w-auto">Verify & Check In</button>
+                  <button onClick={() => handleUpdateStatus(activeStudent.id, 'Checked In')} className="px-8 py-3.5 rounded-xl font-black text-white bg-indigo-600 text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-indigo-500 transition-all active:scale-95">Verify & Check In</button>
                 </div>
               </div>
             ) : (
               <div className="p-6 border-t border-slate-800 bg-slate-950 flex justify-between items-center shrink-0">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Status: <span className="text-white ml-2 px-2 py-1 bg-slate-800 rounded">{activeStudent.status}</span></p>
-                <button onClick={() => handleUpdateStatus(activeStudent.id, 'Pending')} className="px-6 py-2 rounded-xl font-black text-rose-500 border border-rose-500/20 text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Undo Status</button>
+                <button onClick={() => handleUpdateStatus(activeStudent.id, 'Pending')} className="px-6 py-2 rounded-xl font-black text-rose-500 border border-rose-500/20 text-[10px] uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">Undo Check-In</button>
               </div>
             )}
           </div>
@@ -411,7 +348,7 @@ export default function SandboxCheckIn() {
       {/* Form Overlay */}
       {viewingForm && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[100]" onClick={() => setViewingForm(null)}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl p-6 md:p-8" onClick={e => e.stopPropagation()}>
             <h3 className="text-xl md:text-2xl font-black text-white mb-4 border-b border-white/5 pb-4">{FORM_TEMPLATES[viewingForm].title}</h3>
             <p className="text-slate-400 text-sm leading-relaxed mb-8">{FORM_TEMPLATES[viewingForm].text}</p>
             <div className="flex justify-between items-center">
@@ -426,11 +363,17 @@ export default function SandboxCheckIn() {
       {maximizedImage && (
         <div className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setMaximizedImage(null)}>
           <div className="relative group">
-            <img src={maximizedImage} alt="Maximized Headshot" className="max-w-full max-h-[85vh] rounded-2xl border-4 border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)]" />
+            <img src={maximizedImage} alt="Maximized Headshot" className="max-w-full max-h-[85vh] rounded-2xl border-4 border-white/10 shadow-2xl" />
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white/10 px-4 py-1 rounded-full text-white/50 text-[10px] font-black uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">Click to close</div>
           </div>
         </div>
       )}
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+      `}</style>
     </div>
   );
 }
