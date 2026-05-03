@@ -9,7 +9,6 @@ import {
   Clock, MessageSquare, Printer, Plus, User, Trash2
 } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
-// 🟢 FIXED IMPORT: Moved to lib/baserow to prevent 500 error!
 import { getExistingAuditions } from "@/app/lib/baserow"; 
 import { upgradeGuestToUser } from "@/app/actions/auth";
 
@@ -26,8 +25,8 @@ type AuditionFormData = {
   conflicts: Record<string, ConflictEntry>;
   offBookAgreement: boolean; 
   parentCommitteeAgreement: boolean;
-studentSignature: boolean; // Changed to boolean
-  parentSignature: boolean;
+  studentSignature: boolean; // 🟢 Clickwrap boolean
+  parentSignature: boolean;  // 🟢 Clickwrap boolean
 };
 
 interface AuditionSlot {
@@ -104,8 +103,7 @@ const INITIAL_DATA: AuditionFormData = {
   auditionSlotId: null,
   conflicts: {}, 
   offBookAgreement: false, parentCommitteeAgreement: false,
-studentSignature: false, 
-  parentSignature: false
+  studentSignature: false, parentSignature: false
 };
 
 export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
@@ -121,6 +119,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isCanceling, setIsCanceling] = useState<number | null>(null);
   
   const [password, setPassword] = useState("");
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -199,22 +198,20 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setView("hub");
     setIsProcessing(false);
   };
-const [isCanceling, setIsCanceling] = useState<number | null>(null);
 
   const handleCancelAudition = async (auditionId: number, name: string) => {
-    // Safety check so parents don't accidentally click it
     if (!window.confirm(`Are you sure you want to cancel the audition for ${name}? This cannot be undone.`)) return;
 
     setIsCanceling(auditionId);
     const res = await cancelAudition(tenant, auditionId);
     if (res.success) {
-       // Remove the deleted student from the Hub view instantly
        setExistingAuditions(prev => prev.filter(a => a.id !== auditionId));
     } else {
        alert("Failed to cancel. Please try again.");
     }
     setIsCanceling(null);
   };
+
   const markAllAvailable = () => {
     const allAvailable: Record<string, ConflictEntry> = {};
     REHEARSAL_DATES.forEach(date => {
@@ -260,12 +257,15 @@ const [isCanceling, setIsCanceling] = useState<number | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessing(true);
-    // 🟢 NEW: Ensure they clicked both buttons!
+    
+    // 🟢 REQUIRE CLICKWRAP SIGNATURES
     if (!formData.studentSignature || !formData.parentSignature) {
       alert("Please ensure both the Student and Parent have clicked to sign the agreement.");
       return;
     }
+
+    setIsProcessing(true);
+    
     try {
       let finalHeadshotUrl = formData.headshotUrl;
       let finalMusicUrl = null;
@@ -279,11 +279,11 @@ const [isCanceling, setIsCanceling] = useState<number | null>(null);
         finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type);
       }
 
-const payloadToSubmit = {
+      const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
         musicFileUrl: finalMusicUrl,
-        // Translate the clicks into explicit strings for the Director's notes
+        // Map boolean to string for the director's notes
         studentSignature: formData.studentSignature ? "Agreed via Click" : "Missing",
         parentSignature: formData.parentSignature ? "Agreed via Click" : "Missing",
       };
@@ -396,7 +396,7 @@ const payloadToSubmit = {
                  <p><strong>Song:</strong> {formData.songTitle}</p>
               </div>
               <div className="space-y-2">
-                 <p><strong>Parent:</strong> {formData.parentSignature}</p>
+                 <p><strong>Parent:</strong> Clickwrap Verified</p>
                  <p><strong>Email:</strong> {lookupData.email}</p>
                  <p><strong>Height:</strong> {formData.heightFt}'{formData.heightIn}"</p>
               </div>
@@ -410,12 +410,13 @@ const payloadToSubmit = {
     <div className="py-4 px-2 sm:px-4 flex flex-col items-center justify-center font-sans overflow-x-hidden">
       <div className="max-w-3xl w-full space-y-4">
         <div className="flex items-center justify-between px-2 shrink-0">
-          <Link href={`/`} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
+          <button onClick={() => setView(initialEmail ? "hub" : "login")} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
             <ChevronLeft size={16} /> Exit
-          </Link>
+          </button>
           <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>
         </div>
 
+        {/* --- LOGIN VIEW --- */}
         {view === "login" && (
           <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
              <div className="text-center mb-6 sm:mb-8">
@@ -433,6 +434,7 @@ const payloadToSubmit = {
           </div>
         )}
 
+        {/* --- HUB VIEW --- */}
         {view === "hub" && (
           <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-2xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
              <div className="text-center mb-8">
@@ -453,22 +455,24 @@ const payloadToSubmit = {
                            <Clock size={12} className="text-blue-500" /> {audition.time}
                          </p>
                        </div>
-<div className="flex items-center gap-4 text-right">
-     <div className="hidden sm:block">
-       <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Song</span>
-       <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
-     </div>
-     
-     {/* 🟢 THE CANCEL BUTTON */}
-     <button 
-       onClick={() => handleCancelAudition(audition.id, audition.name)}
-       disabled={isCanceling === audition.id}
-       className="p-3 bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-xl transition-all disabled:opacity-50"
-       title="Cancel Audition"
-     >
-       <Trash2 size={16} />
-     </button>
-   </div>
+                       
+                       <div className="flex items-center gap-4 text-right">
+                         <div className="hidden sm:block">
+                           <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Song</span>
+                           <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
+                         </div>
+                         
+                         {/* CANCEL BUTTON */}
+                         <button 
+                           onClick={() => handleCancelAudition(audition.id, audition.name)}
+                           disabled={isCanceling === audition.id}
+                           className="p-3 bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-xl transition-all disabled:opacity-50"
+                           title="Cancel Audition"
+                         >
+                           <Trash2 size={16} />
+                         </button>
+                       </div>
+
                     </div>
                   ))}
                 </>
@@ -485,6 +489,7 @@ const payloadToSubmit = {
           </div>
         )}
 
+        {/* --- WIZARD VIEW --- */}
         {view === "wizard" && (
           <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-[1.5rem] sm:rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col sm:max-h-[85vh]">
             <div className="bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
@@ -524,11 +529,10 @@ const payloadToSubmit = {
                             )}
                          </div>
 
-                         {/* 🟢 FIXED CAMERA UI */}
+                         {/* CAMERA CONTROLS */}
                          <div className="flex gap-2">
                            {isCameraOpen ? (
                              <>
-                               {/* CAPTURE BUTTON */}
                                <button 
                                  type="button" 
                                  onClick={capturePhoto} 
@@ -536,7 +540,6 @@ const payloadToSubmit = {
                                >
                                   <Camera size={14} /> Capture
                                </button>
-                               {/* CANCEL BUTTON */}
                                <button 
                                  type="button" 
                                  onClick={stopCamera} 
@@ -547,7 +550,6 @@ const payloadToSubmit = {
                              </>
                            ) : (
                              <>
-                               {/* OPEN CAMERA / RETAKE BUTTON */}
                                <button 
                                  type="button" 
                                  onClick={() => { 
@@ -561,7 +563,6 @@ const payloadToSubmit = {
                                >
                                   <Camera size={14} /> {formData.headshotUrl ? "Retake Photo" : "Camera"}
                                </button>
-                               {/* UPLOAD BUTTON (Hides after photo taken) */}
                                {!formData.headshotUrl && (
                                  <button 
                                    type="button" 
@@ -583,7 +584,6 @@ const payloadToSubmit = {
                          </div>
                       </div>
                       
-                      {/* ... Rest of Step 1 ... */}
                       <div className="flex-1 space-y-6 sm:space-y-10">
                          <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Actor</h2>
                          <div className="space-y-4 sm:space-y-6">
@@ -591,54 +591,26 @@ const payloadToSubmit = {
                               <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Full Name</label>
                               <input type="text" required value={formData.fullName} onChange={e => updateForm({fullName: e.target.value})} className="w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-lg shadow-inner" />
                             </div>
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 pt-6 sm:pt-10 border-t border-zinc-100 dark:border-zinc-800">
-                      <div className="space-y-3">
-                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Student Signature</label>
-                         <button 
-                           type="button" 
-                           onClick={() => updateForm({ studentSignature: !formData.studentSignature })}
-                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
-                             formData.studentSignature 
-                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
-                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
-                           }`}
-                         >
-                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.studentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
-                             {formData.studentSignature && <CheckCircle2 size={16} />}
-                           </div>
-                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
-                             {formData.studentSignature ? "Student Agreed" : "Click to Sign"}
-                           </span>
-                         </button>
-                      </div>
-                      
-                      <div className="space-y-3">
-                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Parent / Guardian Signature</label>
-                         <button 
-                           type="button" 
-                           onClick={() => updateForm({ parentSignature: !formData.parentSignature })}
-                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
-                             formData.parentSignature 
-                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
-                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
-                           }`}
-                         >
-                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.parentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
-                             {formData.parentSignature && <CheckCircle2 size={16} />}
-                           </div>
-                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
-                             {formData.parentSignature ? "Parent Agreed" : "Click to Sign"}
-                           </span>
-                         </button>
-                      </div>
-                    </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                               <div>
+                                  <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">DOB</label>
+                                  <input type="date" required value={formData.dob} onChange={e => updateForm({ dob: e.target.value })} className="w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-lg" />
+                               </div>
+                               <div>
+                                 <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Grade</label>
+                                 <div className="grid grid-cols-4 gap-1.5">
+                                   {GRADES.map(g => (
+                                     <button key={g} type="button" onClick={() => updateForm({ grade: g })} className={`py-2 rounded-lg font-black text-[9px] transition-all ${formData.grade === g ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"}`}>{g}</button>
+                                   ))}
+                                 </div>
+                               </div>
+                            </div>
                          </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Steps 2-6 Remain Unchanged */}
                 {currentStep === 2 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Casting Details</h2>
@@ -714,20 +686,8 @@ const payloadToSubmit = {
                              </div>
                              
                              <div className="shrink-0 flex flex-col items-center gap-3 w-full md:w-auto">
-                                <audio 
-                                  controls 
-                                  className="h-10 w-full sm:w-[250px]" 
-                                  src={selectedPreset.audioUrl}
-                                >
-                                  Your browser does not support the audio element.
-                                </audio>
-                                
-                                <a 
-                                  href={selectedPreset.audioUrl} 
-                                  download 
-                                  target="_blank" 
-                                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:bg-green-700 transition-colors w-full shadow-md active:scale-95"
-                                >
+                                <audio controls className="h-10 w-full sm:w-[250px]" src={selectedPreset.audioUrl} />
+                                <a href={selectedPreset.audioUrl} download target="_blank" className="bg-green-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:bg-green-700 transition-colors w-full shadow-md active:scale-95">
                                   <Download size={16} /> Download MP3
                                 </a>
                              </div>
@@ -747,9 +707,7 @@ const payloadToSubmit = {
                                 <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
                              )}
                              <input 
-                               type="file" 
-                               ref={fileInputRef} 
-                               className="hidden" 
+                               type="file" ref={fileInputRef} className="hidden" 
                                onChange={(e) => {
                                  if (e.target.files?.[0]) {
                                    setAudioFile(e.target.files[0]);
@@ -775,9 +733,7 @@ const payloadToSubmit = {
                         const isSelected = formData.auditionSlotId === slot.id;
                         return (
                           <button 
-                            key={slot.id} 
-                            type="button" 
-                            disabled={isFull}
+                            key={slot.id} type="button" disabled={isFull}
                             onClick={() => updateForm({ auditionSlotId: slot.id })} 
                             className={`p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 text-left relative transition-all group ${
                               isSelected 
@@ -787,9 +743,7 @@ const payloadToSubmit = {
                                   : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"
                             }`}
                           >
-                            <div className={`absolute top-4 right-4 px-2 py-1 rounded-full text-[7px] font-black uppercase italic ${
-                              isSelected ? "bg-white text-blue-600" : isFull ? "bg-red-600 text-white" : "bg-blue-100 text-blue-600"
-                            }`}>
+                            <div className={`absolute top-4 right-4 px-2 py-1 rounded-full text-[7px] font-black uppercase italic ${isSelected ? "bg-white text-blue-600" : isFull ? "bg-red-600 text-white" : "bg-blue-100 text-blue-600"}`}>
                               {isFull ? "Full" : `${remaining} Left`}
                             </div>
                             <Clock className="mb-4 opacity-30" size={24} />
@@ -847,9 +801,11 @@ const payloadToSubmit = {
                   </div>
                 )}
 
+                {/* 🟢 CLICK-TO-SIGN UI */}
                 {currentStep === 6 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Commitment</h2>
+                    
                     <div className="space-y-4 sm:space-y-6">
                       <label className="flex items-start p-6 sm:p-10 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer">
                           <input type="checkbox" required checked={formData.offBookAgreement} onChange={e => updateForm({ offBookAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-blue-600 rounded-lg mt-1 shrink-0" />
@@ -866,16 +822,49 @@ const payloadToSubmit = {
                           </div>
                       </label>
                     </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 pt-6 sm:pt-10 border-t border-zinc-100 dark:border-zinc-800">
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                          <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Student Signature</label>
-                         <input type="text" required value={formData.studentSignature} onChange={e => updateForm({studentSignature: e.target.value})} placeholder="Full Name" className="w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 font-black text-xl sm:text-3xl italic outline-none" />
+                         <button 
+                           type="button" 
+                           onClick={() => updateForm({ studentSignature: !formData.studentSignature })}
+                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
+                             formData.studentSignature 
+                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
+                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
+                           }`}
+                         >
+                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.studentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
+                             {formData.studentSignature && <CheckCircle2 size={16} />}
+                           </div>
+                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
+                             {formData.studentSignature ? "Student Agreed" : "Click to Sign"}
+                           </span>
+                         </button>
                       </div>
-                      <div className="space-y-2">
-                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Parent Signature</label>
-                         <input type="text" required value={formData.parentSignature} onChange={e => updateForm({parentSignature: e.target.value})} placeholder="Full Name" className="w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 font-black text-xl sm:text-3xl italic outline-none" />
+                      
+                      <div className="space-y-3">
+                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Parent / Guardian Signature</label>
+                         <button 
+                           type="button" 
+                           onClick={() => updateForm({ parentSignature: !formData.parentSignature })}
+                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
+                             formData.parentSignature 
+                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
+                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
+                           }`}
+                         >
+                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.parentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
+                             {formData.parentSignature && <CheckCircle2 size={16} />}
+                           </div>
+                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
+                             {formData.parentSignature ? "Parent Agreed" : "Click to Sign"}
+                           </span>
+                         </button>
                       </div>
                     </div>
+
                   </div>
                 )}
               </form>
