@@ -5,19 +5,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from "next-auth/react"; // Added to check user groups
 import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react';
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
 import { NAV_CONFIG } from '@/app/lib/nav-config'; 
 import { useSidebar } from '@/app/components/SidebarShell';
 
-export default function StaffSidebar() {
+interface StaffSidebarProps {
+  activeProductionId?: string | number;
+}
+
+export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
   // Accordion State for Expanded Mode
-  // We track which groups are open by their label
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // Auto-expand the group if we are on a child route
@@ -36,6 +41,14 @@ export default function StaffSidebar() {
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  // Helper to process dynamic URLs (e.g., replacing /active/ with /94/)
+  const getFinalHref = (href: string) => {
+    if (!href) return "/";
+    return activeProductionId 
+      ? href.replace('/active/', `/${activeProductionId}/`) 
+      : href;
   };
 
   return (
@@ -62,6 +75,7 @@ export default function StaffSidebar() {
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
         
         {NAV_CONFIG.map((section, idx) => {
+           // Section Level Permission Check
            if (section.permission && !hasPermission(globalRole, productionRole, section.permission as Permission)) return null;
 
            // Dashboard Special Case
@@ -90,7 +104,15 @@ export default function StaffSidebar() {
 
                 <div className="space-y-1">
                     {section.items.map((item: any) => {
-                        if (item.permission && !hasPermission(globalRole, productionRole, item.permission as Permission)) return null;
+                        // 🟢 THE FIX: Check both Permissions AND RBAC Groups
+                        const userGroups = (session?.user as any)?.groups || [];
+                        const canSeeByPermission = !item.permission || hasPermission(globalRole, productionRole, item.permission as Permission);
+                        const canSeeByGroup = item.group && userGroups.includes(item.group);
+
+                        // If they have neither permission nor the required group, hide the item
+                        if (!canSeeByPermission && !canSeeByGroup) return null;
+
+                        const itemHref = getFinalHref(item.href);
 
                         // ------------------------------------------------
                         // COLLAPSIBLE GROUP LOGIC
@@ -99,14 +121,15 @@ export default function StaffSidebar() {
                             const isGroupOpen = openGroups[item.label] || false;
                             const isGroupActive = item.children.some((child: any) => pathname.includes(child.href));
 
-                            // FILTER CHILDREN PERMISSIONS
-                            const validChildren = item.children.filter((child: any) => 
-                                !child.permission || hasPermission(globalRole, productionRole, child.permission as Permission)
-                            );
+                            // Filter children based on permission or group
+                            const validChildren = item.children.filter((child: any) => {
+                                const childPermission = !child.permission || hasPermission(globalRole, productionRole, child.permission as Permission);
+                                const childGroup = child.group && userGroups.includes(child.group);
+                                return childPermission || childGroup;
+                            });
 
                             if (validChildren.length === 0) return null;
 
-                            // IF COLLAPSED: Use the Flyout Menu
                             if (isCollapsed) {
                                 return (
                                     <FlyoutMenu 
@@ -114,13 +137,12 @@ export default function StaffSidebar() {
                                         label={item.label}
                                         icon={item.icon}
                                         active={isGroupActive}
-                                        items={validChildren}
+                                        items={validChildren.map((c: any) => ({ ...c, href: getFinalHref(c.href) }))}
                                         pathname={pathname}
                                     />
                                 );
                             }
 
-                            // IF EXPANDED: Use Standard Accordion
                             return (
                                 <div key={item.label}>
                                     <button 
@@ -145,10 +167,10 @@ export default function StaffSidebar() {
                                             {validChildren.map((child: any) => (
                                                 <SubNavItem 
                                                     key={child.href}
-                                                    href={child.href} 
+                                                    href={getFinalHref(child.href)} 
                                                     icon={<child.icon size={14}/>} 
                                                     label={child.label} 
-                                                    active={pathname === child.href} 
+                                                    active={pathname === getFinalHref(child.href)} 
                                                     isCollapsed={false}
                                                 />
                                             ))}
@@ -163,11 +185,11 @@ export default function StaffSidebar() {
                         // ------------------------------------------------
                         return (
                             <NavItem 
-                                key={item.href}
-                                href={item.href} 
+                                key={itemHref}
+                                href={itemHref} 
                                 icon={<item.icon size={18}/>} 
                                 label={item.label} 
-                                active={pathname === item.href} 
+                                active={pathname === itemHref} 
                                 isCollapsed={isCollapsed}
                             />
                         );
@@ -192,6 +214,7 @@ export default function StaffSidebar() {
   );
 }
 
+// ... (FlyoutMenu, NavItem, SubNavItem, and SidebarTooltip components remain exactly as they were)
 // ----------------------------------------------------------------------
 // COMPONENT: FLYOUT MENU (The "Industry Standard" Fix)
 // ----------------------------------------------------------------------

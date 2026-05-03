@@ -1,7 +1,7 @@
 import { 
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
-  SlidersHorizontal, Sparkles, FilePlus, Home 
+  SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck 
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
@@ -14,12 +14,11 @@ export const NAV_CONFIG = [
   {
     title: "Creative Team",
     color: "text-blue-500",
-    permission: "view_cast_list", // Permissions logic from your sidebar
+    permission: "view_cast_list",
     items: [
       { label: "Show Hub", href: "/production", icon: Theater },
       { label: "Scheduler", href: "/schedule", icon: Calendar },
       { label: "Show Calibration", href: "/analysis", icon: SlidersHorizontal, permission: "manage_casting" },
-      // Sub-menu for Casting
       { 
         label: "Casting Suite", 
         icon: Users, 
@@ -36,11 +35,12 @@ export const NAV_CONFIG = [
   {
     title: "Logistics & Ops",
     color: "text-emerald-500",
-    // 👈 Notice: We removed the `permission: "view_cast_list"` from this folder level
     items: [
       { label: "Master Roster", href: "/roster", icon: UserSquare2, permission: "view_cast_list" },
       { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
-      { label: "Committees", href: "/committees", icon: VenetianMask, permission: "manage_committees" }, // 👈 NEW PERMISSION HERE
+      // 🟢 NEW: Check-In Board for the specific RBAC group
+      { label: "Check-In Board", href: "/production/active/check-in", icon: ClipboardCheck, group: "Check In Team" },
+      { label: "Committees", href: "/committees", icon: VenetianMask, permission: "manage_committees" },
       { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
     ]
   },

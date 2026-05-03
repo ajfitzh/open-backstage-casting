@@ -287,7 +287,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const selectedSlot = slots.find(s => s.id === formData.auditionSlotId);
   const firstName = formData.fullName.split(" ")[0] || "Actor";
 
-  if (isSuccess) {
+if (isSuccess) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 pb-20">
         <div className="bg-white dark:bg-zinc-900 p-8 sm:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800 print:shadow-none print:border-none">
@@ -342,7 +342,14 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
              </div>
           )}
 
+          {/* 🟢 NEW SUCCESS SCREEN BUTTONS (Added the 'Add Another Student' button!) */}
           <div className="space-y-3 print:hidden">
+            <button 
+              onClick={startNewAudition}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-all active:scale-95 text-center"
+            >
+              + Add Another Student
+            </button>
             <button 
               onClick={returnToHub}
               disabled={isProcessing}
@@ -382,10 +389,11 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   return (
     <div className="py-4 px-2 sm:px-4 flex flex-col items-center justify-center font-sans overflow-x-hidden">
       <div className="max-w-3xl w-full space-y-4">
-        <div className="flex items-center justify-between px-2 shrink-0">
-          <Link href={`/`} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
+<div className="flex items-center justify-between px-2 shrink-0">
+          {/* 🟢 Changed from a Link to a button that returns to the Hub */}
+          <button onClick={() => setView(initialEmail ? "hub" : "login")} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
             <ChevronLeft size={16} /> Exit
-          </Link>
+          </button>
           <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>
         </div>
 
