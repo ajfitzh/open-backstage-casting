@@ -480,21 +480,64 @@ if (isSuccess) {
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <div className="flex flex-col md:flex-row gap-8 sm:gap-12">
                       <div className="w-full md:w-64 space-y-4">
-                         <div className="aspect-[4/5] bg-zinc-100 dark:bg-zinc-950 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 border-dashed border-zinc-300 dark:border-zinc-800 overflow-hidden relative shadow-inner group">
-                            {formData.headshotUrl ? (
-                              <img src={formData.headshotUrl} alt="Headshot" className="w-full h-full object-cover" />
-) : isCameraOpen ? (
-   <>
-     <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
-     <canvas ref={canvasRef} className="hidden" />
-   </>
-) : (
-                               <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4">
-                                  <ImageIcon size={48} className="opacity-20" />
-                                  <p className="text-[9px] font-black uppercase tracking-widest">Headshot Required</p>
-                               </div>
-                            )}
-                         </div>
+<div className="flex gap-2">
+  {isCameraOpen ? (
+    <>
+      {/* 📸 CAPTURE SNAPSHOT */}
+      <button 
+        type="button" 
+        onClick={capturePhoto} 
+        className="flex-1 bg-blue-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
+      >
+         <Camera size={14} /> Capture
+      </button>
+      
+      {/* ❌ CANCEL / STOP CAMERA */}
+      <button 
+        type="button" 
+        onClick={stopCamera} 
+        className="px-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
+      >
+         Cancel
+      </button>
+    </>
+  ) : (
+    <>
+      {/* 🔄 OPEN CAMERA (or RETAKE) */}
+      <button 
+        type="button" 
+        onClick={() => { 
+          setIsCameraOpen(true); 
+          setTimeout(() => {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+              .then(s => { if(videoRef.current) videoRef.current.srcObject = s; });
+          }, 100); 
+        }} 
+        className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-md hover:bg-blue-600 hover:text-white transition-colors"
+      >
+         <Camera size={14} /> {formData.headshotUrl ? "Retake Photo" : "Camera"}
+      </button>
+
+      {/* 📁 UPLOAD (Only show if no headshot taken yet, to keep UI clean) */}
+      {!formData.headshotUrl && (
+        <button 
+          type="button" 
+          onClick={() => headshotInputRef.current?.click()} 
+          className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
+        >
+          Upload
+        </button>
+      )}
+    </>
+  )}
+  <input type="file" ref={headshotInputRef} className="hidden" accept="image/*" onChange={(e) => {
+     if(e.target.files?.[0]) {
+        const reader = new FileReader();
+        reader.onload = (f) => updateForm({ headshotUrl: f.target?.result as string });
+        reader.readAsDataURL(e.target.files[0]);
+     }
+  }} />
+</div>
                          <div className="flex gap-2">
                             <button type="button" onClick={isCameraOpen ? capturePhoto : () => { 
                               setIsCameraOpen(true); 
