@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { 
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
-  Send, UploadCloud, Music, FileAudio, 
+  Send, UploadCloud, Music, FileAudio, Download, 
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
   Clock, MessageSquare, Printer
 } from "lucide-react";
@@ -67,22 +67,21 @@ const REHEARSAL_DATES = [
   { id: "july_23", label: "July 23 (Tech)", time: "4pm - 9pm", type: "mandatory" },
 ];
 
-// 🟢 THE NEW GENERIC "EASY" PRESET SONGS WITH REAL LINKS
 const PRESET_SONGS = [
   { 
     id: "reflection", 
     title: "Reflection (Mulan)", 
-    youtube: "https://youtu.be/F4B5TGE2Gpw" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/mulan-reflection-piano.mp3" 
   },
   { 
     id: "consider_yourself", 
     title: "Consider Yourself (Oliver!)", 
-    youtube: "https://youtu.be/tLwK2q1-d70" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-consideryourself-piano.mp3" 
   },
   { 
     id: "tomorrow", 
     title: "Tomorrow (Annie)", 
-    youtube: "https://youtu.be/U6_u5N220Fk" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/annie-tomorrow-piano.mp3" 
   },
 ];
 
@@ -483,55 +482,88 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                     </div>
 
                     {formData.usePresetSong ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 animate-in slide-in-from-top-4">
-                        {PRESET_SONGS.map(s => (
-                          <button key={s.id} type="button" onClick={() => updateForm({ songTitle: s.title })} className={`p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${formData.songTitle === s.title ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
-                            <Music size={24} className={`mb-4 ${formData.songTitle === s.title ? "text-white" : "text-blue-600"} opacity-50`} />
-                            <p className="font-black text-sm sm:text-xl uppercase italic leading-tight">{s.title}</p>
-                          </button>
-                        ))}
+                      <div className="space-y-6 animate-in slide-in-from-top-4">
+                        {PRESET_SONGS.length > 6 ? (
+                          <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 shadow-sm">
+                            <select
+                              value={formData.songTitle}
+                              onChange={(e) => updateForm({ songTitle: e.target.value })}
+                              className="w-full bg-transparent p-4 text-lg font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
+                            >
+                              <option value="" disabled>Select an easy-start track...</option>
+                              {PRESET_SONGS.map(s => (
+                                <option key={s.id} value={s.title}>{s.title}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                            {PRESET_SONGS.map(s => (
+                              <button key={s.id} type="button" onClick={() => updateForm({ songTitle: s.title })} className={`p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${formData.songTitle === s.title ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
+                                <Music size={24} className={`mb-4 ${formData.songTitle === s.title ? "text-white" : "text-blue-600"} opacity-50`} />
+                                <p className="font-black text-sm sm:text-xl uppercase italic leading-tight">{s.title}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {selectedPreset && (
+                          <div className="bg-green-50 dark:bg-green-900/10 border-2 border-green-500 p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] flex flex-col md:flex-row items-center gap-6 sm:gap-10 animate-in zoom-in-95">
+                             <CheckCircle2 size={32} className="text-green-500 hidden md:block" />
+                             <div className="flex-1 text-center md:text-left">
+                                <h3 className="font-black text-green-900 dark:text-green-400 uppercase text-lg sm:text-2xl italic">Music Secured</h3>
+                                <p className="text-green-700/80 dark:text-green-500/80 text-sm sm:text-lg">The track will be waiting at the sound booth. Practice below!</p>
+                             </div>
+                             
+                             <div className="shrink-0 flex flex-col items-center gap-3 w-full md:w-auto">
+                                <audio 
+                                  controls 
+                                  className="h-10 w-full sm:w-[250px]" 
+                                  src={selectedPreset.audioUrl}
+                                >
+                                  Your browser does not support the audio element.
+                                </audio>
+                                
+                                <a 
+                                  href={selectedPreset.audioUrl} 
+                                  download 
+                                  target="_blank" 
+                                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:bg-green-700 transition-colors w-full shadow-md active:scale-95"
+                                >
+                                  <Download size={16} /> Download MP3
+                                </a>
+                             </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-4">
                          <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Song Title</label>
                          <input type="text" value={formData.songTitle} onChange={(e) => updateForm({ songTitle: e.target.value })} className="w-full rounded-xl border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 text-zinc-900 dark:text-white font-black text-xl sm:text-3xl italic outline-none shadow-inner" placeholder="E.g. On My Own" />
+                         
+                         <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800">
+                           <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${formData.musicFileName ? "bg-green-50 border-green-500 text-green-600" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
+                             {formData.musicFileName ? (
+                                <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
+                             ) : (
+                                <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
+                             )}
+                             <input 
+                               type="file" 
+                               ref={fileInputRef} 
+                               className="hidden" 
+                               onChange={(e) => {
+                                 if (e.target.files?.[0]) {
+                                   setAudioFile(e.target.files[0]);
+                                   updateForm({ musicFileName: e.target.files[0].name });
+                                 }
+                               }} 
+                               accept="audio/*" 
+                             />
+                           </button>
+                         </div>
                       </div>
                     )}
-
-                    <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800">
-                      {formData.usePresetSong && selectedPreset ? (
-                        <div className="bg-green-50 dark:bg-green-900/10 border-2 border-green-500 p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] flex flex-col md:flex-row items-center gap-6 sm:gap-10">
-                           <CheckCircle2 size={32} className="text-green-500" />
-                           <div className="flex-1 text-center md:text-left">
-                              <h3 className="font-black text-green-900 dark:text-green-400 uppercase text-lg sm:text-2xl italic">Music Secured</h3>
-                              <p className="text-green-700/80 dark:text-green-500/80 text-sm sm:text-lg">The track will be waiting at the sound booth.</p>
-                           </div>
-                           <a href={selectedPreset.youtube} target="_blank" className="bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-6 sm:px-8 py-3 sm:py-5 rounded-xl sm:rounded-[1.5rem] font-black uppercase text-[10px] sm:text-xs flex items-center gap-3">
-                              <Youtube size={20} className="text-red-600" /> Practice
-                           </a>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${formData.musicFileName ? "bg-green-50 border-green-500 text-green-600" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
-                           {formData.musicFileName ? (
-                              <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
-                           ) : (
-                              <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
-                           )}
-                           <input 
-                             type="file" 
-                             ref={fileInputRef} 
-                             className="hidden" 
-                             onChange={(e) => {
-                               if (e.target.files?.[0]) {
-                                 setAudioFile(e.target.files[0]);
-                                 updateForm({ musicFileName: e.target.files[0].name });
-                               }
-                             }} 
-                             accept="audio/*" 
-                           />
-                        </button>
-                      )}
-                    </div>
                   </div>
                 )}
 
