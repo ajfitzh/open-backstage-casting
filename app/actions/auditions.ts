@@ -152,3 +152,43 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     return { success: false, error: "Submission failed" };
   }
 }
+
+export async function getExistingAuditions(tenant: string, email: string, productionId: number) {
+  if (!email) return [];
+  
+  try {
+    const tables = await getTenantTableConfig(tenant);
+    if (!tables.PEOPLE || !tables.AUDITIONS) return [];
+
+    // 1. Find all family members linked to this parent email
+    const people = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
+      filter_type: "AND",
+      [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email
+    });
+
+    if (!people || people.length === 0) return [];
+    
+    // Baserow lets us search multiple IDs using a comma-separated list!
+    const peopleIds = people.map((p: any) => p.id).join(',');
+
+    // 2. Find any auditions for these kids in this specific show
+    const auditions = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, {
+      filter_type: "AND",
+      [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+      [`filter__${DB.AUDITIONS.FIELDS.PERFORMER}__link_row_has_any`]: peopleIds
+    });
+
+    if (!auditions || !Array.isArray(auditions)) return [];
+
+    // 3. Format it beautifully for the UI
+    return auditions.map((a: any) => ({
+      id: a.id,
+      name: a[DB.AUDITIONS.FIELDS.PERFORMER]?.[0]?.value || "Student",
+      time: a[DB.AUDITIONS.FIELDS.AUDITION_SLOTS]?.[0]?.value || "Pending Time",
+      song: a[DB.AUDITIONS.FIELDS.SONG] || "No Song Selected"
+    }));
+  } catch (error) {
+    console.error("Failed to fetch existing auditions:", error);
+    return [];
+  }
+}

@@ -1,15 +1,18 @@
 import { auth } from "@/auth";
 import { getAuditionProduction, getAuditionSlots } from '@/app/lib/baserow';
+import { getExistingAuditions } from '@/app/actions/auditions';
 import AuditionWizardClient from './AuditionWizardClient';
 
 export default async function PublicAuditionPage({ params }: { params: { tenant: string } }) {
   const tenant = params.tenant;
   
-  // 🟢 1. Grab the User's Identity (if they are logged in)
+  // 🟢 1. Grab User Identity & Role
   const session = await auth();
   const userEmail = session?.user?.email || "";
+  const userRole = (session?.user as any)?.role || "Guest";
+  const isGuest = userRole === "Guest"; // True if they need a password!
 
-  // 🟢 2. ALWAYS lock the form to the Upcoming show (Ignore the staff show cookie!)
+  // 🟢 2. ALWAYS lock the form to the Upcoming show
   const activeProduction = await getAuditionProduction(tenant);
 
   if (!activeProduction) {
@@ -25,7 +28,9 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
     );
   }
 
+  // 🟢 3. Fetch Slots & Existing Auditions for the Hub
   const dynamicSlots = await getAuditionSlots(tenant, activeProduction.id);
+  const existingAuditions = await getExistingAuditions(tenant, userEmail, activeProduction.id);
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -34,7 +39,9 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
         productionId={activeProduction.id} 
         productionTitle={activeProduction.title} 
         slots={dynamicSlots} 
-        initialEmail={userEmail} // 🟢 3. Pass the email to the client!
+        initialEmail={userEmail}
+        isGuest={isGuest} // Pass the guest flag!
+        initialExistingAuditions={existingAuditions} // Pass their current kids!
       />
     </main>
   );

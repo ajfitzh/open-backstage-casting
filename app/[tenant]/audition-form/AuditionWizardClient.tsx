@@ -6,9 +6,9 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
   Send, UploadCloud, Music, FileAudio, Download, 
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
-  Clock, MessageSquare, Printer
+  Clock, MessageSquare, Printer, Plus, User
 } from "lucide-react";
-import { submitRealAudition } from "@/app/actions/auditions";
+import { submitRealAudition, getExistingAuditions } from "@/app/actions/auditions";
 import { upgradeGuestToUser } from "@/app/actions/auth";
 
 // --- Types ---
@@ -37,12 +37,21 @@ interface AuditionSlot {
   isFull?: boolean;
 }
 
+interface ExistingAudition {
+  id: number;
+  name: string;
+  time: string;
+  song: string;
+}
+
 interface Props {
   tenant: string;
   productionId: number;
   productionTitle: string;
   slots: AuditionSlot[];
   initialEmail?: string; 
+  isGuest?: boolean;
+  initialExistingAuditions?: ExistingAudition[];
 }
 
 // --- Constants ---
@@ -96,11 +105,15 @@ const INITIAL_DATA: AuditionFormData = {
   studentSignature: "", parentSignature: ""
 };
 
-export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail }: Props) {
+export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
 
-  const [currentStep, setCurrentStep] = useState(initialEmail ? 1 : 0); 
-  const [maxStepReached, setMaxStepReached] = useState(initialEmail ? 1 : 0);
+  // 🟢 The New View State: "login" -> "hub" -> "wizard"
+  const [view, setView] = useState<"login" | "hub" | "wizard">(initialEmail ? "hub" : "login");
+  const [existingAuditions, setExistingAuditions] = useState<ExistingAudition[]>(initialExistingAuditions || []);
+
+  const [currentStep, setCurrentStep] = useState(1); 
+  const [maxStepReached, setMaxStepReached] = useState(1);
   const [formData, setFormData] = useState<AuditionFormData>(INITIAL_DATA);
   const [lookupData, setLookupData] = useState({ email: initialEmail || "", dob: "" });
   const [isProcessing, setIsProcessing] = useState(false);
@@ -139,17 +152,20 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setIsCameraOpen(false);
   }, []);
 
+  // 🟢 Load drafted form data ONLY if we are actively in the wizard
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) try { setFormData(JSON.parse(saved)); } catch (e) {}
-  }, []);
+    if (view === "wizard") {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) try { setFormData(JSON.parse(saved)); } catch (e) {}
+    }
+  }, [view]);
 
   useEffect(() => {
-    if (currentStep > maxStepReached) setMaxStepReached(currentStep);
-    if (currentStep > 0 && !isSuccess) {
+    if (view === "wizard" && currentStep > maxStepReached) setMaxStepReached(currentStep);
+    if (view === "wizard" && currentStep > 0 && !isSuccess) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [formData, currentStep, isSuccess, maxStepReached]);
+  }, [formData, currentStep, isSuccess, maxStepReached, view]);
 
   const updateForm = (fields: Partial<AuditionFormData>) => {
     setFormData((prev) => ({ ...prev, ...fields }));
@@ -157,6 +173,32 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const handleNext = () => setCurrentStep((p) => Math.min(p + 1, totalSteps));
   const handlePrev = () => setCurrentStep((p) => Math.max(p - 1, 0));
+
+  // 🟢 Fetch auditions when a guest submits their email
+  const handleUnlockProfile = async () => {
+    setIsProcessing(true);
+    const found = await getExistingAuditions(tenant, lookupData.email, productionId);
+    setExistingAuditions(found);
+    setView("hub");
+    setIsProcessing(false);
+  };
+
+  const startNewAudition = () => {
+    setFormData(INITIAL_DATA);
+    setCurrentStep(1);
+    setMaxStepReached(1);
+    setIsSuccess(false);
+    setView("wizard");
+  };
+
+  const returnToHub = async () => {
+    setIsProcessing(true);
+    const found = await getExistingAuditions(tenant, lookupData.email, productionId);
+    setExistingAuditions(found);
+    setIsSuccess(false);
+    setView("hub");
+    setIsProcessing(false);
+  };
 
   const markAllAvailable = () => {
     const allAvailable: Record<string, ConflictEntry> = {};
@@ -261,7 +303,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </p>
           </div>
 
-          {!upgradeSuccess ? (
+          {/* 🟢 ONLY show the password box if they are a Guest! */}
+          {isGuest && !upgradeSuccess && (
             <div className="bg-zinc-50 dark:bg-zinc-950 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 mb-8 print:hidden animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-3 mb-4 justify-center">
                   <Sparkles size={18} className="text-blue-600" />
@@ -290,7 +333,9 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                  </button>
                </div>
             </div>
-          ) : (
+          )}
+
+          {isGuest && upgradeSuccess && (
              <div className="bg-green-50 dark:bg-green-900/10 p-6 rounded-3xl border border-green-200 dark:border-green-800/30 mb-8 print:hidden flex items-center justify-center gap-3 animate-in zoom-in-95">
                 <CheckCircle2 size={20} className="text-green-600" />
                 <p className="font-black text-green-800 dark:text-green-400 text-sm uppercase italic tracking-widest">Profile Saved!</p>
@@ -298,12 +343,13 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
           )}
 
           <div className="space-y-3 print:hidden">
-            <Link 
-              href="/" 
-              className="block w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-transform active:scale-95 text-center"
+            <button 
+              onClick={returnToHub}
+              disabled={isProcessing}
+              className="w-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-transform active:scale-95 text-center disabled:opacity-50"
             >
-              Back to Dashboard
-            </Link>
+              {isProcessing ? "Loading..." : "Back to My Hub"}
+            </button>
             <button 
               onClick={() => window.print()}
               className="w-full flex items-center justify-center gap-2 text-zinc-400 font-bold hover:text-blue-600 text-[10px] uppercase tracking-widest transition-colors py-2"
@@ -343,23 +389,67 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
           <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>
         </div>
 
-        {currentStep === 0 && (
+        {/* 🟢 VIEW: EMAIL LOGIN */}
+        {view === "login" && (
           <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
              <div className="text-center mb-6 sm:mb-8">
               <Search size={40} className="text-blue-600 mx-auto mb-4" />
               <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic">Welcome</h2>
-              <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm font-medium">Verify your email to pre-fill your profile.</p>
+              <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm font-medium">Verify your email to find your family profile.</p>
             </div>
-            <form className="space-y-4 sm:space-y-6">
-              <input type="email" placeholder="Parent Email" value={lookupData.email} onChange={e => setLookupData({...lookupData, email: e.target.value})} className="w-full rounded-xl sm:rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-5 font-bold outline-none shadow-inner" />
-              <input type="date" value={lookupData.dob} onChange={e => setLookupData({...lookupData, dob: e.target.value})} className="w-full rounded-xl sm:rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-5 font-bold outline-none shadow-inner" />
-              <button type="button" onClick={() => setCurrentStep(1)} className="w-full py-4 sm:py-5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest shadow-xl text-sm">Unlock Profile</button>
+            <form className="space-y-4 sm:space-y-6" onSubmit={(e) => { e.preventDefault(); handleUnlockProfile(); }}>
+              <input type="email" required placeholder="Parent Email" value={lookupData.email} onChange={e => setLookupData({...lookupData, email: e.target.value})} className="w-full rounded-xl sm:rounded-2xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-5 font-bold outline-none shadow-inner" />
+              <button type="submit" disabled={isProcessing} className="w-full py-4 sm:py-5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest shadow-xl text-sm disabled:opacity-50">
+                {isProcessing ? "Searching..." : "Unlock Profile"}
+              </button>
             </form>
-            <button onClick={() => setCurrentStep(1)} className="w-full mt-6 text-zinc-400 font-bold hover:text-blue-600 text-[10px] uppercase tracking-widest underline decoration-2 underline-offset-4">New Student? Start Blank</button>
+            <button onClick={() => setView("wizard")} className="w-full mt-6 text-zinc-400 font-bold hover:text-blue-600 text-[10px] uppercase tracking-widest underline decoration-2 underline-offset-4">New Student? Start Blank</button>
           </div>
         )}
 
-        {currentStep > 0 && (
+        {/* 🟢 VIEW: PARENT HUB */}
+        {view === "hub" && (
+          <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-2xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
+             <div className="text-center mb-8">
+              <User size={40} className="text-blue-600 mx-auto mb-4" />
+              <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Your Hub</h2>
+              <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm font-medium">Signed in as <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email}</span></p>
+            </div>
+            
+            <div className="space-y-4 mb-8">
+              {existingAuditions.length > 0 ? (
+                <>
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Current Registrations</h3>
+                  {existingAuditions.map(audition => (
+                    <div key={audition.id} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-4">
+                       <div>
+                         <h4 className="font-black text-lg dark:text-white tracking-tighter">{audition.name}</h4>
+                         <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1">
+                           <Clock size={12} className="text-blue-500" /> {audition.time}
+                         </p>
+                       </div>
+                       <div className="hidden sm:block text-right">
+                         <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Song</span>
+                         <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300 italic">{audition.song}</span>
+                       </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-950 rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                  <p className="text-zinc-500 font-bold text-sm">No students registered for this show yet.</p>
+                </div>
+              )}
+            </div>
+
+            <button onClick={startNewAudition} className="w-full py-4 sm:py-5 bg-blue-600 text-white rounded-xl sm:rounded-2xl font-black uppercase tracking-widest shadow-xl text-sm flex items-center justify-center gap-2 transition-transform active:scale-95">
+              <Plus size={18} /> Register a Student
+            </button>
+          </div>
+        )}
+
+        {/* 🟢 VIEW: WIZARD */}
+        {view === "wizard" && (
           <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-[1.5rem] sm:rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col sm:max-h-[85vh]">
             <div className="bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
                <div className="flex gap-1 sm:gap-1.5">
@@ -684,8 +774,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </div>
 
             <div className="mt-auto p-4 sm:p-6 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
-                <button type="button" onClick={handlePrev} className="px-4 sm:px-10 py-3 sm:py-5 rounded-xl sm:rounded-[1.5rem] font-black uppercase text-[10px] sm:text-sm text-zinc-400 hover:text-blue-600 transition-all flex items-center gap-2">
-                  <ChevronLeft size={18} /> Back
+                <button type="button" onClick={() => currentStep === 1 ? setView("hub") : handlePrev()} className="px-4 sm:px-10 py-3 sm:py-5 rounded-xl sm:rounded-[1.5rem] font-black uppercase text-[10px] sm:text-sm text-zinc-400 hover:text-blue-600 transition-all flex items-center gap-2">
+                  <ChevronLeft size={18} /> {currentStep === 1 ? "Cancel" : "Back"}
                 </button>
                 {currentStep < 6 ? (
                   <button type="button" onClick={handleNext} className="bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-6 sm:px-14 py-3 sm:py-5 rounded-xl sm:rounded-[2rem] font-black uppercase text-[10px] sm:text-sm flex items-center gap-2 shadow-xl active:scale-95 transition-all">
