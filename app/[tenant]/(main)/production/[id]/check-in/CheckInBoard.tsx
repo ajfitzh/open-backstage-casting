@@ -42,16 +42,27 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
     setCurrentNote(student.lobbyNote || '');
   };
 
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
+const handleUpdateStatus = async (id: string, newStatus: string) => {
+    // Find the current student state to get their edited phone/email
+    const student = students.find(s => s.id === id);
+    if (!student) return;
+
     // 1. Optimistically update the UI
     setStudents(students.map(s => s.id === id ? { ...s, status: newStatus, lobbyNote: currentNote } : s));
     setActiveStudent(null);
     setSentLinks([]);
 
-    // 2. Save Check-in state to Baserow
-    await saveCheckIn(tenant, parseInt(id), newStatus, currentNote);
-    
-    // NOTE: In the next step, we will expand saveCheckIn to also patch the edited name/phone/email!
+    // 2. Save Check-in state AND updated contact info to Baserow!
+    await saveCheckIn(
+      tenant, 
+      parseInt(id), 
+      newStatus, 
+      currentNote,
+      student.performerId, // The person's ID to patch contact info
+      student.name,
+      student.phone,
+      student.email
+    );
   };
 
   const handleReassign = (id: string, field: string, value: string) => {
