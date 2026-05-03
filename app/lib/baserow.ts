@@ -875,23 +875,32 @@ export async function getComplianceData(tenant: string, productionId?: number) {
 export async function getAuditionSlots(tenant: string, productionId: number) {
   const tables = await getTenantTableConfig(tenant);
   
-  // Assume you added the table ID to your tenant-config.ts
+  if (!tables.AUDITION_SLOTS) return [];
+
+  const F = DB.AUDITION_SLOTS.FIELDS;
+
+  // 🟢 We no longer need user_field_names="true"!
   const data = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, {
     size: "100",
-    [`filter__Production__link_row_has`]: productionId, // Only get slots for this show
-    "user_field_names": "true" 
+    [`filter__${F.PRODUCTION}__link_row_has`]: productionId
   });
 
   if (!Array.isArray(data)) return [];
 
-  return data.map(row => ({
-    id: row.id,
-    label: row['Time Label'],
-    capacity: row['Capacity'],
-    taken: row['Taken'],
-    isFull: row['Is Full?']
-  }));
-} 
+  return data.map((row: any) => {
+    // 🟢 Using your bulletproof schema IDs and safeGet helper
+    const rawLabel = safeGet(row[F.TIME_LABEL], "TBD TBD");
+    
+    return {
+      id: row.id.toString(), 
+      day: rawLabel.split(' ')[0] || 'TBD', 
+      time: rawLabel.split(' ').slice(1).join(' ') || rawLabel, 
+      capacity: parseInt(safeGet(row[F.CAPACITY], 0)) || 0,
+      taken: parseInt(safeGet(row[F.TAKEN], 0)) || 0,
+      isFull: safeGet(row[F.IS_FULL]) === true
+    };
+  });
+}
 export async function getAuditionees(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" }; 

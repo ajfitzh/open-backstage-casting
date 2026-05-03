@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/2/2026, 9:24:58 AM
+//    Generated on: 5/3/2026, 8:40:16 AM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -115,6 +115,7 @@ export const DB = {
       "HISTORICAL_CAST_SIZE": "field_6194", // number
       "WORKFLOW_OVERRIDES": "field_6225", // multiple_select
       "SEASON_LINKED": "field_6249", // link_row
+      "AUDITION_SLOTS": "field_7928", // link_row
     }
   },
   MASTER_SHOW_DB: {
@@ -145,6 +146,7 @@ export const DB = {
       "PERFORMANCE_IDENTITY": "field_5796", // link_row
       "REHEARSAL_REQUIREMENTS": "field_6004", // link_row
       "SCENE_ASSIGNMENTS": "field_6042", // link_row
+      "HEADSHOT": "field_7924", // lookup
     }
   },
   BLUEPRINT_ROLES: {
@@ -418,6 +420,7 @@ export const DB = {
       "COMMITMENT_TO_CHARACTER": "field_6106", // boolean
       "PAID_FEES": "field_6107", // boolean
       "MEASUREMENTS_TAKEN": "field_6108", // boolean
+      "AUDITION_SLOTS": "field_7931", // link_row
     }
   },
   ASSETS: {
@@ -608,6 +611,20 @@ export const DB = {
       "SPACES": "field_7921", // text
       "RATES": "field_7922", // text
       "SLOTS": "field_7923", // text
+      "AUDITION_SLOTS": "field_7935", // text
+    }
+  },
+  AUDITION_SLOTS: {
+    ID: "772",
+    FIELDS: {
+      "TIME_LABEL": "field_7925", // text
+      "PRODUCTION": "field_7926", // link_row
+      "DATE_TIME": "field_7927", // date
+      "CAPACITY": "field_7929", // number
+      "AUDITIONS_LINKED": "field_7930", // link_row
+      "TAKEN": "field_7932", // count
+      "REMAINING": "field_7933", // formula
+      "IS_FULL": "field_7934", // formula
     }
   },
 };
