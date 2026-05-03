@@ -72,7 +72,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nSex: ${formData.sex || 'N/A'}\nHair: ${formData.hairColor || 'N/A'}\nHeight: ${formData.heightFt}'${formData.heightIn}"\nRoles: ${formData.preferredRoles || 'N/A'} (Accept Any: ${formData.acceptAnyRole ? 'Yes' : 'No'})\nOff-Book: ${formData.offBookAgreement ? 'Yes' : 'No'}\nParent Help: ${formData.parentCommitteeAgreement ? 'Yes' : 'No'}\nSignatures: ${formData.studentSignature} (S), ${formData.parentSignature} (P)`;
+    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}`;
 
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
@@ -82,8 +82,17 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
         [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
         [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-        // 🟢 FIXED: Headshot is successfully REMOVED from the Audition Payload so Baserow won't crash!
-        [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}\n\nTrack: ${formData.musicFileUrl || 'None'}`,
+        
+        // 🟢 Writing directly to the new strongly-typed DB columns!
+        [DB.AUDITIONS.FIELDS.HAIR_COLOR]: formData.hairColor || "",
+        [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: formData.acceptAnyRole || false,
+        [DB.AUDITIONS.FIELDS.OFF_BOOK_AGREEMENT]: formData.offBookAgreement || false,
+        [DB.AUDITIONS.FIELDS.PARENT_HELP_AGREEMENT]: formData.parentCommitteeAgreement || false,
+        [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature} (S), ${formData.parentSignature} (P)`,
+        [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
+
+        // Notes and conflicts fallback
+        [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}`,
       })
     });
 
@@ -93,19 +102,37 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       try {
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
+
+        // 🟢 Generate the Practice HTML block if links are present
+        let practiceMaterialsHtml = "";
+        if (formData.practiceKaraoke || formData.practiceLyrics) {
+          practiceMaterialsHtml = `
+            <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bfdbfe;">
+              <h3 style="color: #1e3a8a; margin-top: 0;">🎤 Practice Materials</h3>
+              <p style="font-size: 14px; color: #1e40af; margin-bottom: 10px;">Since you selected an easy-start song, here are your links to practice!</p>
+              ${formData.practiceKaraoke ? `<p style="margin: 5px 0;"><a href="${formData.practiceKaraoke}" style="color: #2563eb; font-weight: bold; text-decoration: none;">▶️ YouTube Karaoke Track</a></p>` : ''}
+              ${formData.practiceLyrics ? `<p style="margin: 5px 0;"><a href="${formData.practiceLyrics}" style="color: #2563eb; font-weight: bold; text-decoration: none;">📄 Sheet Music / Lyrics</a></p>` : ''}
+            </div>
+          `;
+        }
+
         await resend.emails.send({
           from: 'Casting Team <casting@open-backstage.org>',
           to: lookupEmail,
-          subject: `✨ Audition Confirmed: ${firstName} for ${showTitle}!`,
+          subject: `🎉 Audition Confirmed: ${firstName} for ${showTitle}!`,
           html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-                <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">Wish Granted! 🌟</h2>
+                <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">Wish Granted! ✨</h2>
                 <p style="font-size: 16px; color: #374151;">Hi there,</p>
                 <p style="font-size: 16px; color: #374151;">This email confirms that <strong>${formData.fullName}</strong> is successfully registered to audition for <strong>${showTitle}</strong>.</p>
+                
                 <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p style="margin: 0 0 10px 0;"><strong>Actor:</strong> ${formData.fullName}</p>
                     <p style="margin: 0 0 10px 0;"><strong>Time:</strong> ${slotLabel}</p>
                     <p style="margin: 0 0 10px 0;"><strong>Song:</strong> ${formData.songTitle || "Custom Track Uploaded"}</p>
                 </div>
+
+                ${practiceMaterialsHtml}
+
                 <p style="font-size: 16px; color: #374151;">Break a leg!</p>
                 <p style="font-size: 14px; color: #6b7280; font-weight: bold; text-transform: uppercase;">- The Casting Team</p>
             </div>`
@@ -135,7 +162,6 @@ export async function cancelAudition(tenant: string, auditionId: number) {
   }
 }
 
-// 🟢 NEW FUNCTION: Saves the director's scores from the ScoringSidebar
 export async function saveAuditionScore(
   tenant: string, 
   auditionId: number, 

@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
   Send, UploadCloud, Music, FileAudio, Download, 
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
-  Clock, MessageSquare, Printer, Plus, User, Trash2
+  Clock, MessageSquare, Printer, Plus, User, Trash2, FileText
 } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
@@ -78,21 +78,28 @@ const REHEARSAL_DATES = [
   { id: "july_23", label: "July 23 (Tech)", time: "4pm - 9pm", type: "mandatory" },
 ];
 
+// 🟢 ADDED KARAOKE & LYRIC LINKS
 const PRESET_SONGS = [
   { 
     id: "reflection", 
     title: "Reflection (Mulan)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/mulan-reflection-piano.mp3" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/mulan-reflection-piano.mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf"
   },
   { 
     id: "consider_yourself", 
     title: "Consider Yourself (Oliver!)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-consideryourself-piano.mp3" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-consideryourself-piano.mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf"
   },
   { 
     id: "tomorrow", 
     title: "Tomorrow (Annie)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/annie-tomorrow-piano.mp3" 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/annie-tomorrow-piano.mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf"
   },
 ];
 
@@ -133,7 +140,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const headshotInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll refs
   const sigSectionRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
 
@@ -165,7 +171,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   }, [view]);
 
-  // FIX: Wrapped in try-catch and omit headshotUrl to prevent QuotaExceeded crashes
   useEffect(() => {
     if (view === "wizard" && currentStep > maxStepReached) setMaxStepReached(currentStep);
     if (view === "wizard" && currentStep > 0 && !isSuccess) {
@@ -259,6 +264,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     return data.publicUrl;
   };
 
+  const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -273,7 +280,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       let finalHeadshotUrl = formData.headshotUrl;
       let finalMusicUrl = null;
 
-      // FIX: Use native fetch.blob() to prevent atob() array crashes on large files
       if (formData.headshotUrl && formData.headshotUrl.startsWith('data:')) {
         const res = await fetch(formData.headshotUrl);
         const blob = await res.blob();
@@ -284,12 +290,16 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type || 'audio/mpeg');
       }
 
+      // 🟢 PASS THE LINKS INTO THE PAYLOAD FOR THE EMAIL TEMPLATE!
       const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
         musicFileUrl: finalMusicUrl,
         studentSignature: formData.studentSignature ? "Agreed via Click" : "Missing",
         parentSignature: formData.parentSignature ? "Agreed via Click" : "Missing",
+        practiceAudio: selectedPreset?.audioUrl || null,
+        practiceKaraoke: selectedPreset?.karaokeUrl || null,
+        practiceLyrics: selectedPreset?.lyricsUrl || null
       };
 
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
@@ -308,7 +318,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   };
 
-  const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
   const calculatedAge = calculateAge(formData.dob);
   const selectedSlot = slots.find(s => s.id === formData.auditionSlotId);
   const firstName = formData.fullName.split(" ")[0] || "Actor";
@@ -329,13 +338,33 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </p>
           </div>
 
+          {/* 🟢 PRACTICE MATERIALS BOX */}
+          {formData.usePresetSong && selectedPreset && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-6 rounded-3xl mb-8 print:hidden animate-in zoom-in-95 text-left shadow-inner">
+               <h3 className="font-black text-blue-900 dark:text-blue-400 uppercase italic tracking-widest text-sm mb-3 flex items-center gap-2">
+                  <Mic size={16} /> Practice Materials
+               </h3>
+               <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-4">
+                  Since you chose an easy-start song, here are your resources to practice before the audition! <span className="opacity-75">(We also sent these in your email).</span>
+               </p>
+               <div className="flex flex-col gap-3">
+                   <a href={selectedPreset.karaokeUrl || selectedPreset.audioUrl} target="_blank" rel="noreferrer" className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-4 py-3.5 rounded-xl font-black text-blue-600 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-sm">
+                      <Youtube size={16} /> YouTube Karaoke Track
+                   </a>
+                   <a href={selectedPreset.lyricsUrl || "#"} target="_blank" rel="noreferrer" className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-4 py-3.5 rounded-xl font-black text-blue-600 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-sm">
+                      <FileText size={16} /> Sheet Music / Lyrics
+                   </a>
+               </div>
+            </div>
+          )}
+
           {isGuest && !upgradeSuccess && (
             <div className="bg-zinc-50 dark:bg-zinc-950 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 mb-8 print:hidden animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-3 mb-4 justify-center">
                   <Sparkles size={18} className="text-blue-600" />
                   <h3 className="font-black text-zinc-900 dark:text-white uppercase italic tracking-widest text-sm">Skip This Next Time</h3>
                </div>
-               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">Set a password to save your family&apos;s profile for future shows and classes.</p>
+               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">Set a password to save your family's profile for future shows and classes.</p>
                <div className="flex gap-2">
                  <input 
                    type="password" 
@@ -402,7 +431,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               <div className="space-y-2">
                  <p><strong>Parent:</strong> Clickwrap Verified</p>
                  <p><strong>Email:</strong> {lookupData.email}</p>
-                 <p><strong>Height:</strong> {formData.heightFt}&apos;{formData.heightIn}&quot;</p>
+                 <p><strong>Height:</strong> {formData.heightFt}'{formData.heightIn}"</p>
               </div>
            </div>
         </div>
@@ -622,12 +651,12 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4 flex items-center gap-2"><Ruler size={16} /> Height</label>
                         <div className="flex gap-2 sm:gap-4">
                           {["4","5","6"].map(ft => (
-                            <button key={ft} type="button" onClick={() => updateForm({ heightFt: ft })} className={`flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${formData.heightFt === ft ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-400"}`}>{ft}&apos;</button>
+                            <button key={ft} type="button" onClick={() => updateForm({ heightFt: ft })} className={`flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${formData.heightFt === ft ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-400"}`}>{ft}'</button>
                           ))}
                         </div>
                         <div className="grid grid-cols-6 gap-1 sm:gap-2">
                           {INCHES.map(inch => (
-                            <button key={inch} type="button" onClick={() => updateForm({ heightIn: inch })} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100 dark:border-zinc-800"}`}>{inch}&quot;</button>
+                            <button key={inch} type="button" onClick={() => updateForm({ heightIn: inch })} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100 dark:border-zinc-800"}`}>{inch}"</button>
                           ))}
                         </div>
                       </div>
@@ -646,16 +675,33 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                 {currentStep === 3 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Performance</h2>
-                    <div className={`p-6 sm:p-10 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 transition-all cursor-pointer flex gap-4 sm:gap-8 items-start ${formData.usePresetSong ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20" : "bg-zinc-50 border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800"}`} onClick={() => updateForm({ usePresetSong: !formData.usePresetSong, songTitle: "" })}>
-                      <input type="checkbox" checked={formData.usePresetSong} readOnly className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 rounded-lg mt-1" />
-                      <div>
-                        <h4 className="font-black text-zinc-900 dark:text-white text-lg sm:text-2xl uppercase tracking-tighter italic">Trouble Deciding?</h4>
-                        <p className="text-zinc-500 dark:text-zinc-400 font-medium mt-1 text-sm sm:text-lg">Choose an &quot;easy-start&quot; song from the show. We&apos;ll have the music ready!</p>
-                      </div>
+                    
+                    {/* 🟢 NEW: CLEAR A/B SPLIT FOR UPLOAD VS PRESET */}
+                    <div className="flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-2 rounded-[1.5rem] sm:rounded-[2rem]">
+                      <button
+                        type="button"
+                        onClick={() => updateForm({ usePresetSong: false, songTitle: "", musicFileName: "" })}
+                        className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${!formData.usePresetSong ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                      >
+                        <UploadCloud size={24} className={!formData.usePresetSong ? "text-blue-600" : "opacity-50"} />
+                        Upload My Own
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateForm({ usePresetSong: true, songTitle: "", musicFileName: "" })}
+                        className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${formData.usePresetSong ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                      >
+                        <Sparkles size={24} className={formData.usePresetSong ? "text-white" : "opacity-50"} />
+                        Easy-Start Preset
+                      </button>
                     </div>
 
                     {formData.usePresetSong ? (
                       <div className="space-y-6 animate-in slide-in-from-top-4">
+                        <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm sm:text-base text-center max-w-xl mx-auto">
+                          Choose an "easy-start" song from the show. We will provide the backing track at your audition so you don't have to upload anything!
+                        </p>
+
                         {PRESET_SONGS.length > 6 ? (
                           <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 shadow-sm">
                             <select
@@ -685,20 +731,13 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                              <CheckCircle2 size={32} className="text-green-500 hidden md:block" />
                              <div className="flex-1 text-center md:text-left">
                                 <h3 className="font-black text-green-900 dark:text-green-400 uppercase text-lg sm:text-2xl italic">Music Secured</h3>
-                                <p className="text-green-700/80 dark:text-green-500/80 text-sm sm:text-lg">The track will be waiting at the sound booth. Practice below!</p>
-                             </div>
-                             
-                             <div className="shrink-0 flex flex-col items-center gap-3 w-full md:w-auto">
-                                <audio controls className="h-10 w-full sm:w-[250px]" src={selectedPreset.audioUrl} />
-                                <a href={selectedPreset.audioUrl} download target="_blank" className="bg-green-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:bg-green-700 transition-colors w-full shadow-md active:scale-95">
-                                  <Download size={16} /> Download MP3
-                                </a>
+                                <p className="text-green-700/80 dark:text-green-500/80 text-sm sm:text-lg">The track will be waiting at the sound booth. You'll get practice links when you submit!</p>
                              </div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-4 animate-in slide-in-from-top-4">
                          <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Song Title</label>
                          <input type="text" value={formData.songTitle} onChange={(e) => updateForm({ songTitle: e.target.value })} className="w-full rounded-xl border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 text-zinc-900 dark:text-white font-black text-xl sm:text-3xl italic outline-none shadow-inner" placeholder="E.g. On My Own" />
                          
