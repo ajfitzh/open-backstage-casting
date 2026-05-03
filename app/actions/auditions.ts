@@ -72,7 +72,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    // 🟢 FORMAT ALL THE "MISSING" DATA INTO A CLEAN STRING
     const extraDataString = `Grade: ${formData.grade || 'N/A'}\nSex: ${formData.sex || 'N/A'}\nHair: ${formData.hairColor || 'N/A'}\nHeight: ${formData.heightFt}'${formData.heightIn}"\nRoles: ${formData.preferredRoles || 'N/A'} (Accept Any: ${formData.acceptAnyRole ? 'Yes' : 'No'})\nOff-Book: ${formData.offBookAgreement ? 'Yes' : 'No'}\nParent Help: ${formData.parentCommitteeAgreement ? 'Yes' : 'No'}\nSignatures: ${formData.studentSignature} (S), ${formData.parentSignature} (P)`;
 
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
@@ -83,15 +82,13 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
         [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
         [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-        [DB.AUDITIONS.FIELDS.HEADSHOT]: formData.headshotUrl, 
-        // 🟢 SAVING ALL EXTRA DATA TO ADMIN NOTES
+        // 🟢 FIXED: Headshot is successfully REMOVED from the Audition Payload so Baserow won't crash!
         [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}\n\nTrack: ${formData.musicFileUrl || 'None'}`,
       })
     });
 
     if (!audition || audition.error) return { success: false, error: "Database rejected the audition record." };
 
-    // 5. SEND THE CONFIRMATION EMAIL (Unchanged)
     if (audition?.id) {
       try {
         const show = await getShowById(tenant, productionId);
@@ -122,15 +119,12 @@ export async function submitRealAudition(tenant: string, productionId: number, f
   }
 }
 
-// 🟢 NEW FUNCTION: Allows parents to unregister their kids from the Hub
 export async function cancelAudition(tenant: string, auditionId: number) {
   try {
     const tables = await getTenantTableConfig(tenant);
     const response = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
       method: "DELETE"
     });
-    
-    // Baserow returns a 204 No Content on successful deletion
     if (response?.error) {
       return { success: false, error: "Database rejected the cancellation." };
     }
@@ -140,6 +134,7 @@ export async function cancelAudition(tenant: string, auditionId: number) {
     return { success: false, error: "Failed to cancel audition." };
   }
 }
+
 // 🟢 NEW FUNCTION: Saves the director's scores from the ScoringSidebar
 export async function saveAuditionScore(
   tenant: string, 
@@ -150,8 +145,7 @@ export async function saveAuditionScore(
   try {
     const tables = await getTenantTableConfig(tenant);
 
-    // Figure out which notes field this specific judge is allowed to edit
-    let notesField = DB.AUDITIONS.FIELDS.ACTING_NOTES; // Default for Director
+    let notesField = DB.AUDITIONS.FIELDS.ACTING_NOTES;
     if (judgeRole === "Music") notesField = DB.AUDITIONS.FIELDS.MUSIC_NOTES;
     if (judgeRole === "Drop-In") notesField = DB.AUDITIONS.FIELDS.DROP_IN_NOTES;
     if (judgeRole === "Admin") notesField = DB.AUDITIONS.FIELDS.ADMIN_NOTES;
@@ -162,7 +156,6 @@ export async function saveAuditionScore(
       [DB.AUDITIONS.FIELDS.DANCE_SCORE]: scores.dance,
     };
 
-    // Only update the notes if they actually typed something, so we don't accidentally erase old notes
     if (scores.notes !== undefined) {
        payload[notesField] = scores.notes;
     }
