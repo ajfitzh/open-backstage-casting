@@ -53,9 +53,12 @@ export default auth((req) => {
   // ==========================================
   if (tenant) {
     const isOnLoginPage = pathname.startsWith("/login");
+    
+    // 🟢 Identify public tenant routes that do not require auth!
+    const isPublicTenantRoute = pathname.startsWith("/audition-form");
 
-    // Protect all standard tenant routes
-    if (!isLoggedIn && !isOnLoginPage) {
+    // Protect all standard tenant routes EXCEPT login and public routes
+    if (!isLoggedIn && !isOnLoginPage && !isPublicTenantRoute) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
@@ -74,6 +77,6 @@ export default auth((req) => {
 })
 
 export const config = {
-  // 🟢 Added |audition-form to the exclusion list
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|audition-form).*)"],
+  // 🟢 Removed audition-form from here so the middleware CAN process the subdomain rewrite!
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
