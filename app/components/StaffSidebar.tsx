@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from "next-auth/react"; // Added to check user groups
+// 🟢 REMOVED: useSession (This was the cause of the crash)
 import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react';
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -14,18 +14,16 @@ import { useSidebar } from '@/app/components/SidebarShell';
 
 interface StaffSidebarProps {
   activeProductionId?: string | number;
+  userGroups?: string[]; // 🟢 Added this prop
 }
 
-export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) {
+export default function StaffSidebar({ activeProductionId, userGroups = [] }: StaffSidebarProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
-  // Accordion State for Expanded Mode
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  // Auto-expand the group if we are on a child route
   useEffect(() => {
     NAV_CONFIG.forEach(section => {
         section.items.forEach((item: any) => {
@@ -43,7 +41,6 @@ export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) 
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  // Helper to process dynamic URLs (e.g., replacing /active/ with /94/)
   const getFinalHref = (href: string) => {
     if (!href) return "/";
     return activeProductionId 
@@ -73,22 +70,13 @@ export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) 
       </Link>
 
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
-        
         {NAV_CONFIG.map((section, idx) => {
-           // Section Level Permission Check
            if (section.permission && !hasPermission(globalRole, productionRole, section.permission as Permission)) return null;
 
-           // Dashboard Special Case
            if (section.title === "Dashboard") {
                return (
                   <div key={idx} className="space-y-1">
-                     <NavItem 
-                        href="/" 
-                        icon={<Home size={18}/>} 
-                        label="Dashboard" 
-                        active={pathname === '/'} 
-                        isCollapsed={isCollapsed} 
-                     />
+                     <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={pathname === '/'} isCollapsed={isCollapsed} />
                   </div>
                )
            }
@@ -104,24 +92,18 @@ export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) 
 
                 <div className="space-y-1">
                     {section.items.map((item: any) => {
-                        // 🟢 THE FIX: Check both Permissions AND RBAC Groups
-                        const userGroups = (session?.user as any)?.groups || [];
+                        // 🟢 USE THE PROPS: Check permissions and groups
                         const canSeeByPermission = !item.permission || hasPermission(globalRole, productionRole, item.permission as Permission);
                         const canSeeByGroup = item.group && userGroups.includes(item.group);
 
-                        // If they have neither permission nor the required group, hide the item
                         if (!canSeeByPermission && !canSeeByGroup) return null;
 
                         const itemHref = getFinalHref(item.href);
 
-                        // ------------------------------------------------
-                        // COLLAPSIBLE GROUP LOGIC
-                        // ------------------------------------------------
                         if (item.isCollapsible && item.children) {
                             const isGroupOpen = openGroups[item.label] || false;
                             const isGroupActive = item.children.some((child: any) => pathname.includes(child.href));
 
-                            // Filter children based on permission or group
                             const validChildren = item.children.filter((child: any) => {
                                 const childPermission = !child.permission || hasPermission(globalRole, productionRole, child.permission as Permission);
                                 const childGroup = child.group && userGroups.includes(child.group);
@@ -147,32 +129,18 @@ export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) 
                                 <div key={item.label}>
                                     <button 
                                         onClick={() => toggleGroup(item.label)}
-                                        className={`
-                                            w-full flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all
-                                            justify-between
-                                            ${isGroupActive ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
-                                        `}
+                                        className={`w-full flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all justify-between ${isGroupActive ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
                                     >
                                         <div className="flex items-center">
                                             <item.icon size={18} className={`shrink-0 ${isGroupActive ? "text-purple-400" : "text-zinc-500"}`}/>
-                                            <span className="ml-3 whitespace-nowrap overflow-hidden transition-all duration-300">
-                                                {item.label}
-                                            </span>
+                                            <span className="ml-3 truncate">{item.label}</span>
                                         </div>
                                         {isGroupOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                                     </button>
-                                    
                                     {isGroupOpen && (
                                         <div className="mt-1 space-y-1 ml-4 pl-4 border-l border-white/10 animate-in slide-in-from-left-2 duration-200">
                                             {validChildren.map((child: any) => (
-                                                <SubNavItem 
-                                                    key={child.href}
-                                                    href={getFinalHref(child.href)} 
-                                                    icon={<child.icon size={14}/>} 
-                                                    label={child.label} 
-                                                    active={pathname === getFinalHref(child.href)} 
-                                                    isCollapsed={false}
-                                                />
+                                                <SubNavItem key={child.href} href={getFinalHref(child.href)} icon={<child.icon size={14}/>} label={child.label} active={pathname === getFinalHref(child.href)} isCollapsed={false} />
                                             ))}
                                         </div>
                                     )}
@@ -180,45 +148,24 @@ export default function StaffSidebar({ activeProductionId }: StaffSidebarProps) 
                             );
                         }
 
-                        // ------------------------------------------------
-                        // STANDARD ITEM
-                        // ------------------------------------------------
                         return (
-                            <NavItem 
-                                key={itemHref}
-                                href={itemHref} 
-                                icon={<item.icon size={18}/>} 
-                                label={item.label} 
-                                active={pathname === itemHref} 
-                                isCollapsed={isCollapsed}
-                            />
+                            <NavItem key={itemHref} href={itemHref} icon={<item.icon size={18}/>} label={item.label} active={pathname === itemHref} isCollapsed={isCollapsed} />
                         );
                     })}
                 </div>
              </div>
            );
         })}
-
       </div>
 
       <div className="p-3 border-t border-white/5">
-        <NavItem 
-            href="/settings" 
-            icon={<Settings size={18}/>} 
-            label="System Settings" 
-            active={pathname === '/settings'} 
-            isCollapsed={isCollapsed}
-        />
+        <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={pathname === '/settings'} isCollapsed={isCollapsed} />
       </div>
     </nav>
   );
 }
 
-// ... (FlyoutMenu, NavItem, SubNavItem, and SidebarTooltip components remain exactly as they were)
-// ----------------------------------------------------------------------
-// COMPONENT: FLYOUT MENU (The "Industry Standard" Fix)
-// ----------------------------------------------------------------------
-
+// ... (Sub-components: NavItem, FlyoutMenu, etc. remain the same)
 function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     const [isOpen, setIsOpen] = useState(false);
     const [coords, setCoords] = useState({ x: 0, y: 0 });
