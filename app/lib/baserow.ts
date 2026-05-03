@@ -279,7 +279,28 @@ function mapShow(row: any) {
     workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [] 
   };
 }
+export async function getAuditionProduction(tenant: string) {
+  const tables = await getTenantTableConfig(tenant);
+  const F = DB.PRODUCTIONS.FIELDS;
 
+  console.log(`🔍 [Sync] Checking for strictly 'Upcoming' Show for Auditions in ${tenant}...`);
+  
+  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" });
+  
+  if (!Array.isArray(allData) || allData.length === 0) return null;
+
+  // Sort by ID descending
+  const sortedShows = allData.sort((a, b) => b.id - a.id);
+
+  // STRICT CHECK: Only return if the status is exactly "Upcoming"
+  const upcomingShow = sortedShows.find(row => safeGet(row[F.STATUS]) === "Upcoming");
+
+  if (upcomingShow) {
+     return mapShow(upcomingShow);
+  }
+
+  return null; 
+}
 export async function getActiveProduction(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
