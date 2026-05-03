@@ -41,8 +41,8 @@ interface Props {
   tenant: string;
   productionId: number;
   productionTitle: string;
-  slots: AuditionSlot[]; 
-  initialEmail?: string; //// 🟢 Injected directly from Baserow
+  slots: AuditionSlot[];
+  initialEmail?: string; 
 }
 
 // --- Constants ---
@@ -67,10 +67,23 @@ const REHEARSAL_DATES = [
   { id: "july_23", label: "July 23 (Tech)", time: "4pm - 9pm", type: "mandatory" },
 ];
 
+// 🟢 THE NEW GENERIC "EASY" PRESET SONGS WITH REAL LINKS
 const PRESET_SONGS = [
-  { id: "giants", title: "Giants in the Sky", youtube: "https://www.youtube.com/results?search_query=giants+in+the+sky+karaoke" },
-  { id: "steps", title: "On the Steps of the Palace", youtube: "https://www.youtube.com/results?search_query=on+the+steps+of+the+palace+karaoke" },
-  { id: "agony", title: "Agony", youtube: "https://www.youtube.com/results?search_query=agony+into+the+woods+karaoke" },
+  { 
+    id: "reflection", 
+    title: "Reflection (Mulan)", 
+    youtube: "https://youtu.be/F4B5TGE2Gpw" 
+  },
+  { 
+    id: "consider_yourself", 
+    title: "Consider Yourself (Oliver!)", 
+    youtube: "https://youtu.be/tLwK2q1-d70" 
+  },
+  { 
+    id: "tomorrow", 
+    title: "Tomorrow (Annie)", 
+    youtube: "https://youtu.be/U6_u5N220Fk" 
+  },
 ];
 
 const INITIAL_DATA: AuditionFormData = {
@@ -86,23 +99,19 @@ const INITIAL_DATA: AuditionFormData = {
 
 export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
-// 🟢 If they are logged in, skip Step 0 and go straight to the form!
+
   const [currentStep, setCurrentStep] = useState(initialEmail ? 1 : 0); 
   const [maxStepReached, setMaxStepReached] = useState(initialEmail ? 1 : 0);
-  
-  // 🟢 Pre-fill the lookupData with their logged-in email
-  const [lookupData, setLookupData] = useState({ email: initialEmail || "", dob: "" });
   const [formData, setFormData] = useState<AuditionFormData>(INITIAL_DATA);
+  const [lookupData, setLookupData] = useState({ email: initialEmail || "", dob: "" });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
-  // Opt-in account creation state
   const [password, setPassword] = useState("");
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
 
-  // Track the actual File object for S3 upload
   const [audioFile, setAudioFile] = useState<File | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -169,7 +178,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   };
 
-  // --- S3 Upload Helpers ---
   const dataURLtoBlob = (dataurl: string) => {
     let arr = dataurl.split(','), match = arr[0].match(/:(.*?);/), mime = match ? match[1] : 'image/jpeg',
     bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
@@ -194,7 +202,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     return data.publicUrl;
   };
 
-  // --- Final Submission ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
@@ -203,25 +210,21 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       let finalHeadshotUrl = formData.headshotUrl;
       let finalMusicUrl = null;
 
-      // 1. Upload Captured/Uploaded Headshot to S3
       if (formData.headshotUrl && formData.headshotUrl.startsWith('data:')) {
         const blob = dataURLtoBlob(formData.headshotUrl);
         finalHeadshotUrl = await uploadToSpaces(blob, `headshot-${Date.now()}.jpg`, 'image/jpeg');
       }
 
-      // 2. Upload MP3 track if provided
       if (!formData.usePresetSong && audioFile) {
         finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type);
       }
 
-      // 3. Prepare final data payload
       const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
         musicFileUrl: finalMusicUrl
       };
 
-      // 4. Send to Baserow via Server Action
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
 
       if (result?.success) {
@@ -259,7 +262,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </p>
           </div>
 
-          {/* 🟢 THE OPT-IN ACCOUNT UPGRADE */}
           {!upgradeSuccess ? (
             <div className="bg-zinc-50 dark:bg-zinc-950 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 mb-8 print:hidden animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-3 mb-4 justify-center">
@@ -312,7 +314,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
           </div>
         </div>
         
-        {/* Print Layout */}
         <div className="hidden print:block fixed inset-0 bg-white p-10 text-zinc-900">
            <h1 className="text-3xl font-black uppercase italic border-b-4 border-black pb-4 mb-6">Audition Record: {formData.fullName}</h1>
            <div className="grid grid-cols-2 gap-8 text-sm">
