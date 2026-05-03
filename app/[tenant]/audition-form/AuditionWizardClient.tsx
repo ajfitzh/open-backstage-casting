@@ -9,7 +9,8 @@ import {
   Clock, MessageSquare, Printer, Plus, User
 } from "lucide-react";
 import { submitRealAudition } from "@/app/actions/auditions";
-import { getExistingAuditions } from "@/app/lib/baserow"; // Import from lib instead
+// 🟢 FIXED IMPORT: Moved to lib/baserow to prevent 500 error!
+import { getExistingAuditions } from "@/app/lib/baserow"; 
 import { upgradeGuestToUser } from "@/app/actions/auth";
 
 // --- Types ---
@@ -109,7 +110,6 @@ const INITIAL_DATA: AuditionFormData = {
 export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
 
-  // 🟢 The New View State: "login" -> "hub" -> "wizard"
   const [view, setView] = useState<"login" | "hub" | "wizard">(initialEmail ? "hub" : "login");
   const [existingAuditions, setExistingAuditions] = useState<ExistingAudition[]>(initialExistingAuditions || []);
 
@@ -153,7 +153,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setIsCameraOpen(false);
   }, []);
 
-  // 🟢 Load drafted form data ONLY if we are actively in the wizard
   useEffect(() => {
     if (view === "wizard") {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -175,7 +174,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const handleNext = () => setCurrentStep((p) => Math.min(p + 1, totalSteps));
   const handlePrev = () => setCurrentStep((p) => Math.max(p - 1, 0));
 
-  // 🟢 Fetch auditions when a guest submits their email
   const handleUnlockProfile = async () => {
     setIsProcessing(true);
     const found = await getExistingAuditions(tenant, lookupData.email, productionId);
@@ -288,7 +286,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const selectedSlot = slots.find(s => s.id === formData.auditionSlotId);
   const firstName = formData.fullName.split(" ")[0] || "Actor";
 
-if (isSuccess) {
+  if (isSuccess) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 pb-20">
         <div className="bg-white dark:bg-zinc-900 p-8 sm:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800 print:shadow-none print:border-none">
@@ -304,7 +302,6 @@ if (isSuccess) {
             </p>
           </div>
 
-          {/* 🟢 ONLY show the password box if they are a Guest! */}
           {isGuest && !upgradeSuccess && (
             <div className="bg-zinc-50 dark:bg-zinc-950 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 mb-8 print:hidden animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-3 mb-4 justify-center">
@@ -343,7 +340,6 @@ if (isSuccess) {
              </div>
           )}
 
-          {/* 🟢 NEW SUCCESS SCREEN BUTTONS (Added the 'Add Another Student' button!) */}
           <div className="space-y-3 print:hidden">
             <button 
               onClick={startNewAudition}
@@ -390,15 +386,13 @@ if (isSuccess) {
   return (
     <div className="py-4 px-2 sm:px-4 flex flex-col items-center justify-center font-sans overflow-x-hidden">
       <div className="max-w-3xl w-full space-y-4">
-<div className="flex items-center justify-between px-2 shrink-0">
-          {/* 🟢 Changed from a Link to a button that returns to the Hub */}
-          <button onClick={() => setView(initialEmail ? "hub" : "login")} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+        <div className="flex items-center justify-between px-2 shrink-0">
+          <Link href={`/`} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
             <ChevronLeft size={16} /> Exit
-          </button>
+          </Link>
           <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>
         </div>
 
-        {/* 🟢 VIEW: EMAIL LOGIN */}
         {view === "login" && (
           <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
              <div className="text-center mb-6 sm:mb-8">
@@ -416,7 +410,6 @@ if (isSuccess) {
           </div>
         )}
 
-        {/* 🟢 VIEW: PARENT HUB */}
         {view === "hub" && (
           <div className="bg-white dark:bg-zinc-900 shadow-xl rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-10 max-w-2xl mx-auto border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-300">
              <div className="text-center mb-8">
@@ -457,7 +450,6 @@ if (isSuccess) {
           </div>
         )}
 
-        {/* 🟢 VIEW: WIZARD */}
         {view === "wizard" && (
           <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-[1.5rem] sm:rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col sm:max-h-[85vh]">
             <div className="bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
@@ -481,84 +473,82 @@ if (isSuccess) {
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <div className="flex flex-col md:flex-row gap-8 sm:gap-12">
                       <div className="w-full md:w-64 space-y-4">
-<div className="flex gap-2">
-  {isCameraOpen ? (
-    <>
-      {/* 📸 CAPTURE SNAPSHOT */}
-      <button 
-        type="button" 
-        onClick={capturePhoto} 
-        className="flex-1 bg-blue-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
-      >
-         <Camera size={14} /> Capture
-      </button>
-      
-      {/* ❌ CANCEL / STOP CAMERA */}
-      <button 
-        type="button" 
-        onClick={stopCamera} 
-        className="px-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
-      >
-         Cancel
-      </button>
-    </>
-  ) : (
-    <>
-      {/* 🔄 OPEN CAMERA (or RETAKE) */}
-      <button 
-        type="button" 
-        onClick={() => { 
-          setIsCameraOpen(true); 
-          setTimeout(() => {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-              .then(s => { if(videoRef.current) videoRef.current.srcObject = s; });
-          }, 100); 
-        }} 
-        className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-md hover:bg-blue-600 hover:text-white transition-colors"
-      >
-         <Camera size={14} /> {formData.headshotUrl ? "Retake Photo" : "Camera"}
-      </button>
+                         <div className="aspect-[4/5] bg-zinc-100 dark:bg-zinc-950 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 border-dashed border-zinc-300 dark:border-zinc-800 overflow-hidden relative shadow-inner group">
+                            {isCameraOpen ? (
+                               <>
+                                 <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
+                                 <canvas ref={canvasRef} className="hidden" />
+                               </>
+                            ) : formData.headshotUrl ? (
+                              <img src={formData.headshotUrl} alt="Headshot" className="w-full h-full object-cover" />
+                            ) : (
+                               <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4">
+                                  <ImageIcon size={48} className="opacity-20" />
+                                  <p className="text-[9px] font-black uppercase tracking-widest">Headshot Required</p>
+                               </div>
+                            )}
+                         </div>
 
-      {/* 📁 UPLOAD (Only show if no headshot taken yet, to keep UI clean) */}
-      {!formData.headshotUrl && (
-        <button 
-          type="button" 
-          onClick={() => headshotInputRef.current?.click()} 
-          className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
-        >
-          Upload
-        </button>
-      )}
-    </>
-  )}
-  <input type="file" ref={headshotInputRef} className="hidden" accept="image/*" onChange={(e) => {
-     if(e.target.files?.[0]) {
-        const reader = new FileReader();
-        reader.onload = (f) => updateForm({ headshotUrl: f.target?.result as string });
-        reader.readAsDataURL(e.target.files[0]);
-     }
-  }} />
-</div>
+                         {/* 🟢 FIXED CAMERA UI */}
                          <div className="flex gap-2">
-                            <button type="button" onClick={isCameraOpen ? capturePhoto : () => { 
-                              setIsCameraOpen(true); 
-                              setTimeout(() => {
-                                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-                                  .then(s => { if(videoRef.current) videoRef.current.srcObject = s; });
-                              }, 100); 
-                            }} className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2">
-                               <Camera size={14} /> {isCameraOpen ? "Capture" : "Camera"}
-                            </button>
-                            <button type="button" onClick={() => headshotInputRef.current?.click()} className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200">Upload</button>
-                            <input type="file" ref={headshotInputRef} className="hidden" accept="image/*" onChange={(e) => {
-                               if(e.target.files?.[0]) {
-                                  const reader = new FileReader();
-                                  reader.onload = (f) => updateForm({ headshotUrl: f.target?.result as string });
-                                  reader.readAsDataURL(e.target.files[0]);
-                               }
-                            }} />
+                           {isCameraOpen ? (
+                             <>
+                               {/* CAPTURE BUTTON */}
+                               <button 
+                                 type="button" 
+                                 onClick={capturePhoto} 
+                                 className="flex-1 bg-blue-600 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
+                               >
+                                  <Camera size={14} /> Capture
+                               </button>
+                               {/* CANCEL BUTTON */}
+                               <button 
+                                 type="button" 
+                                 onClick={stopCamera} 
+                                 className="px-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
+                               >
+                                  Cancel
+                               </button>
+                             </>
+                           ) : (
+                             <>
+                               {/* OPEN CAMERA / RETAKE BUTTON */}
+                               <button 
+                                 type="button" 
+                                 onClick={() => { 
+                                   setIsCameraOpen(true); 
+                                   setTimeout(() => {
+                                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                                       .then(s => { if(videoRef.current) videoRef.current.srcObject = s; });
+                                   }, 100); 
+                                 }} 
+                                 className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-md hover:bg-blue-600 hover:text-white transition-colors"
+                               >
+                                  <Camera size={14} /> {formData.headshotUrl ? "Retake Photo" : "Camera"}
+                               </button>
+                               {/* UPLOAD BUTTON (Hides after photo taken) */}
+                               {!formData.headshotUrl && (
+                                 <button 
+                                   type="button" 
+                                   onClick={() => headshotInputRef.current?.click()} 
+                                   className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200"
+                                 >
+                                   Upload
+                                 </button>
+                               )}
+                             </>
+                           )}
+                           <input type="file" ref={headshotInputRef} className="hidden" accept="image/*" onChange={(e) => {
+                              if(e.target.files?.[0]) {
+                                 const reader = new FileReader();
+                                 reader.onload = (f) => updateForm({ headshotUrl: f.target?.result as string });
+                                 reader.readAsDataURL(e.target.files[0]);
+                              }
+                           }} />
                          </div>
                       </div>
+                      
+                      {/* ... Rest of Step 1 ... */}
                       <div className="flex-1 space-y-6 sm:space-y-10">
                          <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Actor</h2>
                          <div className="space-y-4 sm:space-y-6">
@@ -586,6 +576,7 @@ if (isSuccess) {
                   </div>
                 )}
 
+                {/* Steps 2-6 Remain Unchanged */}
                 {currentStep === 2 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Casting Details</h2>
