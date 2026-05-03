@@ -44,8 +44,8 @@ export interface Performer {
   adminNotes: string;
   isWalkIn: boolean;
   isCheckedIn: boolean;
-  backingTrack: string; // 🟢 Added
-  lobbyNote: string;    // 🟢 Added
+  backingTrack: string;
+  lobbyNote: string;   
 }
 
 export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
@@ -54,6 +54,11 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Choreographer: { color: "border-emerald-500", text: "text-emerald-400", glow: "shadow-emerald-500/20", weight: "Dance 100%" },
   "Drop-In": { color: "border-amber-500", text: "text-amber-400", glow: "shadow-amber-500/20", weight: "Impression Only" },
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
+};
+
+// 🟢 RESTORED TO PREVENT SCORING SIDEBAR FROM CRASHING
+export const parseAdminNotes = (notes: string) => {
+  return { track: "", lobbyNote: "", status: "Pending" };
 };
 
 interface AuditionsClientProps {
@@ -117,65 +122,51 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
       
       try {
         const slots = await getAuditionees(tenant, productionId);
-        
-        const formatHeight = (val: any) => {
-          if (!val) return "N/A";
-          if (String(val).includes("'")) return val; 
-          const num = Number(val);
-          if (isNaN(num)) return val;
-          return `${Math.floor(num / 12)}'${num % 12}"`;
-        };
 
         const formattedSchedule: Performer[] = slots.map((row: any) => {
-           let session: AuditionSession = "Video/Remote";
-           let displayTime = "TBD";
+           let session: AuditionSession = "Scheduled";
+           let displayTime = row.timeSlot || "TBD"; // 🟢 Uses the exact label from Baserow
 
-           if (row.timeSlotLabel) {
-             session = "Scheduled";
-             displayTime = row.timeSlotLabel; 
-           } else if (row.date) {
-             const dateObj = new Date(row.date);
-             session = "Scheduled"; 
-             displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-           } else if (row.video) {
-               session = "Video/Remote";
+           if (row.status === "Walk-In" || displayTime === "WALK-IN") {
+             session = "Walk-In";
+             displayTime = "WALK-IN";
+           } else if (row.video && displayTime === "TBD") {
+             session = "Video/Remote";
            }
 
-           if (row.status === "Walk-In") session = "Walk-In";
-
-           const actorIsCheckedIn = row.checkedIn === true || row.status === "Walk-In";
+           const actorIsCheckedIn = row.checkedIn === true || session === "Walk-In";
 
            return {
              id: row.id,
              originalId: row.id, 
-             performerId: row.studentId, 
+             performerId: row.performerId, 
              name: row.name || "Unknown Actor", 
-             avatar: row.headshot || null,      
+             avatar: row.avatar || null,      
              age: row.age || "?",
              video: row.video || null,
-             height: formatHeight(row.height),
+             height: row.height || "",
              vocalRange: row.vocalRange || "",
              dob: row.dob || "",
              conflicts: row.conflicts || "",
              tenure: row.status || "Unknown", 
-             pastRoles: row.pastRoles || [],
-             song: row.song || "",
-             monologue: row.monologue || "",
+             pastRoles: row.showHistory || [],
+             song: row.auditionPrep?.songTitle || row.song || "",
+             monologue: row.auditionPrep?.monologue || row.monologue || "",
              timeSlot: displayTime,
              session: session,
              vocal: parseFloat(row.vocalScore) || 0,
              acting: parseFloat(row.actingScore) || 0,
              dance: parseFloat(row.danceScore) || 0,
-             presence: 0, 
+             presence: parseFloat(row.presenceScore) || 0, 
              actingNotes: row.actingNotes || "",
              musicNotes: row.musicNotes || "",
              choreoNotes: row.choreoNotes || "",
              dropInNotes: row.dropInNotes || "",
              adminNotes: row.adminNotes || "",
-             isWalkIn: row.status === "Walk-In",
+             isWalkIn: session === "Walk-In",
              isCheckedIn: actorIsCheckedIn,
-             backingTrack: row.backingTrack || "", // 🟢 Mapped cleanly
-             lobbyNote: row.lobbyNote || ""        // 🟢 Mapped cleanly
+             backingTrack: row.backingTrack || "", 
+             lobbyNote: row.lobbyNote || ""        
            };
         });
 
@@ -319,13 +310,14 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     if (activeSession === "Walk-In") {
       if (!searchQuery) return [];
       return allStudents
-        .filter(s => s["Full Name"]?.toLowerCase().includes(searchQuery.toLowerCase()))
+        .filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()))
         .map(s => ({
           id: -1, 
           originalId: s.id, 
-          name: s["Full Name"],
-          avatar: s.Headshot?.[0]?.url || null, 
-          age: s.Age,
+          performerId: s.performerId,
+          name: s.name,
+          avatar: s.avatar || null, 
+          age: s.age,
           timeSlot: "WALK-IN", 
           session: "Walk-In" as AuditionSession, 
           isWalkIn: true,
@@ -440,7 +432,8 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                   {people.map((person) => {
                     
                     const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
-                    const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Waiting in Lobby...";
+                    // 🟢 CHANGED TEXT TO "Not Checked In"
+                    const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Not Checked In";
                     const displayAvatar = person.isCheckedIn ? person.avatar : null;
                     
                     return (
@@ -481,7 +474,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                                 {displayAvatar ? <img src={displayAvatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
                                 {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
                                 
-                                {/* 🟢 Replaced parsedNotes logic with direct field read */}
                                 {person.lobbyNote && !grades[person.id] && (
                                   <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
                                 )}
@@ -490,8 +482,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                                 <p className="font-bold text-sm flex items-center gap-2 truncate">
                                   <span className="truncate">{displayName}</span>
                                   {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
-                                  
-                                  {/* 🟢 Replaced parsedNotes logic with direct field read */}
                                   {person.backingTrack && <Music size={12} className="text-purple-500 shrink-0" />}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : displayAge}</p>
