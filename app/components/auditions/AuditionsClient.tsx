@@ -44,7 +44,7 @@ export interface Performer {
   dropInNotes: string;
   adminNotes: string;
   isWalkIn: boolean;
-  isCheckedIn: boolean; // 🟢 Added to track check-in status
+  isCheckedIn: boolean;
 }
 
 export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
@@ -55,13 +55,20 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
 
+// 🟢 FIX: Added status extraction to read from your Check-In server action!
 export const parseAdminNotes = (notes: string) => {
-  const parsed = { track: "", lobbyNote: "" };
+  const parsed = { track: "", lobbyNote: "", status: "Pending" };
   if (!notes) return parsed;
+  
   const trackMatch = notes.match(/Track:\s*(.+)/);
   if (trackMatch && trackMatch[1] !== "None") parsed.track = trackMatch[1].trim();
+  
   const lobbyMatch = notes.match(/LOBBY:\s*(.+)/);
   if (lobbyMatch) parsed.lobbyNote = lobbyMatch[1].trim();
+  
+  const statusMatch = notes.match(/STATUS:\s*(.+)/);
+  if (statusMatch) parsed.status = statusMatch[1].trim();
+  
   return parsed;
 };
 
@@ -114,14 +121,13 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     }
   }, []);
 
-  // 🟢 Live-Polling Effect
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
     const loadData = async (isBackgroundPoll = false) => {
       if (!isReady || !productionId) return;
       
-      if (!isBackgroundPoll) {
+      if (!isBackgroundPoll && scheduledPerformers.length === 0) {
         setLoading(true);
       }
       
@@ -150,8 +156,12 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
 
            if (row.status === "Walk-In") session = "Walk-In";
 
-           // 🟢 Determine check-in status (Modify this check if your Baserow field name is different)
-           const actorIsCheckedIn = row.status === "Checked In" || row.checkedIn === true || row.status === "Walk-In";
+           // 🟢 FIX: Parse the adminNotes block to find the real-time Check-In status
+           const parsedNotes = parseAdminNotes(row.adminNotes || "");
+           const actorIsCheckedIn = 
+              parsedNotes.status === "Checked In" || 
+              parsedNotes.status === "Late" || 
+              row.status === "Walk-In";
 
            return {
              id: row.id,
@@ -181,7 +191,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              dropInNotes: row.dropInNotes || "",
              adminNotes: row.adminNotes || "",
              isWalkIn: row.status === "Walk-In",
-             isCheckedIn: actorIsCheckedIn // 🟢 Set the boolean here
+             isCheckedIn: actorIsCheckedIn // Now correctly driven by the CheckIn server action
            };
         });
 
@@ -203,14 +213,12 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
       }
     };
 
-    // Initial explicit load
     loadData(false);
 
-    // Set up background polling
     if (isReady && productionId) {
       intervalId = setInterval(() => {
         loadData(true);
-      }, 15000); // 15 seconds
+      }, 15000); 
     }
 
     return () => {
@@ -337,7 +345,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
           timeSlot: "WALK-IN", 
           session: "Walk-In" as AuditionSession, 
           isWalkIn: true,
-          isCheckedIn: true, // 🟢 Walk-ins are inherently checked in
+          isCheckedIn: true,
           vocal: 0, acting: 0, dance: 0, presence: 0, 
           actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
           height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null
@@ -447,7 +455,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                   {people.map((person) => {
                     const parsedNotes = parseAdminNotes(person.adminNotes);
                     
-                    // 🟢 CONDITIONAL IDENTITY OBSCURING
                     const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
                     const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Waiting in Lobby...";
                     const displayAvatar = person.isCheckedIn ? person.avatar : null;
@@ -456,7 +463,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
                     <div key={person.id} className="flex gap-2 mb-3 group">
                         <button
                           onClick={() => {
-                            // 🟢 BLOCK SCORING IF NOT CHECKED IN
                             if (!person.isCheckedIn) {
                               alert("This actor has not been checked in yet.");
                               return;
