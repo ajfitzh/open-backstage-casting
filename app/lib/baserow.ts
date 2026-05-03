@@ -1266,16 +1266,20 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     });
 
     if (!Array.isArray(people) || people.length === 0) return [];
-    const peopleIds = people.map((p: any) => p.id).join(',');
+    
+    // 2. Fetch auditions for EACH family member individually using Promise.all
+    // This avoids the unsupported "link_row_has_any" filter.
+    const auditionPromises = people.map((p: any) => 
+      fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, {
+        filter_type: "AND",
+        [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+        [`filter__${DB.AUDITIONS.FIELDS.PERFORMER}__link_row_has`]: p.id
+      })
+    );
 
-    // 2. Find their auditions for this show
-    const auditions = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, {
-      filter_type: "AND",
-      [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
-      [`filter__${DB.AUDITIONS.FIELDS.PERFORMER}__link_row_has_any`]: peopleIds
-    });
-
-    if (!Array.isArray(auditions)) return [];
+    // Wait for all the individual fetches to complete and flatten the array
+    const results = await Promise.all(auditionPromises);
+    const auditions = results.flat().filter(a => a && !a.error);
 
     return auditions.map((a: any) => ({
       id: a.id,
