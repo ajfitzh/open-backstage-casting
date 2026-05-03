@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
-import { getAuditionProduction, getAuditionSlots } from '@/app/lib/baserow';
-import { getExistingAuditions } from '@/app/actions/auditions';
-import AuditionWizardClient from './AuditionWizardClient';
+import { getAuditionProduction, getAuditionSlots, getExistingAuditions } from '@/app/lib/baserow';
+// Remove the import from @/app/actions/auditionsimport AuditionWizardClient from './AuditionWizardClient';
 
 export default async function PublicAuditionPage({ params }: { params: { tenant: string } }) {
   const tenant = params.tenant;

@@ -8,7 +8,8 @@ import {
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
   Clock, MessageSquare, Printer, Plus, User
 } from "lucide-react";
-import { submitRealAudition, getExistingAuditions } from "@/app/actions/auditions";
+import { submitRealAudition } from "@/app/actions/auditions";
+import { getExistingAuditions } from "@/app/lib/baserow"; // Import from lib instead
 import { upgradeGuestToUser } from "@/app/actions/auth";
 
 // --- Types ---
