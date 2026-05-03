@@ -26,8 +26,8 @@ type AuditionFormData = {
   conflicts: Record<string, ConflictEntry>;
   offBookAgreement: boolean; 
   parentCommitteeAgreement: boolean;
-  studentSignature: string; 
-  parentSignature: string;
+studentSignature: boolean; // Changed to boolean
+  parentSignature: boolean;
 };
 
 interface AuditionSlot {
@@ -104,7 +104,8 @@ const INITIAL_DATA: AuditionFormData = {
   auditionSlotId: null,
   conflicts: {}, 
   offBookAgreement: false, parentCommitteeAgreement: false,
-  studentSignature: "", parentSignature: ""
+studentSignature: false, 
+  parentSignature: false
 };
 
 export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
@@ -274,10 +275,13 @@ const [isCanceling, setIsCanceling] = useState<number | null>(null);
         finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type);
       }
 
-      const payloadToSubmit = {
+const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
-        musicFileUrl: finalMusicUrl
+        musicFileUrl: finalMusicUrl,
+        // Translate the clicks into explicit strings for the Director's notes
+        studentSignature: formData.studentSignature ? "Agreed via Click" : "Missing",
+        parentSignature: formData.parentSignature ? "Agreed via Click" : "Missing",
       };
 
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
@@ -583,20 +587,47 @@ const [isCanceling, setIsCanceling] = useState<number | null>(null);
                               <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Full Name</label>
                               <input type="text" required value={formData.fullName} onChange={e => updateForm({fullName: e.target.value})} className="w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-lg shadow-inner" />
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                               <div>
-                                  <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">DOB</label>
-                                  <input type="date" required value={formData.dob} onChange={e => updateForm({ dob: e.target.value })} className="w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-lg" />
-                               </div>
-                               <div>
-                                 <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Grade</label>
-                                 <div className="grid grid-cols-4 gap-1.5">
-                                   {GRADES.map(g => (
-                                     <button key={g} type="button" onClick={() => updateForm({ grade: g })} className={`py-2 rounded-lg font-black text-[9px] transition-all ${formData.grade === g ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"}`}>{g}</button>
-                                   ))}
-                                 </div>
-                               </div>
-                            </div>
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 pt-6 sm:pt-10 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="space-y-3">
+                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Student Signature</label>
+                         <button 
+                           type="button" 
+                           onClick={() => updateForm({ studentSignature: !formData.studentSignature })}
+                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
+                             formData.studentSignature 
+                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
+                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
+                           }`}
+                         >
+                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.studentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
+                             {formData.studentSignature && <CheckCircle2 size={16} />}
+                           </div>
+                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
+                             {formData.studentSignature ? "Student Agreed" : "Click to Sign"}
+                           </span>
+                         </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest">Parent / Guardian Signature</label>
+                         <button 
+                           type="button" 
+                           onClick={() => updateForm({ parentSignature: !formData.parentSignature })}
+                           className={`w-full p-6 sm:p-8 rounded-xl sm:rounded-[2rem] border-2 flex items-center justify-center gap-3 transition-all active:scale-95 ${
+                             formData.parentSignature 
+                               ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:text-green-400" 
+                               : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:border-blue-400"
+                           }`}
+                         >
+                           <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center ${formData.parentSignature ? "border-green-500 bg-green-500 text-white" : "border-zinc-300 dark:border-zinc-700"}`}>
+                             {formData.parentSignature && <CheckCircle2 size={16} />}
+                           </div>
+                           <span className="font-black text-lg sm:text-2xl italic tracking-tighter">
+                             {formData.parentSignature ? "Parent Agreed" : "Click to Sign"}
+                           </span>
+                         </button>
+                      </div>
+                    </div>
                          </div>
                       </div>
                     </div>
