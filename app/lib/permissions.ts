@@ -6,18 +6,21 @@ export type Permission =
   | 'view_cast_list'
   | 'view_billing'
   | 'view_auditions'
-  | 'manage_committees';
+  | 'manage_committees'
+  | 'view_checkin';
 
 // 1. GLOBAL ROLES
 const GLOBAL_ROLES: Record<string, Permission[]> = {
   // Aimee & Admins: See Everything
-  'Executive Director': [
+'Executive Director': [
       'view_financials', 'edit_compliance', 'view_sensitive_reports', 
-      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 'manage_committees'
+      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 
+      'manage_committees', 'view_checkin' // 🟢 2. Assign to Executive Director
   ],
   'Admin': [
       'view_financials', 'edit_compliance', 'view_sensitive_reports', 
-      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 'manage_committees'
+      'manage_casting', 'view_cast_list', 'view_billing', 'view_auditions', 
+      'manage_committees', 'view_checkin' // 🟢 3. Assign to Admin
   ],
 
   // Krista: Money & Risk

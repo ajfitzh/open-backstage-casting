@@ -30,8 +30,9 @@ export async function POST(request: Request) {
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 });
 
     // 4. Construct the final public URL for Baserow
-    const publicUrl = `${process.env.DO_SPACES_ENDPOINT}/${process.env.DO_SPACES_BUCKET}/${uniqueFilename}`;
-
+// 4. Construct the final public URL for Baserow
+// Standard format: https://bucket.region.digitaloceanspaces.com/filename
+const publicUrl = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_REGION}.digitaloceanspaces.com/${uniqueFilename}`;
     return NextResponse.json({ uploadUrl, publicUrl });
   } catch (error) {
     console.error("Presign Error:", error);

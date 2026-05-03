@@ -247,22 +247,25 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   };
 
-  const uploadToSpaces = async (file: File | Blob, filename: string, type: string) => {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, fileType: type })
-    });
-    const data = await res.json();
-    if (!data.uploadUrl) throw new Error("Failed to get upload URL");
-    
-    await fetch(data.uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: { 'Content-Type': type }
-    });
-    return data.publicUrl;
-  };
+const uploadToSpaces = async (file: File | Blob, filename: string, type: string) => {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, fileType: type })
+  });
+  const data = await res.json();
+  if (!data.uploadUrl) throw new Error("Failed to get upload URL");
+  
+  await fetch(data.uploadUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 
+      'Content-Type': type,
+      'x-amz-acl': 'public-read' // 🟢 ADD THIS HEADER
+    }
+  });
+  return data.publicUrl;
+};
 
   const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
 

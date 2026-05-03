@@ -35,6 +35,7 @@ export default function GlobalHeaderClient({
   const contextRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const cleanPathname = pathname.replace(/^\/[^\/]+/, '') || '/';
 
   // Close menus on click outside
   useEffect(() => {
@@ -147,7 +148,7 @@ export default function GlobalHeaderClient({
                                   <Clock size={10} /> Now Playing
                                 </div>
                                 {groupedData.active[season].map(prod => (
-                                  <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={pathname} />
+                                  <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={cleanPathname} />
                                 ))}
                               </div>
                             )}
@@ -158,7 +159,7 @@ export default function GlobalHeaderClient({
                                   <Rocket size={10} /> Pre-Production
                                 </div>
                                 {groupedData.upcoming[season].map(prod => (
-                                  <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={pathname} />
+                                  <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={cleanPathname} />
                                 ))}
                               </div>
                             )}
@@ -180,7 +181,7 @@ export default function GlobalHeaderClient({
                             </summary>
                             <div className="pt-2 pl-2 space-y-1">
                               {groupedData.archive[season].map(prod => (
-                                <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={pathname} />
+                                <ProductionItem key={prod.id} prod={prod} activeId={activeId} pathname={cleanPathname} />
                               ))}
                             </div>
                           </details>
