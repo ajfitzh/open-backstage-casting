@@ -1,4 +1,4 @@
-import { getActiveProduction } from '@/app/lib/baserow';
+import { getActiveProduction, getAuditionSlots } from '@/app/lib/baserow';
 import AuditionWizardClient from './AuditionWizardClient';
 
 export default async function PublicAuditionPage({ params }: { params: { tenant: string } }) {
@@ -18,12 +18,16 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
     );
   }
 
+  // 🟢 Fetch the dynamic slots directly from your new Baserow table!
+  const dynamicSlots = await getAuditionSlots(tenant, activeProduction.id);
+
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <AuditionWizardClient 
         tenant={tenant} 
         productionId={activeProduction.id} 
         productionTitle={activeProduction.title} 
+        slots={dynamicSlots} 
       />
     </main>
   );

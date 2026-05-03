@@ -1,4 +1,3 @@
-// app/[tenant]/(main)/page.tsx
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
@@ -9,7 +8,6 @@ import {
   UserCog 
 } from 'lucide-react';
 
-// 🟢 1. Import getCommitteeData
 import { 
   getActiveProduction, 
   getShowById, 
@@ -123,7 +121,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                     
                     {/* 🟢 4. DYNAMIC BUTTON LABEL */}
                     <Link 
-                        href={`/production/${show.id}/cast`}
+                        href={`/${tenant}/production/${show.id}/cast`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
                     >
                         <Users size={18} className="text-zinc-400 group-hover:text-white transition-colors"/>
@@ -133,7 +131,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                     </Link>
 
                     <Link 
-                        href={`/production/${show.id}/team`}
+                        href={`/${tenant}/production/${show.id}/team`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
                     >
                          <UserCog size={18} className={`${theme.accent} group-hover:text-white transition-colors`}/>
@@ -157,17 +155,17 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
-             <ActionCard href="/schedule" title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
-             <ActionCard href="/casting" title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
+             <ActionCard href={`/${tenant}/schedule`} title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
+             <ActionCard href={`/${tenant}/casting`} title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
         </div>
         <div className="space-y-4">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics</h3>
-            <ActionCard href="/roster" title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
-            <ActionCard href="/reports" title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
+            <ActionCard href={`/${tenant}/roster`} title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
+            <ActionCard href={`/${tenant}/reports`} title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
         </div>
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> Academy & Season</h3>
-             <ActionCard href="/education" title="Class Manager" desc="Weekly attendance status and enrollment" icon={<GraduationCap className="text-pink-400"/>} color="bg-pink-400"/>
+             <ActionCard href={`/${tenant}/education`} title="Class Manager" desc="Weekly attendance status and enrollment" icon={<GraduationCap className="text-pink-400"/>} color="bg-pink-400"/>
              <div className="p-6 rounded-3xl border border-dashed border-zinc-800/50 flex flex-col items-center justify-center text-center group transition-all hover:bg-zinc-900/30">
                 <Sparkles size={24} className="text-zinc-800 group-hover:text-purple-500/50 transition-all duration-500 mb-2"/>
                 <span className="text-[10px] font-black uppercase text-zinc-700 tracking-tighter">Season Planning</span>

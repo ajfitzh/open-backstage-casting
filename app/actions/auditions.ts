@@ -31,25 +31,35 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     }
 
     // 2. Submit the Audition Record
-    const auditionPayload = {
+    const auditionPayload: any = {
       [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
       [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
       [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString(),
       [DB.AUDITIONS.FIELDS.GENDER]: { value: formData.sex || "Unknown" },
       [DB.AUDITIONS.FIELDS.HEIGHT]: `${formData.heightFt}'${formData.heightIn}"`,
       [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle,
-      [DB.AUDITIONS.FIELDS.CONFLICTS]: JSON.stringify(formData.conflicts), // Save conflicts as JSON string
-      // Note: Ensure these fields exist in your Baserow Auditions table, or map them to a "Notes" field
-      "Headshot URL": formData.headshotUrl,
-      "Audio Track URL": formData.musicFileUrl
+      [DB.AUDITIONS.FIELDS.CONFLICTS]: JSON.stringify(formData.conflicts),
+      
+      // 🟢 Link it directly to the new Audition Slots table
+      // Ensure the field name matches your new Baserow linked column perfectly
+      "Audition Slot": formData.auditionSlotId ? [formData.auditionSlotId] : [], 
     };
+
+    // Attach URLs only if they exist to avoid passing nulls into text fields
+    if (formData.headshotUrl) {
+        auditionPayload["Headshot URL"] = formData.headshotUrl;
+    }
+    
+    if (formData.musicFileUrl) {
+        auditionPayload["Audio Track URL"] = formData.musicFileUrl;
+    }
 
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
       body: JSON.stringify(auditionPayload)
     });
 
-    return { success: true, auditionId: audition.id };
+    return { success: true, auditionId: audition?.id };
   } catch (error) {
     console.error("Failed to submit audition:", error);
     return { success: false, error: "Submission failed" };

@@ -862,7 +862,28 @@ export async function getComplianceData(tenant: string, productionId?: number) {
 // ==============================================================================
 // 🎤 AUDITIONS (READ & WRITE)
 // ==============================================================================
+// app/lib/baserow.ts
 
+export async function getAuditionSlots(tenant: string, productionId: number) {
+  const tables = await getTenantTableConfig(tenant);
+  
+  // Assume you added the table ID to your tenant-config.ts
+  const data = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, {
+    size: "100",
+    [`filter__Production__link_row_has`]: productionId, // Only get slots for this show
+    "user_field_names": "true" 
+  });
+
+  if (!Array.isArray(data)) return [];
+
+  return data.map(row => ({
+    id: row.id,
+    label: row['Time Label'],
+    capacity: row['Capacity'],
+    taken: row['Taken'],
+    isFull: row['Is Full?']
+  }));
+}
 export async function getAuditionees(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" }; 

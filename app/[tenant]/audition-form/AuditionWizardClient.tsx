@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -28,6 +27,22 @@ type AuditionFormData = {
   parentSignature: string;
 };
 
+interface AuditionSlot {
+  id: string;
+  day: string;
+  time: string;
+  capacity: number;
+  taken: number;
+  isFull?: boolean;
+}
+
+interface Props {
+  tenant: string;
+  productionId: number;
+  productionTitle: string;
+  slots: AuditionSlot[]; // 🟢 Injected directly from Baserow
+}
+
 // --- Constants ---
 const GRADES = ["7th", "8th", "9th", "10th", "11th", "12th", "College", "Grad"];
 const HAIR_COLORS = ["Blonde", "Brown", "Black", "Red", "Auburn", "Grey", "Other"];
@@ -50,17 +65,6 @@ const REHEARSAL_DATES = [
   { id: "july_23", label: "July 23 (Tech)", time: "4pm - 9pm", type: "mandatory" },
 ];
 
-const AUDITION_SLOTS = [
-  { id: "t_500", day: "Thursday", time: "5:00 PM", capacity: 10, taken: 10 },
-  { id: "t_530", day: "Thursday", time: "5:30 PM", capacity: 10, taken: 5 },
-  { id: "t_630", day: "Thursday", time: "6:30 PM", capacity: 10, taken: 7 },
-  { id: "t_700", day: "Thursday", time: "7:00 PM", capacity: 10, taken: 8 },
-  { id: "f_500", day: "Friday", time: "5:00 PM", capacity: 10, taken: 7 },
-  { id: "f_530", day: "Friday", time: "5:30 PM", capacity: 10, taken: 8 },
-  { id: "f_630", day: "Friday", time: "6:30 PM", capacity: 10, taken: 7 },
-  { id: "f_700", day: "Friday", time: "7:00 PM", capacity: 10, taken: 8 },
-];
-
 const PRESET_SONGS = [
   { id: "giants", title: "Giants in the Sky", youtube: "https://www.youtube.com/results?search_query=giants+in+the+sky+karaoke" },
   { id: "steps", title: "On the Steps of the Palace", youtube: "https://www.youtube.com/results?search_query=on+the+steps+of+the+palace+karaoke" },
@@ -78,13 +82,7 @@ const INITIAL_DATA: AuditionFormData = {
   studentSignature: "", parentSignature: ""
 };
 
-interface Props {
-  tenant: string;
-  productionId: number;
-  productionTitle: string;
-}
-
-export default function AuditionWizardClient({ tenant, productionId, productionTitle }: Props) {
+export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
 
   const [currentStep, setCurrentStep] = useState(0); 
@@ -233,7 +231,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
   const calculatedAge = calculateAge(formData.dob);
-  const selectedSlot = AUDITION_SLOTS.find(s => s.id === formData.auditionSlotId);
+  const selectedSlot = slots.find(s => s.id === formData.auditionSlotId);
   const firstName = formData.fullName.split(" ")[0] || "Actor";
 
   if (isSuccess) {
@@ -491,9 +489,9 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Audition Time</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                      {AUDITION_SLOTS.map(slot => {
+                      {slots.map(slot => {
                         const remaining = slot.capacity - slot.taken;
-                        const isFull = remaining === 0;
+                        const isFull = slot.isFull || remaining <= 0;
                         const isSelected = formData.auditionSlotId === slot.id;
                         return (
                           <button 

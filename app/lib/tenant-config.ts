@@ -14,6 +14,7 @@ const SYSTEM_DUMMY_CONFIG = {
     SIGNATURES: "0", STATS: "0", ROLES_POSITIONS: "0", MEASUREMENTS: "0",
     GARMENT_INVENTORY: "0", STUDENT_BIO: "0", ATTENDANCE: "0",
     REQUIREMENTS: "0", FAMILIES: "0", SEATS: "0",
+    AUDITION_SLOTS: "0", // 🟢 Added to dummy config
 };
 
 export async function getTenantTableConfig(tenantSlug: string) {
@@ -60,6 +61,9 @@ export async function getTenantTableConfig(tenantSlug: string) {
     VENUES: tenantRow.VENUES || null,
     PERFORMANCES: tenantRow.PERFORMANCES || null,
     SPACES: tenantRow.SPACES || null,
+
+    // 🟢 NEW TABLE ADDED: Will check the registry first, but safely fall back to 772
+    AUDITION_SLOTS: tenantRow.AUDITION_SLOTS || 772,
 
     // ALIASES (These fix the TypeScript errors!)
     RENTAL_RATES: tenantRow.RATES || null,
