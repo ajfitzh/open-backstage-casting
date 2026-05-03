@@ -911,18 +911,37 @@ export async function getAuditionees(tenant: string, productionId?: number) {
   const data = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params);
   if (!Array.isArray(data)) return [];
 
-  return data.map((row: any) => ({
-      id: row.id,
-      name: extractName(row[F.PERFORMER], "Unknown Actor"),
-      studentId: safeId(row[F.PERFORMER]),
-      // ... (keep all your other existing fields here) ...
-      vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
-      song: safeGet(row[F.SONG], ""),
-      monologue: safeGet(row[F.MONOLOGUE], ""),
-      
-      // 🟢 ADD THIS NEW LINE: Read the exact boolean field
-      checkedIn: row[F.CHECKED_IN] === true 
-  }));
+  return data.map((row: any) => {
+      // 🟢 Read the new Audition Slot linked row!
+      const linkedSlot = row[F.AUDITION_SLOTS]?.[0]?.value;
+      const isWalkIn = !row[F.DATE] && !linkedSlot;
+
+      return {
+          id: row.id,
+          name: extractName(row[F.PERFORMER], "Unknown Actor"),
+          studentId: safeId(row[F.PERFORMER]),
+          gender: safeGet(row[F.GENDER], "Unknown"), 
+          date: row[F.DATE] || null, 
+          timeSlotLabel: linkedSlot || null, // 🟢 Export the new time slot string
+          headshot: row[F.HEADSHOT]?.[0]?.url || null,
+          video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
+          vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
+          actingScore: safeGet(row[F.ACTING_SCORE], 0),
+          danceScore: safeGet(row[F.DANCE_SCORE], 0),
+          presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
+          age: safeGet(row[F.AGE], "?"),
+          height: safeGet(row[F.HEIGHT], ""),
+          conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
+          actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
+          musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
+          choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
+          status: isWalkIn ? "Walk-In" : "Scheduled", // 🟢 Accurate Status
+          vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
+          song: safeGet(row[F.SONG], ""),
+          monologue: safeGet(row[F.MONOLOGUE], ""),
+          checkedIn: row[F.CHECKED_IN] === true 
+      };
+  });
 }
 
 export async function submitAudition(tenant: string, studentId: number, productionId: number, extraData: any) {

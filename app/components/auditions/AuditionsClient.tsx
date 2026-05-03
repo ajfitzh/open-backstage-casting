@@ -139,11 +139,16 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
           return `${Math.floor(num / 12)}'${num % 12}"`;
         };
 
-        const formattedSchedule: Performer[] = slots.map((row: any) => {
+const formattedSchedule: Performer[] = slots.map((row: any) => {
            let session: AuditionSession = "Video/Remote";
            let displayTime = "TBD";
 
-           if (row.date) {
+           // 🟢 Use the Linked Slot label for the grouping and display!
+           if (row.timeSlotLabel) {
+             session = "Scheduled";
+             displayTime = row.timeSlotLabel; 
+           } else if (row.date) {
+             // Fallback for older entries
              const dateObj = new Date(row.date);
              session = "Scheduled"; 
              displayTime = dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -153,7 +158,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
 
            if (row.status === "Walk-In") session = "Walk-In";
 
-           // 🟢 Read boolean directly from getAuditionees data!
            const actorIsCheckedIn = row.checkedIn === true || row.status === "Walk-In";
 
            return {
@@ -172,7 +176,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              pastRoles: row.pastRoles || [],
              song: row.song || "",
              monologue: row.monologue || "",
-             timeSlot: displayTime,
+             timeSlot: displayTime, // 🟢 Group by the new label
              session: session,
              vocal: parseFloat(row.vocalScore) || 0,
              acting: parseFloat(row.actingScore) || 0,
