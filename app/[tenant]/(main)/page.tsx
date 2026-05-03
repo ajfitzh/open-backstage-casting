@@ -145,11 +145,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
             </div>
         </div>
       </div>
-
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-         <WorkflowProgress status={workflowStatus} productionId={show.id} />
-      </div>
-
       {/* 🟢 THE NEW UPCOMING AUDITIONS BANNER */}
       {upcomingShow && (
         <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl animate-in slide-in-from-bottom-4">
@@ -178,6 +173,11 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
            </div>
         </div>
       )}
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+         <WorkflowProgress status={workflowStatus} productionId={show.id} />
+      </div>
+
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
