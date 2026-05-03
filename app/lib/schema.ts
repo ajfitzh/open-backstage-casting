@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/3/2026, 8:40:16 AM
+//    Generated on: 5/3/2026, 5:57:25 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -14,7 +14,7 @@ export const DB = {
       "DATE_OF_BIRTH": "field_5738", // date
       "AGE": "field_5739", // formula
       "GENDER": "field_5775", // single_select
-      "HEADSHOT": "field_5776", // file
+      "HEADSHOT": "field_5776", // url
       "HEIGHT_TOTAL_INCHES": "field_5777", // number
       "HEIGHT_FORMATTED": "field_5778", // formula
       "PARENT_GUARDIAN_1": "field_5779", // link_row
@@ -421,6 +421,7 @@ export const DB = {
       "PAID_FEES": "field_6107", // boolean
       "MEASUREMENTS_TAKEN": "field_6108", // boolean
       "AUDITION_SLOTS": "field_7931", // link_row
+      "CHECKED_IN": "field_7936", // boolean
     }
   },
   ASSETS: {

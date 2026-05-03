@@ -55,19 +55,16 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
 
-// 🟢 FIX: Added status extraction to read from your Check-In server action!
+// 🟢 Simplified parse note (only looks for Track and Lobby alerts now)
 export const parseAdminNotes = (notes: string) => {
-  const parsed = { track: "", lobbyNote: "", status: "Pending" };
+  const parsed = { track: "", lobbyNote: "" };
   if (!notes) return parsed;
   
-  const trackMatch = notes.match(/Track:\s*(.+)/);
+  const trackMatch = notes.match(/Track:\s*([^\r\n]+)/i);
   if (trackMatch && trackMatch[1] !== "None") parsed.track = trackMatch[1].trim();
   
-  const lobbyMatch = notes.match(/LOBBY:\s*(.+)/);
+  const lobbyMatch = notes.match(/LOBBY:\s*([^\r\n]+)/i);
   if (lobbyMatch) parsed.lobbyNote = lobbyMatch[1].trim();
-  
-  const statusMatch = notes.match(/STATUS:\s*(.+)/);
-  if (statusMatch) parsed.status = statusMatch[1].trim();
   
   return parsed;
 };
@@ -156,12 +153,8 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
 
            if (row.status === "Walk-In") session = "Walk-In";
 
-           // 🟢 FIX: Parse the adminNotes block to find the real-time Check-In status
-           const parsedNotes = parseAdminNotes(row.adminNotes || "");
-           const actorIsCheckedIn = 
-              parsedNotes.status === "Checked In" || 
-              parsedNotes.status === "Late" || 
-              row.status === "Walk-In";
+           // 🟢 Read boolean directly from getAuditionees data!
+           const actorIsCheckedIn = row.checkedIn === true || row.status === "Walk-In";
 
            return {
              id: row.id,
@@ -191,7 +184,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              dropInNotes: row.dropInNotes || "",
              adminNotes: row.adminNotes || "",
              isWalkIn: row.status === "Walk-In",
-             isCheckedIn: actorIsCheckedIn // Now correctly driven by the CheckIn server action
+             isCheckedIn: actorIsCheckedIn
            };
         });
 

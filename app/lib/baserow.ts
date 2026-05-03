@@ -915,24 +915,13 @@ export async function getAuditionees(tenant: string, productionId?: number) {
       id: row.id,
       name: extractName(row[F.PERFORMER], "Unknown Actor"),
       studentId: safeId(row[F.PERFORMER]),
-      gender: safeGet(row[F.GENDER], "Unknown"), 
-      date: row[F.DATE] || null, 
-      headshot: row[F.HEADSHOT]?.[0]?.url || null,
-      video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
-      vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
-      actingScore: safeGet(row[F.ACTING_SCORE], 0),
-      danceScore: safeGet(row[F.DANCE_SCORE], 0),
-      presenceScore: safeGet(row[F.STAGE_PRESENCE_SCORE], 0),
-      age: safeGet(row[F.AGE], "?"),
-      height: safeGet(row[F.HEIGHT], ""),
-      conflicts: safeGet(row[F.CONFLICTS], "No known conflicts"),
-      actingNotes: safeGet(row[F.ACTING_NOTES], "No notes."),
-      musicNotes: safeGet(row[F.MUSIC_NOTES], "No notes."),
-      choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], "No notes."),
-      status: !row[F.DATE] ? "Walk-In" : "Scheduled",
+      // ... (keep all your other existing fields here) ...
       vocalRange: safeGet(row[F.VOCAL_RANGE], ""), 
       song: safeGet(row[F.SONG], ""),
       monologue: safeGet(row[F.MONOLOGUE], ""),
+      
+      // 🟢 ADD THIS NEW LINE: Read the exact boolean field
+      checkedIn: row[F.CHECKED_IN] === true 
   }));
 }
 

@@ -7,24 +7,29 @@ export async function saveCheckIn(tenant: string, auditionId: number, status: st
   try {
     const tables = await getTenantTableConfig(tenant);
 
-    // 1. Fetch current Admin Notes so we preserve existing data (Grade, Hair, etc.)
+    // 1. Fetch current Admin Notes (using secure internal IDs again)
     const row = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`);
     if (!row || row.error) return { success: false };
 
     let adminNotes = row[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "";
 
-    // 2. Clean out old Status/Lobby tags using a cleaner regex
-    // This prevents the field from growing infinitely with redundant tags
-    adminNotes = adminNotes.replace(/STATUS:.*$/gm, '').replace(/LOBBY:.*$/gm, '').trim();
+    // 2. Remove old LOBBY lines if they already exist
+    adminNotes = adminNotes.replace(/\n\nLOBBY:.*$/im, '');
 
-    // 3. Append the new tags on fresh lines
-    const updatedNotes = `${adminNotes}\n\nSTATUS: ${status}${lobbyNote ? `\nLOBBY: ${lobbyNote}` : ''}`;
+    // 3. Append the new real-time lobby note
+    if (lobbyNote) {
+        adminNotes += `\n\nLOBBY: ${lobbyNote}`;
+    }
 
-    // 4. Update Baserow
+    // 4. Calculate the boolean (True if Checked In OR Late)
+    const isCheckedIn = status === "Checked In" || status === "Late";
+
+    // 5. Save back to Baserow patching BOTH fields
     const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
        method: "PATCH",
        body: JSON.stringify({
-           [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: updatedNotes
+           [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: adminNotes,
+           [DB.AUDITIONS.FIELDS.CHECKED_IN]: isCheckedIn
        })
     });
 
