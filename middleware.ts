@@ -74,6 +74,6 @@ export default auth((req) => {
 })
 
 export const config = {
-  // Your existing matcher, keeping static files, images, and API routes fast!
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)"],
-}
+  // 🟢 Added |audition-form to the exclusion list
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|audition-form).*)"],
+};

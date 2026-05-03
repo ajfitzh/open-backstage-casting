@@ -475,9 +475,12 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                          <div className="aspect-[4/5] bg-zinc-100 dark:bg-zinc-950 rounded-[1.5rem] sm:rounded-[2.5rem] border-2 border-dashed border-zinc-300 dark:border-zinc-800 overflow-hidden relative shadow-inner group">
                             {formData.headshotUrl ? (
                               <img src={formData.headshotUrl} alt="Headshot" className="w-full h-full object-cover" />
-                            ) : isCameraOpen ? (
-                               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
-                            ) : (
+) : isCameraOpen ? (
+   <>
+     <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
+     <canvas ref={canvasRef} className="hidden" />
+   </>
+) : (
                                <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4">
                                   <ImageIcon size={48} className="opacity-20" />
                                   <p className="text-[9px] font-black uppercase tracking-widest">Headshot Required</p>
