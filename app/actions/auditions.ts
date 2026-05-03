@@ -1,7 +1,7 @@
 // app/actions/auditions.ts
 "use server";
 
-import { fetchBaserow, DB, findUserByEmail, getTenantTableConfig, getShowById } from "@/app/lib/baserow";
+import { fetchBaserow, DB, getTenantTableConfig, getShowById } from "@/app/lib/baserow";
 import { Resend } from 'resend';
 
 // Initialize Resend
@@ -11,19 +11,30 @@ export async function submitRealAudition(tenant: string, productionId: number, f
   try {
     const tables = await getTenantTableConfig(tenant);
     
-    // 1. Find or create the Person
-    let personId;
-    let person = await findUserByEmail(tenant, lookupEmail);
+    // 1. Separate the performer's name
+    const nameParts = formData.fullName.trim().split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : "";
+
+    const studentSearchParams = {
+      filter_type: "AND",
+      [`filter__${DB.PEOPLE.FIELDS.FIRST_NAME}__equal`]: firstName,
+      [`filter__${DB.PEOPLE.FIELDS.LAST_NAME}__equal`]: lastName,
+    };
     
-    if (person) {
-      personId = person.id;
+    const existingStudents = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, studentSearchParams);
+    
+    let personId;
+    
+    if (existingStudents && existingStudents.length > 0) {
+      personId = existingStudents[0].id;
     } else {
-      const nameParts = formData.fullName.split(' ');
       const newPersonPayload = {
-        [DB.PEOPLE.FIELDS.FIRST_NAME]: nameParts[0],
-        [DB.PEOPLE.FIELDS.LAST_NAME]: nameParts.slice(1).join(' '),
+        [DB.PEOPLE.FIELDS.FIRST_NAME]: firstName,
+        [DB.PEOPLE.FIELDS.LAST_NAME]: lastName,
         [DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL]: lookupEmail,
-        [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], // Kept as Guest until they set a password!
+        [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
+        [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], 
       };
       
       const newPerson = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
@@ -33,26 +44,32 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       personId = newPerson.id;
     }
 
-    // 🟢 FORMAT CONFLICTS FOR READING
-    // Turns the raw JSON into a clean list of dates they are late/absent
+    // 2. Fetch the Slot details for the Calendar Invite
+    let slotDateTime = "";
+    let slotLabel = "your scheduled time";
+
+    if (formData.auditionSlotId) {
+      // Grab the exact slot row from Baserow
+      const slotData = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/${formData.auditionSlotId}/`);
+      if (slotData && !slotData.error) {
+        slotLabel = slotData[DB.AUDITION_SLOTS.FIELDS.TIME_LABEL] || slotLabel;
+        slotDateTime = slotData[DB.AUDITION_SLOTS.FIELDS.DATE_TIME] || "";
+      }
+    }
+
+    // 3. Format Conflicts
     const conflictString = Object.entries(formData.conflicts || {})
        .filter(([key, val]: any) => val.level !== "available")
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    // 2. Submit the Audition Record
-    // 🟢 CRITICAL FIX: Removed GENDER, HEIGHT, and CONFLICTS because they are LOOKUP fields!
-    // Writing to a lookup field causes a 400 Bad Request error.
+    // 4. Submit the Audition Record
     const auditionPayload: any = {
       [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
       [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
       [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
       [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
-      
-      // Use the exact schema ID for the Audition Slots linked field
       [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-      
-      // Dump all the extra form data safely into a text field so it doesn't crash the database!
       [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Height: ${formData.heightFt}'${formData.heightIn}"\nGender: ${formData.sex || 'N/A'}\n\nConflicts:\n${conflictString || "None"}\n\nHeadshot: ${formData.headshotUrl || 'None'}\nTrack: ${formData.musicFileUrl || 'None'}`,
     };
 
@@ -66,19 +83,46 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         return { success: false, error: "Database rejected the format." };
     }
 
-    // 3. SEND THE CONFIRMATION EMAIL
+    // 5. SEND THE CONFIRMATION EMAIL
     if (audition?.id) {
       try {
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
-        const firstName = formData.fullName.split(' ')[0];
 
-        // ⚠️ Don't forget to change this 'from' email to your verified Cloudflare domain!
+        // Build Schema.org JSON-LD for Gmail Calendar integration
+        let jsonLd = "";
+        if (slotDateTime) {
+            jsonLd = `
+            <script type="application/ld+json">
+            {
+              "@context": "http://schema.org",
+              "@type": "EventReservation",
+              "reservationNumber": "AUD-${audition.id}",
+              "reservationStatus": "http://schema.org/Confirmed",
+              "underName": {
+                "@type": "Person",
+                "name": "${formData.fullName}"
+              },
+              "reservationFor": {
+                "@type": "Event",
+                "name": "Audition: ${showTitle}",
+                "startDate": "${slotDateTime}",
+                "location": {
+                  "@type": "Place",
+                  "name": "CYT Auditions"
+                }
+              }
+            }
+            </script>
+            `;
+        }
+
         await resend.emails.send({
-          from: 'Open Backstage <onboarding@resend.dev>', 
+          from: 'Casting Team <casting@open-backstage.org>',
           to: lookupEmail,
           subject: `✨ Audition Confirmed: ${firstName} for ${showTitle}!`,
           html: `
+            ${jsonLd}
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
                 <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">Wish Granted! 🌟</h2>
                 <p style="font-size: 16px; color: #374151;">Hi there,</p>
@@ -86,6 +130,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
                 
                 <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p style="margin: 0 0 10px 0;"><strong>Actor:</strong> ${formData.fullName}</p>
+                    <p style="margin: 0 0 10px 0;"><strong>Time:</strong> ${slotLabel}</p>
                     <p style="margin: 0 0 10px 0;"><strong>Song:</strong> ${formData.songTitle || "Custom Track Uploaded"}</p>
                     <p style="margin: 0;"><strong>Height:</strong> ${formData.heightFt}'${formData.heightIn}"</p>
                 </div>
