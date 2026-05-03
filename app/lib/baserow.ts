@@ -915,20 +915,24 @@ export async function getAuditionees(tenant: string, productionId?: number) {
       const linkedSlot = row[F.AUDITION_SLOTS]?.[0]?.value;
       const isWalkIn = !row[F.DATE] && !linkedSlot;
 
-      // Extract Person ID for the Contact Info Patching
       const performerId = row[F.PERFORMER]?.[0]?.id || null;
-      const performerName = row[F.PERFORMER]?.[0]?.value || "Unknown Actor";
+      const performerName = extractName(row[F.PERFORMER], "Unknown Actor");
 
-      // Missing Forms Logic (Based on your new Signatures field)
       const signatures = row[F.SIGNATURES] || "";
       const missingForms = [];
       if (!signatures.includes("Medical") && !signatures.includes("S")) missingForms.push("Medical Release");
       if (!signatures.includes("Conduct") && !signatures.includes("P")) missingForms.push("Code of Conduct");
 
-      // Check-In Board Status Logic
       let currentStatus = "Pending";
       if (row[F.CHECKED_IN]) {
          currentStatus = row[F.LOBBY_NOTE]?.toLowerCase().includes("late") ? "Late" : "Checked In";
+      }
+
+      // 🟢 FIX: Handle the headshot safely and generate a UI-Avatar if it's missing!
+      let avatarUrl = row[F.HEADSHOT]?.[0]?.url || safeGet(row[F.HEADSHOT], "");
+      if (!avatarUrl || avatarUrl === "null" || typeof avatarUrl !== 'string' || !avatarUrl.startsWith("http")) {
+          // Generates a nice letter-icon matching your app's dark mode colors
+          avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(performerName)}&background=27272a&color=60a5fa`;
       }
 
       return {
@@ -940,10 +944,12 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           status: currentStatus,
           timeSlot: linkedSlot || "WALK-IN",
           auditionDay: row[F.DATE] ? new Date(row[F.DATE]).toLocaleDateString('en-US', { weekday: 'long' }) : "",
-          avatar: row[F.HEADSHOT]?.[0]?.url || null,
+          
+          // 🟢 FIX: Export as 'avatar' so both UI components read it correctly
+          avatar: avatarUrl,
+          
           video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
 
-          // 🟢 Check-In Prep Block Data
           auditionPrep: {
               monologue: safeGet(row[F.MONOLOGUE], "None Listed"),
               songTitle: safeGet(row[F.SONG], "None Listed"),
@@ -953,17 +959,14 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           lobbyNote: safeGet(row[F.LOBBY_NOTE], ""),
           conflicts: safeGet(row[F.CONFLICTS], ""),
 
-          // 🟢 Context Block Data
           isFirstShow: !row[F.PAST_PRODUCTIONS] || row[F.PAST_PRODUCTIONS].length === 0,
           showHistory: (row[F.PAST_PRODUCTIONS] || []).map((p: any) => ({ title: p.value, role: "Cast Member" })),
           missingForms: missingForms,
           
-          // These require deep lookups, stubbing safely so UI doesn't break
           family: { parents: ["Guardian on File"], siblings: [] },
           phone: "", 
           email: "", 
 
-          // Standard Deck Data
           checkedIn: row[F.CHECKED_IN] === true,
           vocalScore: safeGet(row[F.VOCAL_SCORE], 0),
           actingScore: safeGet(row[F.ACTING_SCORE], 0),

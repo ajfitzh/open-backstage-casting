@@ -8,8 +8,6 @@ import {
 import { getAuditionees, updateAuditionSlot, submitAudition } from "@/app/lib/baserow";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
-
-import JudgeSetupModal from "./JudgeSetupModal";
 import ScoringSidebar from "./ScoringSidebar";
 
 export type AuditionSession = "Scheduled" | "Video/Remote" | "Walk-In";
@@ -56,7 +54,6 @@ export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow:
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
 
-// 🟢 RESTORED TO PREVENT SCORING SIDEBAR FROM CRASHING
 export const parseAdminNotes = (notes: string) => {
   return { track: "", lobbyNote: "", status: "Pending" };
 };
@@ -65,14 +62,28 @@ interface AuditionsClientProps {
   tenant: string;
   productionId: number;
   productionTitle: string;
+  serverJudgeName: string;
+  serverJudgeRole: string;
 }
 
-export default function AuditionsClient({ tenant, productionId, productionTitle }: AuditionsClientProps) {
-  const [isMounted, setIsMounted] = useState(false); 
+export default function AuditionsClient({ tenant, productionId, productionTitle, serverJudgeName, serverJudgeRole }: AuditionsClientProps) {
   
-  const [judgeName, setJudgeName] = useState("");
-  const [judgeRole, setJudgeRole] = useState<JudgeRole | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  const judgeName = serverJudgeName || "Guest Judge";
+
+  // 🟢 SMART ROLE MAPPING: Translates your raw DB role into one of the 5 Deck Themes
+  let judgeRole: JudgeRole = "Drop-In"; // Default fallback (Impression Only)
+  const rawRole = (serverJudgeRole || "").toLowerCase();
+
+  if (rawRole.includes("director") && !rawRole.includes("music")) {
+      judgeRole = "Director";
+  } else if (rawRole.includes("music") || rawRole.includes("vocal")) {
+      judgeRole = "Music";
+  } else if (rawRole.includes("choreo") || rawRole.includes("dance")) {
+      judgeRole = "Choreographer";
+  } else if (rawRole.includes("admin") || rawRole.includes("producer") || rawRole.includes("team")) {
+      // Maps "Committee Team" to Admin so you have full read/write access
+      judgeRole = "Admin";
+  }
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSession, setActiveSession] = useState<AuditionSession>("Scheduled");
@@ -88,33 +99,11 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     vocal: 0, acting: 0, dance: 0, presence: 0, notes: "",
   });
 
-  const reopenJudgeSetup = () => setIsReady(false);
-
-  useEffect(() => {
-    setIsMounted(true); 
-    const savedName = localStorage.getItem("judgeName");
-    const savedRole = localStorage.getItem("judgeRole") as JudgeRole | null;
-    
-    if (savedName && savedRole) {
-      setJudgeName(savedName);
-      setJudgeRole(savedRole);
-      setIsReady(true);
-    } else {
-      const defaultName = "Austin Fitzhugh";
-      const defaultRole: JudgeRole = "Director";
-      setJudgeName(defaultName);
-      setJudgeRole(defaultRole);
-      localStorage.setItem("judgeName", defaultName);
-      localStorage.setItem("judgeRole", defaultRole);
-      setIsReady(true); 
-    }
-  }, []);
-
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
     const loadData = async (isBackgroundPoll = false) => {
-      if (!isReady || !productionId) return;
+      if (!productionId) return;
       
       if (!isBackgroundPoll && scheduledPerformers.length === 0) {
         setLoading(true);
@@ -123,9 +112,17 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
       try {
         const slots = await getAuditionees(tenant, productionId);
 
+        const formatHeight = (val: any) => {
+          if (!val) return "N/A";
+          if (String(val).includes("'")) return val; 
+          const num = Number(val);
+          if (isNaN(num)) return val;
+          return `${Math.floor(num / 12)}'${num % 12}"`;
+        };
+
         const formattedSchedule: Performer[] = slots.map((row: any) => {
            let session: AuditionSession = "Scheduled";
-           let displayTime = row.timeSlot || "TBD"; // 🟢 Uses the exact label from Baserow
+           let displayTime = row.timeSlot || "TBD"; 
 
            if (row.status === "Walk-In" || displayTime === "WALK-IN") {
              session = "Walk-In";
@@ -144,7 +141,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
              avatar: row.avatar || null,      
              age: row.age || "?",
              video: row.video || null,
-             height: row.height || "",
+             height: formatHeight(row.height),
              vocalRange: row.vocalRange || "",
              dob: row.dob || "",
              conflicts: row.conflicts || "",
@@ -190,7 +187,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
 
     loadData(false);
 
-    if (isReady && productionId) {
+    if (productionId) {
       intervalId = setInterval(() => {
         loadData(true);
       }, 15000); 
@@ -199,7 +196,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isReady, productionId, productionTitle, tenant]);
+  }, [productionId, productionTitle, tenant]);
 
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
@@ -292,7 +289,6 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
   };
 
   const calculateWeightedScore = (scores: any) => {
-    if (!judgeRole) return 0;
     const s = {
       vocal: Number(scores.vocal) || 0,
       acting: Number(scores.acting) || 0,
@@ -347,189 +343,175 @@ export default function AuditionsClient({ tenant, productionId, productionTitle 
 
  return (
   <>
-    {!isReady && (
-      <JudgeSetupModal
-        isMounted={isMounted}
-        judgeName={judgeName}
-        setJudgeName={setJudgeName}
-        judgeRole={judgeRole}
-        setJudgeRole={setJudgeRole}
-        setIsReady={setIsReady}
-      />
-    )}
-
-    {isReady && (
-      judgeRole === 'Choreographer' ? (
-        <div className="h-screen bg-black flex flex-col">
-            <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
-                <button onClick={reopenJudgeSetup} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">
-                    Exit Dance Mode
-                </button>
-                <div className="flex gap-2">
-                      {(["Scheduled", "Walk-In"] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setActiveSession(s)}
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
-                            activeSession === s ? "bg-white text-black" : "bg-zinc-800 text-zinc-500"
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                </div>
-            </div>
-            
-            <div className="flex-1 overflow-hidden">
-                <ChoreoWorkspace 
-                    people={visibleList} 
-                    initialGrades={grades} 
-                    onSave={handleChoreoSave} 
-                />
-            </div>
-        </div>
-      ) : (
-        <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
-          <div className="flex-1 flex flex-col min-w-0">
-            
-            <header className={`p-4 md:p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole!].color} shrink-0`}>
-              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                <button onClick={reopenJudgeSetup} className="text-left group shrink-0">
-                  <h1 className="text-xl md:text-2xl font-black italic uppercase">Audition Deck</h1>
-                  <div className="flex items-center gap-2">
-                      <p className="text-[9px] uppercase text-zinc-500">{judgeName} • {judgeRole}</p>
-                      <span className="text-[9px] uppercase text-blue-500 font-bold ml-2">
-                        {productionTitle}
-                      </span>
-                  </div>
-                </button>
-
-                <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar mask-linear-fade">
-                  {(["Scheduled", "Video/Remote", "Walk-In"] as const).map((s) => (
-                    <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border border-transparent ${activeSession === s ? "bg-white text-black" : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-white/5"}`}>
-                      {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
-                    </button>
-                  ))}
-                </div>
+    {judgeRole === 'Choreographer' ? (
+      <div className="h-screen bg-black flex flex-col">
+          <div className="h-14 bg-zinc-900 border-b border-white/5 flex items-center justify-between px-4 shrink-0">
+              <span className="text-[10px] font-black uppercase text-zinc-500">
+                  Dance Mode
+              </span>
+              <div className="flex gap-2">
+                    {(["Scheduled", "Walk-In"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setActiveSession(s)}
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-all ${
+                          activeSession === s ? "bg-white text-black" : "bg-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
               </div>
-
-              <div className="mt-4 relative w-full md:w-64">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none text-white" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-              {loading && <div className="text-center text-zinc-500 mt-20"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Auditions...</div>}
-
-              {activeSession === "Walk-In" && visibleList.length === 0 && !loading && (
-                <div className="text-center text-zinc-500 mt-20"><UserPlus size={48} className="mx-auto mb-4 opacity-20" /><p className="text-sm">Start typing to find a student...</p></div>
-              )}
-
-              {Object.entries(grouped).map(([time, people]) => (
-                <div key={time}>
-                  {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
-                  {people.map((person) => {
-                    
-                    const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
-                    // 🟢 CHANGED TEXT TO "Not Checked In"
-                    const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Not Checked In";
-                    const displayAvatar = person.isCheckedIn ? person.avatar : null;
-                    
-                    return (
-                    <div key={person.id} className="flex gap-2 mb-3 group">
-                        <button
-                          onClick={() => {
-                            if (!person.isCheckedIn) {
-                              alert("This actor has not been checked in yet.");
-                              return;
-                            }
-                            
-                            setSelectedPerson(person);
-                            const saved = grades[person.id] || {};
-                            let loadedNote = "";
-                            if (saved.notes) {
-                                loadedNote = saved.notes;
-                            } else {
-                                switch(judgeRole) {
-                                    case "Director": loadedNote = person.actingNotes; break;
-                                    case "Music": loadedNote = person.musicNotes; break;
-                                    case "Drop-In": loadedNote = person.dropInNotes; break;
-                                    case "Admin": loadedNote = person.adminNotes; break;
-                                    default: loadedNote = ""; break;
-                                }
-                            }
-
-                            setCurrentScores({
-                                vocal: saved.vocal || person.vocal || 0,
-                                acting: saved.acting || person.acting || 0,
-                                dance: saved.dance || person.dance || 0,
-                                presence: saved.presence || person.presence || 0,
-                                notes: loadedNote || "", 
-                            });
-                          }}
-                          className={`flex-1 flex items-center gap-3 md:gap-4 p-3 rounded-xl transition-all border min-w-0 ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"} ${!person.isCheckedIn ? "opacity-60 grayscale" : ""}`}
-                        >
-                            <div className="relative flex-shrink-0">
-                                {displayAvatar ? <img src={displayAvatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
-                                {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
-                                
-                                {person.lobbyNote && !grades[person.id] && (
-                                  <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
-                                )}
-                            </div>
-                            <div className="text-left min-w-0 flex-1">
-                                <p className="font-bold text-sm flex items-center gap-2 truncate">
-                                  <span className="truncate">{displayName}</span>
-                                  {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
-                                  {person.backingTrack && <Music size={12} className="text-purple-500 shrink-0" />}
-                                </p>
-                                <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : displayAge}</p>
-                            </div>
-                        </button>
-                        
-                        {person.video && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); window.open(person.video!, "_blank"); }}
-                                className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30 shrink-0"
-                                title="Watch Audition"
-                            >
-                                <PlayCircle size={18} />
-                            </button>
-                        )}
-                        
-                        <button 
-                          onClick={() => {
-                            if (!person.isCheckedIn) {
-                              alert("Profile locked until actor checks in.");
-                              return;
-                            }
-                            setInspectingActor(person);
-                          }} 
-                          className={`w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center shrink-0 ${person.isCheckedIn ? "text-zinc-400 hover:text-white" : "text-zinc-700 cursor-not-allowed"}`} 
-                        >
-                          <User size={18} />
-                        </button>
-                    </div>
-                  )})}
-                </div>
-              ))}
-            </div>
           </div>
+          
+          <div className="flex-1 overflow-hidden">
+              <ChoreoWorkspace 
+                  people={visibleList} 
+                  initialGrades={grades} 
+                  onSave={handleChoreoSave} 
+              />
+          </div>
+      </div>
+    ) : (
+      <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
+        <div className="flex-1 flex flex-col min-w-0">
+          
+          <header className={`p-4 md:p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole].color} shrink-0`}>
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+              <div className="text-left shrink-0">
+                <h1 className="text-xl md:text-2xl font-black italic uppercase">Audition Deck</h1>
+                <div className="flex items-center gap-2">
+                    <p className="text-[9px] uppercase text-zinc-500">{judgeName} • {judgeRole}</p>
+                    <span className="text-[9px] uppercase text-blue-500 font-bold ml-2">
+                      {productionTitle}
+                    </span>
+                </div>
+              </div>
 
-          {selectedPerson && (
-            <ScoringSidebar
-                selectedPerson={selectedPerson}
-                setSelectedPerson={setSelectedPerson}
-                judgeRole={judgeRole!}
-                currentScores={currentScores}
-                setCurrentScores={setCurrentScores}
-                handleCommit={handleCommit}
-                calculateWeightedScore={calculateWeightedScore}
-            />
-          )}
+              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto no-scrollbar mask-linear-fade">
+                {(["Scheduled", "Video/Remote", "Walk-In"] as const).map((s) => (
+                  <button key={s} onClick={() => { setActiveSession(s); setSearchQuery(""); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-colors whitespace-nowrap border border-transparent ${activeSession === s ? "bg-white text-black" : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 border-white/5"}`}>
+                    {s === "Walk-In" ? <span className="flex items-center gap-1"><UserPlus size={12}/> Walk-In</span> : s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 relative w-full md:w-64">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none text-white" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+            {loading && <div className="text-center text-zinc-500 mt-20"><Loader2 className="animate-spin mx-auto mb-2"/> Loading Auditions...</div>}
+
+            {activeSession === "Walk-In" && visibleList.length === 0 && !loading && (
+              <div className="text-center text-zinc-500 mt-20"><UserPlus size={48} className="mx-auto mb-4 opacity-20" /><p className="text-sm">Start typing to find a student...</p></div>
+            )}
+
+            {Object.entries(grouped).map(([time, people]) => (
+              <div key={time}>
+                {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
+                {people.map((person) => {
+                  
+                  const displayName = person.isCheckedIn ? person.name : `Actor #${person.id.toString().padStart(3, '0')}`;
+                  const displayAge = person.isCheckedIn ? `Age ${person.age}` : "Not Checked In";
+                  const displayAvatar = person.isCheckedIn ? person.avatar : null;
+                  
+                  return (
+                  <div key={person.id} className="flex gap-2 mb-3 group">
+                      <button
+                        onClick={() => {
+                          if (!person.isCheckedIn) {
+                            alert("This actor has not been checked in yet.");
+                            return;
+                          }
+                          
+                          setSelectedPerson(person);
+                          const saved = grades[person.id] || {};
+                          let loadedNote = "";
+                          if (saved.notes) {
+                              loadedNote = saved.notes;
+                          } else {
+                              switch(judgeRole) {
+                                  case "Director": loadedNote = person.actingNotes; break;
+                                  case "Music": loadedNote = person.musicNotes; break;
+                                  case "Drop-In": loadedNote = person.dropInNotes; break;
+                                  case "Admin": loadedNote = person.adminNotes; break;
+                                  default: loadedNote = ""; break;
+                              }
+                          }
+
+                          setCurrentScores({
+                              vocal: saved.vocal || person.vocal || 0,
+                              acting: saved.acting || person.acting || 0,
+                              dance: saved.dance || person.dance || 0,
+                              presence: saved.presence || person.presence || 0,
+                              notes: loadedNote || "", 
+                          });
+                        }}
+                        className={`flex-1 flex items-center gap-3 md:gap-4 p-3 rounded-xl transition-all border min-w-0 ${selectedPerson?.id === person.id ? "bg-zinc-800 border-blue-500 ring-1 ring-blue-500" : "bg-zinc-900 border-white/5 hover:bg-zinc-800"} ${!person.isCheckedIn ? "opacity-60 grayscale" : ""}`}
+                      >
+                          <div className="relative flex-shrink-0">
+                              {displayAvatar ? <img src={displayAvatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
+                              {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
+                              
+                              {person.lobbyNote && !grades[person.id] && (
+                                <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
+                              )}
+                          </div>
+                          <div className="text-left min-w-0 flex-1">
+                              <p className="font-bold text-sm flex items-center gap-2 truncate">
+                                <span className="truncate">{displayName}</span>
+                                {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
+                                {person.backingTrack && <Music size={12} className="text-purple-500 shrink-0" />}
+                              </p>
+                              <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : displayAge}</p>
+                          </div>
+                      </button>
+                      
+                      {person.video && (
+                          <button
+                              onClick={(e) => { e.stopPropagation(); window.open(person.video!, "_blank"); }}
+                              className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30 shrink-0"
+                              title="Watch Audition"
+                          >
+                              <PlayCircle size={18} />
+                          </button>
+                      )}
+                      
+                      <button 
+                        onClick={() => {
+                          if (!person.isCheckedIn) {
+                            alert("Profile locked until actor checks in.");
+                            return;
+                          }
+                          setInspectingActor(person);
+                        }} 
+                        className={`w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center shrink-0 ${person.isCheckedIn ? "text-zinc-400 hover:text-white" : "text-zinc-700 cursor-not-allowed"}`} 
+                      >
+                        <User size={18} />
+                      </button>
+                  </div>
+                )})}
+              </div>
+            ))}
+          </div>
         </div>
-      )
+
+        {selectedPerson && (
+          <ScoringSidebar
+              selectedPerson={selectedPerson}
+              setSelectedPerson={setSelectedPerson}
+              judgeRole={judgeRole!}
+              currentScores={currentScores}
+              setCurrentScores={setCurrentScores}
+              handleCommit={handleCommit}
+              calculateWeightedScore={calculateWeightedScore}
+          />
+        )}
+      </div>
     )}
 
     {inspectingActor && <ActorProfileModal actor={inspectingActor} grades={grades[inspectingActor.id]} onClose={() => setInspectingActor(null)} />}

@@ -1,37 +1,26 @@
-import { cookies } from 'next/headers';
-import { getShowById, getActiveProduction } from '@/app/lib/baserow';
-import AuditionsClient from '@/app/components/auditions/AuditionsClient';
+import { auth } from "@/auth";
+import { getActiveProduction } from "@/app/lib/baserow";
+import AuditionsClient from "@/app/components/auditions/AuditionsClient";
 
-// 🟢 1. Add params to the page signature
+export const dynamic = "force-dynamic";
+
 export default async function AuditionsPage({ params }: { params: { tenant: string } }) {
-  // 🟢 2. Extract the tenant
-  const tenant = params.tenant;
-  
-  const cookieStore = await cookies();
-  let activeId = Number(cookieStore.get('active_production_id')?.value);
-  let showTitle = "Select a Production";
+  // 1. Securely fetch the logged-in user's session
+  const session = await auth();
+  const production = await getActiveProduction(params.tenant);
 
-  if (activeId) {
-    // 🟢 3. Pass tenant to fetcher
-    const showData = await getShowById(tenant, activeId);
-    if (showData) {
-      showTitle = showData.title; // Fixed case
-    }
-  } 
-  
-  if (!activeId || showTitle === "Select a Production") {
-    // 🟢 4. Pass tenant to fallback fetcher
-    const defaultShow = await getActiveProduction(tenant);
-    if (defaultShow) {
-      activeId = defaultShow.id;
-      showTitle = defaultShow.title; // Fixed case
-    }
+  if (!production) {
+    return <div className="p-8 text-center text-zinc-500">No active production found.</div>;
   }
 
-return (
-    <main className="min-h-screen bg-black">
-      {/* 🟢 Added tenant={tenant} here! */}
-      <AuditionsClient tenant={tenant} productionId={activeId} productionTitle={showTitle} />
-    </main>
+  return (
+    <AuditionsClient
+      tenant={params.tenant}
+      productionId={production.id}
+      productionTitle={production.title}
+      // 2. Pass the DB Name and Role directly into the Client!
+      serverJudgeName={session?.user?.name || "Guest Judge"}
+      serverJudgeRole={(session?.user as any)?.role || "Drop-In"}
+    />
   );
 }
