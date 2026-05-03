@@ -140,3 +140,46 @@ export async function cancelAudition(tenant: string, auditionId: number) {
     return { success: false, error: "Failed to cancel audition." };
   }
 }
+// 🟢 NEW FUNCTION: Saves the director's scores from the ScoringSidebar
+export async function saveAuditionScore(
+  tenant: string, 
+  auditionId: number, 
+  scores: { vocal: number; acting: number; dance: number; presence: number; notes: string }, 
+  judgeRole: string
+) {
+  try {
+    const tables = await getTenantTableConfig(tenant);
+
+    // Figure out which notes field this specific judge is allowed to edit
+    let notesField = DB.AUDITIONS.FIELDS.ACTING_NOTES; // Default for Director
+    if (judgeRole === "Music") notesField = DB.AUDITIONS.FIELDS.MUSIC_NOTES;
+    if (judgeRole === "Drop-In") notesField = DB.AUDITIONS.FIELDS.DROP_IN_NOTES;
+    if (judgeRole === "Admin") notesField = DB.AUDITIONS.FIELDS.ADMIN_NOTES;
+
+    const payload: any = {
+      [DB.AUDITIONS.FIELDS.VOCAL_SCORE]: scores.vocal,
+      [DB.AUDITIONS.FIELDS.ACTING_SCORE]: scores.acting,
+      [DB.AUDITIONS.FIELDS.DANCE_SCORE]: scores.dance,
+    };
+
+    // Only update the notes if they actually typed something, so we don't accidentally erase old notes
+    if (scores.notes !== undefined) {
+       payload[notesField] = scores.notes;
+    }
+
+    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+       method: "PATCH",
+       body: JSON.stringify(payload)
+    });
+
+    if (!res || res.error) {
+       console.error("Failed to save score:", res);
+       return { success: false, error: "Database rejected the score." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Scoring Error:", error);
+    return { success: false, error: "Failed to connect to database." };
+  }
+}

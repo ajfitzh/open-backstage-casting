@@ -28,9 +28,10 @@ export default async function AuditionsPage({ params }: { params: { tenant: stri
     }
   }
 
-  return (
+return (
     <main className="min-h-screen bg-black">
-      <AuditionsClient productionId={activeId} productionTitle={showTitle} />
+      {/* 🟢 Added tenant={tenant} here! */}
+      <AuditionsClient tenant={tenant} productionId={activeId} productionTitle={showTitle} />
     </main>
   );
 }

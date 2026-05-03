@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { X, MessageSquare, Save, User, Music, Star, Move } from 'lucide-react';
-import { JudgeRole, ROLE_THEMES, Performer } from './AuditionsClient';
+import { JudgeRole, ROLE_THEMES, Performer, parseAdminNotes } from './AuditionsClient';
 
 // --- HELPER COMPONENT: RUBRIC SLIDER ---
 const RubricSlider = ({ label, val, setVal, disabled }: { label: string, val: number, setVal: (n: number) => void, disabled: boolean }) => (
@@ -50,6 +50,10 @@ export default function ScoringSidebar({
   handleCommit,
   calculateWeightedScore
 }: ScoringSidebarProps) {
+  
+  // 🟢 Extract the audio track and lobby notes instantly
+  const parsedNotes = useMemo(() => parseAdminNotes(selectedPerson.adminNotes), [selectedPerson.adminNotes]);
+
   return (
     <aside className="fixed inset-0 z-[200] w-full bg-zinc-950 flex flex-col md:relative md:w-[420px] md:border-l md:border-white/10 md:z-50">
         <div className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50">
@@ -71,11 +75,31 @@ export default function ScoringSidebar({
        </div>
 
        <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+          
+          {/* 🟢 LOBBY ALERT */}
+          {parsedNotes.lobbyNote && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Lobby Alert
+              </p>
+              <p className="text-amber-100 text-xs font-medium">{parsedNotes.lobbyNote}</p>
+            </div>
+          )}
+
           {selectedPerson.video && (
              <div className="rounded-xl overflow-hidden border border-white/10 bg-black aspect-video relative group shadow-2xl">
                 <video src={selectedPerson.video} controls className="w-full h-full object-contain" poster={selectedPerson.avatar || undefined} />
                 <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase text-white pointer-events-none border border-white/10">Audition Tape</div>
              </div>
+          )}
+
+          {/* 🟢 AUDIO PLAYER */}
+          {parsedNotes.track && (
+            <div className="bg-zinc-900 border border-white/5 p-4 rounded-xl shadow-inner">
+               <p className="text-[9px] font-black uppercase tracking-widest text-purple-500 mb-2 flex items-center gap-1"><Music size={12}/> Backing Track</p>
+               <audio controls src={parsedNotes.track} className="w-full h-8" />
+            </div>
           )}
 
           <div className={`p-4 rounded-xl border ${ROLE_THEMES[judgeRole].color} bg-zinc-900/50`}>

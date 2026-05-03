@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  User, Clock, CheckCircle2, Search, UserPlus, PlayCircle, Film, Loader2
+  User, Clock, CheckCircle2, Search, UserPlus, PlayCircle, Film, Loader2, Music
 } from "lucide-react";
 import { getAuditionees, updateAuditionSlot, submitAudition } from "@/app/lib/baserow";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
@@ -37,7 +37,7 @@ export interface Performer {
   vocal: number;
   acting: number;
   dance: number;
-  presence: number;
+  presence: number; // Kept in state for the UI slider, but not saved to DB
   actingNotes: string;
   musicNotes: string;
   choreoNotes: string;
@@ -47,19 +47,31 @@ export interface Performer {
 }
 
 export const ROLE_THEMES: Record<JudgeRole, { color: string; text: string; glow: string; weight: string }> = {
-  Director: { color: "border-blue-500", text: "text-blue-400", glow: "shadow-blue-500/20", weight: "Acting 60% | Vocal 20% | Dance 20%" },
+  Director: { color: "border-blue-500", text: "text-blue-400", glow: "shadow-blue-500/20", weight: "Acting 70% | Vocal 30%" },
   Music: { color: "border-purple-500", text: "text-purple-400", glow: "shadow-purple-500/20", weight: "Vocal 80% | Acting 20%" },
-  Choreographer: { color: "border-emerald-500", text: "text-emerald-400", glow: "shadow-emerald-500/20", weight: "Dance 80% | Presence 20%" },
+  Choreographer: { color: "border-emerald-500", text: "text-emerald-400", glow: "shadow-emerald-500/20", weight: "Dance 100%" },
   "Drop-In": { color: "border-amber-500", text: "text-amber-400", glow: "shadow-amber-500/20", weight: "Impression Only" },
   Admin: { color: "border-zinc-100", text: "text-zinc-100", glow: "shadow-white/5", weight: "Full Access" },
 };
 
+// 🟢 HELPER: Extracts the Lobby Note and Audio Track from the raw database notes
+export const parseAdminNotes = (notes: string) => {
+  const parsed = { track: "", lobbyNote: "" };
+  if (!notes) return parsed;
+  const trackMatch = notes.match(/Track:\s*(.+)/);
+  if (trackMatch && trackMatch[1] !== "None") parsed.track = trackMatch[1].trim();
+  const lobbyMatch = notes.match(/LOBBY:\s*(.+)/);
+  if (lobbyMatch) parsed.lobbyNote = lobbyMatch[1].trim();
+  return parsed;
+};
+
 interface AuditionsClientProps {
+  tenant: string; // 🟢 Added tenant prop to fix TypeScript errors
   productionId: number;
   productionTitle: string;
 }
 
-export default function AuditionsClient({ productionId, productionTitle }: AuditionsClientProps) {
+export default function AuditionsClient({ tenant, productionId, productionTitle }: AuditionsClientProps) {
   const [isMounted, setIsMounted] = useState(false); 
   
   // Judge State 
@@ -115,7 +127,8 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
       console.log(`🚀 Loading Auditions for ${productionTitle} (ID: ${productionId})...`);
       
       try {
-        const slots = await getAuditionees(productionId);
+        // 🟢 Pass tenant explicitly
+        const slots = await getAuditionees(tenant, productionId);
         console.log(`✅ Loaded ${slots.length} actors.`);
         
         const formatHeight = (val: any) => {
@@ -165,7 +178,7 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
              vocal: parseFloat(row.vocalScore) || 0,
              acting: parseFloat(row.actingScore) || 0,
              dance: parseFloat(row.danceScore) || 0,
-             presence: parseFloat(row.presenceScore) || 0,
+             presence: 0, // Removed from DB schema, keeping it 0 for local UI compatibility
              actingNotes: row.actingNotes || "",
              musicNotes: row.musicNotes || "",
              choreoNotes: row.choreoNotes || "",
@@ -192,7 +205,7 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
     };
 
     loadData();
-  }, [isReady, productionId, productionTitle]);
+  }, [isReady, productionId, productionTitle, tenant]);
 
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
@@ -218,7 +231,8 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
         payload["Dance Video"] = videoUrl; 
     }
     
-    updateAuditionSlot(actorId, payload).catch(err => console.error("Auto-save failed", err));
+    // 🟢 Pass tenant explicitly
+    updateAuditionSlot(tenant, actorId, payload).catch(err => console.error("Auto-save failed", err));
   };
 
   const handleCommit = async () => {
@@ -251,26 +265,32 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
     });
 
     try {
+      // 🟢 Stage Presence omitted from payload to prevent 400 errors
       const payload: any = {
           "Vocal Score": scoresToSave.vocal > 0 ? scoresToSave.vocal : null,
           "Acting Score": scoresToSave.acting > 0 ? scoresToSave.acting : null,
           "Dance Score": scoresToSave.dance > 0 ? scoresToSave.dance : null,
-          "Stage Presence Score": scoresToSave.presence > 0 ? scoresToSave.presence : null,
       };
 
-      switch (judgeRole) {
-          case "Director": payload["Acting Notes"] = scoresToSave.notes; break;
-          case "Music": payload["Music Notes"] = scoresToSave.notes; break;
-          case "Choreographer": payload["Choreography Notes"] = scoresToSave.notes; break;
-          case "Drop-In": payload["Drop-In Notes"] = scoresToSave.notes; break;
-          case "Admin": payload["Admin Notes"] = scoresToSave.notes; break;
+      if (judgeRole === "Admin") {
+         const currentNotes = selectedPerson.adminNotes || "";
+         payload["Admin Notes"] = currentNotes + "\n\nAdmin Log: " + scoresToSave.notes;
+      } else {
+         switch (judgeRole) {
+            case "Director": payload["Acting Notes"] = scoresToSave.notes; break;
+            case "Music": payload["Music Notes"] = scoresToSave.notes; break;
+            case "Choreographer": payload["Choreography Notes"] = scoresToSave.notes; break;
+            case "Drop-In": payload["Drop-In Notes"] = scoresToSave.notes; break;
+         }
       }
 
       if (isWalkIn) {
-        await submitAudition(originalId, productionId, payload);
+        // 🟢 Pass tenant explicitly
+        await submitAudition(tenant, originalId, productionId, payload);
         alert("Walk-In Created!");
       } else {
-        await updateAuditionSlot(personId, payload);
+        // 🟢 Pass tenant explicitly
+        await updateAuditionSlot(tenant, personId, payload);
       }
       
       setSelectedPerson((current) => (current?.id === personId ? null : current));
@@ -287,13 +307,12 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
       vocal: Number(scores.vocal) || 0,
       acting: Number(scores.acting) || 0,
       dance: Number(scores.dance) || 0,
-      presence: Number(scores.presence) || 0,
     };
     switch(judgeRole) {
       case "Director": return (s.acting * 0.7) + (s.vocal * 0.3); 
       case "Music": return (s.vocal * 0.8) + (s.acting * 0.2);
-      case "Choreographer": return (s.dance * 0.8) + (s.presence * 0.2);
-      default: return (s.vocal + s.acting + s.dance + s.presence) / 4;
+      case "Choreographer": return s.dance;
+      default: return (s.vocal + s.acting + s.dance) / 3;
     }
   };
 
@@ -420,7 +439,11 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
               {Object.entries(grouped).map(([time, people]) => (
                 <div key={time}>
                   {activeSession !== "Walk-In" && <h3 className="text-xs uppercase text-blue-500 mb-2 flex items-center gap-1 sticky top-0 bg-black/90 backdrop-blur py-2 z-10"><Clock size={12} /> {time}</h3>}
-                  {people.map((person) => (
+                  {people.map((person) => {
+                    // 🟢 PULL THE LOBBY NOTES AND AUDIO TRACKS FOR THE LIST VIEW
+                    const parsedNotes = parseAdminNotes(person.adminNotes);
+                    
+                    return (
                     <div key={person.id} className="flex gap-2 mb-3 group">
                         <button
                           onClick={() => {
@@ -452,11 +475,18 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
                             <div className="relative flex-shrink-0">
                                 {person.avatar ? <img src={person.avatar} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover" alt="" /> : <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-zinc-800 flex items-center justify-center"><User size={20} className="text-zinc-600"/></div>}
                                 {grades[person.id] && !person.isWalkIn && <div className="absolute -top-1 -right-1 bg-black rounded-full"><CheckCircle2 size={14} className="text-emerald-500" /></div>}
+                                
+                                {/* 🟢 THE BOUNCING LOBBY ALERT DOT */}
+                                {parsedNotes.lobbyNote && !grades[person.id] && (
+                                  <div className="absolute -top-1 -left-1 w-3 h-3 bg-amber-500 border-2 border-zinc-900 rounded-full animate-bounce shadow-[0_0_8px_rgba(245,158,11,0.6)]"></div>
+                                )}
                             </div>
                             <div className="text-left min-w-0 flex-1">
                                 <p className="font-bold text-sm flex items-center gap-2 truncate">
                                   <span className="truncate">{person.name}</span>
                                   {person.video && <Film size={12} className="text-blue-500 shrink-0" />}
+                                  {/* 🟢 THE BACKING TRACK INDICATOR */}
+                                  {parsedNotes.track && <Music size={12} className="text-purple-500 shrink-0" />}
                                 </p>
                                 <p className="text-[10px] text-zinc-500 truncate">{person.isWalkIn ? "Click to Audition Now" : `Age ${person.age}`}</p>
                             </div>
@@ -479,7 +509,7 @@ export default function AuditionsClient({ productionId, productionTitle }: Audit
                           <User size={18} />
                         </button>
                     </div>
-                  ))}
+                  )})}
                 </div>
               ))}
             </div>
