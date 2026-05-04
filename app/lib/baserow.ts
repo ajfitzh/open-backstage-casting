@@ -918,6 +918,32 @@ export async function getAuditionees(tenant: string, productionId?: number) {
       const performerId = row[F.PERFORMER]?.[0]?.id || null;
       const performerName = extractName(row[F.PERFORMER], "Unknown Actor");
 
+      // ==========================================
+      // 👯 SIBLING MATCHING LOGIC
+      // ==========================================
+      // Get the last name as a fallback in case an explicit email lookup field is missing
+      const lastName = performerName.split(' ').slice(1).join(' ');
+      
+      // Try to find an email lookup field (adjust the string name if yours is different in Baserow)
+      const studentEmail = safeGet(row['CYT Account Personal Email'], safeGet(row['Parent Email'], lastName));
+
+      const siblings = data
+          .filter((siblingRow: any) => {
+              // Don't match the student with themselves
+              if (siblingRow.id === row.id) return false; 
+
+              const siblingName = extractName(siblingRow[F.PERFORMER], "Unknown Actor");
+              const siblingLastName = siblingName.split(' ').slice(1).join(' ');
+              
+              // Check the sibling's email, fallback to their last name
+              const siblingEmail = safeGet(siblingRow['CYT Account Personal Email'], safeGet(siblingRow['Parent Email'], siblingLastName));
+
+              // Return true if they share the same parent email (or same last name as fallback)
+              return studentEmail && siblingEmail && studentEmail === siblingEmail;
+          })
+          .map((siblingRow: any) => extractName(siblingRow[F.PERFORMER], "Unknown Actor"));
+      // ==========================================
+
       const signatures = row[F.SIGNATURES] || "";
       const missingForms = [];
       if (!signatures.includes("Medical") && !signatures.includes("S")) missingForms.push("Medical Release");
@@ -928,7 +954,7 @@ export async function getAuditionees(tenant: string, productionId?: number) {
          currentStatus = row[F.LOBBY_NOTE]?.toLowerCase().includes("late") ? "Late" : "Checked In";
       }
 
-      // 🟢 FIX: Handle the headshot safely and generate a UI-Avatar if it's missing!
+      // Handle the headshot safely and generate a UI-Avatar if it's missing
       let avatarUrl = row[F.HEADSHOT]?.[0]?.url || safeGet(row[F.HEADSHOT], "");
       if (!avatarUrl || avatarUrl === "null" || typeof avatarUrl !== 'string' || !avatarUrl.startsWith("http")) {
           // Generates a nice letter-icon matching your app's dark mode colors
@@ -945,9 +971,7 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           timeSlot: linkedSlot || "WALK-IN",
           auditionDay: row[F.DATE] ? new Date(row[F.DATE]).toLocaleDateString('en-US', { weekday: 'long' }) : "",
           
-          // 🟢 FIX: Export as 'avatar' so both UI components read it correctly
           avatar: avatarUrl,
-          
           video: row[F.AUDITION_VIDEO]?.[0]?.url || row[F.DANCE_VIDEO] || null,
 
           auditionPrep: {
@@ -963,7 +987,9 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           showHistory: (row[F.PAST_PRODUCTIONS] || []).map((p: any) => ({ title: p.value, role: "Cast Member" })),
           missingForms: missingForms,
           
-          family: { parents: ["Guardian on File"], siblings: [] },
+          // 🟢 INJECT SIBLINGS HERE
+          family: { parents: ["Guardian on File"], siblings: siblings },
+          
           phone: "", 
           email: "", 
 
