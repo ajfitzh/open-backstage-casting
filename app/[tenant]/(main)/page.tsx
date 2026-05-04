@@ -48,10 +48,16 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
+// Define exactly who is allowed to see the heavy backend
+  // Adjust these strings to match the exact roles in your auth/Baserow schema
+  const staffRoles = ["Admin", "Director", "Staff", "Teacher", "SuperAdmin"];
+  const isStaff = staffRoles.includes(userRole);
+
   // ==========================================
   // 👪 THE FAMILY HUB (Parents & Students)
   // ==========================================
-  if (userRole === "Guest" || userRole === "User") {
+  // Fail-Safe: If they are NOT explicit staff, they get the Family Hub.
+  if (!isStaff) {
       // Look up ONLY this family's auditions based on their login email
       const myAuditions = await getExistingAuditions(tenant, userEmail, show.id);
       
