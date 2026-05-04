@@ -24,6 +24,12 @@ type AuditionFormData = {
   songTitle: string; musicFileName: string; usePresetSong: boolean; 
   auditionSlotId: string | null;
   conflicts: Record<string, ConflictEntry>;
+  
+  // Committee Fields
+  preShow1: string; preShow2: string; preShow3: string;
+  show1: string; show2: string; show3: string;
+  willingToChair: boolean; chairPreference: string;
+
   offBookAgreement: boolean; 
   parentCommitteeAgreement: boolean;
   studentSignature: boolean; 
@@ -61,6 +67,19 @@ const GRADES = ["7th", "8th", "9th", "10th", "11th", "12th", "College", "Grad"];
 const HAIR_COLORS = ["Blonde", "Brown", "Black", "Red", "Auburn", "Grey", "Other"];
 const INCHES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"];
 
+const PRE_SHOW_COMMITTEES = [
+  "Publicity", "Set Dressing", "Sets", "Raffles", 
+  "Greenroom/Backstage", "Costume/Quick Change", 
+  "Props", "Makeup", "Hair"
+];
+
+const SHOW_COMMITTEES = [
+  "Tech", "Ninjas/Set Movers", "Box Office/House", 
+  "Concessions", "Security", "Raffles", 
+  "Greenroom/Backstage", "Costume/Quick Change", 
+  "Props", "Makeup", "Hair"
+];
+
 const REHEARSAL_DATES = [
   { id: "june_11", label: "June 11 (Music)", time: "10am - 1pm", type: "encouraged" },
   { id: "june_20", label: "June 20 (Music)", time: "10am - 3pm", type: "encouraged" },
@@ -78,7 +97,6 @@ const REHEARSAL_DATES = [
   { id: "july_23", label: "July 23 (Tech)", time: "4pm - 9pm", type: "mandatory" },
 ];
 
-// 🟢 ADDED KARAOKE & LYRIC LINKS
 const PRESET_SONGS = [
   { 
     id: "reflection", 
@@ -110,6 +128,9 @@ const INITIAL_DATA: AuditionFormData = {
   songTitle: "", musicFileName: "", usePresetSong: false,
   auditionSlotId: null,
   conflicts: {}, 
+  preShow1: "", preShow2: "", preShow3: "",
+  show1: "", show2: "", show3: "",
+  willingToChair: false, chairPreference: "",
   offBookAgreement: false, parentCommitteeAgreement: false,
   studentSignature: false, parentSignature: false
 };
@@ -128,6 +149,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isCanceling, setIsCanceling] = useState<number | null>(null);
+  const [showCommitteeGuide, setShowCommitteeGuide] = useState(false);
   
   const [password, setPassword] = useState("");
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -143,7 +165,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const sigSectionRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
 
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const calculateAge = useCallback((dob: string) => {
     if (!dob) return null;
@@ -247,25 +269,25 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
   };
 
-const uploadToSpaces = async (file: File | Blob, filename: string, type: string) => {
-  const res = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, fileType: type })
-  });
-  const data = await res.json();
-  if (!data.uploadUrl) throw new Error("Failed to get upload URL");
-  
-  await fetch(data.uploadUrl, {
-    method: 'PUT',
-    body: file,
-    headers: { 
-      'Content-Type': type,
-      'x-amz-acl': 'public-read' // 🟢 ADD THIS HEADER
-    }
-  });
-  return data.publicUrl;
-};
+  const uploadToSpaces = async (file: File | Blob, filename: string, type: string) => {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, fileType: type })
+    });
+    const data = await res.json();
+    if (!data.uploadUrl) throw new Error("Failed to get upload URL");
+    
+    await fetch(data.uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 
+        'Content-Type': type,
+        'x-amz-acl': 'public-read'
+      }
+    });
+    return data.publicUrl;
+  };
 
   const selectedPreset = PRESET_SONGS.find(s => s.title === formData.songTitle);
 
@@ -293,7 +315,6 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
         finalMusicUrl = await uploadToSpaces(audioFile, audioFile.name, audioFile.type || 'audio/mpeg');
       }
 
-      // 🟢 PASS THE LINKS INTO THE PAYLOAD FOR THE EMAIL TEMPLATE!
       const payloadToSubmit = {
         ...formData,
         headshotUrl: finalHeadshotUrl,
@@ -341,7 +362,6 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
             </p>
           </div>
 
-          {/* 🟢 PRACTICE MATERIALS BOX */}
           {formData.usePresetSong && selectedPreset && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-6 rounded-3xl mb-8 print:hidden animate-in zoom-in-95 text-left shadow-inner">
                <h3 className="font-black text-blue-900 dark:text-blue-400 uppercase italic tracking-widest text-sm mb-3 flex items-center gap-2">
@@ -507,7 +527,6 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
                            <Trash2 size={16} />
                          </button>
                        </div>
-
                     </div>
                   ))}
                 </>
@@ -529,17 +548,17 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
           <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-[1.5rem] sm:rounded-[3rem] border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col sm:max-h-[85vh]">
             <div className="bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
                <div className="flex gap-1 sm:gap-1.5">
-                 {[1,2,3,4,5,6].map(i => (
+                 {[1,2,3,4,5,6,7].map(i => (
                    <button 
                     key={i} 
                     type="button"
                     disabled={i > maxStepReached}
                     onClick={() => setCurrentStep(i)}
-                    className={`h-1.5 sm:h-2 w-6 sm:w-12 rounded-full transition-all duration-300 ${i === currentStep ? "bg-blue-600 scale-y-125" : i < currentStep ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:border-zinc-800"} ${i <= maxStepReached ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`} 
+                    className={`h-1.5 sm:h-2 w-4 sm:w-10 rounded-full transition-all duration-300 ${i === currentStep ? "bg-blue-600 scale-y-125" : i < currentStep ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:border-zinc-800"} ${i <= maxStepReached ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`} 
                    />
                  ))}
                </div>
-               <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest italic">Step {currentStep}/6</span>
+               <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest italic">Step {currentStep}/7</span>
             </div>
 
             <div className="p-5 sm:p-10 overflow-y-auto custom-scrollbar flex-1">
@@ -679,7 +698,6 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Performance</h2>
                     
-                    {/* 🟢 NEW: CLEAR A/B SPLIT FOR UPLOAD VS PRESET */}
                     <div className="flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-2 rounded-[1.5rem] sm:rounded-[2rem]">
                       <button
                         type="button"
@@ -851,8 +869,110 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
                   </div>
                 )}
 
-                {/* 泙 CLICK-TO-SIGN UI */}
                 {currentStep === 6 && (
+                  <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                      <div>
+                        <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Parent Committees</h2>
+                        <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm sm:text-base font-medium leading-relaxed">
+                          Each family must serve on one Pre-Show and one Show Week committee.
+                        </p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowCommitteeGuide(true)}
+                        className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors shrink-0"
+                      >
+                        View Descriptions
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
+                      
+                      {/* PRE-SHOW COLUMN */}
+                      <div className="space-y-6 bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800">
+                        <h3 className="font-black text-lg uppercase italic tracking-widest text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                          Pre-Show Choices
+                        </h3>
+                        {[1, 2, 3].map((num) => {
+                          const fieldName = `preShow${num}` as keyof AuditionFormData;
+                          return (
+                            <div key={`pre-${num}`} className="space-y-2">
+                              <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest">
+                                Choice {num} {num === 1 && <span className="text-blue-500">(Top Pick)</span>}
+                              </label>
+                              <select
+                                required
+                                value={formData[fieldName] as string}
+                                onChange={(e) => updateForm({ [fieldName]: e.target.value })}
+                                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm cursor-pointer shadow-sm focus:border-blue-500"
+                              >
+                                <option value="" disabled>Select a committee...</option>
+                                {PRE_SHOW_COMMITTEES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* SHOW WEEK COLUMN */}
+                      <div className="space-y-6 bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 rounded-[1.5rem] border border-zinc-200 dark:border-zinc-800">
+                        <h3 className="font-black text-lg uppercase italic tracking-widest text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                          Show Week Choices
+                        </h3>
+                        {[1, 2, 3].map((num) => {
+                          const fieldName = `show${num}` as keyof AuditionFormData;
+                          return (
+                            <div key={`show-${num}`} className="space-y-2">
+                              <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest">
+                                Choice {num} {num === 1 && <span className="text-blue-500">(Top Pick)</span>}
+                              </label>
+                              <select
+                                required
+                                value={formData[fieldName] as string}
+                                onChange={(e) => updateForm({ [fieldName]: e.target.value })}
+                                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm cursor-pointer shadow-sm focus:border-blue-500"
+                              >
+                                <option value="" disabled>Select a committee...</option>
+                                {SHOW_COMMITTEES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-600 text-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] shadow-xl animate-in slide-in-from-bottom-4">
+                      <label className="flex items-start cursor-pointer group">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.willingToChair} 
+                          onChange={e => updateForm({ willingToChair: e.target.checked })} 
+                          className="h-6 w-6 rounded border-white/20 bg-blue-700 text-white mt-1 shrink-0" 
+                        />
+                        <div className="ml-4 space-y-1">
+                            <h4 className="font-black text-lg sm:text-xl uppercase italic tracking-tighter group-hover:text-blue-100 transition-colors">I am willing to be a Chair!</h4>
+                            <p className="text-blue-100/80 text-xs sm:text-sm font-medium">Chairs lead the team, manage budgets, and receive special training. (Training date: Mar 19 on Zoom).</p>
+                        </div>
+                      </label>
+                      
+                      {formData.willingToChair && (
+                        <div className="mt-6 pt-6 border-t border-blue-500/50 animate-in fade-in zoom-in-95">
+                          <label className="block text-[10px] font-black uppercase text-blue-200 tracking-widest mb-2">Which committee would you prefer to chair?</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g., Props or Concessions" 
+                            value={formData.chairPreference}
+                            onChange={(e) => updateForm({ chairPreference: e.target.value })}
+                            className="w-full bg-blue-700/50 border border-blue-500 text-white placeholder:text-blue-300/50 p-4 rounded-xl font-bold outline-none focus:ring-2 ring-white/50"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {currentStep === 7 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
                     <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Commitment</h2>
                     
@@ -947,7 +1067,7 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
                 <button type="button" onClick={() => currentStep === 1 ? setView("hub") : handlePrev()} className="px-4 sm:px-10 py-3 sm:py-5 rounded-xl sm:rounded-[1.5rem] font-black uppercase text-[10px] sm:text-sm text-zinc-400 hover:text-blue-600 transition-all flex items-center gap-2">
                   <ChevronLeft size={18} /> {currentStep === 1 ? "Cancel" : "Back"}
                 </button>
-                {currentStep < 6 ? (
+                {currentStep < 7 ? (
                   <button type="button" onClick={handleNext} className="bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-6 sm:px-14 py-3 sm:py-5 rounded-xl sm:rounded-[2rem] font-black uppercase text-[10px] sm:text-sm flex items-center gap-2 shadow-xl active:scale-95 transition-all">
                     Next <ChevronRight size={18} />
                   </button>
@@ -961,6 +1081,82 @@ const uploadToSpaces = async (file: File | Blob, filename: string, type: string)
         )}
       </div>
       
+      {/* 🟢 MODAL OVERLAY FOR COMMITTEE GUIDE */}
+      {showCommitteeGuide && (
+        <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[80vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950 shrink-0">
+              <h3 className="font-black text-xl uppercase italic tracking-widest text-zinc-900 dark:text-white">Committee Guide</h3>
+              <button onClick={() => setShowCommitteeGuide(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">1. Publicity (Pre-Show)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Provide intentional publicity efforts to boost attendance. Execute publicity events, distribute posters, find 6-8 advertisers. Must be available for 3 Saturdays.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">2. Sets / Set Dressing (Pre-Show)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Build, adapt, and transport sets. Move sets in on Super Saturday. Painting, assembly, and aesthetic eye required. Be prepared to work most weekends.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">3. Raffles (Pre-Show/Show)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Organize and manage raffles to hit income targets. Set up and take down tables. Sell raffles at the lobby table during shows.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">4. Greenroom / Backstage Monitors</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Supervise cast in the greenroom during rehearsals, tech week, and performances. Oversee student cleaning at the close of each event.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">5. Costumes / Quick Change</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Sew, craft, thrift, and organize costumes. Handle fittings, iron/steam, and assist with quick changes during tech and shows. Launder after production.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">6. Props</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Locate, thrift, borrow or create all required props for the show. Manage props during the run and handle repairs.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">7. Hair & Makeup</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Assist cast with hair and makeup during rehearsals and performances. Practice specialty looks and train committee members.</p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">8. Tech (Show Week)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Provide professional sound and lighting. Transport, set-up, run, and return technical equipment. Training provided if necessary.</p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">9. Ninjas / Set Movers (Show Week)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Move sets pieces on and off during tech week and shows. Must be available during tech week evenings and able to lift pieces at a safe, hurried pace.</p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">10. Box Office / House (Show Week)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Oversee ticketing activities at the venue. Sell tickets, usher patrons, hand out playbills, enforce house rules, and clean the theater after performances.</p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">11. Concessions (Show Week)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Organize and manage the concession table. Set up, tear down, and sell refreshments during all performances.</p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-blue-600 uppercase">12. Security (Show Week)</h4>
+                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">Monitor security during performances. Stand guard inside doors leading to backstage, ensure only authorized personnel enter cast areas.</p>
+              </div>
+
+              <p className="text-xs text-zinc-400 italic text-center pt-4">Click outside to close</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         @media (min-width: 640px) { .custom-scrollbar::-webkit-scrollbar { width: 8px; } }

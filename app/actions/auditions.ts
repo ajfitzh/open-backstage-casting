@@ -83,7 +83,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
         [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
         
-        // 🟢 Writing directly to the new strongly-typed DB columns!
         [DB.AUDITIONS.FIELDS.HAIR_COLOR]: formData.hairColor || "",
         [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: formData.acceptAnyRole || false,
         [DB.AUDITIONS.FIELDS.OFF_BOOK_AGREEMENT]: formData.offBookAgreement || false,
@@ -91,19 +90,45 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature} (S), ${formData.parentSignature} (P)`,
         [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
 
-        // Notes and conflicts fallback
         [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}`,
       })
     });
 
     if (!audition || audition.error) return { success: false, error: "Database rejected the audition record." };
 
+    // ==========================================
+    // 🟢 NEW: WRITE TO COMMITTEE_PREFS TABLE
+    // ==========================================
+    if (audition?.id && tables.COMMITTEE_PREFS) {
+      try {
+        await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {
+          method: "POST",
+          body: JSON.stringify({
+            [DB.COMMITTEE_PREFS.FIELDS.PRODUCTION]: [productionId],
+            [DB.COMMITTEE_PREFS.FIELDS.STUDENT_NAME]: formData.fullName,
+            [DB.COMMITTEE_PREFS.FIELDS.EMAIL]: lookupEmail,
+            [DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_1ST]: formData.preShow1 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_2ND]: formData.preShow2 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_3RD]: formData.preShow3 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_1ST]: formData.show1 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_2ND]: formData.show2 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_3RD]: formData.show3 || "",
+            [DB.COMMITTEE_PREFS.FIELDS.IS_CHAIR]: formData.willingToChair || false,
+            // You can append chairPreference string to a notes column if your schema has one, 
+            // e.g.: [DB.COMMITTEE_PREFS.FIELDS.NOTES]: formData.chairPreference || ""
+          })
+        });
+      } catch (committeeError) {
+        console.error("Failed to save Committee Prefs:", committeeError);
+      }
+    }
+    // ==========================================
+
     if (audition?.id) {
       try {
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
 
-        // 🟢 Generate the Practice HTML block if links are present
         let practiceMaterialsHtml = "";
         if (formData.practiceKaraoke || formData.practiceLyrics) {
           practiceMaterialsHtml = `
