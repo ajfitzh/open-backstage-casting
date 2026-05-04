@@ -57,14 +57,19 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   // 👪 THE FAMILY HUB (Parents & Students)
   // ==========================================
   // Fail-Safe: If they are NOT explicit staff, they get the Family Hub.
-  if (!isStaff) {
-      // Look up ONLY this family's auditions based on their login email
-      const myAuditions = await getExistingAuditions(tenant, userEmail, show.id);
-      
-      // Get upcoming shows for the audition banner
+if (!isStaff) {
+      // 1. Get all shows to find the Upcoming one
       const allShows = await getAllShows(tenant);
       const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
 
+      // 2. Fetch auditions for the ACTIVE show
+      let myAuditions = await getExistingAuditions(tenant, userEmail, show.id);
+
+      // 3. 🟢 NEW: Fetch auditions for the UPCOMING show and combine them!
+      if (upcomingShow && upcomingShow.id !== show.id) {
+          const upcomingAuditions = await getExistingAuditions(tenant, userEmail, upcomingShow.id);
+          myAuditions = [...myAuditions, ...upcomingAuditions];
+      }
       return (
         <div className="min-h-screen bg-zinc-950 p-4 sm:p-6 pb-20">
            <div className="max-w-4xl mx-auto space-y-8">
