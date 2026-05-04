@@ -5,7 +5,7 @@ import {
   Users, Calendar, BarChart3, Ticket, 
   ChevronRight, Sparkles, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog, Mic 
+  UserCog, Mic, AlertCircle, CheckCircle2, Clock
 } from 'lucide-react';
 
 import { 
@@ -19,7 +19,8 @@ import {
   getProductionEvents,
   getSeasons,
   getAllShows,
-  getCommitteeData 
+  getCommitteeData,
+  getExistingAuditions // 🟢 Added this to look up the parent's kids!
 } from '@/app/lib/baserow';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
@@ -32,7 +33,9 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   const { tenant } = params; 
   
   const session = await auth();
+  // 🟢 1. Check the Role AND get the Email
   const userRole = (session?.user as any)?.role || "Guest";
+  const userEmail = session?.user?.email || "";
 
   const cookieStore = await cookies();
   const cookieId = cookieStore.get('active_production_id')?.value;
@@ -44,6 +47,134 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   if (!show) {
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
+
+  // ==========================================
+  // 👪 THE FAMILY HUB (Parents & Students)
+  // ==========================================
+  if (userRole === "Guest" || userRole === "User") {
+      // Look up ONLY this family's auditions based on their login email
+      const myAuditions = await getExistingAuditions(tenant, userEmail, show.id);
+      
+      // Get upcoming shows for the audition banner
+      const allShows = await getAllShows(tenant);
+      const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
+
+      return (
+        <div className="min-h-screen bg-zinc-950 p-4 sm:p-6 pb-20">
+           <div className="max-w-4xl mx-auto space-y-8">
+              
+              <div className="flex items-center justify-between">
+                 <div>
+                    <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">Family Hub</h1>
+                    <p className="text-zinc-400 text-sm font-medium">Logged in as {userEmail}</p>
+                 </div>
+                 <span className="px-3 py-1 bg-zinc-900 border border-white/10 rounded-full text-[10px] text-zinc-400 font-black uppercase tracking-widest">
+                    CYT Fredericksburg
+                 </span>
+              </div>
+
+              <div className="space-y-4">
+                 <h2 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-zinc-800 pb-2">My Students</h2>
+                 
+                 {myAuditions.length === 0 ? (
+                    <div className="bg-zinc-900/50 border border-dashed border-zinc-800 p-10 rounded-3xl text-center">
+                       <p className="text-zinc-500 font-bold">No students registered for active shows.</p>
+                    </div>
+                 ) : (
+                    <div className="grid gap-4">
+                       {myAuditions.map((student: any) => {
+                          // 🟢 THE LEGAL GATE LOGIC
+                          // Note: You may need to map these exact variables to your Baserow schema later
+                          const isCast = student.status === "Cast";
+                          const hasSignedLegal = student.signatures?.includes("S") && student.signatures?.includes("P");
+                          
+                          return (
+                             <div key={student.id} className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl">
+                                <div className="flex justify-between items-start mb-4">
+                                   <div>
+                                      <h3 className="text-2xl font-black text-white tracking-tighter">{student.name}</h3>
+                                      <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{show.title}</p>
+                                   </div>
+                                </div>
+
+                                {/* STATE 1: PENDING */}
+                                {!isCast && (
+                                   <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center gap-4">
+                                      <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
+                                         <Clock size={18} className="text-zinc-500" />
+                                      </div>
+                                      <div>
+                                         <p className="font-black text-zinc-300 text-sm uppercase tracking-widest">Audition Complete</p>
+                                         <p className="text-xs text-zinc-500 font-medium">The directors are currently deliberating. Cast list drops Friday!</p>
+                                      </div>
+                                   </div>
+                                )}
+
+                                {/* STATE 2: THE "RED BOX" (Cast, but missing signatures) */}
+                                {isCast && !hasSignedLegal && (
+                                   <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in zoom-in-95">
+                                      <div className="flex items-center gap-4">
+                                         <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                                            <AlertCircle size={18} className="text-red-500" />
+                                         </div>
+                                         <div>
+                                            <p className="font-black text-red-400 text-sm uppercase tracking-widest">Role Offered: {student.role || "Cast Member"}</p>
+                                            <p className="text-xs text-red-500/80 font-bold">Action Required: You must accept your role and sign waivers.</p>
+                                         </div>
+                                      </div>
+                                      <button className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-colors shrink-0">
+                                         Accept & Sign
+                                      </button>
+                                   </div>
+                                )}
+
+                                {/* STATE 3: THE "GREEN BOX" (Cast & Signed) */}
+                                {isCast && hasSignedLegal && (
+                                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4">
+                                      <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                                         <CheckCircle2 size={18} className="text-emerald-500" />
+                                      </div>
+                                      <div>
+                                         <p className="font-black text-emerald-400 text-sm uppercase tracking-widest">Role Accepted: {student.role || "Cast Member"}</p>
+                                         <p className="text-xs text-emerald-500/80 font-medium">Waivers signed. See you at rehearsal!</p>
+                                      </div>
+                                   </div>
+                                )}
+
+                             </div>
+                          )
+                       })}
+                    </div>
+                 )}
+              </div>
+
+              {/* UPCOMING SHOW BANNER FOR PARENTS */}
+              {upcomingShow && (
+                 <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl">
+                    <div className="relative z-10">
+                       <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Upcoming Auditions
+                       </h3>
+                       <h2 className="text-2xl md:text-3xl font-black text-white italic tracking-tighter">{upcomingShow.title}</h2>
+                    </div>
+                    <Link 
+                        href="/audition-form"
+                        className="relative z-10 flex items-center justify-center gap-2 px-8 py-4 bg-white text-blue-900 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-50 transition-all w-full md:w-auto text-xs shrink-0"
+                    >
+                        Sign Up <ChevronRight size={16} />
+                    </Link>
+                 </div>
+              )}
+           </div>
+        </div>
+      );
+  }
+
+  // ==========================================
+  // 🏢 THE STAFF DASHBOARD (Admin/Director/Staff)
+  // ==========================================
+  
+  // (Everything below this line is EXACTLY the code you already wrote)
 
   const [
     assignments, 
@@ -67,7 +198,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       getCommitteeData(tenant, show.id)
   ]);
   
-  // 🟢 Isolate the Upcoming show specifically for the Audition Banner
   const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
 
   // SMART PHASE DETECTION
@@ -145,7 +275,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
             </div>
         </div>
       </div>
-      {/* 🟢 THE NEW UPCOMING AUDITIONS BANNER */}
+      
       {upcomingShow && (
         <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl animate-in slide-in-from-bottom-4">
            <div className="absolute -right-10 -top-10 opacity-10 text-blue-400 rotate-12 transition-transform group-hover:rotate-45 duration-700 pointer-events-none">
@@ -176,8 +306,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
          <WorkflowProgress status={workflowStatus} productionId={show.id} />
       </div>
-
-
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
