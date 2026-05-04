@@ -1,3 +1,4 @@
+"use client";
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
@@ -133,9 +134,17 @@ if (!isStaff) {
                                             <p className="text-xs text-red-500/80 font-bold">Action Required: You must accept your role and sign waivers.</p>
                                          </div>
                                       </div>
-                                      <button className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-colors shrink-0">
-                                         Accept & Sign
-                                      </button>
+                                      <button 
+   onClick={async () => {
+      // Temporary direct call for testing
+      const { acceptRoleAndSign } = await import('@/app/actions/auditions');
+      await acceptRoleAndSign(tenant, student.id, student.name, student.role, show.title, userEmail);
+      window.location.reload(); // Quick refresh to see the box turn green!
+   }}
+   className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-colors shrink-0"
+>
+   Accept & Sign
+</button>
                                    </div>
                                 )}
 

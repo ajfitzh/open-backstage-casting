@@ -227,3 +227,68 @@ export async function saveAuditionScore(
     return { success: false, error: "Failed to connect to database." };
   }
 }
+
+export async function acceptRoleAndSign(
+  tenant: string, 
+  auditionId: number, 
+  studentName: string, 
+  roleName: string, 
+  showTitle: string, 
+  parentEmail: string
+) {
+  try {
+    const tables = await getTenantTableConfig(tenant);
+
+    // 1. UPDATE BASEROW
+    // Overwrite the signature field with the explicit digital click-wrap confirmation
+    const payload = {
+      [DB.AUDITIONS.FIELDS.SIGNATURES]: "Agreed via Click (S), Agreed via Click (P)"
+    };
+
+    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+       method: "PATCH",
+       body: JSON.stringify(payload)
+    });
+
+    if (!res || res.error) {
+       console.error("Failed to update signatures:", res);
+       return { success: false, error: "Database rejected the signature update." };
+    }
+
+    // 2. SEND "WELCOME TO THE CAST" EMAIL
+    try {
+      await resend.emails.send({
+        from: 'Casting Team <casting@open-backstage.org>',
+        to: parentEmail,
+        subject: `🎭 Role Accepted: ${studentName} in ${showTitle}!`,
+        html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+              <h2 style="color: #059669; font-style: italic; text-transform: uppercase;">Welcome to the Cast! 🎉</h2>
+              <p style="font-size: 16px; color: #374151;">Hi there,</p>
+              <p style="font-size: 16px; color: #374151;">This email confirms that you have officially accepted the role of <strong>${roleName}</strong> for <strong>${studentName}</strong> in our upcoming production of <em>${showTitle}</em>.</p>
+              
+              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #374151;">Digital Agreements Confirmed:</h3>
+                  <ul style="margin: 0; color: #4b5563; font-size: 14px;">
+                     <li>✅ Medical & Liability Release</li>
+                     <li>✅ CYT Code of Conduct</li>
+                     <li>✅ Parent Committee Agreement</li>
+                  </ul>
+              </div>
+
+              <p style="font-size: 16px; color: #374151;"><strong>Next Steps:</strong> Check your Family Hub for the official rehearsal schedule and to submit your program bio!</p>
+              
+              <p style="font-size: 16px; color: #374151;">We can't wait to get started!</p>
+              <p style="font-size: 14px; color: #6b7280; font-weight: bold; text-transform: uppercase;">- The Directing Team</p>
+          </div>`
+      });
+    } catch (emailError) { 
+      // We don't fail the whole function if the email blips, the DB update is the critical part
+      console.error("Welcome Email failed:", emailError); 
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Acceptance Error:", error);
+    return { success: false, error: "Failed to connect to the database." };
+  }
+}
