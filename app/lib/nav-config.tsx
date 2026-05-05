@@ -3,7 +3,7 @@ import {
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
   SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck, 
-  UserCircle, ClipboardList, BookOpen, Mic, UserCheck
+  UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
@@ -22,6 +22,8 @@ export const NAV_CONFIG = [
     items: [
       { label: "Show Hub", href: "/production", icon: Theater },
       { label: "Scheduler", href: "/schedule", icon: Calendar },
+      // 🟢 The Director's post-rehearsal dashboard
+      { label: "Nightly Report", href: "/production/active/report", icon: BookOpen, permission: "manage_casting" },
       { label: "Show Calibration", href: "/analysis", icon: SlidersHorizontal, permission: "manage_casting" },
       { 
         label: "Casting Suite", 
@@ -42,6 +44,8 @@ export const NAV_CONFIG = [
     items: [
       { label: "Master Roster", href: "/roster", icon: UserSquare2, permission: "view_cast_list" },
       { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
+      // 🟢 One-click CSV export for the costume team
+      { label: "Costume Wardrobe", href: "/production/active/costumes", icon: Scissors, permission: "view_cast_list" },
       
       { 
         label: "Audition Check-In", 
@@ -51,7 +55,7 @@ export const NAV_CONFIG = [
         group: "Check In Team"      
       },
       { 
-        label: "Daily Rehearsal Kiosk", 
+        label: "Daily Check-In", 
         href: "/production/active/rehearsal-check-in", 
         icon: UserCheck, 
         permission: "view_checkin", 
@@ -77,6 +81,7 @@ export const NAV_CONFIG = [
     permission: "view_financials",
     items: [
       { label: "Reports & Fees", href: "/reports", icon: BarChart3 },
+      // 🟢 Concatenated bios and ads for InDesign
       { label: "Playbill Exporter", href: "/reports/playbill", icon: BookOpen },
       { label: "Show Analytics", href: "/analytics", icon: Banknote },
     ]

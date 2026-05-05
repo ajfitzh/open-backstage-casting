@@ -4,8 +4,6 @@ import { revalidatePath } from 'next/cache';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
-// app/actions/committees.ts
-"use server";
 
 import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
 
