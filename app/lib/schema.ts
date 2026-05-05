@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/4/2026, 8:03:14 PM
+//    Generated on: 5/4/2026, 8:09:43 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -147,6 +147,7 @@ export const DB = {
       "REHEARSAL_REQUIREMENTS": "field_6004", // link_row
       "SCENE_ASSIGNMENTS": "field_6042", // link_row
       "HEADSHOT": "field_7924", // lookup
+      "AUDITIONS": "field_7954", // link_row
     }
   },
   BLUEPRINT_ROLES: {
@@ -437,6 +438,9 @@ export const DB = {
       "CAST_PARTY_RSVP": "field_7948", // single_select
       "SCRIPT_SCORE_NUMBER": "field_7949", // text
       "AUDITION_NUMBER": "field_7950", // text
+      "STATUS": "field_7952", // single_select
+      "ROLES_POSITIONS": "field_7953", // link_row
+      "CAST_ROLE": "field_7955", // lookup
     }
   },
   ASSETS: {
