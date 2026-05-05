@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/3/2026, 6:12:34 PM
+//    Generated on: 5/4/2026, 8:03:14 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -293,6 +293,7 @@ export const DB = {
       "STUDENT_NAME": "field_6103", // lookup
       "PRODUCTION_NAME": "field_6104", // lookup
       "IS_CHAIR": "field_7483", // boolean
+      "TICKETS_SOLD": "field_7951", // number
     }
   },
   ATTENDANCE: {
@@ -430,6 +431,12 @@ export const DB = {
       "SIGNATURES": "field_7942", // text
       "BACKING_TRACK": "field_7943", // text
       "LOBBY_NOTE": "field_7944", // text
+      "PROGRAM_BIO": "field_7945", // long_text
+      "CONGRATS_AD_TEXT": "field_7946", // long_text
+      "PRODUCTION_FEE_STATUS": "field_7947", // single_select
+      "CAST_PARTY_RSVP": "field_7948", // single_select
+      "SCRIPT_SCORE_NUMBER": "field_7949", // text
+      "AUDITION_NUMBER": "field_7950", // text
     }
   },
   ASSETS: {

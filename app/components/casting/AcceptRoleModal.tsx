@@ -76,7 +76,7 @@ export default function AcceptRoleModal({
             <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Congratulations!</p>
             <h3 className="text-3xl sm:text-4xl font-black text-zinc-900 dark:text-white tracking-tighter">
               {studentName} has been cast as <br/>
-              <span className="text-emerald-600 dark:text-emerald-400 italic">"{roleName}"</span>
+              <span className="text-emerald-600 dark:text-emerald-400 italic">&quot;{roleName}&quot;</span>
             </h3>
           </div>
 

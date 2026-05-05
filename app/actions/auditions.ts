@@ -292,3 +292,32 @@ export async function acceptRoleAndSign(
     return { success: false, error: "Failed to connect to the database." };
   }
 }
+
+// Add to bottom of app/actions/auditions.ts
+
+export async function saveStudentBio(tenant: string, auditionId: number, bioText: string) {
+  try {
+    const tables = await getTenantTableConfig(tenant);
+
+    // Ensure you have a 'Program Bio' (or similarly named) Long Text field in your Auditions table in Baserow
+    const payload = {
+      // NOTE: Update this field name to exactly match what you name it in Baserow!
+      "Program Bio": bioText
+    };
+
+    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+       method: "PATCH",
+       body: JSON.stringify(payload)
+    });
+
+    if (!res || res.error) {
+       console.error("Failed to update bio:", res);
+       return { success: false, error: "Database rejected the bio update." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Bio Save Error:", error);
+    return { success: false, error: "Failed to connect to the database." };
+  }
+}
