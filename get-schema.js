@@ -41,6 +41,7 @@ const TABLES = {
   STAFF_INTEREST: "642",
   TENANT_REGISTRY: "771",
   AUDITION_SLOTS: "772",
+  COMMITTEE_REPORTS: "773",
 };
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");

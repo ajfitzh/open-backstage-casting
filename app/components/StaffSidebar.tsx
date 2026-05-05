@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -53,7 +53,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
             }
         });
     });
-  }, [pathname]);
+  }, [isPathActive, pathname]);
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));

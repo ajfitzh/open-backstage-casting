@@ -1,12 +1,52 @@
 "use server"
 
 import { revalidatePath } from 'next/cache';
-import { getTenantTableConfig } from '@/app/lib/tenant-config';
-import { DB } from '@/app/lib/schema'; // 🟢 Added Schema Import
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
 const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
+// app/actions/committees.ts
+"use server";
 
+import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+
+export async function submitCommitteeReport(tenant: string, data: any) {
+  try {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.COMMITTEE_REPORTS.FIELDS;
+    
+    // Fallback to static ID if you haven't added it to the Tenant Registry table yet
+const tableId = (tables as any).COMMITTEE_REPORTS || DB.COMMITTEE_REPORTS.ID;
+    // Build the payload using your new schema fields
+    const payload = {
+      [F.NAME]: `${data.committeeName} - ${data.phase} Report`, 
+      [F.PRODUCTION]: [data.productionId],
+      [F.SUBMITTER]: [data.submitterId],
+      [F.COMMITTEE_NAME]: data.committeeName,
+      [F.REPORT_DATE]: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+      [F.PRODUCTION_PHASE]: data.phase,
+      [F.PROGRESS_UPDATE]: data.progressUpdate || "",
+      [F.ATTENDANCE_NOTES]: data.attendanceNotes || "",
+      [F.BLOCKERS_AND_NEEDS]: data.blockers || "",
+      [F.ESTIMATED_COMPLETION]: parseInt(data.completion) || 0,
+      [F.MONEY_SPENT_THIS_WEEK]: parseFloat(data.moneySpent) || 0,
+    };
+
+    const res = await fetchBaserow(`/database/rows/table/${tableId}/`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    if (!res || res.error) {
+      console.error("Failed to submit report:", res);
+      return { success: false, error: "Failed to save the report to the database." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Report Submission Error:", error);
+    return { success: false, error: "An unexpected error occurred." };
+  }
+}
 export async function saveCommitteeAssignments(
     tenant: string,
     phase: 'Pre-Show' | 'Show Week',

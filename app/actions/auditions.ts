@@ -1,11 +1,59 @@
 // app/actions/auditions.ts
 "use server";
 
-import { fetchBaserow, DB, getTenantTableConfig, getShowById } from "@/app/lib/baserow";
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+// app/actions/auditions.ts
+"use server";
 
+import { getShowById } from "@/app/lib/baserow";
+
+// 1. Save the Program Bio (AUDITIONS table)
+export async function saveStudentBio(tenant: string, auditionId: number, bio: string) {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.AUDITIONS.FIELDS;
+    
+    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+        method: "PATCH",
+        body: JSON.stringify({ [F.PROGRAM_BIO]: bio })
+    });
+}
+
+// 2. Save the Congrats Ad (AUDITIONS table)
+export async function saveCongratsAd(tenant: string, auditionId: number, adText: string) {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.AUDITIONS.FIELDS;
+    
+    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+        method: "PATCH",
+        body: JSON.stringify({ [F.CONGRATS_AD_TEXT]: adText })
+    });
+}
+
+// 3. Update Tickets Sold (COMMITTEE_PREFS table)
+export async function saveTicketsSold(tenant: string, studentId: number, productionId: number, tickets: number) {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.COMMITTEE_PREFS.FIELDS;
+
+    // Find the specific committee pref row for this student & show
+    const params = {
+        filter_type: "AND",
+        [`filter__${F.STUDENT_ID}__link_row_has`]: studentId,
+        [`filter__${F.PRODUCTION}__link_row_has`]: productionId
+    };
+    
+    const rows = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params);
+    
+    if (Array.isArray(rows) && rows.length > 0) {
+        const rowId = rows[0].id;
+        return await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/${rowId}/`, {
+            method: "PATCH",
+            body: JSON.stringify({ [F.TICKETS_SOLD]: tickets })
+        });
+    }
+    return { error: "Committee Pref row not found" };
+}
 export async function submitRealAudition(tenant: string, productionId: number, formData: any, lookupEmail: string) {
   try {
     const tables = await getTenantTableConfig(tenant);
@@ -228,21 +276,26 @@ export async function saveAuditionScore(
   }
 }
 
+// app/actions/auditions.ts
+import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+// import { resend } from "@/app/lib/resend"; // Assuming you have your emailer setup here
+
 export async function acceptRoleAndSign(
   tenant: string, 
   auditionId: number, 
   studentName: string, 
   roleName: string, 
   showTitle: string, 
-  parentEmail: string
+  parentEmail: string,
+  signatures: string // 🟢 NEW: Accepts the dynamic signature string from the Modal
 ) {
   try {
     const tables = await getTenantTableConfig(tenant);
 
     // 1. UPDATE BASEROW
-    // Overwrite the signature field with the explicit digital click-wrap confirmation
+    // Write the explicit digital click-wrap confirmation string directly to the DB
     const payload = {
-      [DB.AUDITIONS.FIELDS.SIGNATURES]: "Agreed via Click (S), Agreed via Click (P)"
+      [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
     };
 
     const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
@@ -269,9 +322,10 @@ export async function acceptRoleAndSign(
               <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                   <h3 style="margin-top: 0; color: #374151;">Digital Agreements Confirmed:</h3>
                   <ul style="margin: 0; color: #4b5563; font-size: 14px;">
-                     <li>✅ Medical & Liability Release</li>
-                     <li>✅ CYT Code of Conduct</li>
-                     <li>✅ Parent Committee Agreement</li>
+                     <li>✅ Student Conduct Agreement</li>
+                     <li>✅ Parent Committee & Medical Release</li>
+                     <li>✅ Non-Refundable Production Fee Policy</li>
+                     <li>✅ Attendance & Illness Policy</li>
                   </ul>
               </div>
 
@@ -293,31 +347,5 @@ export async function acceptRoleAndSign(
   }
 }
 
-// Add to bottom of app/actions/auditions.ts
 
-export async function saveStudentBio(tenant: string, auditionId: number, bioText: string) {
-  try {
-    const tables = await getTenantTableConfig(tenant);
 
-    // Ensure you have a 'Program Bio' (or similarly named) Long Text field in your Auditions table in Baserow
-    const payload = {
-      // NOTE: Update this field name to exactly match what you name it in Baserow!
-      "Program Bio": bioText
-    };
-
-    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-       method: "PATCH",
-       body: JSON.stringify(payload)
-    });
-
-    if (!res || res.error) {
-       console.error("Failed to update bio:", res);
-       return { success: false, error: "Database rejected the bio update." };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Bio Save Error:", error);
-    return { success: false, error: "Failed to connect to the database." };
-  }
-}

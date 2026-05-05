@@ -1,3 +1,4 @@
+// app/[tenant]/(main)/page.tsx
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
@@ -8,6 +9,7 @@ import {
   UserCog, Mic, AlertCircle, CheckCircle2, Clock
 } from 'lucide-react';
 import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard';
+import ChairLogbook from '@/app/components/committees/ChairLogbook'; // 🟢 NEW IMPORT
 import { 
   getActiveProduction, 
   getShowById, 
@@ -20,7 +22,8 @@ import {
   getSeasons,
   getAllShows,
   getCommitteeData,
-  getExistingAuditions 
+  getExistingAuditions,
+  getUserProfile // 🟢 NEW IMPORT
 } from '@/app/lib/baserow';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
@@ -54,7 +57,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   const isStaff = staffRoles.includes(userRole);
 
   // ==========================================
-  // 👪 THE FAMILY HUB (Parents & Students)
+  // 👨‍👩‍👧‍👦 THE FAMILY HUB (Parents & Students)
   // ==========================================
   if (!isStaff) {
       // 1. Get all shows to find the Upcoming one
@@ -70,6 +73,14 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
           myAuditions = [...myAuditions, ...upcomingAuditions];
       }
 
+      // 🟢 4. CHAIR LOGBOOK LOGIC: Check if this parent is a Committee Chair
+      const userProfile = await getUserProfile(tenant, userEmail);
+      const myPersonId = userProfile?.id ? parseInt(userProfile.id) : null;
+      
+      const allCommitteeData = await getCommitteeData(tenant, show.id);
+      // Find the row for this parent where isChair is true
+      const chairRecord = allCommitteeData.find((c: any) => c.email === userEmail && c.isChair);
+
       return (
         <div className="min-h-screen bg-zinc-950 p-4 sm:p-6 pb-20">
            <div className="max-w-4xl mx-auto space-y-8">
@@ -84,6 +95,18 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                  </span>
               </div>
 
+              {/* 🟢 THE CHAIR LOGBOOK (Only renders if they are a Chair!) */}
+              {chairRecord && myPersonId && (
+                 <div className="animate-in fade-in slide-in-from-top-4">
+                    <ChairLogbook 
+                       tenant={tenant}
+                       productionId={show.id}
+                       submitterId={myPersonId}
+                       committeeName={chairRecord.assignedPreShow || chairRecord.assignedShowWeek || "Committee"}
+                    />
+                 </div>
+              )}
+
               <div className="space-y-4">
                  <h2 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-zinc-800 pb-2">My Students</h2>
                  
@@ -93,7 +116,6 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                     </div>
                  ) : (
                     <div className="grid gap-4">
-                       {/* 🟢 HERE IS THE CLEAN NEW COMPONENT LOOP */}
                        {myAuditions.map((student: any) => (
                           <FamilyHubStudentCard 
                              key={`${student._show.id}-${student.id}`} 
@@ -130,7 +152,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   }
 
   // ==========================================
-  // 🏢 THE STAFF DASHBOARD (Admin/Director/Staff)
+  // 📋 THE STAFF DASHBOARD (Admin/Director/Staff)
   // ==========================================
 
   const [

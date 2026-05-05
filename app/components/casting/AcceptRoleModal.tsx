@@ -1,3 +1,4 @@
+// app/components/casting/AcceptRoleModal.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -21,18 +22,25 @@ export default function AcceptRoleModal({
 }: Props) {
   const [studentAgreed, setStudentAgreed] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
+  const [refundPolicy, setRefundPolicy] = useState(false);
+  const [illnessPolicy, setIllnessPolicy] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
-    if (!studentAgreed || !parentAgreed) return;
+    // Ensure all 4 boxes are checked before proceeding
+    if (!studentAgreed || !parentAgreed || !refundPolicy || !illnessPolicy) return;
     
     setIsSubmitting(true);
     setError("");
 
-    const res = await acceptRoleAndSign(tenant, auditionId, studentName, roleName, showTitle, parentEmail);
+    // Build the comma-separated signature string to write to Baserow field 7942
+    const finalSignatures = ["S", "P", "Refund", "Illness"].join(",");
+
+    // Pass the signature string down to the action
+    const res = await acceptRoleAndSign(tenant, auditionId, studentName, roleName, showTitle, parentEmail, finalSignatures);
     
     if (res.success) {
       onSuccess();
@@ -118,6 +126,32 @@ export default function AcceptRoleModal({
                     <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium leading-relaxed">I agree to the medical release terms, photo release, and commit to fulfilling my parent committee duties.</p>
                 </div>
             </label>
+
+            <label className="flex items-start p-5 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-colors group">
+                <input 
+                  type="checkbox" 
+                  checked={refundPolicy} 
+                  onChange={e => setRefundPolicy(e.target.checked)} 
+                  className="h-6 w-6 text-emerald-600 rounded-lg mt-0.5 shrink-0 cursor-pointer" 
+                />
+                <div className="ml-4 space-y-1">
+                    <h4 className="font-black text-zinc-900 dark:text-white uppercase tracking-widest text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Refund Policy</h4>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium leading-relaxed">I acknowledge the non-refundable nature of the production fee once casting is finalized.</p>
+                </div>
+            </label>
+
+            <label className="flex items-start p-5 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-colors group">
+                <input 
+                  type="checkbox" 
+                  checked={illnessPolicy} 
+                  onChange={e => setIllnessPolicy(e.target.checked)} 
+                  className="h-6 w-6 text-emerald-600 rounded-lg mt-0.5 shrink-0 cursor-pointer" 
+                />
+                <div className="ml-4 space-y-1">
+                    <h4 className="font-black text-zinc-900 dark:text-white uppercase tracking-widest text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Attendance & Illness Policy</h4>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-xs font-medium leading-relaxed">I acknowledge the illness and absence policy, understanding that 3 unexcused absences may result in dismissal.</p>
+                </div>
+            </label>
           </div>
 
           {error && <p className="text-red-500 text-sm font-bold text-center">{error}</p>}
@@ -134,7 +168,7 @@ export default function AcceptRoleModal({
            </button>
            <button 
              onClick={handleSubmit}
-             disabled={!studentAgreed || !parentAgreed || isSubmitting}
+             disabled={!studentAgreed || !parentAgreed || !refundPolicy || !illnessPolicy || isSubmitting}
              className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
            >
              {isSubmitting ? "Processing..." : "Accept Role"} <CheckCircle2 size={16} />

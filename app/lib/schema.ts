@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/4/2026, 8:24:50 PM
+//    Generated on: 5/4/2026, 9:58:42 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -75,6 +75,7 @@ export const DB = {
       "FORM_COMMITTEE_PREFERENCES_PARENT_GUARDIAN_NAME": "field_7482", // link_row
       "PHOTO_RELEASE": "field_7956", // boolean
       "AUTHORIZED_PICKUP_JSON": "field_7957", // long_text
+      "COMMITTEE_REPORTS": "field_7966", // link_row
     }
   },
   PRODUCTIONS: {
@@ -118,6 +119,7 @@ export const DB = {
       "WORKFLOW_OVERRIDES": "field_6225", // multiple_select
       "SEASON_LINKED": "field_6249", // link_row
       "AUDITION_SLOTS": "field_7928", // link_row
+      "COMMITTEE_REPORTS": "field_7965", // link_row
     }
   },
   MASTER_SHOW_DB: {
@@ -651,6 +653,23 @@ export const DB = {
       "TAKEN": "field_7932", // count
       "REMAINING": "field_7933", // formula
       "IS_FULL": "field_7934", // formula
+    }
+  },
+  COMMITTEE_REPORTS: {
+    ID: "773",
+    FIELDS: {
+      "NAME": "field_7962", // text
+      "PRODUCTION": "field_7963", // link_row
+      "SUBMITTER": "field_7964", // link_row
+      "COMMITTEE_NAME": "field_7967", // single_select
+      "REPORT_DATE": "field_7968", // date
+      "PRODUCTION_PHASE": "field_7969", // single_select
+      "PROGRESS_UPDATE": "field_7970", // long_text
+      "ATTENDANCE_NOTES": "field_7971", // long_text
+      "BLOCKERS_AND_NEEDS": "field_7972", // long_text
+      "ESTIMATED_COMPLETION": "field_7973", // number
+      "MONEY_SPENT_THIS_WEEK": "field_7974", // number
+      "RECEIPTS": "field_7975", // file
     }
   },
 };
