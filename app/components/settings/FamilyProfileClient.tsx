@@ -1,3 +1,4 @@
+// app/components/settings/FamilyProfileClient.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -7,7 +8,6 @@ import { updateStudentMasterProfile } from "@/app/actions/family";
 const T_SHIRT_SIZES = ["Youth S", "Youth M", "Youth L", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult XXL"];
 
 export default function FamilyProfileClient({ tenant, initialFamily, userEmail }: any) {
-  // Initialize local state for the family members so we can edit them
   const [family, setFamily] = useState<any[]>(initialFamily);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [successId, setSuccessId] = useState<number | null>(null);
@@ -20,12 +20,12 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
     setSavingId(person.id);
     
     const res = await updateStudentMasterProfile(tenant, person.id, {
-        address: person.Address,
-        emergencyContact: person['Emergency Contact'],
-        tShirtSize: person['T-Shirt Size'],
-        allergies: person.Allergies,
-        tylenol: person['Tylenol Permission'],
-        ibuprofen: person['Ibuprofen Permission']
+        address: person.address,
+        emergencyContact: person.emergencyContact,
+        tShirtSize: person.tShirtSize,
+        allergies: person.allergies,
+        tylenol: person.tylenol,
+        ibuprofen: person.ibuprofen
     });
 
     if (res.success) {
@@ -56,16 +56,16 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
              {/* Header */}
              <div className="p-6 sm:p-8 border-b border-zinc-800 bg-zinc-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                   {person.Headshot ? (
-                      <img src={person.Headshot[0]?.url || person.Headshot} alt={person['First Name']} className="w-16 h-16 rounded-full object-cover border-2 border-zinc-700" />
+                   {person.headshot ? (
+                      <img src={person.headshot} alt={person.firstName} className="w-16 h-16 rounded-full object-cover border-2 border-zinc-700" />
                    ) : (
                       <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700">
                          <User size={24} className="text-zinc-500" />
                       </div>
                    )}
                    <div>
-                      <h3 className="text-2xl font-black text-white tracking-tighter">{person['First Name']} {person['Last Name']}</h3>
-                      <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">DOB: {person['Date of Birth'] || "Not Set"}</p>
+                      <h3 className="text-2xl font-black text-white tracking-tighter">{person.firstName} {person.lastName}</h3>
+                      <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">DOB: {person.dateOfBirth}</p>
                    </div>
                 </div>
                 
@@ -96,8 +96,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                       <input 
                          type="text" 
                          placeholder="123 Main St, Fredericksburg VA 22401"
-                         value={person.Address || ""}
-                         onChange={(e) => handleUpdateField(person.id, 'Address', e.target.value)}
+                         value={person.address || ""}
+                         onChange={(e) => handleUpdateField(person.id, 'address', e.target.value)}
                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-blue-500 transition-colors"
                       />
                    </div>
@@ -109,8 +109,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                       <input 
                          type="text" 
                          placeholder="Jane Doe - (555) 123-4567"
-                         value={person['Emergency Contact'] || ""}
-                         onChange={(e) => handleUpdateField(person.id, 'Emergency Contact', e.target.value)}
+                         value={person.emergencyContact || ""}
+                         onChange={(e) => handleUpdateField(person.id, 'emergencyContact', e.target.value)}
                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-blue-500 transition-colors"
                       />
                    </div>
@@ -120,8 +120,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                         <Shirt size={12}/> T-Shirt Size
                       </label>
                       <select 
-                         value={person['T-Shirt Size'] || ""}
-                         onChange={(e) => handleUpdateField(person.id, 'T-Shirt Size', e.target.value)}
+                         value={person.tShirtSize || ""}
+                         onChange={(e) => handleUpdateField(person.id, 'tShirtSize', e.target.value)}
                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-blue-500 transition-colors cursor-pointer"
                       >
                          <option value="" disabled>Select a size...</option>
@@ -142,8 +142,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                       </label>
                       <textarea 
                          placeholder="E.g., Peanut allergy, carries epi-pen. Or type 'None'."
-                         value={person.Allergies || ""}
-                         onChange={(e) => handleUpdateField(person.id, 'Allergies', e.target.value)}
+                         value={person.allergies || ""}
+                         onChange={(e) => handleUpdateField(person.id, 'allergies', e.target.value)}
                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-red-500 transition-colors min-h-[100px]"
                       />
                    </div>
@@ -157,8 +157,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                          <span className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">Provide Tylenol (Acetaminophen)</span>
                          <input 
                            type="checkbox" 
-                           checked={person['Tylenol Permission'] || false}
-                           onChange={(e) => handleUpdateField(person.id, 'Tylenol Permission', e.target.checked)}
+                           checked={person.tylenol || false}
+                           onChange={(e) => handleUpdateField(person.id, 'tylenol', e.target.checked)}
                            className="w-5 h-5 rounded text-blue-600 bg-zinc-900 border-zinc-700" 
                          />
                       </label>
@@ -169,8 +169,8 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
                          <span className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">Provide Advil/Motrin (Ibuprofen)</span>
                          <input 
                            type="checkbox" 
-                           checked={person['Ibuprofen Permission'] || false}
-                           onChange={(e) => handleUpdateField(person.id, 'Ibuprofen Permission', e.target.checked)}
+                           checked={person.ibuprofen || false}
+                           onChange={(e) => handleUpdateField(person.id, 'ibuprofen', e.target.checked)}
                            className="w-5 h-5 rounded text-blue-600 bg-zinc-900 border-zinc-700" 
                          />
                       </label>

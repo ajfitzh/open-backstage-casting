@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/4/2026, 8:09:43 PM
+//    Generated on: 5/4/2026, 8:24:50 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -73,6 +73,8 @@ export const DB = {
       "APP_PASSWORD": "field_6195", // text
       "STAFF_INTEREST": "field_6256", // link_row
       "FORM_COMMITTEE_PREFERENCES_PARENT_GUARDIAN_NAME": "field_7482", // link_row
+      "PHOTO_RELEASE": "field_7956", // boolean
+      "AUTHORIZED_PICKUP_JSON": "field_7957", // long_text
     }
   },
   PRODUCTIONS: {
@@ -441,6 +443,10 @@ export const DB = {
       "STATUS": "field_7952", // single_select
       "ROLES_POSITIONS": "field_7953", // link_row
       "CAST_ROLE": "field_7955", // lookup
+      "WILLING_TO_ALTER_APPEARANCE": "field_7958", // boolean
+      "FEAR_OF_HEIGHTS": "field_7959", // boolean
+      "OTHER_TALENTS": "field_7960", // long_text
+      "REFERRAL_SOURCE": "field_7961", // text
     }
   },
   ASSETS: {
