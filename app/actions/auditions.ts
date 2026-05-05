@@ -5,7 +5,7 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 // app/actions/auditions.ts
-"use server";
+
 
 import { getShowById } from "@/app/lib/baserow";
 
