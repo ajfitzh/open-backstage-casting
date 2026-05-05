@@ -213,6 +213,7 @@ export default function SchedulerClient({
                     currentWeekOffset={currentWeekOffset}
                     setCurrentWeekOffset={setCurrentWeekOffset}
                     weekLabel={`Week of ${weekStats.viewedDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                    conflicts={conflicts} 
                 />
             )}
             {activeTab === 'progress' && <BurnUpView 
@@ -227,18 +228,32 @@ export default function SchedulerClient({
   );
 }
 
-function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, setCurrentWeekOffset, weekLabel }: any) {
+function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, setCurrentWeekOffset, weekLabel, conflicts = [] }: any) {
   const [draggedSceneId, setDraggedSceneId] = useState<number | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const getTrackStyles = (track: TrackType) => {
+  const getTrackStyles = (track: TrackType, hasConflict: boolean) => {
+    // 🔴 CONFLICT OVERRIDE: Flashes red if there is a conflict
+    if (hasConflict) return 'bg-red-900/80 border-red-500 text-red-100 shadow-[0_0_15px_rgba(239,68,68,0.4)] ring-2 ring-red-500 animate-pulse';
+
     switch (track) {
       case 'Music': return 'bg-pink-900/40 border-pink-500 text-pink-100 shadow-[0_0_15px_rgba(236,72,153,0.15)]';
       case 'Dance': return 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
       case 'Acting': return 'bg-blue-900/40 border-blue-500 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
       default: return 'bg-zinc-800 border-zinc-500 text-zinc-100';
     }
+  };
+
+  // Helper to calculate the real date of a column
+  const getRealDateForColumn = (day: 'Fri' | 'Sat', offset: number) => {
+    const today = new Date();
+    const nextFri = new Date(today);
+    nextFri.setDate(today.getDate() + (5 + 7 - today.getDay()) % 7 + (offset * 7));
+    if (day === 'Fri') return nextFri.toISOString().split('T')[0];
+    const nextSat = new Date(nextFri);
+    nextSat.setDate(nextFri.getDate() + 1);
+    return nextSat.toISOString().split('T')[0];
   };
 
   const handleDrop = (e: React.DragEvent, day: 'Fri' | 'Sat', hour: number, min: number, track: TrackType) => {
@@ -320,17 +335,24 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                  ))}
              </div>
          </aside>
+         
          <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
              <div className="h-12 border-b border-white/10 bg-zinc-900/50 flex items-center justify-center gap-4 shrink-0">
                  <button onClick={() => setCurrentWeekOffset((c: number) => c - 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronLeft size={18}/></button>
                  <span className="text-xs font-black uppercase tracking-widest text-zinc-300 w-48 text-center">{weekLabel}</span>
                  <button onClick={() => setCurrentWeekOffset((c: number) => c + 1)} className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"><ChevronRight size={18}/></button>
              </div>
+             
              <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-950 p-4">
                  <div className="flex gap-4 h-full min-h-[850px]">
-                     {[{ day: 'Fri', slots: friSlots, start: FRI_START }, { day: 'Sat', slots: satSlots, start: SAT_START }].map((col: any) => (
+                     {[{ day: 'Fri', slots: friSlots, start: FRI_START }, { day: 'Sat', slots: satSlots, start: SAT_START }].map((col: any) => {
+                         const realDate = getRealDateForColumn(col.day, currentWeekOffset);
+
+                         return (
                          <div key={col.day} className="flex-1 flex flex-col bg-zinc-900/30 border border-white/10 rounded-2xl overflow-hidden">
-                             <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">{col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}</div>
+                             <div className="p-3 bg-zinc-800/80 border-b border-white/5 text-center font-black uppercase text-zinc-400 text-[10px] tracking-[0.2em]">
+                                 {col.day === 'Fri' ? 'Friday Evening' : 'Saturday Full-Day'}
+                             </div>
                              <div className="flex-1 relative flex">
                                  <div className="w-14 bg-black/20 border-r border-white/5 text-[10px] text-zinc-600 font-mono text-right py-2 shrink-0">
                                      {col.slots.filter((s:any) => s.m === 0).map((s:any) => (<div key={s.val} style={{ height: '128px' }} className="pr-3 pt-1">{s.h > 12 ? s.h-12 : s.h} {s.h >= 12 ? 'PM' : 'AM'}</div>))}
@@ -339,9 +361,11 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                                      {['Acting', 'Music', 'Dance'].map((track) => (
                                          <div key={track} className="relative group/lane">
                                               <div className="absolute top-0 inset-x-0 p-1 text-[9px] font-black uppercase text-center text-zinc-700 bg-zinc-900/40 z-10 pointer-events-none">{track}</div>
+                                              
                                               {col.slots.map((slot:any) => (
                                                   <div key={slot.val} className={`h-8 border-b border-white/[0.02] transition-colors ${draggedSceneId || draggedItemId ? 'hover:bg-blue-500/10' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, col.day, slot.h, slot.m, track as TrackType)}/>
                                               ))}
+
                                               {schedule.filter((i: any) => i.day === col.day && i.track === track && i.weekOffset === currentWeekOffset).map((item: any) => {
                                                   const top = (item.startTime - col.start) * 128;
                                                   const height = (item.duration / 60) * 128;
@@ -349,19 +373,32 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                                                   const span = item.span || 1;
                                                   const isDraggingThis = draggedItemId === item.id;
                                                   
+                                                  // 🔴 CONFLICT ENGINE LOGIC:
+                                                  const sceneCast = scene?.castNames || [];
+                                                  const activeConflicts = conflicts.filter((c: any) => 
+                                                      c.date === realDate && sceneCast.includes(c.personName)
+                                                  );
+                                                  const hasConflict = activeConflicts.length > 0;
+                                                  
                                                   return (
                                                       <div key={item.id} draggable onDragStart={(e) => { e.dataTransfer.setData("itemId", item.id.toString()); setDraggedItemId(item.id.toString()); }} onDragEnd={() => setDraggedItemId(null)}
                                                         className={`absolute rounded-xl border-l-[6px] shadow-2xl text-xs transition-all group hover:brightness-110 active:scale-[0.98] cursor-grab active:cursor-grabbing
-                                                          ${getTrackStyles(item.track)}
+                                                          ${getTrackStyles(item.track, hasConflict)}
                                                           ${span > 1 ? 'z-40 ring-2 ring-white/10' : 'z-20 left-1.5 right-1.5'}
                                                           ${isDraggingThis ? 'opacity-50 pointer-events-none' : ''} 
                                                         `}
                                                         style={{ top: `${top}px`, height: `${height}px`, width: span > 1 ? `calc(${span * 100}% + ${(span - 1) * 0.25}rem - 0.75rem)` : 'auto' }}>
                                                            
-                                                           <div className="w-full h-full p-3 overflow-hidden">
-                                                               <div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4">
+                                                           <div className="w-full h-full p-3 overflow-hidden flex flex-col">
+                                                               <div className="font-black truncate uppercase tracking-tighter leading-tight text-[11px] pr-4 flex items-center gap-1">
+                                                                  {hasConflict && <AlertTriangle size={12} className="text-red-300" />}
                                                                   {span === 3 ? '🌎 FULL RUN: ' : span === 2 ? '🤝 JOINT: ' : ''}{scene?.name}
                                                                </div>
+                                                               {hasConflict && (
+                                                                  <div className="text-[9px] font-bold text-red-200 truncate mt-1">
+                                                                     Out: {activeConflicts.map((c:any) => c.personName.split(' ')[0]).join(', ')}
+                                                                  </div>
+                                                               )}
                                                            </div>
                                                            
                                                            <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all z-50 transform hover:scale-110"><X size={10} /></button>
@@ -383,7 +420,8 @@ function CalendarView({ sceneData, schedule, setSchedule, currentWeekOffset, set
                                  </div>
                              </div>
                          </div>
-                     ))}
+                         );
+                     })}
                  </div>
              </div>
          </main>
