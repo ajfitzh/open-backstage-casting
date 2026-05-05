@@ -1,14 +1,17 @@
 import { 
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
-  SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck 
+  SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck, 
+  UserCircle
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
   {
-    title: "Dashboard",
+    title: "My Family",
+    color: "text-blue-400",
     items: [
-      { label: "Dashboard", href: "/", icon: Home }
+      { label: "Family Hub", href: "/", icon: Home },
+      { label: "Master Profile", href: "/settings/family", icon: UserCircle },
     ]
   },
   {

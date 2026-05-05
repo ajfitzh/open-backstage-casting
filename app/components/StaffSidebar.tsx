@@ -21,24 +21,21 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
+  // 🟢 Role-awareness for branding
+  const staffRoles = ["Admin", "Director", "Staff", "Teacher", "SuperAdmin"];
+  const isStaff = staffRoles.includes(globalRole);
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  // 🟢 FIX 1: A bulletproof RBAC evaluation helper to stop truthy/falsy bugs
+  // RBAC evaluation helper
   const canSee = (entity: any) => {
-      // If it has neither, everyone sees it
       if (!entity.permission && !entity.group) return true;
-      
-      // If it has a permission and you pass it, you see it
       if (entity.permission && hasPermission(globalRole, productionRole, entity.permission as Permission)) return true;
-      
-      // If it has a group and you are in it, you see it
       if (entity.group && userGroups.includes(entity.group)) return true;
-      
-      // Otherwise, hide it.
       return false;
   };
 
-  // 🟢 FIX 2: Helper to accurately determine if a path is active, even in multi-tenant URLs
+  // Helper to determine active path
   const isPathActive = (href: string) => {
       if (!pathname) return false;
       if (href === '/') return pathname === '/';
@@ -49,7 +46,6 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
     NAV_CONFIG.forEach(section => {
         section.items.forEach((item: any) => {
             if (item.children) {
-                // Now uses the safer isPathActive check
                 const isChildActive = item.children.some((child: any) => isPathActive(child.href));
                 if (isChildActive) {
                     setOpenGroups(prev => ({ ...prev, [item.label]: true }));
@@ -85,7 +81,13 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
                 OPEN<span className="text-white">BACKSTAGE</span>
                 </h1>
                 <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest group-hover:text-zinc-500">
-                    {isSimulating ? <span className="text-red-500 animate-pulse">GOD MODE ACTIVE</span> : "Staff Portal"}
+                    {isSimulating ? (
+                        <span className="text-red-500 animate-pulse">GOD MODE ACTIVE</span>
+                    ) : isStaff ? (
+                        "Staff Portal"
+                    ) : (
+                        "Family Portal" 
+                    )}
                 </span>
             </div>
         )}
@@ -94,14 +96,6 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
         {NAV_CONFIG.map((section, idx) => {
            if (!canSee(section)) return null;
-
-           if (section.title === "Dashboard") {
-               return (
-                  <div key={idx} className="space-y-1">
-                     <NavItem href="/" icon={<Home size={18}/>} label="Dashboard" active={isPathActive('/')} isCollapsed={isCollapsed} />
-                  </div>
-               )
-           }
 
            return (
              <div key={idx} className="animate-in slide-in-from-left-2 duration-300">
@@ -114,7 +108,6 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
 
                 <div className="space-y-1">
                     {section.items.map((item: any) => {
-                        // Using the new helper
                         if (!canSee(item)) return null;
 
                         const itemHref = getFinalHref(item.href);
@@ -122,8 +115,6 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
                         if (item.isCollapsible && item.children) {
                             const isGroupOpen = openGroups[item.label] || false;
                             const isGroupActive = item.children.some((child: any) => isPathActive(child.href));
-
-                            // Validate children using the new helper
                             const validChildren = item.children.filter((child: any) => canSee(child));
 
                             if (validChildren.length === 0) return null;
@@ -148,7 +139,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
                                         className={`w-full flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all justify-between ${isGroupActive ? 'text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
                                     >
                                         <div className="flex items-center">
-                                            <item.icon size={18} className={`shrink-0 ${isGroupActive ? "text-purple-400" : "text-zinc-500"}`}/>
+                                            <item.icon size={18} className={`shrink-0 ${isGroupActive ? "text-blue-400" : "text-zinc-500"}`}/>
                                             <span className="ml-3 truncate">{item.label}</span>
                                         </div>
                                         {isGroupOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
@@ -181,7 +172,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   );
 }
 
-// ... Sub-components Below ...
+// ... Sub-components ...
 function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     const [isOpen, setIsOpen] = useState(false);
     const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -199,20 +190,10 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
     };
 
     return (
-        <div 
-            onMouseEnter={handleMouseEnter} 
-            onMouseLeave={handleMouseLeave} 
-            className="w-full relative"
-        >
-            <button 
-                className={`
-                    w-full flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-all
-                    ${active ? 'text-white bg-white/5' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}
-                `}
-            >
-                <Icon size={18} className={active ? "text-purple-400" : "text-zinc-500"}/>
+        <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} className="w-full relative">
+            <button className={`w-full flex items-center justify-center px-3 py-2 rounded-lg text-xs font-bold transition-all ${active ? 'text-white bg-white/5' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}>
+                <Icon size={18} className={active ? "text-blue-400" : "text-zinc-500"}/>
             </button>
-
             {isOpen && createPortal(
                 <div 
                     onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }}
@@ -232,12 +213,7 @@ function FlyoutMenu({ label, icon: Icon, active, items, pathname }: any) {
                                     key={child.href}
                                     href={child.href}
                                     onClick={() => setIsOpen(false)}
-                                    className={`
-                                        flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors
-                                        ${isActive 
-                                            ? 'bg-zinc-800 text-white' 
-                                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}
-                                    `}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors ${isActive ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                 >
                                     <ChildIcon size={14} />
                                     {child.label}
@@ -258,19 +234,10 @@ function NavItem({ href, icon, label, active, isCollapsed }: any) {
         <SidebarTooltip text={label} isCollapsed={isCollapsed}>
             <Link 
                 href={href} 
-                className={`
-                    flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all relative
-                    ${isCollapsed ? 'justify-center' : ''}
-                    ${active 
-                        ? 'bg-zinc-800 text-white border border-white/5 shadow-sm' 
-                        : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200 border border-transparent'}
-                `}
+                className={`flex items-center px-3 py-2 rounded-lg text-xs font-bold transition-all relative ${isCollapsed ? 'justify-center' : ''} ${active ? 'bg-zinc-800 text-white border border-white/5 shadow-sm' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200 border border-transparent'}`}
             >
                 <div className="shrink-0">{icon}</div>
-                <span className={`
-                    overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out
-                    ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}
-                `}>
+                <span className={`overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}`}>
                     {label}
                 </span>
             </Link>
@@ -282,13 +249,7 @@ function SubNavItem({ href, icon, label, active, isCollapsed }: any) {
     return (
         <Link 
             href={href} 
-            className={`
-                flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all relative
-                ${isCollapsed ? 'justify-center w-full' : ''}
-                ${active 
-                    ? 'text-white bg-white/5' 
-                    : 'text-zinc-500 hover:text-zinc-300'}
-            `}
+            className={`flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all relative ${isCollapsed ? 'justify-center w-full' : ''} ${active ? 'text-white bg-white/5' : 'text-zinc-500 hover:text-zinc-300'}`}
         >
             <div className="shrink-0">{icon}</div>
             <span className="ml-3 truncate">{label}</span>
