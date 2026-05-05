@@ -13,7 +13,8 @@ export async function submitCommitteeReport(tenant: string, data: any) {
     const F = DB.COMMITTEE_REPORTS.FIELDS;
     
     // Fallback to static ID if you haven't added it to the Tenant Registry table yet
-const tableId = (tables as any).COMMITTEE_REPORTS || DB.COMMITTEE_REPORTS.ID;
+    const tableId = (tables as any).COMMITTEE_REPORTS || DB.COMMITTEE_REPORTS.ID;
+    
     // Build the payload using your new schema fields
     const payload = {
       [F.NAME]: `${data.committeeName} - ${data.phase} Report`, 
@@ -45,19 +46,19 @@ const tableId = (tables as any).COMMITTEE_REPORTS || DB.COMMITTEE_REPORTS.ID;
     return { success: false, error: "An unexpected error occurred." };
   }
 }
+
 export async function saveCommitteeAssignments(
     tenant: string,
     phase: 'Pre-Show' | 'Show Week',
     assignments: Record<number, string>,
     chairs: Record<number, boolean> 
 ) {
-    // 🟢 1. THE DRY RUN INTERCEPT (Safe testing mode)
-    // ⚠️ COMMENT THIS OUT when you are ready to actually write to the database!
-    if (process.env.NODE_ENV === "development") {
+    // 🟢 1. THE DRY RUN INTERCEPT
+    // Set ENABLE_DRY_RUN="true" in your .env or .env.local to trigger this safe mode.
+    if (process.env.ENABLE_DRY_RUN === "true") {
         console.log(`\n💾 --- DRY RUN SAVE: ${phase} ---`);
         console.log(`🏢 Tenant: ${tenant}`);
         
-        // Let's see exactly what the UI is trying to send to the database
         const payloadChanges = Object.keys(assignments).map(id => ({
             personId: id,
             assignedTo: assignments[Number(id)],
@@ -70,14 +71,11 @@ export async function saveCommitteeAssignments(
         await new Promise(resolve => setTimeout(resolve, 1500));
         
         console.log("✅ Dry run complete. Aborting real database write.");
-        
-        // Return early so we DON'T actually write to Baserow
         return { success: true }; 
     }
 
-
     // 🟢 2. REAL DATABASE WRITE
-    const tables = await getTenantTableConfig(tenant); // Ensure this is awaited!
+    const tables = await getTenantTableConfig(tenant);
     const tableId = tables.COMMITTEE_PREFS;
     const F = DB.COMMITTEE_PREFS.FIELDS;
     
@@ -85,7 +83,6 @@ export async function saveCommitteeAssignments(
     const fieldId = phase === 'Pre-Show' ? F.PRE_SHOW_PHASE : F.SHOW_WEEK_COMMITTEES;
 
     const updates = Object.entries(assignments).map(([id, value]) => {
-        // 🟢 Removed ?user_field_names=true since we are using strict IDs
         return fetch(`${BASE_URL}/api/database/rows/table/${tableId}/${id}/`, {
             method: 'PATCH',
             headers: {

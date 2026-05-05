@@ -311,7 +311,7 @@ export async function acceptRoleAndSign(
     // 2. SEND "WELCOME TO THE CAST" EMAIL
     try {
       await resend.emails.send({
-        from: 'Casting Team <casting@open-backstage.org>',
+        from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
         to: parentEmail,
         subject: `🎭 Role Accepted: ${studentName} in ${showTitle}!`,
         html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">

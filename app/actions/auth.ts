@@ -2,7 +2,7 @@
 "use server";
 
 import { fetchBaserow, DB, findUserByEmail, getTenantTableConfig } from "@/app/lib/baserow";
-// import bcrypt from "bcryptjs"; // Uncomment if you hash passwords here
+import bcrypt from "bcryptjs"; // Uncomment if you hash passwords here
 
 export async function upgradeGuestToUser(tenant: string, email: string, passwordRaw: string) {
   try {
@@ -13,8 +13,8 @@ export async function upgradeGuestToUser(tenant: string, email: string, password
     if (!user) return { success: false, error: "Account not found." };
 
     // 2. Hash the password (Highly recommended!)
-    // const hashedPassword = await bcrypt.hash(passwordRaw, 10);
-    const hashedPassword = passwordRaw; // Replace with hashed version in production
+    const hashedPassword = await bcrypt.hash(passwordRaw, 10);
+    // const hashedPassword = passwordRaw; // Replace with hashed version in production
 
     // 3. Update the Baserow record
     // Note: Replace 'PASSWORD_FIELD' with your actual Baserow field name for passwords

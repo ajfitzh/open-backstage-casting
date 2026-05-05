@@ -1,24 +1,38 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Send, Users, Mic, BookOpen, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Send, Users, Mic, BookOpen, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { sendNightlyReport } from '@/app/actions/reports'; // 🟢 Import the new action
 
 export default function NightlyReportClient({ todayEvent, attendance, scenesWorked, castEmails }: any) {
     const [directorNotes, setDirectorNotes] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [sent, setSent] = useState(false);
+    const [errorMsg, setErrorMsg] = useState(""); // 🟢 New error state
 
     // Calculate today's metrics
     const absences = attendance.filter((a: any) => a.status === "Unexcused Absence" || a.status === "Excused");
     
     const handleSendReport = async () => {
         setIsSending(true);
-        // Here you would call a server action (e.g., sendNightlyEmail) 
-        // passing: castEmails, directorNotes, absences, and scenesWorked.
-        // For the MVP frontend, we will simulate the API call:
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
+        setErrorMsg("");
+
+        // 🟢 Actually call the server action with the real data
+        const result = await sendNightlyReport({
+            emails: castEmails,
+            eventName: todayEvent?.name || "Today's Rehearsal",
+            date: new Date().toLocaleDateString(),
+            absences: absences.map((a: any) => ({ name: a.name, status: a.status })),
+            scenes: scenesWorked || [],
+            notes: directorNotes
+        });
+
+        if (result.success) {
+            setSent(true);
+        } else {
+            setErrorMsg(result.error || "Failed to send the report.");
+        }
         
-        setSent(true);
         setIsSending(false);
     };
 
@@ -96,9 +110,16 @@ export default function NightlyReportClient({ todayEvent, attendance, scenesWork
                 </div>
             </div>
 
+            {/* 🟢 Render error message if the send fails */}
+            {errorMsg && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl flex items-center gap-2 text-sm font-medium">
+                    <XCircle size={16} /> {errorMsg}
+                </div>
+            )}
+
             <button 
                 onClick={handleSendReport}
-                disabled={isSending || !directorNotes.trim()}
+                disabled={isSending || !directorNotes.trim() || castEmails?.length === 0}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95"
             >
                 {isSending ? "Compiling Report..." : "Send Nightly Summary to Cast"} <Send size={16} />

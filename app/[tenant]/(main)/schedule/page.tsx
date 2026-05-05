@@ -1,25 +1,37 @@
 import { cookies } from 'next/headers';
 import { BaserowClient } from '@/app/lib/BaserowClient';
+import { getActiveProduction, getShowById } from '@/app/lib/baserow'; // 🟢 Added imports
 import SchedulerClient from '@/app/components/schedule/SchedulerClient';
 
-// 🟢 1. Add params to the page signature
-export default async function SchedulePage({ params }: { params: { tenant: string } }) {
-  // 🟢 2. Extract the tenant
-  const tenant = params.tenant;
+export const dynamic = 'force-dynamic'; // 🟢 Ensure Next.js never statically caches this view
 
-  // 🟢 3. Await cookies
+export default async function SchedulePage({ params }: { params: { tenant: string } }) {
+  const tenant = params.tenant;
   const cookieStore = await cookies();
   
-  // Use the exact same global state logic we used for Casting
-  const savedShowId = cookieStore.get('active_production_id')?.value;
-  const showId = parseInt(savedShowId || "94", 10);
+  // 🟢 1. Intelligent Active Show Resolution
+  const cookieId = cookieStore.get('active_production_id')?.value;
+  let show = null;
+  
+  if (cookieId) show = await getShowById(tenant, Number(cookieId));
+  if (!show) show = await getActiveProduction(tenant); // Fallback to current season's show
 
-  if (isNaN(showId)) {
-    return <div className="p-10 text-white font-bold">Error: Could not determine active show.</div>;
+  // 🟢 2. Empty State (No Active Show)
+  if (!show) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 bg-zinc-950">
+          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4">
+              <span className="text-2xl">📅</span>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">No Active Show Found</h2>
+          <p className="text-zinc-400 max-w-md">There is no active production set. Please select a production from the global header to view the schedule.</p>
+      </div>
+    );
   }
 
-  // 🟢 4. Pass the tenant string to ALL BaserowClient fetchers
-  // Fetch ALL data needed for the schedule board in parallel
+  const showId = show.id;
+
+  // 🟢 3. Fetch ALL data needed for the schedule board in parallel
   const [
     events, 
     allSlots, 
@@ -29,7 +41,7 @@ export default async function SchedulePage({ params }: { params: { tenant: strin
     roster
   ] = await Promise.all([
     BaserowClient.getEventsForShow(tenant, showId),
-    BaserowClient.getSlotsForShow(tenant, showId), // Pulls a large batch from the table
+    BaserowClient.getSlotsForShow(tenant, showId),
     BaserowClient.getConflictsForShow(tenant, showId),
     BaserowClient.getScenesForShow(tenant, showId),
     BaserowClient.getAssignmentsForShow(tenant, showId),
