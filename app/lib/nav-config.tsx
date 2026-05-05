@@ -1,8 +1,9 @@
+// app/lib/nav-config.tsx
 import { 
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
   SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck, 
-  UserCircle
+  UserCircle, ClipboardList, BookOpen, Mic, UserCheck
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
@@ -35,34 +36,48 @@ export const NAV_CONFIG = [
       }
     ]
   },
-// app/lib/nav-config.tsx
-
-{
+  {
     title: "Logistics & Ops",
     color: "text-emerald-500",
     items: [
       { label: "Master Roster", href: "/roster", icon: UserSquare2, permission: "view_cast_list" },
       { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
       
-      // 🟢 4. Add the permission requirement next to the group
       { 
-        label: "Check-In Board", 
+        label: "Audition Check-In", 
         href: "/production/active/check-in", 
-        icon: ClipboardCheck, 
-        permission: "view_checkin", // Admins see it via this
-        group: "Check In Team"      // Volunteers see it via this
+        icon: Mic, 
+        permission: "view_checkin", 
+        group: "Check In Team"      
+      },
+      { 
+        label: "Daily Rehearsal Kiosk", 
+        href: "/production/active/rehearsal-check-in", 
+        icon: UserCheck, 
+        permission: "view_checkin", 
+        group: "Check In Team"      
       },
       
-      { label: "Committees", href: "/committees", icon: VenetianMask, permission: "manage_committees" },
+      { 
+        label: "Committee Team", 
+        icon: VenetianMask, 
+        isCollapsible: true,
+        permission: "manage_committees",
+        children: [
+           { label: "Assignments", href: "/committees", icon: Users },
+           { label: "Weekly Reports", href: "/committees/reports", icon: ClipboardList }
+        ]
+      },
       { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
     ]
-},
+  },
   {
     title: "Business Office",
     color: "text-amber-500",
     permission: "view_financials",
     items: [
       { label: "Reports & Fees", href: "/reports", icon: BarChart3 },
+      { label: "Playbill Exporter", href: "/reports/playbill", icon: BookOpen },
       { label: "Show Analytics", href: "/analytics", icon: Banknote },
     ]
   },
