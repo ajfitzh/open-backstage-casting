@@ -34,3 +34,44 @@ export async function upgradeGuestToUser(tenant: string, email: string, password
     return { success: false, error: "Something went wrong." };
   }
 }
+
+
+export async function registerUser(tenant: string, data: any) {
+  try {
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.PEOPLE.FIELDS;
+    
+    // 1. Check if the user already exists
+    const existingUser = await findUserByEmail(tenant, data.email);
+    if (existingUser) {
+        return { success: false, error: "An account with this email already exists." };
+    }
+
+    // 2. Hash the password securely
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    // 3. Create the brand new user in Baserow
+    const payload = {
+      [F.FIRST_NAME]: data.firstName,
+      [F.LAST_NAME]: data.lastName,
+      [F.CYT_ACCOUNT_PERSONAL_EMAIL]: data.email,
+      [F.STATUS]: ["User"], // Set them as a standard User
+      "Password": hashedPassword // Ensure this matches your actual Baserow password column name!
+    };
+
+    const res = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    if (!res || res.error) {
+      console.error("Baserow creation error:", res);
+      return { success: false, error: "Failed to create account in the database." };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Registration error:", error);
+    return { success: false, error: "An unexpected error occurred." };
+  }
+}
