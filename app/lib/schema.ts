@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/4/2026, 9:58:42 PM
+//    Generated on: 5/5/2026, 8:15:05 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -640,6 +640,7 @@ export const DB = {
       "RATES": "field_7922", // text
       "SLOTS": "field_7923", // text
       "AUDITION_SLOTS": "field_7935", // text
+      "COMMITTEE_REPORTS": "field_7976", // text
     }
   },
   AUDITION_SLOTS: {
