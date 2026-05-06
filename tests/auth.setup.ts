@@ -3,19 +3,23 @@ import { test as setup, expect } from '@playwright/test';
 const authFile = 'playwright/.auth/user.json';
 
 setup('authenticate', async ({ page }) => {
-  await page.goto('/login');
+  // 1. Go to your login page
+  await page.goto('/sandbox/login'); // Change to just '/login' if you aren't using the sandbox tenant prefix
 
-  // 1. Match your specific placeholders
-  await page.getByPlaceholder('Email Address').fill('test@email.com');
-  await page.getByPlaceholder('App Password').fill('test');
+  // 2. Fill credentials
+  await page.getByPlaceholder(/Email/i).fill('test@email.com');
+  await page.getByPlaceholder(/Password/i).fill('test');
 
-  // 2. Click the EXACT button name from your code
-  await page.getByRole('button', { name: 'Enter Deck' }).click();
+  // 3. Click submit
+  await page.getByRole('button', { name: /Enter Deck|Sign In/i }).click();
 
-  // 3. Wait for the app to land on the dashboard
-  // (Adjust the text 'Dashboard' to something that actually exists on your home page)
-  await page.waitForURL('**/'); 
- await expect(page.getByText(/dashboard|staff portal|war room/i).first()).toBeVisible({ timeout: 10000 });
-  // 4. Save the session
+  // 4. Wait for the URL to specifically NOT be the login page
+  await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 10000 });
+
+  // 5. Look for something that ALWAYS exists in your logged-in app shell
+  // We know your staff sidebar has a "Schedule" or "Roster" link!
+  await expect(page.getByRole('link', { name: /Schedule|Roster|Casting/i }).first()).toBeVisible({ timeout: 10000 });
+
+  // 6. Save the session
   await page.context().storageState({ path: authFile });
 });
