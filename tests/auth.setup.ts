@@ -7,7 +7,7 @@ setup('authenticate', async ({ page }) => {
   await page.goto('/login');
 
   // 2. Fill credentials 
-  await page.getByPlaceholder(/Email Address/i).fill('james@e2e-sandbox.org');
+  await page.getByPlaceholder(/Email Address/i).fill('admin@e2e-sandbox.org');
   await page.getByPlaceholder(/Password/i).fill('dev-mode-bypass');
 
   // 3. Click submit
