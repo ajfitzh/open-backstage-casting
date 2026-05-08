@@ -164,8 +164,18 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const sigSectionRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
+  
+  // 🟢 FIX 1: Ref for our scrollable container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const totalSteps = 7;
+
+  // 🟢 FIX 1: Auto-scroll to top when step changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [currentStep]);
 
   const calculateAge = useCallback((dob: string) => {
     if (!dob) return null;
@@ -209,7 +219,46 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setFormData((prev) => ({ ...prev, ...fields }));
   };
 
-  const handleNext = () => setCurrentStep((p) => Math.min(p + 1, totalSteps));
+  // 🟢 FIX 2: Intercept handleNext with validation logic to prevent ghost registrations
+  const handleNext = () => {
+    if (currentStep === 1) {
+      if (!formData.fullName || !formData.dob || !formData.grade) {
+        alert("Please fill out your Name, Date of Birth, and Grade before continuing.");
+        return;
+      }
+    }
+    if (currentStep === 2) {
+      if (!formData.heightFt || !formData.hairColor) {
+        alert("Please fill out your Height and Hair Color before continuing.");
+        return;
+      }
+    }
+    if (currentStep === 3) {
+      if (!formData.songTitle) {
+        alert("Please select or enter the title of your audition song.");
+        return;
+      }
+      if (!formData.usePresetSong && !formData.musicFileName) {
+        alert("Please upload your MP3 backing track, or select an Easy-Start preset instead.");
+        return;
+      }
+    }
+    if (currentStep === 4) {
+      if (!formData.auditionSlotId) {
+        alert("Please select an audition time slot.");
+        return;
+      }
+    }
+    if (currentStep === 6) {
+      if (!formData.preShow1 || !formData.show1) {
+        alert("Please select your top picks for both Pre-Show and Show Week committees.");
+        return;
+      }
+    }
+    // If all required fields pass, move to next step!
+    setCurrentStep((p) => Math.min(p + 1, totalSteps));
+  };
+
   const handlePrev = () => setCurrentStep((p) => Math.max(p - 1, 0));
 
   const handleUnlockProfile = async () => {
@@ -561,7 +610,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest italic">Step {currentStep}/7</span>
             </div>
 
-            <div className="p-5 sm:p-10 overflow-y-auto custom-scrollbar flex-1">
+            {/* 🟢 FIX 1: We attach the scrollContainerRef here! */}
+            <div ref={scrollContainerRef} className="p-5 sm:p-10 overflow-y-auto custom-scrollbar flex-1">
               <form onSubmit={handleSubmit} className="space-y-10 sm:space-y-12 pb-4">
                 {currentStep === 1 && (
                   <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
@@ -848,7 +898,19 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                                      { id: "tentative", label: "Partial", color: "bg-orange-400" },
                                      { id: "absent", label: "Absent", color: "bg-red-600" }
                                    ].map(l => (
-                                     <button key={l.id} type="button" onClick={() => updateForm({ conflicts: {...formData.conflicts, [d.id]: {level: l.id as ConflictLevel, notes: curr.notes} } })} className={`px-2 sm:px-4 py-2 sm:py-3 text-[8px] sm:text-[9px] font-black uppercase rounded-lg sm:rounded-xl transition-all ${curr.level === l.id ? `${l.color} text-white shadow-md` : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}>
+                                     <button 
+                                      key={l.id} 
+                                      type="button" 
+                                      // 🟢 FIX 3: Intercept clicks on mandatory dates
+                                      onClick={() => {
+                                        if ((d.type === "mandatory" || d.type === "critical") && l.id !== "available") {
+                                          alert("This date is a mandatory rehearsal. Conflicts are not permitted.");
+                                          return;
+                                        }
+                                        updateForm({ conflicts: {...formData.conflicts, [d.id]: {level: l.id as ConflictLevel, notes: curr.notes} } });
+                                      }} 
+                                      className={`px-2 sm:px-4 py-2 sm:py-3 text-[8px] sm:text-[9px] font-black uppercase rounded-lg sm:rounded-xl transition-all ${curr.level === l.id ? `${l.color} text-white shadow-md` : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}
+                                     >
                                        {l.label}
                                      </button>
                                    ))}
@@ -1068,6 +1130,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                   <ChevronLeft size={18} /> {currentStep === 1 ? "Cancel" : "Back"}
                 </button>
                 {currentStep < 7 ? (
+                  // 🟢 FIX 2: We trigger our validation logic before advancing
                   <button type="button" onClick={handleNext} className="bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-6 sm:px-14 py-3 sm:py-5 rounded-xl sm:rounded-[2rem] font-black uppercase text-[10px] sm:text-sm flex items-center gap-2 shadow-xl active:scale-95 transition-all">
                     Next <ChevronRight size={18} />
                   </button>
