@@ -17,8 +17,18 @@ const HEADERS = {
 // 🛡️ HELPERS
 // ==============================================================================
 
-export async function fetchBaserow(endpoint: string, options: RequestInit = {}, queryParams: Record<string, any> = {}) {
+export async function fetchBaserow(
+  endpoint: string, 
+  options: RequestInit = {}, 
+  queryParams: Record<string, any> = {},
+  tenant: string = "cytfred" // 🟢 FIX 1: Safely default to your main database
+) {
   try {
+    // 🟢 FIX 2: Hot-swap the token based on the requested tenant
+    const token = (tenant === "e2e" || tenant === "sandbox")
+      ? process.env.SANDBOX_BASEROW_TOKEN
+      : process.env.NEXT_PUBLIC_BASEROW_TOKEN;
+
     const params = new URLSearchParams(queryParams);
     let path = endpoint;
     if (!path.startsWith("http") && !path.startsWith("/api")) {
@@ -29,7 +39,11 @@ export async function fetchBaserow(endpoint: string, options: RequestInit = {}, 
 
     const res = await fetch(finalUrl, {
       ...options,
-      headers: { ...HEADERS, ...options.headers },
+      headers: { 
+        ...HEADERS, 
+        "Authorization": `Token ${token}`, // 🟢 FIX 3: Inject the correct token
+        ...options.headers 
+      },
       cache: options.cache || "no-store", 
     });
 
@@ -90,7 +104,7 @@ export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeo
   const tables = await getTenantTableConfig(tenant);
   const tableId = tables[tableKey as keyof typeof tables];
   const url = `/database/rows/table/${tableId}/${rowId}/`;
-  const res = await fetchBaserow(url, { method: "DELETE" });
+  const res = await fetchBaserow(url, { method: "DELETE" }, {}, tenant); // 🟢 Added tenant
   return res !== null;
 }
 
@@ -108,7 +122,8 @@ export async function getClasses(tenant: string) {
     const data = await fetchBaserow(
       `/database/rows/table/${tables.CLASSES}/`, 
       {}, 
-      { page: page.toString(), size: "200" } 
+      { page: page.toString(), size: "200" },
+      tenant // 🟢 Added tenant
     );
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -140,7 +155,7 @@ return allRows.map((row: any) => ({
 
 export async function getClassById(tenant: string, classId: string) {
   const tables = await getTenantTableConfig(tenant);
-  const row = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`);
+  const row = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`, {}, {}, tenant); // 🟢 Added tenant
   if (!row || row.error) return null;
 
   const students = row[DB.CLASSES.FIELDS.STUDENTS] || []; 
@@ -171,7 +186,7 @@ export async function getClassRoster(tenant: string, classId: string) {
     size: "200"
   };
 
-  const students = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
+  const students = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(students)) return [];
 
   return students.map((s: any) => ({
@@ -191,7 +206,8 @@ export async function getVenues(tenant: string) {
   const data = await fetchBaserow(
     `/database/rows/table/${tables.VENUES}/`, 
     {}, 
-    { size: "200" }
+    { size: "200" },
+    tenant // 🟢 Added tenant
   );
   
   if (!Array.isArray(data)) return [];
@@ -214,9 +230,9 @@ export async function getVenues(tenant: string) {
 export async function getVenueLogistics(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
-    fetchBaserow(`/database/rows/table/${tables.VENUES}/`, {}, { size: "200" }),
-    fetchBaserow(`/database/rows/table/${tables.SPACES}/`, {}, { size: "200" }),
-    fetchBaserow(`/database/rows/table/${tables.RENTAL_RATES}/`, {}, { size: "200" }),
+    fetchBaserow(`/database/rows/table/${tables.VENUES}/`, {}, { size: "200" }, tenant), // 🟢 Added tenant
+    fetchBaserow(`/database/rows/table/${tables.SPACES}/`, {}, { size: "200" }, tenant), // 🟢 Added tenant
+    fetchBaserow(`/database/rows/table/${tables.RENTAL_RATES}/`, {}, { size: "200" }, tenant), // 🟢 Added tenant
     getClasses(tenant)
   ]);
 
@@ -285,7 +301,7 @@ export async function getAuditionProduction(tenant: string) {
 
   console.log(`🔍 [Sync] Checking for strictly 'Upcoming' Show for Auditions in ${tenant}...`);
   
-  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" });
+  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" }, tenant); // 🟢 Added tenant
   
   if (!Array.isArray(allData) || allData.length === 0) return null;
 
@@ -308,8 +324,7 @@ export async function getActiveProduction(tenant: string) {
   console.log(`🔍 [Sync] Checking for Upcoming/Active Show in ${tenant}...`);
   
   // 🟢 OPTIMIZATION: Fetch the latest 10 productions to evaluate their status locally.
-  // This is much faster than making 3 sequential API calls to Baserow!
-  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" });
+  const allData = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/`, {}, { size: "10" }, tenant); // 🟢 Added tenant
   
   if (!Array.isArray(allData) || allData.length === 0) return null;
 
@@ -339,8 +354,8 @@ export async function getSeasons(tenant: string) {
   const data = await fetchBaserow(
     `/database/rows/table/${tables.SEASONS}/`, 
     {}, 
-    // 🟢 FIXED: Removed order_by so we don't trigger ghost-field crashes
-    { size: "200" } 
+    { size: "200" },
+    tenant // 🟢 Added tenant
   );
 
   if (!Array.isArray(data)) return [];
@@ -357,7 +372,7 @@ export async function getSeasons(tenant: string) {
 
 export async function getShowById(tenant: string, id: string | number) {
   const tables = await getTenantTableConfig(tenant);
-  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${id}/`);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${id}/`, {}, {}, tenant); // 🟢 Added tenant
   if (!data || data.error || Array.isArray(data)) return null;
   return mapShow(data);
 }
@@ -367,7 +382,8 @@ export async function getAllShows(tenant: string) {
   const data = await fetchBaserow(
     `/database/rows/table/${tables.PRODUCTIONS}/`, 
     {}, 
-    { size: "200" } 
+    { size: "200" },
+    tenant // 🟢 Added tenant
   );
 
   if (!Array.isArray(data)) return [];
@@ -411,7 +427,8 @@ export async function getPeople(tenant: string) {
       { 
         size: "200", 
         page: page.toString() 
-      }
+      },
+      tenant // 🟢 Added tenant
     );
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -435,7 +452,7 @@ export async function getPeople(tenant: string) {
 export async function getRoles(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
   const F = DB.BLUEPRINT_ROLES.FIELDS;
-  const data = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, { size: "200", user_field_names: "true" });
+  const data = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, { size: "200", user_field_names: "true" }, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -455,7 +472,7 @@ export async function createCastAssignment(tenant: string, personId: number, rol
   return await fetchBaserow(`/database/rows/table/${tables.ASSIGNMENTS}/`, { 
     method: "POST", 
     body: JSON.stringify(body) 
-  });
+  }, {}, tenant); // 🟢 Added tenant
 }
 
 export async function updateCastAssignment(tenant: string, assignmentId: number, personId: number | null, sceneIds?: number[]) {
@@ -475,7 +492,7 @@ export async function updateCastAssignment(tenant: string, assignmentId: number,
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
-  });
+  }, {}, tenant); // 🟢 Added tenant
 }
 
 // ==============================================================================
@@ -498,7 +515,8 @@ export async function getScheduleSlots(tenant: string, productionId: number) {
     const data = await fetchBaserow(
       `/database/rows/table/${tables.SCHEDULE_SLOTS}/`, 
       {}, 
-      { page: page.toString(), size: "200", user_field_names: "true" }
+      { page: page.toString(), size: "200", user_field_names: "true" },
+      tenant // 🟢 Added tenant
     );
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -544,7 +562,7 @@ export async function getSceneAssignments(tenant: string, productionId: number) 
     "user_field_names": "true" 
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.SCENE_ASSIGNMENTS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SCENE_ASSIGNMENTS}/`, {}, params, tenant); // 🟢 Added tenant
   
   if (!Array.isArray(data)) return [];
   return data;
@@ -577,7 +595,7 @@ export async function saveScheduleBatch(tenant: string, productionId: number, ne
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: chunk })
-    });
+    }, {}, tenant); // 🟢 Added tenant
   }
 
   return true;
@@ -596,7 +614,7 @@ export async function clearSchedule(tenant: string, productionId: number) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: chunk.map((id:any) => id) }), 
-    });
+    }, {}, tenant); // 🟢 Added tenant
   }
 }
 
@@ -607,10 +625,9 @@ export async function getScenes(tenant: string, productionId?: number) {
 
   if (productionId) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
-    // 🟢 FIXED: Removed params['order_by'] = F.ORDER;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.SCENES}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SCENES}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -638,13 +655,11 @@ export async function getProductionEvents(tenant: string, productionId: number) 
   const params = {
     size: "200",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    // 🟢 FIXED: Removed order_by: F.EVENT_DATE
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.EVENTS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.EVENTS}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
-  // 🟢 FIXED: Added JS sort to ensure chronological order
   return data.map((row: any) => ({
     id: row.id,
     date: row[F.EVENT_DATE],
@@ -667,7 +682,7 @@ export async function getProductionAssets(tenant: string, productionId?: number)
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.ASSETS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.ASSETS}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -689,7 +704,7 @@ export async function createProductionAsset(tenant: string, name: string, url: s
   return await fetchBaserow(`/database/rows/table/${tables.ASSETS}/`, { 
     method: "POST", 
     body: JSON.stringify(body) 
-  });
+  }, {}, tenant); // 🟢 Added tenant
 }
 
 // ==============================================================================
@@ -698,7 +713,7 @@ export async function createProductionAsset(tenant: string, name: string, url: s
 
 export async function getCastDemographics(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
-  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, { size: "200" });
+  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, { size: "200" }, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -728,7 +743,8 @@ export async function getAssignments(tenant: string, productionId?: number) {
     const data = await fetchBaserow(
       `/database/rows/table/${tables.ASSIGNMENTS}/`, 
       {}, 
-      { ...params, page: page.toString() }
+      { ...params, page: page.toString() },
+      tenant // 🟢 Added tenant
     );
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -761,7 +777,7 @@ export async function getCreativeTeam(tenant: string, productionId?: number) {
     params[`filter__${F.PRODUCTIONS}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
@@ -791,7 +807,7 @@ export async function getProductionConflicts(tenant: string, productionId: numbe
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -815,7 +831,7 @@ export async function getCommitteeData(tenant: string, productionId?: number) {
     params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   }
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params, tenant); // 🟢 Added tenant
   
   if (!Array.isArray(data)) {
     console.error(`[Baserow] Failed to fetch committee data for tenant: ${tenant}`);
@@ -854,17 +870,17 @@ export async function getCommitteeData(tenant: string, productionId?: number) {
 }
 export async function getCommitteePreferences(tenant: string) {
   const tables = await getTenantTableConfig(tenant);
-  return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`);
+  return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, {}, tenant); // 🟢 Added tenant
 }
 
 export async function getConflicts(tenant: string, id?: any) {
   const tables = await getTenantTableConfig(tenant);
-  return fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`);
+  return fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`, {}, {}, tenant); // 🟢 Added tenant
 }
 
 export async function getComplianceData(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
-  return fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`);
+  return fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {}, tenant); // 🟢 Added tenant
 }
 
 // ==============================================================================
@@ -883,7 +899,7 @@ export async function getAuditionSlots(tenant: string, productionId: number) {
   const data = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, {
     size: "100",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId
-  });
+  }, tenant); // 🟢 Added tenant
 
   if (!Array.isArray(data)) return [];
 
@@ -908,7 +924,7 @@ export async function getAuditionees(tenant: string, productionId?: number) {
   
   if(productionId) params[`filter__${F.PRODUCTION}__link_row_has`] = productionId;
   
-  const data = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => {
@@ -1028,7 +1044,7 @@ export async function submitAudition(tenant: string, studentId: number, producti
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
-    });
+    }, {}, tenant); // 🟢 Added tenant
 }
 
 export async function updateAuditionSlot(tenant: string, rowId: number, data: any) {
@@ -1037,7 +1053,7 @@ export async function updateAuditionSlot(tenant: string, rowId: number, data: an
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
-    });
+    }, {}, tenant); // 🟢 Added tenant
 }
 
 export async function updateRole(tenant: string, roleId: number, data: any) {
@@ -1045,7 +1061,7 @@ export async function updateRole(tenant: string, roleId: number, data: any) {
   return await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/${roleId}/`, { 
     method: "PATCH", 
     body: JSON.stringify(data) 
-  });
+  }, {}, tenant); // 🟢 Added tenant
 }
 
 // ==============================================================================
@@ -1061,7 +1077,7 @@ export async function findUserByEmail(tenant: string, email: string) {
     [`filter__${DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
   };
 
-  const results = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
+  const results = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params, tenant); // 🟢 Added tenant
   
   if (!results || results.length === 0) return null;
   
@@ -1108,7 +1124,7 @@ export async function getUserProfile(tenant: string, email: string) {
     size: "1",
     [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email,
     [`filter__${DB.PEOPLE.FIELDS.CYT_NATIONAL_INDIVIDUAL_EMAIL}__equal`]: email,
-  });
+  }, tenant); // 🟢 Added tenant
 
   if (!userRows || userRows.length === 0) return null;
 
@@ -1131,7 +1147,7 @@ export async function getUserProfile(tenant: string, email: string) {
     const familyData = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
       [`filter__${DB.PEOPLE.FIELDS.FAMILIES}__link_row_has`]: familyId,
       size: "20"
-    });
+    }, tenant); // 🟢 Added tenant
 
     if (Array.isArray(familyData)) {
       profile.familyMembers = familyData
@@ -1157,7 +1173,7 @@ export async function getUserProductionRole(tenant: string, userId: number, prod
     [`filter__${DB.SHOW_TEAM.FIELDS.PRODUCTIONS}__link_row_has`]: productionId,
   };
 
-  const rows = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params);
+  const rows = await fetchBaserow(`/database/rows/table/${tables.SHOW_TEAM}/`, {}, params, tenant); // 🟢 Added tenant
 
   if (!rows || rows.length === 0) return null;
   return safeGet(rows[0][DB.SHOW_TEAM.FIELDS.POSITION]); 
@@ -1175,7 +1191,7 @@ export async function getTeacherApplicants(tenant: string) {
     [`filter__${F.STATUS}__multiple_select_has`]: "Active Faculty",
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -1200,7 +1216,7 @@ export async function updateApplicantStatus(tenant: string, personId: number, cu
     body: JSON.stringify({
       [DB.PEOPLE.FIELDS.STATUS]: finalTags 
     })
-  });
+  }, {}, tenant); // 🟢 Added tenant
 }
 
 export async function getTeacherClasses(tenant: string, teacherName: string) {
@@ -1212,7 +1228,7 @@ export async function getTeacherClasses(tenant: string, teacherName: string) {
     "user_field_names": "true"
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -1237,7 +1253,7 @@ export async function getOpenBounties(tenant: string) {
     "user_field_names": "true"
   };
 
-  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params);
+  const data = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/`, {}, params, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
   return data.map((row: any) => ({
@@ -1269,7 +1285,7 @@ export async function submitClassProposal(tenant: string, data: any) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
-    });
+    }, {}, tenant); // 🟢 Added tenant
 }
 
 export async function claimBounty(tenant: string, classId: number, teacherName: string) {
@@ -1282,7 +1298,7 @@ export async function claimBounty(tenant: string, classId: number, teacherName: 
             [F.TEACHER]: teacherName,
             [F.STATUS]: "Drafting"
         })
-    });
+    }, {}, tenant); // 🟢 Added tenant
 }
 
 // ==============================================================================
@@ -1291,7 +1307,7 @@ export async function claimBounty(tenant: string, classId: number, teacherName: 
 
 export async function getPerformanceAnalytics(tenant: string, productionId?: number) {
   const tables = await getTenantTableConfig(tenant);
-  const data = await fetchBaserow(`/database/rows/table/${tables.PERFORMANCES}/`, {}, { size: "200" });
+  const data = await fetchBaserow(`/database/rows/table/${tables.PERFORMANCES}/`, {}, { size: "200" }, tenant); // 🟢 Added tenant
   if (!Array.isArray(data)) return [];
 
 return data.map((row: any) => {
@@ -1341,7 +1357,7 @@ export async function createGoogleUser(tenant: string, googleUser: any) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  });
+  }, {}, tenant); // 🟢 Added tenant
 
   return res;
 }
@@ -1356,7 +1372,7 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     const people = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
       filter_type: "AND",
       [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: email
-    });
+    }, tenant); // 🟢 Added tenant
 
     if (!Array.isArray(people) || people.length === 0) return [];
     
@@ -1367,7 +1383,7 @@ export async function getExistingAuditions(tenant: string, email: string, produc
         filter_type: "AND",
         [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
         [`filter__${DB.AUDITIONS.FIELDS.PERFORMER}__link_row_has`]: p.id
-      })
+      }, tenant) // 🟢 Added tenant
     );
 
     // Wait for all the individual fetches to complete and flatten the array
