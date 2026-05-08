@@ -19,10 +19,13 @@ async function getTenantContext() {
   const hostList = await headers(); // Await the headers promise
   const host = hostList.get("host") || "";
 
-  // DEV BYPASS: Google OAuth hates subdomains on localhost.
-  // This forces local dev to always check the 'cytfred' database so you can log in at localhost:3000
+  // 🟢 FIXED DEV BYPASS: Now supports local subdomains like e2e.localhost!
   if (process.env.NODE_ENV === "development" && host.includes("localhost")) {
-    return "cytfred";
+    const currentHost = host.split(":")[0]; // Strips the port
+    if (currentHost !== "localhost") {
+        return currentHost.replace(".localhost", ""); // Extracts 'e2e'
+    }
+    return "cytfred"; // Fallback for your normal localhost:3000 work
   }
 
   // Prod extraction
