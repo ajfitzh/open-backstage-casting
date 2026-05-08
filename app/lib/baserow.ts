@@ -1066,12 +1066,32 @@ export async function findUserByEmail(tenant: string, email: string) {
   if (!results || results.length === 0) return null;
   
   const row = results[0];
+
+  // 🟢 The Multi-Select Role Fix
+  // Extract all tags from the multiple_select field
+  const rawStatus = row[DB.PEOPLE.FIELDS.STATUS];
+  const tags = Array.isArray(rawStatus) ? rawStatus.map((s:any) => s.value) : [];
+
+  // Determine the highest privilege role from their tags
+  let assignedRole = "Student";
+  if (tags.includes("Admin") || tags.includes("Executive Director") || tags.includes("Business Manager")) {
+      assignedRole = "Admin";
+  } else if (tags.includes("Director") || tags.includes("Staff") || tags.includes("Production Coordinator") || tags.includes("Education Coordinator")) {
+      assignedRole = "Staff";
+  } else if (tags.includes("Check In Team") || tags.includes("Committee Team")) {
+      assignedRole = "Volunteer";
+  } else if (tags.includes("Parent/Guardian")) {
+      assignedRole = "Parent/Guardian";
+  } else if (tags.length > 0) {
+      assignedRole = tags[0]; // Fallback to their first tag
+  }
+
   return {
     id: row.id.toString(),
     name: safeGet(row[DB.PEOPLE.FIELDS.FULL_NAME]),
     email: email,
     image: row[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
-    role: safeGet(row[DB.PEOPLE.FIELDS.STATUS]),
+    role: assignedRole, // Now passes the correct top-level string!
   };
 }
 
