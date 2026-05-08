@@ -49,7 +49,7 @@ export const NAV_CONFIG = [
       
       { 
         label: "Audition Check-In", 
-        href: "/production/active/check-in", 
+        href: "/production/active/audition-check-in", // <-- FIXED ROUTE
         icon: Mic, 
         permission: "view_checkin", 
         group: "Check In Team"      
