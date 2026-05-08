@@ -144,6 +144,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async jwt({ token, user, account }) {
+      // 🟢 FIX: Copy the role from the user object to the token object so it persists!
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
@@ -163,9 +164,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async session({ session, token }) {
+      // 🟢 FIX: Pass the role from the token to the session with a strict fallback
       if (session.user) {
         (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
+        (session.user as any).role = token.role || "Guest"; 
       }
       return session;
     }
