@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 "use client";
 
 import { useState, FormEvent } from 'react';
@@ -28,7 +29,8 @@ export default function LoginPage() {
   const handleGoogleLogin = () => {
       setIsLoading(true);
       // "google" must match the provider ID in route.ts
-      signIn("google", { callbackUrl: `/${tenant}` });
+      // 🟢 FIX: Send them to the root of the current subdomain
+      signIn("google", { callbackUrl: `/` });
   };
 
   // 2. Handle Password Login
@@ -48,7 +50,8 @@ export default function LoginPage() {
       setIsLoading(false);
     } else {
       router.refresh(); 
-      router.push(`/${tenant}`); // Bounce them to their tenant's dashboard
+      // 🟢 FIX: Send them to the root of the current subdomain
+      router.push(`/`); 
     }
   };
 
@@ -62,7 +65,7 @@ export default function LoginPage() {
         
         <div className="space-y-1 mb-8">
             <h1 className="text-3xl font-black uppercase italic text-white tracking-tight">Portal Login</h1>
-            {/* 🟢 NEW: Elegant Organization Name display */}
+            {/* Elegant Organization Name display */}
             <p className="text-blue-400 font-bold tracking-widest uppercase text-xs">
                 {orgName}
             </p>
@@ -122,11 +125,12 @@ export default function LoginPage() {
                 </button>
             </form>
 
-            {/* 🟢 NEW: The Sign Up Link! */}
+            {/* The Sign Up Link! */}
             <div className="mt-8 text-center border-t border-zinc-800 pt-6">
                 <p className="text-zinc-500 text-sm mb-2">Don&apos;t have an account yet?</p>
+                {/* 🟢 FIX: Clean relative path so it correctly resolves to e2e.localhost:3001/signup */}
                 <a 
-                    href={`/${tenant}/signup`} 
+                    href="/signup" 
                     className="text-blue-500 hover:text-blue-400 font-bold text-sm transition-colors"
                 >
                     Create a Free Account
