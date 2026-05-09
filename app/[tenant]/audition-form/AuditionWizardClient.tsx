@@ -103,23 +103,30 @@ const PRESET_SONGS = [
   { 
     id: "reflection", 
     title: "Reflection (Mulan)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/mulan-reflection-piano.mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Reflection%20-%20Mulan%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=agSKYf1qmPg", 
     lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf"
-  },
-  { 
-    id: "consider_yourself", 
-    title: "Consider Yourself (Oliver!)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-consideryourself-piano.mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf"
   },
   { 
     id: "tomorrow", 
     title: "Tomorrow (Annie)", 
-    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/annie-tomorrow-piano.mp3",
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Tomorrow%20from%20Annie%20-%20Karaoke%20Track%20with%20Lyrics%20on%20Screen%20(1).mp3",
     karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
     lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf"
+  },
+  { 
+    id: "consider_yourself", 
+    title: "Consider Yourself (Oliver!)", 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Consider%20Yourself%20-%20Oliver%20(Karaoke%20Version).mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=sc5B3lHdGzI",
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf"
+  },
+  { 
+    id: "friend_in_me", 
+    title: "Friend In Me (Toy Story)", 
+    audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Youve%20Got%20a%20Friend%20in%20Me%20-%20Toy%20Story%20(Randy%20Newman)%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
+    karaokeUrl: "https://www.youtube.com/watch?v=agSKYf1qmPg",
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/friend-in-me-lyrics.pdf"
   },
 ];
 
