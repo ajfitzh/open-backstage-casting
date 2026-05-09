@@ -51,7 +51,7 @@ test.describe('Audition Wizard (Public Parent Flow)', () => {
 
     // --- Step 2 ---
     await page.getByRole('button', { name: "5'" }).click(); // 5 ft
-    await page.getByRole('button', { name: '0"' }).click();  // 0 in
+    await page.getByRole('button', { name: '0"', exact: true }).click();
     await page.getByRole('button', { name: 'Brown' }).click(); // Hair Color
     await page.getByRole('button', { name: /Next/i }).click();
 
