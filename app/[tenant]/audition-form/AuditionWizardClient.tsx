@@ -6,7 +6,6 @@ import React, { useState, useRef, useEffect } from "react";
 import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2 } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
-import { upgradeGuestToUser } from "@/app/actions/auth";
 
 import { AuditionFormData, AuditionSlot, INITIAL_DATA, PRESET_SONGS } from "@/app/components/audition-wizard/types";
 import { Step1ActorInfo } from "@/app/components/audition-wizard/Step1ActorInfo";
@@ -95,9 +94,13 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     if (currentStep === 4) {
       if (!formData.auditionSlotId) newErrors.auditionSlotId = "Please select an audition time slot.";
     }
+    if (currentStep === 5) {
+      if (!formData.callbackStatus) newErrors.callbackStatus = "Please select your callback availability.";
+    }
     if (currentStep === 6) {
       if (!formData.preShow1) newErrors.preShow1 = "Please select a 1st Choice Pre-Show Committee.";
       if (!formData.show1) newErrors.show1 = "Please select a 1st Choice Show Week Committee.";
+      if (!formData.chairInterest) newErrors.chairInterest = "Please indicate if you are interested in chairing.";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -189,7 +192,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         parentSignature: "Agreed via Click",
         practiceAudio: selectedPreset?.audioUrl || null,
         practiceLyrics: selectedPreset?.lyricsUrl || null,
-        
       };
 
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
@@ -361,7 +363,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
               <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">1. Publicity</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Boost attendance. Distribute posters, find 6-8 advertisers.</p></div>
               <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">2. Sets / Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Build, adapt, and transport sets. Be prepared to work weekends.</p></div>
-              {/* Note: Omitted full guide here for brevity, add back the rest of the rows if desired! */}
+              {/* Note: Feel free to paste the rest of your committee guide options here! */}
               <p className="text-xs text-zinc-400 italic text-center pt-4">Click outside to close</p>
             </div>
           </div>
