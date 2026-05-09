@@ -178,13 +178,14 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
 
-        let practiceMaterialsHtml = "";
-        if (formData.practiceKaraoke || formData.practiceLyrics) {
+let practiceMaterialsHtml = "";
+        if (formData.practiceAudio || formData.practiceLyrics) {
           practiceMaterialsHtml = `
             <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bfdbfe;">
               <h3 style="color: #1e3a8a; margin-top: 0;">🎤 Practice Materials</h3>
               <p style="font-size: 14px; color: #1e40af; margin-bottom: 10px;">Since you selected an easy-start song, here are your links to practice!</p>
-              ${formData.practiceKaraoke ? `<p style="margin: 5px 0;"><a href="${formData.practiceKaraoke}" style="color: #2563eb; font-weight: bold; text-decoration: none;">▶️ YouTube Karaoke Track</a></p>` : ''}
+              ${formData.cutNotes ? `<p style="margin: 5px 0 15px 0; font-size: 14px; color: #374151;"><strong>Audition Cut:</strong> ${formData.cutNotes}</p>` : ''}
+              ${formData.practiceAudio ? `<p style="margin: 5px 0;"><a href="${formData.practiceAudio}" style="color: #2563eb; font-weight: bold; text-decoration: none;">⬇️ Download MP3 Backing Track</a></p>` : ''}
               ${formData.practiceLyrics ? `<p style="margin: 5px 0;"><a href="${formData.practiceLyrics}" style="color: #2563eb; font-weight: bold; text-decoration: none;">📄 Sheet Music / Lyrics</a></p>` : ''}
             </div>
           `;

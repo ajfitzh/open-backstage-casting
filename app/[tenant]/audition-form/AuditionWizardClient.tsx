@@ -1,3 +1,4 @@
+// app/[tenant]/audition-form/AuditionWizardClient.tsx
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
@@ -7,9 +8,9 @@ import Link from "next/link";
 import { 
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
   Send, UploadCloud, Music, FileAudio, Download, 
-  Search, Ruler, Youtube, Camera, Image as ImageIcon,
+  Search, Ruler, Camera, Image as ImageIcon,
   Clock, MessageSquare, Printer, Plus, User, Trash2, FileText,
-  Volume2 // 🟢 Added Volume2 icon
+  Volume2
 } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
@@ -104,29 +105,29 @@ const PRESET_SONGS = [
     id: "reflection", 
     title: "Reflection (Mulan)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Reflection%20-%20Mulan%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=agSKYf1qmPg", 
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf"
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf",
+    cutNotes: "Sing measure 12 to 34 (0:45 to 1:40 in track)."
   },
   { 
     id: "tomorrow", 
     title: "Tomorrow (Annie)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Tomorrow%20from%20Annie%20-%20Karaoke%20Track%20with%20Lyrics%20on%20Screen%20(1).mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=placeholder",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf"
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf",
+    cutNotes: "Start at the beginning. Stop at 1:15."
   },
   { 
     id: "consider_yourself", 
     title: "Consider Yourself (Oliver!)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Consider%20Yourself%20-%20Oliver%20(Karaoke%20Version).mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=sc5B3lHdGzI",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf"
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf",
+    cutNotes: "Sing the first verse and chorus."
   },
   { 
     id: "friend_in_me", 
     title: "Friend In Me (Toy Story)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Youve%20Got%20a%20Friend%20in%20Me%20-%20Toy%20Story%20(Randy%20Newman)%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
-    karaokeUrl: "https://www.youtube.com/watch?v=agSKYf1qmPg",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/friend-in-me-lyrics.pdf"
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/friend-in-me-lyrics.pdf",
+    cutNotes: "Start at 0:10 after piano intro, end at 1:05."
   },
 ];
 
@@ -166,7 +167,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const [audioFile, setAudioFile] = useState<File | null>(null);
 
-  // 🟢 Preview Audio State
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -182,14 +182,12 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const totalSteps = 7;
 
-  // Auto-scroll to top when step changes
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [currentStep]);
 
-  // 🟢 Audio Cleanup
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -242,7 +240,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setFormData((prev) => ({ ...prev, ...fields }));
   };
 
-  // 🟢 Audio Play/Pause Toggle
   const togglePreview = (e: React.MouseEvent, trackId: string, url: string) => {
     e.stopPropagation(); 
   
@@ -411,8 +408,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         studentSignature: formData.studentSignature ? "Agreed via Click" : "Missing",
         parentSignature: formData.parentSignature ? "Agreed via Click" : "Missing",
         practiceAudio: selectedPreset?.audioUrl || null,
-        practiceKaraoke: selectedPreset?.karaokeUrl || null,
-        practiceLyrics: selectedPreset?.lyricsUrl || null
+        practiceLyrics: selectedPreset?.lyricsUrl || null,
+        cutNotes: selectedPreset?.cutNotes || null // Passed to the server action
       };
 
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
@@ -459,9 +456,17 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-4">
                   Since you chose an easy-start song, here are your resources to practice before the audition! <span className="opacity-75">(We also sent these in your email).</span>
                </p>
+               
+               {selectedPreset.cutNotes && (
+                 <div className="mb-4 bg-white/50 dark:bg-black/20 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50">
+                    <p className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-widest mb-1">Audition Cut:</p>
+                    <p className="text-sm text-blue-900 dark:text-blue-200 font-medium">{selectedPreset.cutNotes}</p>
+                 </div>
+               )}
+
                <div className="flex flex-col gap-3">
-                   <a href={selectedPreset.karaokeUrl || selectedPreset.audioUrl} target="_blank" rel="noreferrer" className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-4 py-3.5 rounded-xl font-black text-blue-600 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-sm">
-                      <Youtube size={16} /> YouTube Karaoke Track
+                   <a href={selectedPreset.audioUrl} download target="_blank" rel="noreferrer" className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-4 py-3.5 rounded-xl font-black text-blue-600 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-sm">
+                      <Download size={16} /> Download MP3 Track
                    </a>
                    <a href={selectedPreset.lyricsUrl || "#"} target="_blank" rel="noreferrer" className="w-full bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-4 py-3.5 rounded-xl font-black text-blue-600 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-sm">
                       <FileText size={16} /> Sheet Music / Lyrics
@@ -812,8 +817,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                           Choose an "easy-start" song from the show. We will provide the backing track at your audition so you don't have to upload anything!
                         </p>
 
-                        {/* 🟢 Integrated the new Mobile-Friendly Preview Cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                           {PRESET_SONGS.map(s => {
                             const isSelected = formData.songTitle === s.title;
                             const isPlaying = playingTrackId === s.id;
@@ -831,9 +835,13 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                                 >
                                   <Music size={24} className={`mb-4 ${isSelected ? "text-white" : "text-blue-600"} opacity-50`} />
                                   <p className="font-black text-sm sm:text-xl uppercase italic leading-tight pr-8">{s.title}</p>
+                                  {s.cutNotes && (
+                                    <p className={`text-[10px] mt-2 pr-8 normal-case font-medium ${isSelected ? "text-blue-100" : "text-zinc-500"}`}>
+                                      {s.cutNotes}
+                                    </p>
+                                  )}
                                 </button>
 
-                                {/* Mobile-friendly Preview Button */}
                                 <button
                                   type="button"
                                   onClick={(e) => togglePreview(e, s.id, s.audioUrl)}
