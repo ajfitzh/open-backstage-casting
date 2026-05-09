@@ -123,8 +123,10 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}`;
-
+// app/actions/auditions.ts
+const extraDataString = `Grade: ${formData.grade || 'N/A'}
+Roles: ${formData.preferredRoles || 'N/A'}
+Callbacks: ${formData.callbackStatus || 'In-Person'}`; // <-- Add this line
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
       body: JSON.stringify({
