@@ -2,15 +2,16 @@
 "use client";
 
 import React from "react";
-import { MessageSquare, MapPin, Video, UserX } from "lucide-react";
+import { MessageSquare, MapPin, Video, UserX, AlertCircle } from "lucide-react";
 import { AuditionFormData, REHEARSAL_DATES, ConflictLevel, ConflictEntry } from "./types";
 
 interface Props {
   formData: AuditionFormData;
   updateForm: (fields: Partial<AuditionFormData>) => void;
+  errors: Record<string, string>;
 }
 
-export function Step5Conflicts({ formData, updateForm }: Props) {
+export function Step5Conflicts({ formData, updateForm, errors }: Props) {
   const markAllAvailable = () => {
     const allAvailable: Record<string, ConflictEntry> = {};
     REHEARSAL_DATES.forEach(date => allAvailable[date.id] = { level: "available", notes: "" });
@@ -62,8 +63,11 @@ export function Step5Conflicts({ formData, updateForm }: Props) {
           })}
         </div>
 
-        <div id="field-callbackStatus" className="pt-8 sm:pt-10 border-t border-zinc-200 dark:border-zinc-800 mt-10">
-          <h3 className="text-xl sm:text-3xl font-black dark:text-white uppercase italic tracking-tighter mb-2">Callback Availability</h3>
+        <div id="field-callbackStatus" className={`pt-8 sm:pt-10 border-t mt-10 p-4 rounded-3xl transition-colors ${errors.callbackStatus ? "bg-red-50 border-red-200 border-2" : "border-zinc-200 dark:border-zinc-800"}`}>
+          <h3 className="text-xl sm:text-3xl font-black dark:text-white uppercase italic tracking-tighter mb-2 flex justify-between items-center">
+             Callback Availability
+             {errors.callbackStatus && <span className="text-red-500 text-sm uppercase flex items-center gap-1 animate-pulse"><AlertCircle size={16}/> Required</span>}
+          </h3>
           <p className="text-zinc-500 text-sm sm:text-base font-medium mb-6">Callbacks are by invitation only. If invited, how will you attend?</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button type="button" onClick={() => updateForm({ callbackStatus: 'in-person' })} className={`p-4 sm:p-6 rounded-2xl border-2 flex flex-col items-center gap-3 transition-all ${formData.callbackStatus === 'in-person' ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-105' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 text-zinc-500 hover:border-blue-400'}`}>

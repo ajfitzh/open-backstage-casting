@@ -65,18 +65,34 @@ export function Step6Committees({ formData, updateForm, errors, setShowCommittee
         </div>
       </div>
 
-      <div className="bg-blue-600 text-white p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] shadow-xl">
-        <label className="flex items-start cursor-pointer group">
-          <input type="checkbox" checked={formData.willingToChair} onChange={e => updateForm({ willingToChair: e.target.checked })} className="h-6 w-6 rounded border-white/20 bg-blue-700 text-white mt-1 shrink-0" />
-          <div className="ml-4 space-y-1">
-              <h4 className="font-black text-lg sm:text-xl uppercase italic tracking-tighter group-hover:text-blue-100 transition-colors">I am willing to be a Chair!</h4>
-              <p className="text-blue-100/80 text-xs sm:text-sm font-medium">Chairs lead the team, manage budgets, and receive special training.</p>
-          </div>
-        </label>
-        {formData.willingToChair && (
-          <div className="mt-6 pt-6 border-t border-blue-500/50 animate-in fade-in zoom-in-95">
-            <label className="block text-[10px] font-black uppercase text-blue-200 tracking-widest mb-2">Which committee would you prefer to chair?</label>
-            <input type="text" placeholder="e.g., Props or Concessions" value={formData.chairPreference} onChange={(e) => updateForm({ chairPreference: e.target.value })} className="w-full bg-blue-700/50 border border-blue-500 text-white placeholder:text-blue-300/50 p-4 rounded-xl font-bold outline-none focus:ring-2 ring-white/50" />
+      <div id="field-chairInterest" className={`bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 rounded-[1.5rem] border transition-colors ${errors.chairInterest ? "border-red-500 bg-red-50/50" : "border-zinc-200 dark:border-zinc-800"}`}>
+        <h3 className="font-black text-lg uppercase italic tracking-widest text-zinc-900 dark:text-white mb-4 flex justify-between items-center">
+           Are you willing to Chair?
+           {errors.chairInterest && <span className="text-red-500 flex items-center gap-1 text-[10px] normal-case"><AlertCircle size={14}/> Required</span>}
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+           <button type="button" onClick={() => updateForm({ chairInterest: 'yes' })} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${formData.chairInterest === 'yes' ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 border-zinc-200 text-zinc-500 hover:border-blue-400'}`}>
+              Yes, I&apos;ll Chair!
+           </button>
+           <button type="button" onClick={() => updateForm({ chairInterest: 'maybe' })} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${formData.chairInterest === 'maybe' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white dark:bg-zinc-900 border-zinc-200 text-zinc-500 hover:border-amber-400'}`}>
+              Maybe, tell me more
+           </button>
+           <button type="button" onClick={() => updateForm({ chairInterest: 'no' })} className={`p-4 rounded-xl border-2 font-bold text-sm transition-all ${formData.chairInterest === 'no' ? 'bg-zinc-200 border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 shadow-md' : 'bg-white dark:bg-zinc-900 border-zinc-200 text-zinc-500 hover:border-zinc-300'}`}>
+              No thanks
+           </button>
+        </div>
+
+        {(formData.chairInterest === 'yes' || formData.chairInterest === 'maybe') && (
+          <div className="mt-6 animate-in slide-in-from-top-4">
+            <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Any specific committee in mind? (Optional)</label>
+            <input 
+               type="text" 
+               placeholder="e.g., Props or Concessions" 
+               value={formData.chairPreference} 
+               onChange={(e) => updateForm({ chairPreference: e.target.value })} 
+               className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500" 
+            />
           </div>
         )}
       </div>

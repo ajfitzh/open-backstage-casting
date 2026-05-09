@@ -10,11 +10,12 @@ export type AuditionFormData = {
   songTitle: string; musicFileName: string; usePresetSong: boolean; 
   auditionSlotId: string | null;
   conflicts: Record<string, ConflictEntry>;
-  callbackStatus: "in-person" | "virtual" | "unavailable";
+  callbackStatus: "" | "in-person" | "virtual" | "unavailable"; // <-- Default is now empty
   
   preShow1: string; preShow2: string; preShow3: string;
   show1: string; show2: string; show3: string;
-  willingToChair: boolean; chairPreference: string;
+  chairInterest: "" | "yes" | "maybe" | "no"; // <-- 3-way choice
+  chairPreference: string;
 
   offBookAgreement: boolean; 
   parentCommitteeAgreement: boolean;
@@ -62,26 +63,22 @@ export const PRESET_SONGS = [
   { 
     id: "reflection", title: "Reflection (Mulan)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Reflection%20-%20Mulan%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf",
-    cutNotes: "Sing measure 12 to 34 (0:45 to 1:40 in track)."
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/reflection-lyrics.pdf"
   },
   { 
     id: "tomorrow", title: "Tomorrow (Annie)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Tomorrow%20from%20Annie%20-%20Karaoke%20Track%20with%20Lyrics%20on%20Screen%20(1).mp3",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf",
-    cutNotes: "Start at the beginning. Stop at 1:15."
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/tomorrow-lyrics.pdf"
   },
   { 
     id: "consider_yourself", title: "Consider Yourself (Oliver!)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Consider%20Yourself%20-%20Oliver%20(Karaoke%20Version).mp3",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf",
-    cutNotes: "Sing the first verse and chorus."
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/oliver-lyrics.pdf"
   },
   { 
     id: "friend_in_me", title: "Friend In Me (Toy Story)", 
     audioUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/Youve%20Got%20a%20Friend%20in%20Me%20-%20Toy%20Story%20(Randy%20Newman)%20_%20Karaoke%20Version%20_%20KaraFun.mp3",
-    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/friend-in-me-lyrics.pdf",
-    cutNotes: "Start at 0:10 after piano intro, end at 1:05."
+    lyricsUrl: "https://cyt-fredericksburg.nyc3.digitaloceanspaces.com/tracks/friend-in-me-lyrics.pdf"
   },
 ];
 
@@ -91,10 +88,10 @@ export const INITIAL_DATA: AuditionFormData = {
   preferredRoles: "", acceptAnyRole: false,
   songTitle: "", musicFileName: "", usePresetSong: false,
   auditionSlotId: null,
-  conflicts: {}, callbackStatus: "in-person",
+  conflicts: {}, callbackStatus: "",
   preShow1: "", preShow2: "", preShow3: "",
   show1: "", show2: "", show3: "",
-  willingToChair: false, chairPreference: "",
+  chairInterest: "", chairPreference: "",
   offBookAgreement: false, parentCommitteeAgreement: false,
   studentSignature: false, parentSignature: false
 };

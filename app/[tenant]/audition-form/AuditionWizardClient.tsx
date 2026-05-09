@@ -189,7 +189,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         parentSignature: "Agreed via Click",
         practiceAudio: selectedPreset?.audioUrl || null,
         practiceLyrics: selectedPreset?.lyricsUrl || null,
-        cutNotes: selectedPreset?.cutNotes || null 
+        
       };
 
       const result = await submitRealAudition(tenant, productionId, payloadToSubmit, lookupData.email);
@@ -325,7 +325,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                 {currentStep === 2 && <Step2CastingDetails formData={formData} updateForm={updateForm} errors={errors} />}
                 {currentStep === 3 && <Step3Performance formData={formData} updateForm={updateForm} errors={errors} setAudioFile={setAudioFile} />}
                 {currentStep === 4 && <Step4AuditionTime formData={formData} updateForm={updateForm} errors={errors} slots={slots} />}
-                {currentStep === 5 && <Step5Conflicts formData={formData} updateForm={updateForm} />}
+                {currentStep === 5 && <Step5Conflicts formData={formData} updateForm={updateForm} errors={errors} />}
                 {currentStep === 6 && <Step6Committees formData={formData} updateForm={updateForm} errors={errors} setShowCommitteeGuide={setShowCommitteeGuide} />}
                 {currentStep === 7 && <Step7Commitment formData={formData} updateForm={updateForm} errors={errors} />}
               

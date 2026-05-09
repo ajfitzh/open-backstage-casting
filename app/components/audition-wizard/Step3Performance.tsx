@@ -64,7 +64,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                   <button type="button" onClick={() => updateForm({ songTitle: s.title })} className={`w-full p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${isSelected ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
                     <Music size={24} className={`mb-4 ${isSelected ? "text-white" : "text-blue-600"} opacity-50`} />
                     <p className="font-black text-sm sm:text-xl uppercase italic leading-tight pr-8">{s.title}</p>
-                    {s.cutNotes && <p className={`text-[10px] mt-2 pr-8 normal-case font-medium ${isSelected ? "text-blue-100" : "text-zinc-500"}`}>{s.cutNotes}</p>}
                   </button>
                   <button type="button" onClick={(e) => togglePreview(e, s.id, s.audioUrl)} className={`absolute top-4 right-4 p-3 rounded-full shadow-lg transition-all active:scale-90 z-10 ${isPlaying ? "bg-red-500 text-white animate-pulse" : isSelected ? "bg-white text-blue-600" : "bg-blue-600 text-white hover:bg-blue-700"}`} title={isPlaying ? "Stop Preview" : "Listen to Track"}>
                     <Volume2 size={16} />

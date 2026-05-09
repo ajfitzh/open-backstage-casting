@@ -123,10 +123,8 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-// app/actions/auditions.ts
-const extraDataString = `Grade: ${formData.grade || 'N/A'}
-Roles: ${formData.preferredRoles || 'N/A'}
-Callbacks: ${formData.callbackStatus || 'In-Person'}`; // <-- Add this line
+    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}\nCallbacks: ${formData.callbackStatus || 'No Answer'}\nChair Interest: ${formData.chairInterest || 'No'}`;
+
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
       body: JSON.stringify({
@@ -150,7 +148,7 @@ Callbacks: ${formData.callbackStatus || 'In-Person'}`; // <-- Add this line
     if (!audition || audition.error) return { success: false, error: "Database rejected the audition record." };
 
     // ==========================================
-    // 🟢 NEW: WRITE TO COMMITTEE_PREFS TABLE
+    // 🟢 WRITE TO COMMITTEE_PREFS TABLE
     // ==========================================
     if (audition?.id && tables.COMMITTEE_PREFS) {
       try {
@@ -166,7 +164,8 @@ Callbacks: ${formData.callbackStatus || 'In-Person'}`; // <-- Add this line
             [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_1ST]: formData.show1 || "",
             [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_2ND]: formData.show2 || "",
             [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_3RD]: formData.show3 || "",
-            [DB.COMMITTEE_PREFS.FIELDS.IS_CHAIR]: formData.willingToChair || false,
+            // Map "yes" to true, anything else to false
+            [DB.COMMITTEE_PREFS.FIELDS.IS_CHAIR]: formData.chairInterest === "yes" ? true : false,
           })
         });
       } catch (committeeError) {
@@ -180,7 +179,7 @@ Callbacks: ${formData.callbackStatus || 'In-Person'}`; // <-- Add this line
         const show = await getShowById(tenant, productionId);
         const showTitle = show?.title || "our upcoming show";
 
-let practiceMaterialsHtml = "";
+        let practiceMaterialsHtml = "";
         if (formData.practiceAudio || formData.practiceLyrics) {
           practiceMaterialsHtml = `
             <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bfdbfe;">
