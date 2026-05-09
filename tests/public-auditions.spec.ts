@@ -65,7 +65,7 @@ test.describe('Audition Wizard (Public Parent Flow)', () => {
     await page.locator('button:has-text("Left")').first().click();
     await page.getByRole('button', { name: /Next/i }).click();
 
-    // --- Step 5 (The Test!) ---
+// --- Step 5 (The Test!) ---
     await expect(page.getByText('Step 5/7')).toBeVisible();
 
     // Setup an alert listener to catch the Mandatory Date blocker
@@ -75,8 +75,10 @@ test.describe('Audition Wizard (Public Parent Flow)', () => {
       await dialog.accept();
     });
 
-    // Locate the mandatory July 6th row, and try to click the "Absent" button
-    const mandatoryRow = page.locator('div').filter({ hasText: 'July 6 (Intensive)' }).first();
+    // 🟢 FIX: Find the exact text, then step UP two parent levels to get the specific row wrapper!
+    const mandatoryRow = page.getByText('July 6 (Intensive)').locator('..').locator('..');
+    
+    // Now this will exclusively find the ONE 'Absent' button inside that exact row
     await mandatoryRow.getByRole('button', { name: 'Absent' }).click();
 
     // Verify Jenny's bug fix worked and threw the alert!
