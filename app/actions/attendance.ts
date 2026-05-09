@@ -1,7 +1,7 @@
 // app/actions/attendance.ts
 "use server";
 
-import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 
 export async function toggleAttendance(
     tenant: string, 
@@ -11,6 +11,7 @@ export async function toggleAttendance(
     action: "IN" | "OUT" | "ABSENT"
 ) {
     try {
+        const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);
         const F = DB.ATTENDANCE.FIELDS;
         const tableId = tables.ATTENDANCE || DB.ATTENDANCE.ID;
@@ -22,7 +23,7 @@ export async function toggleAttendance(
             [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: eventId
         };
         
-        const existingRows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params);
+        const existingRows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params, tenant);
         const now = new Date().toISOString();
 
         let payload: any = {};
@@ -41,7 +42,7 @@ export async function toggleAttendance(
             const res = await fetchBaserow(`/database/rows/table/${tableId}/${rowId}/`, {
                 method: "PATCH",
                 body: JSON.stringify(payload)
-            });
+            }, {}, tenant);
             return { success: !res.error, data: res };
         } else {
             // Create a brand new attendance record
@@ -52,7 +53,7 @@ export async function toggleAttendance(
             const res = await fetchBaserow(`/database/rows/table/${tableId}/`, {
                 method: "POST",
                 body: JSON.stringify(payload)
-            });
+            }, {}, tenant);
             return { success: !res.error, data: res };
         }
     } catch (error) {

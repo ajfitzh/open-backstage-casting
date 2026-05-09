@@ -2,15 +2,14 @@
 "use server";
 
 import { Resend } from 'resend';
+import { getShowById, fetchBaserow, getDB } from "@/app/lib/baserow";
+import { getTenantTableConfig } from "@/app/lib/tenant-config";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-// app/actions/auditions.ts
-
-
-import { getShowById } from "@/app/lib/baserow";
 
 // 1. Save the Program Bio (AUDITIONS table)
 export async function saveStudentBio(tenant: string, auditionId: number, bio: string) {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
@@ -22,6 +21,7 @@ export async function saveStudentBio(tenant: string, auditionId: number, bio: st
 
 // 2. Save the Congrats Ad (AUDITIONS table)
 export async function saveCongratsAd(tenant: string, auditionId: number, adText: string) {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
@@ -33,6 +33,7 @@ export async function saveCongratsAd(tenant: string, auditionId: number, adText:
 
 // 3. Update Tickets Sold (COMMITTEE_PREFS table)
 export async function saveTicketsSold(tenant: string, studentId: number, productionId: number, tickets: number) {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_PREFS.FIELDS;
 
@@ -54,8 +55,10 @@ export async function saveTicketsSold(tenant: string, studentId: number, product
     }
     return { error: "Committee Pref row not found" };
 }
+
 export async function submitRealAudition(tenant: string, productionId: number, formData: any, lookupEmail: string) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     
     // 1. RESOLVE STUDENT IDENTITY
@@ -162,8 +165,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
             [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_2ND]: formData.show2 || "",
             [DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_3RD]: formData.show3 || "",
             [DB.COMMITTEE_PREFS.FIELDS.IS_CHAIR]: formData.willingToChair || false,
-            // You can append chairPreference string to a notes column if your schema has one, 
-            // e.g.: [DB.COMMITTEE_PREFS.FIELDS.NOTES]: formData.chairPreference || ""
           })
         });
       } catch (committeeError) {
@@ -242,6 +243,7 @@ export async function saveAuditionScore(
   judgeRole: string
 ) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 
     let notesField = DB.AUDITIONS.FIELDS.ACTING_NOTES;
@@ -276,10 +278,6 @@ export async function saveAuditionScore(
   }
 }
 
-// app/actions/auditions.ts
-import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
-// import { resend } from "@/app/lib/resend"; // Assuming you have your emailer setup here
-
 export async function acceptRoleAndSign(
   tenant: string, 
   auditionId: number, 
@@ -287,13 +285,13 @@ export async function acceptRoleAndSign(
   roleName: string, 
   showTitle: string, 
   parentEmail: string,
-  signatures: string // 🟢 NEW: Accepts the dynamic signature string from the Modal
+  signatures: string 
 ) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 
     // 1. UPDATE BASEROW
-    // Write the explicit digital click-wrap confirmation string directly to the DB
     const payload = {
       [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
     };
@@ -336,7 +334,6 @@ export async function acceptRoleAndSign(
           </div>`
       });
     } catch (emailError) { 
-      // We don't fail the whole function if the email blips, the DB update is the critical part
       console.error("Welcome Email failed:", emailError); 
     }
 
@@ -346,6 +343,3 @@ export async function acceptRoleAndSign(
     return { success: false, error: "Failed to connect to the database." };
   }
 }
-
-
-

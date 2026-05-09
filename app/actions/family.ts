@@ -1,11 +1,12 @@
 // app/actions/family.ts
 "use server";
 
-import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 
 // Fetch all people tied to the parent's email
 export async function getFamilyMembers(tenant: string, email: string) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PEOPLE.FIELDS;
     
@@ -40,6 +41,7 @@ export async function getFamilyMembers(tenant: string, email: string) {
 // Save updates for a specific student's master profile
 export async function updateStudentMasterProfile(tenant: string, personId: number, data: any) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PEOPLE.FIELDS;
     

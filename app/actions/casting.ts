@@ -1,19 +1,24 @@
+ // app/actions/casting.ts
 "use server";
 
-import { fetchBaserow, DB } from "@/app/lib/baserow";
+import { fetchBaserow, getDB } from "@/app/lib/baserow";
+import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { revalidatePath } from "next/cache";
 
-export async function generateCastingRows(productionId: number) {
-  console.log(`Generating casting rows for Production ${productionId}...`);
+export async function generateCastingRows(tenant: string, productionId: number) {
+  console.log(`Generating casting rows for Production ${productionId} on tenant ${tenant}...`);
 
   try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+
     // 1. Fetch ALL Blueprint Roles using pagination
     let allRoles: any[] = [];
     let page = 1;
     let hasNextPage = true;
 
     while (hasNextPage) {
-      const response = await fetchBaserow(`/database/rows/table/${DB.BLUEPRINT_ROLES.ID}/`, {}, {
+      const response = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, {
         size: "200", 
         page: page.toString(),
         "user_field_names": "true" 
@@ -53,14 +58,14 @@ export async function generateCastingRows(productionId: number) {
     for (let i = 0; i < newRows.length; i += chunkSize) {
       const chunk = newRows.slice(i, i + chunkSize);
       
-      await fetchBaserow(`/database/rows/table/${DB.ASSIGNMENTS.ID}/batch/`, {
+      await fetchBaserow(`/database/rows/table/${tables.ASSIGNMENTS}/batch/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: chunk })
       });
     }
 
-    revalidatePath('/casting');
+    revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');
     return { success: true, count: newRows.length };
 
   } catch (error) {

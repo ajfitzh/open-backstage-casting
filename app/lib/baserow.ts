@@ -1194,3 +1194,5 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     return [];
   }
 }
+
+export { getTenantTableConfig };

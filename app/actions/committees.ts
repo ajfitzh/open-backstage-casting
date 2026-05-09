@@ -1,14 +1,12 @@
+// app/actions/committees.ts
 "use server"
 
 import { revalidatePath } from 'next/cache';
-
-const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
-const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN;
-
-import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 
 export async function submitCommitteeReport(tenant: string, data: any) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_REPORTS.FIELDS;
     
@@ -33,7 +31,7 @@ export async function submitCommitteeReport(tenant: string, data: any) {
     const res = await fetchBaserow(`/database/rows/table/${tableId}/`, {
       method: "POST",
       body: JSON.stringify(payload)
-    });
+    }, {}, tenant);
 
     if (!res || res.error) {
       console.error("Failed to submit report:", res);
@@ -75,6 +73,7 @@ export async function saveCommitteeAssignments(
     }
 
     // 🟢 2. REAL DATABASE WRITE
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const tableId = tables.COMMITTEE_PREFS;
     const F = DB.COMMITTEE_PREFS.FIELDS;
@@ -83,17 +82,13 @@ export async function saveCommitteeAssignments(
     const fieldId = phase === 'Pre-Show' ? F.PRE_SHOW_PHASE : F.SHOW_WEEK_COMMITTEES;
 
     const updates = Object.entries(assignments).map(([id, value]) => {
-        return fetch(`${BASE_URL}/api/database/rows/table/${tableId}/${id}/`, {
+        return fetchBaserow(`/database/rows/table/${tableId}/${id}/`, {
             method: 'PATCH',
-            headers: {
-                "Authorization": `Token ${API_TOKEN}`,
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify({
                 [fieldId]: value === "Unassigned" ? null : value,
                 [F.IS_CHAIR]: chairs[Number(id)] || false 
             })
-        });
+        }, {}, tenant);
     });
 
     await Promise.all(updates);

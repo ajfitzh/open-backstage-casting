@@ -1,11 +1,12 @@
 // app/actions/auth.ts
 "use server";
 
-import { fetchBaserow, DB, findUserByEmail, getTenantTableConfig } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, findUserByEmail, getTenantTableConfig } from "@/app/lib/baserow";
 import bcrypt from "bcryptjs"; // Uncomment if you hash passwords here
 
 export async function upgradeGuestToUser(tenant: string, email: string, passwordRaw: string) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     
     // 1. Find the Guest record we just created
@@ -35,9 +36,9 @@ export async function upgradeGuestToUser(tenant: string, email: string, password
   }
 }
 
-
 export async function registerUser(tenant: string, data: any) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PEOPLE.FIELDS;
     

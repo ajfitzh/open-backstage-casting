@@ -1,6 +1,7 @@
+// app/actions/checkin.ts
 "use server";
 
-import { fetchBaserow, DB, getTenantTableConfig } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 
 export async function saveCheckIn(
   tenant: string, 
@@ -13,6 +14,7 @@ export async function saveCheckIn(
   updatedEmail?: string
 ) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     
     // 1. Calculate Check-In Boolean
