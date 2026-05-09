@@ -39,7 +39,7 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "get-e2e-schema.js"  ],
   "exclude": [
     "node_modules"
   ]
