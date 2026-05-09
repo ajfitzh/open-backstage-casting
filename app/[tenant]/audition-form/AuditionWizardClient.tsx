@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
@@ -7,7 +8,8 @@ import {
   ChevronLeft, ChevronRight, CheckCircle2, Sparkles, Mic, 
   Send, UploadCloud, Music, FileAudio, Download, 
   Search, Ruler, Youtube, Camera, Image as ImageIcon,
-  Clock, MessageSquare, Printer, Plus, User, Trash2, FileText
+  Clock, MessageSquare, Printer, Plus, User, Trash2, FileText,
+  Volume2 // 🟢 Added Volume2 icon
 } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
@@ -157,6 +159,10 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const [audioFile, setAudioFile] = useState<File | null>(null);
 
+  // 🟢 Preview Audio State
+  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const headshotInputRef = useRef<HTMLInputElement>(null);
@@ -165,16 +171,25 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const sigSectionRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   
-  // 🟢 FIX 1: Ref for our scrollable container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const totalSteps = 7;
 
-  // 🟢 FIX 1: Auto-scroll to top when step changes
+  // Auto-scroll to top when step changes
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
+  }, [currentStep]);
+
+  // 🟢 Audio Cleanup
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setPlayingTrackId(null);
+    };
   }, [currentStep]);
 
   const calculateAge = useCallback((dob: string) => {
@@ -201,6 +216,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) try { setFormData(JSON.parse(saved)); } catch (e) {}
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
   useEffect(() => {
@@ -219,7 +235,25 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setFormData((prev) => ({ ...prev, ...fields }));
   };
 
-  // 🟢 FIX 2: Intercept handleNext with validation logic to prevent ghost registrations
+  // 🟢 Audio Play/Pause Toggle
+  const togglePreview = (e: React.MouseEvent, trackId: string, url: string) => {
+    e.stopPropagation(); 
+  
+    if (playingTrackId === trackId) {
+      audioRef.current?.pause();
+      setPlayingTrackId(null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      audioRef.current = new Audio(url);
+      audioRef.current.play();
+      setPlayingTrackId(trackId);
+      
+      audioRef.current.onended = () => setPlayingTrackId(null);
+    }
+  };
+
   const handleNext = () => {
     if (currentStep === 1) {
       if (!formData.fullName || !formData.dob || !formData.grade) {
@@ -255,7 +289,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         return;
       }
     }
-    // If all required fields pass, move to next step!
     setCurrentStep((p) => Math.min(p + 1, totalSteps));
   };
 
@@ -436,7 +469,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                   <Sparkles size={18} className="text-blue-600" />
                   <h3 className="font-black text-zinc-900 dark:text-white uppercase italic tracking-widest text-sm">Skip This Next Time</h3>
                </div>
-               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">Set a password to save your family's profile for future shows and classes.</p>
+               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 font-medium">Set a password to save your family&lsquo;s profile for future shows and classes.</p>
                <div className="flex gap-2">
                  <input 
                    type="password" 
@@ -610,7 +643,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest italic">Step {currentStep}/7</span>
             </div>
 
-            {/* 🟢 FIX 1: We attach the scrollContainerRef here! */}
             <div ref={scrollContainerRef} className="p-5 sm:p-10 overflow-y-auto custom-scrollbar flex-1">
               <form onSubmit={handleSubmit} className="space-y-10 sm:space-y-12 pb-4">
                 {currentStep === 1 && (
@@ -773,29 +805,52 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                           Choose an "easy-start" song from the show. We will provide the backing track at your audition so you don't have to upload anything!
                         </p>
 
-                        {PRESET_SONGS.length > 6 ? (
-                          <div className="bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 shadow-sm">
-                            <select
-                              value={formData.songTitle}
-                              onChange={(e) => updateForm({ songTitle: e.target.value })}
-                              className="w-full bg-transparent p-4 text-lg font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
-                            >
-                              <option value="" disabled>Select an easy-start track...</option>
-                              {PRESET_SONGS.map(s => (
-                                <option key={s.id} value={s.title}>{s.title}</option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                            {PRESET_SONGS.map(s => (
-                              <button key={s.id} type="button" onClick={() => updateForm({ songTitle: s.title })} className={`p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${formData.songTitle === s.title ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
-                                <Music size={24} className={`mb-4 ${formData.songTitle === s.title ? "text-white" : "text-blue-600"} opacity-50`} />
-                                <p className="font-black text-sm sm:text-xl uppercase italic leading-tight">{s.title}</p>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                        {/* 🟢 Integrated the new Mobile-Friendly Preview Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                          {PRESET_SONGS.map(s => {
+                            const isSelected = formData.songTitle === s.title;
+                            const isPlaying = playingTrackId === s.id;
+
+                            return (
+                              <div key={s.id} className="relative group">
+                                <button 
+                                  type="button" 
+                                  onClick={() => updateForm({ songTitle: s.title })} 
+                                  className={`w-full p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${
+                                    isSelected 
+                                      ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" 
+                                      : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"
+                                  }`}
+                                >
+                                  <Music size={24} className={`mb-4 ${isSelected ? "text-white" : "text-blue-600"} opacity-50`} />
+                                  <p className="font-black text-sm sm:text-xl uppercase italic leading-tight pr-8">{s.title}</p>
+                                </button>
+
+                                {/* Mobile-friendly Preview Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => togglePreview(e, s.id, s.audioUrl)}
+                                  className={`absolute top-4 right-4 p-3 rounded-full shadow-lg transition-all active:scale-90 z-10 ${
+                                    isPlaying 
+                                      ? "bg-red-500 text-white animate-pulse" 
+                                      : isSelected ? "bg-white text-blue-600" : "bg-blue-600 text-white hover:bg-blue-700"
+                                  }`}
+                                  title={isPlaying ? "Stop Preview" : "Listen to Track"}
+                                >
+                                  {isPlaying ? (
+                                    <div className="flex gap-0.5 items-center justify-center h-4 w-4">
+                                      <div className="w-1 bg-current h-3 rounded-full animate-bounce" />
+                                      <div className="w-1 bg-current h-4 rounded-full animate-bounce [animation-delay:0.2s]" />
+                                      <div className="w-1 bg-current h-2 rounded-full animate-bounce [animation-delay:0.4s]" />
+                                    </div>
+                                  ) : (
+                                    <Volume2 size={16} />
+                                  )}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         {selectedPreset && (
                           <div className="bg-green-50 dark:bg-green-900/10 border-2 border-green-500 p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] flex flex-col md:flex-row items-center gap-6 sm:gap-10 animate-in zoom-in-95">
@@ -901,7 +956,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                                      <button 
                                       key={l.id} 
                                       type="button" 
-                                      // 🟢 FIX 3: Intercept clicks on mandatory dates
                                       onClick={() => {
                                         if ((d.type === "mandatory" || d.type === "critical") && l.id !== "available") {
                                           alert("This date is a mandatory rehearsal. Conflicts are not permitted.");
@@ -1130,7 +1184,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                   <ChevronLeft size={18} /> {currentStep === 1 ? "Cancel" : "Back"}
                 </button>
                 {currentStep < 7 ? (
-                  // 🟢 FIX 2: We trigger our validation logic before advancing
                   <button type="button" onClick={handleNext} className="bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white px-6 sm:px-14 py-3 sm:py-5 rounded-xl sm:rounded-[2rem] font-black uppercase text-[10px] sm:text-sm flex items-center gap-2 shadow-xl active:scale-95 transition-all">
                     Next <ChevronRight size={18} />
                   </button>
@@ -1144,7 +1197,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         )}
       </div>
       
-      {/* 🟢 MODAL OVERLAY FOR COMMITTEE GUIDE */}
+      {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
       {showCommitteeGuide && (
         <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
           <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[80vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
