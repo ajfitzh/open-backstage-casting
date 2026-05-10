@@ -11,6 +11,7 @@ import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 import ScoringSidebar from "./ScoringSidebar";
 
+export const dynamic = "force-dynamic";
 export type AuditionSession = "Scheduled" | "Video/Remote" | "Walk-In";
 export type JudgeRole = "Director" | "Music" | "Choreographer" | "Drop-In" | "Admin";
 

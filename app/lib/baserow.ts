@@ -894,41 +894,54 @@ export async function getComplianceData(tenant: string, productionId?: number) {
 export async function getAuditionSlots(tenant: string, productionId: number) {
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
+  
+  // Failsafe: If the table doesn't exist for this tenant, return nothing
   if (!tables.AUDITION_SLOTS) return [];
+  
   const F = DB.AUDITION_SLOTS.FIELDS;
 
+  // Fetch from Baserow using your dynamic registry
   const data = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, {
     size: "100",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId
   }, tenant);
 
+  // If no slots exist in the DB, exit cleanly so the UI can show the "TBD" state
   if (!Array.isArray(data) || data.length === 0) {
-      console.log("⚠️ No audition slots found for this production.");
+      console.log(`⚠️ No audition slots found for production  ${productionId}.`);
       return [];
   }
 
+  // Uncomment this next line if you ever need to inspect the raw JSON keys again!
+  // console.log("🕵️ RAW BASEROW ROW:", JSON.stringify(data[0], null, 2));
+
   return data.map((row: any) => {
-    // 1. Robustly unpack the Time Label (Catch Baserow Array/Object formats)
-    let rawLabel = safeGet(row[F.TIME_LABEL]);
+    // --- 1. IRONCLAD LABEL EXTRACTION ---
+    // Try the F registry first, fallback to the CSV column names
+    let rawLabel = row[F.TIME_LABEL] ?? row["Time Label"] ?? "TBD TBD";
+    
+    // Unpack Baserow's Array/Object formats for Formula and Lookup fields
     if (Array.isArray(rawLabel)) rawLabel = rawLabel[0]?.value || rawLabel[0];
     if (typeof rawLabel === 'object' && rawLabel !== null) rawLabel = rawLabel.value;
     if (typeof rawLabel !== 'string') rawLabel = "TBD TBD";
 
-    // 2. Safely parse numbers
-    const capacity = parseInt(safeGet(row[F.CAPACITY], 0)) || 0;
-    const taken = parseInt(safeGet(row[F.TAKEN], 0)) || 0;
+    // --- 2. SAFE NUMBER PARSING ---
+    // Try F registry, fallback to CSV column names
+    const capacity = parseInt(row[F.CAPACITY] ?? row["Capacity"] ?? 0) || 0;
+    const taken = parseInt(row[F.TAKEN] ?? row["Taken"] ?? 0) || 0;
     
-    // 3. Calculate remaining manually to guarantee the UI gets it
+    // --- 3. EXPLICIT UI CALCULATION ---
+    // Calculate remaining manually to guarantee the UI gets exactly what it expects
     const remaining = capacity - taken; 
 
     return {
-      id: row.id.toString(), 
+      id: row.id?.toString() || Math.random().toString(), 
       day: rawLabel.split(' ')[0] || 'TBD', 
       time: rawLabel.split(' ').slice(1).join(' ') || rawLabel, 
       capacity,
       taken,
-      remaining, // <-- The UI needs this to render "10 Left"!
-      isFull: remaining <= 0 || safeGet(row[F.IS_FULL]) === true
+      remaining, // <-- The crucial piece for the UI ("8 Left")
+      isFull: remaining <= 0 || row[F.IS_FULL] === true || row["Is Full?"] === true
     };
   });
 }
