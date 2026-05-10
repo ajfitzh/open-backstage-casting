@@ -43,7 +43,7 @@ projects: [
       ...devices['Desktop Chrome'],
       storageState: 'playwright/.auth/user.json', 
     },
-    dependencies: ['setup'], // <--- This tells Playwright to run setup FIRST
+    //dependencies: ['setup'], // <--- This tells Playwright to run setup FIRST
   },
 ]
 ,

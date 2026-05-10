@@ -1,21 +1,15 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Check-In Kiosk', () => {
-  test('displays empty state when no rehearsal is scheduled', async ({ page }) => {
+  test('displays live kiosk mode when a rehearsal is scheduled', async ({ page }) => {
     
-    // 1. Go to the main tenant dashboard
     await page.goto('/');
+    // Uses Regex (/.../i) to find the button even if the "Upcoming/Active" text changes!
+await page.getByRole('button', { name: /Playwright 2: The Musical \(E2E\)/i }).first().click();
+await page.getByRole('link', { name: /Daily Check-In/i }).click();
 
-    // 2. Playwright looks for the specific seeded show card and clicks it
-    // (If the card itself is a link, or has the title inside it, this will trigger the navigation)
-    await page.getByText('Sandbox Summer Trial').first().click(); 
-    
-    // 3. Now inside the Production context, click the Rehearsal Check-In button in the sidebar
-    await page.getByRole('link', { name: /Rehearsal Check-In/i }).click();
-
-    // 4. Verify the Empty State
-    await expect(page.locator('text=No Rehearsal Scheduled')).toBeVisible();
-    await expect(page.locator('text=Enjoy your day off!')).toBeVisible();
-    await expect(page.locator('text=Live Kiosk Mode')).not.toBeVisible();
+    // 4. Verify the Live Kiosk State instead of the Empty State
+    await expect(page.locator('text=Live Kiosk Mode')).toBeVisible();
+    await expect(page.locator('text=No Rehearsal Scheduled')).not.toBeVisible();
   });
 });
