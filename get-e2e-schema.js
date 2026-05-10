@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 // 🟢 Mapped exactly to your e2e Tenant Registry IDs!
+// get-e2e-schema.js
+
+// 🟢 Mapped exactly to your e2e Tenant Registry IDs!
 const TABLES = {
   PEOPLE: "844",
   PRODUCTIONS: "845",
@@ -34,8 +37,11 @@ const TABLES = {
   SPACES: "871",
   RENTAL_RATES: "872",
   SCHEDULE_SLOTS: "873",
-  AUDITION_SLOTS: "874",
-  COMMITTEE_REPORTS: "875"
+  SEASONS: "874",           // Added
+  STAFF_INTEREST: "875",    // Added
+  TENANT_REGISTRY: "876",   // Added
+  AUDITION_SLOTS: "877",    // 🟢 FIXED: Now correctly points to 877
+  COMMITTEE_REPORTS: "878"  // 🟢 FIXED: Now correctly points to 878
 };
 
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");

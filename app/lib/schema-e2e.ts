@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/8/2026, 8:14:15 PM
+//    Generated on: 5/10/2026, 7:53:30 AM
 // --------------------------------------------------------
 
 export const E2E_DB = {
@@ -580,7 +580,7 @@ export const E2E_DB = {
       "DURATION": "field_9340",
     }
   },
-  AUDITION_SLOTS: {
+  SEASONS: {
     ID: "874",
     FIELDS: {
       "NAME": "field_9341",
@@ -592,7 +592,7 @@ export const E2E_DB = {
       "SESSIONS": "field_9347",
     }
   },
-  COMMITTEE_REPORTS: {
+  STAFF_INTEREST: {
     ID: "875",
     FIELDS: {
       "NAME": "field_9348",
@@ -601,6 +601,75 @@ export const E2E_DB = {
       "AVAILABILITY_JSON": "field_9351",
       "ROLE_PREFERENCES": "field_9352",
       "CONSTRAINTS": "field_9353",
+    }
+  },
+  TENANT_REGISTRY: {
+    ID: "876",
+    FIELDS: {
+      "SLUG": "field_9354",
+      "NAME": "field_9355",
+      "PEOPLE": "field_9356",
+      "PRODUCTIONS": "field_9357",
+      "MASTER_SHOW_DB": "field_9358",
+      "ASSIGNMENTS": "field_9359",
+      "ROLES": "field_9360",
+      "SIGNATURES": "field_9361",
+      "STATS": "field_9362",
+      "ROLES_POSITIONS": "field_9363",
+      "TEAM_ASSIGNMENTS": "field_9364",
+      "MEASUREMENTS": "field_9365",
+      "GARMENT_INVENTORY": "field_9366",
+      "STUDENT_BIO": "field_9367",
+      "COMMITTEE_PREFS": "field_9368",
+      "ATTENDANCE": "field_9369",
+      "CONFLICTS": "field_9370",
+      "REQUIREMENTS": "field_9371",
+      "EVENTS": "field_9372",
+      "SCENES": "field_9373",
+      "SCENE_ASSIGNMENTS": "field_9374",
+      "AUDITIONS": "field_9375",
+      "RESOURCES": "field_9376",
+      "SESSIONS": "field_9377",
+      "CLASSES": "field_9378",
+      "FAMILIES": "field_9379",
+      "VENUES": "field_9380",
+      "SEATS": "field_9381",
+      "PERFORMANCES": "field_9382",
+      "SPACES": "field_9383",
+      "RATES": "field_9384",
+      "SLOTS": "field_9385",
+      "AUDITION_SLOTS": "field_9386",
+      "COMMITTEE_REPORTS": "field_9387",
+    }
+  },
+  AUDITION_SLOTS: {
+    ID: "877",
+    FIELDS: {
+      "TIME_LABEL": "field_9388",
+      "PRODUCTION": "field_9389",
+      "DATE_TIME": "field_9390",
+      "CAPACITY": "field_9391",
+      "AUDITIONS_LINKED": "field_9392",
+      "TAKEN": "field_9451",
+      "REMAINING": "field_9453",
+      "IS_FULL": "field_9455",
+    }
+  },
+  COMMITTEE_REPORTS: {
+    ID: "878",
+    FIELDS: {
+      "NAME": "field_9393",
+      "PRODUCTION": "field_9394",
+      "SUBMITTER": "field_9395",
+      "COMMITTEE_NAME": "field_9396",
+      "REPORT_DATE": "field_9397",
+      "PRODUCTION_PHASE": "field_9398",
+      "PROGRESS_UPDATE": "field_9399",
+      "ATTENDANCE_NOTES": "field_9400",
+      "BLOCKERS_AND_NEEDS": "field_9401",
+      "ESTIMATED_COMPLETION": "field_9402",
+      "MONEY_SPENT_THIS_WEEK": "field_9403",
+      "RECEIPTS": "field_9404",
     }
   },
 };
