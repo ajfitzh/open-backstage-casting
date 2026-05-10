@@ -903,27 +903,35 @@ export async function getAuditionSlots(tenant: string, productionId: number) {
   }, tenant);
 
   if (!Array.isArray(data) || data.length === 0) {
-      console.log("⚠️ [Sandbox] No audition slots found. Injecting mock slots for E2E testing.");
-      return [
-        { id: "mock-1", day: "Sat", time: "10:00 AM", capacity: 10, taken: 2, isFull: false },
-        { id: "mock-2", day: "Sat", time: "10:30 AM", capacity: 10, taken: 10, isFull: true },
-        { id: "mock-3", day: "Sat", time: "11:00 AM", capacity: 10, taken: 5, isFull: false }
-      ];
+      console.log("⚠️ No audition slots found for this production.");
+      return [];
   }
 
   return data.map((row: any) => {
-    const rawLabel = safeGet(row[F.TIME_LABEL], "TBD TBD");
+    // 1. Robustly unpack the Time Label (Catch Baserow Array/Object formats)
+    let rawLabel = safeGet(row[F.TIME_LABEL]);
+    if (Array.isArray(rawLabel)) rawLabel = rawLabel[0]?.value || rawLabel[0];
+    if (typeof rawLabel === 'object' && rawLabel !== null) rawLabel = rawLabel.value;
+    if (typeof rawLabel !== 'string') rawLabel = "TBD TBD";
+
+    // 2. Safely parse numbers
+    const capacity = parseInt(safeGet(row[F.CAPACITY], 0)) || 0;
+    const taken = parseInt(safeGet(row[F.TAKEN], 0)) || 0;
+    
+    // 3. Calculate remaining manually to guarantee the UI gets it
+    const remaining = capacity - taken; 
+
     return {
       id: row.id.toString(), 
       day: rawLabel.split(' ')[0] || 'TBD', 
       time: rawLabel.split(' ').slice(1).join(' ') || rawLabel, 
-      capacity: parseInt(safeGet(row[F.CAPACITY], 0)) || 0,
-      taken: parseInt(safeGet(row[F.TAKEN], 0)) || 0,
-      isFull: safeGet(row[F.IS_FULL]) === true
+      capacity,
+      taken,
+      remaining, // <-- The UI needs this to render "10 Left"!
+      isFull: remaining <= 0 || safeGet(row[F.IS_FULL]) === true
     };
   });
 }
-
 export async function getAuditionees(tenant: string, productionId?: number) {
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);

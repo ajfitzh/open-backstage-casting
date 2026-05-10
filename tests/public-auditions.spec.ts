@@ -36,8 +36,6 @@ test.describe('Audition Wizard (Parent Flow)', () => {
 
     // --- STEP 4: AUDITION TIME ---
     await expect(page.getByText('Step 4/7')).toBeVisible();
-    // FREEZE TIME: Let's look at the screen!
-    await page.pause();
     await page.locator('button:has-text("Left")').first().click(); // Pick first available slot
     await page.getByRole('button', { name: /Next/i }).click();
 
