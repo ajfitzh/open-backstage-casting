@@ -1,3 +1,4 @@
+// app/components/committees/CommitteeClient.tsx
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
@@ -5,9 +6,14 @@ import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { 
   Printer, Crown, Wand2, RotateCcw, X, 
   Save, Loader2, Settings2, Lightbulb,
-  LayoutGrid, LayoutList 
+  LayoutGrid, LayoutList, Plus, Trash2, Edit2
 } from 'lucide-react';
-import { saveCommitteeAssignments } from '@/app/actions/committees';
+import { 
+  saveCommitteeAssignments, 
+  updateCommitteeVolunteer, 
+  deleteCommitteeVolunteer,
+  addCommitteeVolunteer 
+} from '@/app/actions/committees';
 import { useTenant } from '@/app/components/TenantProvider'; 
 
 // --- TYPES ---
@@ -30,8 +36,8 @@ interface Volunteer {
 
 // --- CONFIG ---
 const COMMITTEES: Record<string, string[]> = {
-    'Pre-Show': ["Show Chair", "Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech"],
-    'Show Week': ["Show Chair", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security"]
+    'Pre-Show': ["Show Chair", "Publicity", "Sets", "Set Dressing", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Floater"],
+    'Show Week': ["Show Chair", "Raffles", "Green Room", "Costumes", "Props", "Makeup", "Hair", "Tech", "Ninjas/Set Movers", "Box Office", "Concessions", "Security", "Floater"]
 };
 
 const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?: number, reason: string }> = {
@@ -50,6 +56,7 @@ const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?
     "Box Office": { type: 'fixed', val: 3, reason: "Ticket Window" },
     "Concessions": { type: 'fixed', val: 4, reason: "Prep & Sales" },
     "Ninjas/Set Movers": { type: 'fixed', val: 4, reason: "Deck Crew" },
+    "Floater": { type: 'fixed', val: 3, reason: "Flex Helpers" },
     "default": { type: 'fixed', val: 3, reason: "Standard Size" }
 };
 
@@ -68,28 +75,32 @@ export default function CommitteeDashboard({
   const [groupBy, setGroupBy] = useState<'Pre-Show' | 'Show Week'>('Pre-Show');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   
-  const rawData = volunteers;
+  // Local state for optimistic UI updates on add/edit/delete
+  const [localVolunteers, setLocalVolunteers] = useState<Volunteer[]>(volunteers);
   
   const initialAssignments = useMemo(() => {
       const acc: Record<number, string> = {};
-      rawData.forEach(v => {
+      localVolunteers.forEach(v => {
           const val = groupBy === 'Pre-Show' ? v.assignedPreShow : v.assignedShowWeek;
           if (val) acc[v.id] = val;
       });
       return acc;
-  }, [rawData, groupBy]);
+  }, [localVolunteers, groupBy]);
 
   const initialChairs = useMemo(() => {
       const acc: Record<number, boolean> = {};
-      rawData.forEach(v => { if (v.isChair) acc[v.id] = true; });
+      localVolunteers.forEach(v => { if (v.isChair) acc[v.id] = true; });
       return acc;
-  }, [rawData]);
+  }, [localVolunteers]);
 
   const [assignments, setAssignments] = useState<Record<number, string>>(initialAssignments);
   const [chairs, setChairs] = useState<Record<number, boolean>>(initialChairs);
   const [selectedCommittee, setSelectedCommittee] = useState<string | null>(null);
   
+  // Edit & Add Modal State
   const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" });
 
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
@@ -99,6 +110,11 @@ export default function CommitteeDashboard({
   } | null>(null);
 
   const [isPending, startTransition] = useTransition();
+
+  // Sync props if external DB changes
+  useEffect(() => {
+    setLocalVolunteers(volunteers);
+  }, [volunteers]);
 
   useEffect(() => {
       const initialTargets: Record<string, number> = {};
@@ -131,9 +147,61 @@ export default function CommitteeDashboard({
 
   const getCommitteeTarget = (committeeName: string) => targets[`${groupBy}-${committeeName}`] || 0;
 
+  // --- CRUD HANDLERS ---
   const handleSave = () => {
       startTransition(async () => {
           await saveCommitteeAssignments(tenant, groupBy, assignments, chairs);
+      });
+  };
+
+  const handleOpenEdit = (p: Volunteer | null) => {
+      if (p) {
+          setSelectedVolunteer(p);
+          setEditForm({ name: p.name || "", email: p.email || "", phone: p.phone || "" });
+          setIsEditing(false);
+      } else {
+          // Open "Add New" mode
+          setSelectedVolunteer({ id: -1 } as Volunteer);
+          setEditForm({ name: "", email: "", phone: "" });
+          setIsEditing(true);
+      }
+  };
+
+  const handleSaveVolunteer = async () => {
+      if (!selectedVolunteer) return;
+      const isNew = selectedVolunteer.id === -1;
+      
+      startTransition(async () => {
+          if (isNew) {
+              await addCommitteeVolunteer(tenant, editForm);
+              // Optimistic UI insert
+              setLocalVolunteers([...localVolunteers, { 
+                  ...selectedVolunteer, 
+                  id: Date.now(), 
+                  ...editForm 
+              }]);
+          } else {
+              await updateCommitteeVolunteer(tenant, selectedVolunteer.id, editForm);
+              // Optimistic UI update
+              setLocalVolunteers(localVolunteers.map(v => 
+                  v.id === selectedVolunteer.id ? { ...v, ...editForm } : v
+              ));
+          }
+          setSelectedVolunteer(null);
+          setIsEditing(false);
+      });
+  };
+
+  const handleDeleteVolunteer = async () => {
+      if (!selectedVolunteer || selectedVolunteer.id === -1) return;
+      if (!confirm(`Are you sure you want to permanently delete ${selectedVolunteer.name}?`)) return;
+      
+      startTransition(async () => {
+          await deleteCommitteeVolunteer(tenant, selectedVolunteer.id);
+          // Optimistic UI remove
+          setLocalVolunteers(localVolunteers.filter(v => v.id !== selectedVolunteer.id));
+          setSelectedVolunteer(null);
+          setIsEditing(false);
       });
   };
 
@@ -148,9 +216,9 @@ export default function CommitteeDashboard({
       
       const newAssignments = { ...assignments };
       const currentCommittees = COMMITTEES[groupBy];
-      const getCount = (comm: string) => rawData.filter(p => newAssignments[p.id] === comm).length;
+      const getCount = (comm: string) => localVolunteers.filter(p => newAssignments[p.id] === comm).length;
       
-      rawData.forEach(p => {
+      localVolunteers.forEach(p => {
           if (!newAssignments[p.id] || newAssignments[p.id] === "Unassigned") {
               const prefs = getPrefs(p);
               const choices = [prefs.first, prefs.second, prefs.third].filter(Boolean) as string[];
@@ -168,7 +236,7 @@ export default function CommitteeDashboard({
       });
 
       let first = 0, second = 0, third = 0, other = 0, unassigned = 0;
-      rawData.forEach(p => {
+      localVolunteers.forEach(p => {
           const assigned = newAssignments[p.id] || "Unassigned";
           const prefs = getPrefs(p);
           if (assigned === "Unassigned") unassigned++;
@@ -187,7 +255,7 @@ export default function CommitteeDashboard({
       const newAssignments = { ...assignments };
       const currentCommittees = COMMITTEES[groupBy];
 
-      rawData.forEach(p => {
+      localVolunteers.forEach(p => {
           if (!newAssignments[p.id] || newAssignments[p.id] === "Unassigned") {
               const prefs = getPrefs(p);
               const topChoice = [prefs.first, prefs.second, prefs.third].find(c => c && currentCommittees.includes(c));
@@ -203,7 +271,7 @@ export default function CommitteeDashboard({
 
   const handleSuggestLimits = () => {
       const currentComms = COMMITTEES[groupBy];
-      const totalVolunteers = rawData.length;
+      const totalVolunteers = localVolunteers.length;
       const currentTotalTargets = currentComms.reduce((sum, c) => sum + (targets[`${groupBy}-${c}`] || 0), 0);
       if (currentTotalTargets === 0) return;
       const scale = totalVolunteers / currentTotalTargets;
@@ -220,7 +288,7 @@ export default function CommitteeDashboard({
       COMMITTEES[groupBy].forEach(c => groups[c] = []);
       groups["Unassigned"] = [];
       
-      rawData.forEach(p => {
+      localVolunteers.forEach(p => {
           const assignedVal = assignments[p.id];
           if (assignedVal && groups[assignedVal]) {
               groups[assignedVal].push(p);
@@ -229,17 +297,17 @@ export default function CommitteeDashboard({
           }
       });
       return groups;
-  }, [groupBy, rawData, assignments]);
+  }, [groupBy, localVolunteers, assignments]);
 
   const sortedListData = useMemo(() => {
-      return [...rawData].sort((a, b) => {
+      return [...localVolunteers].sort((a, b) => {
           const aAssigned = assignments[a.id] || "Unassigned";
           const bAssigned = assignments[b.id] || "Unassigned";
           if (aAssigned === "Unassigned" && bAssigned !== "Unassigned") return -1;
           if (aAssigned !== "Unassigned" && bAssigned === "Unassigned") return 1;
           return a.name.localeCompare(b.name);
       });
-  }, [rawData, assignments]);
+  }, [localVolunteers, assignments]);
 
   const currentTeam = selectedCommittee ? groupedData[selectedCommittee] : [];
 
@@ -250,7 +318,7 @@ export default function CommitteeDashboard({
             <div>
                 <h1 className="text-2xl font-black uppercase italic tracking-tighter text-white">Committee Manager</h1>
                 <p className="text-zinc-500 text-xs font-medium">
-                    {rawData.length} Volunteers • Cast Size: <span className="text-blue-400 font-bold">{students.length}</span>
+                    {localVolunteers.length} Volunteers • Cast Size: <span className="text-blue-400 font-bold">{students.length}</span>
                 </p>
             </div>
             <div className="flex flex-wrap gap-2 w-full xl:w-auto items-center">
@@ -278,10 +346,10 @@ export default function CommitteeDashboard({
                     {hasChanges ? "Save Changes" : "Saved"}
                 </button>
 
+                <button onClick={() => handleOpenEdit(null)} className="bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-600/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Plus size={14}/> Add Person</button>
                 <button onClick={() => setShowSettings(true)} className="bg-purple-600/10 hover:bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Settings2 size={14}/> Limits</button>
                 <button onClick={handleAutoBalance} className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-500 border border-blue-600/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><Wand2 size={14}/> Balance</button>
                 <button onClick={handleClearBoard} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all"><RotateCcw size={14}/> Revert</button>
-                <button onClick={() => window.print()} className="bg-white text-black hover:bg-zinc-200 px-4 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all shadow-xl"><Printer size={14}/> Print</button>
             </div>
         </div>
 
@@ -294,7 +362,6 @@ export default function CommitteeDashboard({
                     const isUnderstaffed = team.length < target;
                     const isOverstaffed = team.length > target;
                     
-                    // 🟢 UX FIX: Overstaffed is now a pleasant Blue (surplus is good!)
                     let statusColor = 'text-emerald-500';
                     if (isUnderstaffed) statusColor = 'text-amber-500';
                     if (isOverstaffed) statusColor = 'text-blue-400';
@@ -321,12 +388,11 @@ export default function CommitteeDashboard({
                                 {team.slice(0, 7).map((p: Volunteer) => (
                                     <div 
                                         key={p.id} 
-                                        onClick={(e) => { e.stopPropagation(); setSelectedVolunteer(p); }}
+                                        onClick={(e) => { e.stopPropagation(); handleOpenEdit(p); }}
                                         className="text-xs flex justify-between items-center py-0.5 cursor-pointer transition-colors text-zinc-300 hover:text-white"
                                     >
                                         <span className="truncate pr-2">{p.name}</span>
                                         <div className="flex items-center gap-1.5 shrink-0">
-                                            {/* 🟢 UX FIX: Neutral Badges Instead of Checkmarks/Triangles */}
                                             <ChoiceBadge assigned={committee} prefs={getPrefs(p)} />
                                         </div>
                                     </div>
@@ -363,7 +429,7 @@ export default function CommitteeDashboard({
                                         <tr key={p.id} className={`hover:bg-white/5 transition-colors ${isUnassigned ? 'bg-amber-900/5' : isChair ? 'bg-amber-500/10' : ''}`}>
                                             <td 
                                                 className="px-3 py-2 font-bold text-xs leading-tight cursor-pointer hover:underline"
-                                                onClick={() => setSelectedVolunteer(p)}
+                                                onClick={() => handleOpenEdit(p)}
                                             >
                                                 <div className="flex items-center gap-2 text-zinc-200">
                                                     <ChoiceBadge assigned={currentAssigned} prefs={prefs} />
@@ -444,7 +510,7 @@ export default function CommitteeDashboard({
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h4 className="text-sm font-bold text-blue-400">Smart Distribution</h4>
-                                    <p className="text-xs text-blue-300/70 mt-1 pr-4">Automatically scales targets to match your {rawData.length} volunteers.</p>
+                                    <p className="text-xs text-blue-300/70 mt-1 pr-4">Automatically scales targets to match your {localVolunteers.length} volunteers.</p>
                                 </div>
                                 <button onClick={handleSuggestLimits} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded shadow-lg text-xs font-black uppercase flex items-center gap-2 transition-colors"><Lightbulb size={14}/> Suggest</button>
                             </div>
@@ -538,52 +604,119 @@ export default function CommitteeDashboard({
             </div>
         )}
 
-        {/* --- VOLUNTEER PROFILE MODAL (TAP ON MOBILE) --- */}
+        {/* --- VOLUNTEER EDIT/VIEW MODAL --- */}
         {selectedVolunteer && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedVolunteer(null)} />
                 <div className="relative w-full max-w-sm bg-zinc-900 border border-white/10 shadow-2xl rounded-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                     <div className="p-6 border-b border-white/10 bg-zinc-950 flex justify-between items-start">
                         <div>
-                            <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">{selectedVolunteer.name}</h2>
-                            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">Parent of {selectedVolunteer.studentName || "Unknown"}</p>
+                            {isEditing ? (
+                                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">
+                                    {selectedVolunteer.id === -1 ? 'Add Volunteer' : 'Edit Volunteer'}
+                                </h2>
+                            ) : (
+                                <>
+                                    <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">{selectedVolunteer.name}</h2>
+                                    <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">
+                                        Parent of {selectedVolunteer.studentName || "Unknown"}
+                                    </p>
+                                </>
+                            )}
                         </div>
-                        <button onClick={() => setSelectedVolunteer(null)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-colors"><X size={18}/></button>
+                        <div className="flex gap-2">
+                            {!isEditing && (
+                                <button onClick={() => setIsEditing(true)} className="p-2 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-full transition-colors"><Edit2 size={16}/></button>
+                            )}
+                            <button onClick={() => setSelectedVolunteer(null)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-colors"><X size={18}/></button>
+                        </div>
                     </div>
 
                     <div className="p-6 space-y-5 bg-zinc-950/50">
-                        <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Contact Info</h4>
-                            <div className="space-y-1">
-                                <p className="text-sm text-zinc-300 font-medium">Email: <span className="text-zinc-400 font-normal">{selectedVolunteer.email || "N/A"}</span></p>
-                                <p className="text-sm text-zinc-300 font-medium">Phone: <span className="text-zinc-400 font-normal">{selectedVolunteer.phone || "N/A"}</span></p>
-                            </div>
-                        </div>
+                        {isEditing ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">Parent Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={editForm.name} 
+                                        onChange={e => setEditForm({...editForm, name: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500 focus:ring-1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">Email</label>
+                                    <input 
+                                        type="email" 
+                                        value={editForm.email} 
+                                        onChange={e => setEditForm({...editForm, email: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500 focus:ring-1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">Phone</label>
+                                    <input 
+                                        type="text" 
+                                        value={editForm.phone} 
+                                        onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500 focus:ring-1"
+                                    />
+                                </div>
 
-                        <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">{groupBy} Preferences</h4>
-                            <div className="space-y-2">
-                                {(() => {
-                                    const prefs = getPrefs(selectedVolunteer);
-                                    return (
-                                        <>
-                                            <div className="flex items-center gap-3">
-                                                <span className="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-black">1</span> 
-                                                <span className="text-sm font-bold text-zinc-200">{prefs.first || "None"}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">2</span> 
-                                                <span className="text-sm font-bold text-zinc-200">{prefs.second || "None"}</span>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-black">3</span> 
-                                                <span className="text-sm font-bold text-zinc-200">{prefs.third || "None"}</span>
-                                            </div>
-                                        </>
-                                    );
-                                })()}
+                                <div className="pt-4 flex gap-2 justify-between items-center border-t border-white/5">
+                                    {selectedVolunteer.id !== -1 ? (
+                                        <button onClick={handleDeleteVolunteer} className="text-red-500 hover:bg-red-500/10 p-2 rounded transition-colors" title="Delete">
+                                            {isPending ? <Loader2 size={16} className="animate-spin"/> : <Trash2 size={16}/>}
+                                        </button>
+                                    ) : <div/>}
+                                    
+                                    <div className="flex gap-2">
+                                        <button onClick={() => {
+                                            if (selectedVolunteer.id === -1) setSelectedVolunteer(null);
+                                            else setIsEditing(false);
+                                        }} className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white">Cancel</button>
+                                        <button onClick={handleSaveVolunteer} disabled={isPending} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded shadow-lg text-xs font-black uppercase flex items-center gap-2">
+                                            {isPending ? <Loader2 size={14} className="animate-spin" /> : "Save"}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">Contact Info</h4>
+                                    <div className="space-y-1">
+                                        <p className="text-sm text-zinc-300 font-medium">Email: <span className="text-zinc-400 font-normal">{selectedVolunteer.email || "N/A"}</span></p>
+                                        <p className="text-sm text-zinc-300 font-medium">Phone: <span className="text-zinc-400 font-normal">{selectedVolunteer.phone || "N/A"}</span></p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">{groupBy} Preferences</h4>
+                                    <div className="space-y-2">
+                                        {(() => {
+                                            const prefs = getPrefs(selectedVolunteer);
+                                            return (
+                                                <>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-black">1</span> 
+                                                        <span className="text-sm font-bold text-zinc-200">{prefs.first || "None"}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">2</span> 
+                                                        <span className="text-sm font-bold text-zinc-200">{prefs.second || "None"}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-black">3</span> 
+                                                        <span className="text-sm font-bold text-zinc-200">{prefs.third || "None"}</span>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -612,7 +745,7 @@ export default function CommitteeDashboard({
                                     <div key={p.id} className={`p-3 hover:bg-white/5 transition-colors group flex justify-between items-center ${isChair ? 'bg-amber-500/10' : ''}`}>
                                         <div 
                                             className="cursor-pointer hover:underline"
-                                            onClick={() => setSelectedVolunteer(p)}
+                                            onClick={() => handleOpenEdit(p)}
                                         >
                                             <div className="text-sm font-bold flex items-center gap-2 text-zinc-200">
                                                 <ChoiceBadge assigned={selectedCommittee} prefs={prefs} />
@@ -667,7 +800,7 @@ export default function CommitteeDashboard({
   );
 }
 
-// 🟢 NEW: Clean, neutral Choice Badge generator
+// 🟢 Clean, neutral Choice Badge generator
 function ChoiceBadge({ assigned, prefs }: { assigned: string | null, prefs: any }) {
     if (!assigned || assigned === "Unassigned" || assigned === "Show Chair") return null;
     

@@ -40,10 +40,21 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
       <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Performance</h2>
       
       <div className="flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-2 rounded-[1.5rem] sm:rounded-[2rem]">
-        <button type="button" onClick={() => updateForm({ usePresetSong: false, songTitle: "", musicFileName: "" })} className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${!formData.usePresetSong ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+        <button 
+          type="button" 
+          onClick={() => updateForm({ usePresetSong: false, songTitle: "", musicFileName: "" })} 
+          className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${!formData.usePresetSong ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+        >
           <UploadCloud size={24} className={!formData.usePresetSong ? "text-blue-600" : "opacity-50"} /> Upload My Own
         </button>
-        <button type="button" onClick={() => updateForm({ usePresetSong: true, songTitle: "", musicFileName: "" })} className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${formData.usePresetSong ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>
+        <button 
+          type="button" 
+          onClick={() => { 
+            setAudioFile(null); // <-- FIX: Clears out stale uploads
+            updateForm({ usePresetSong: true, songTitle: "", musicFileName: "" }); 
+          }} 
+          className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${formData.usePresetSong ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+        >
           <Sparkles size={24} className={formData.usePresetSong ? "text-white" : "opacity-50"} /> Easy-Start Preset
         </button>
       </div>

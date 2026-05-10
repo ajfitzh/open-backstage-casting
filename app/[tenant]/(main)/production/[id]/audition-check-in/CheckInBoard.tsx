@@ -1,4 +1,4 @@
-// app/[tenant]/(main)/production/[id]/check-in/CheckInBoard.tsx
+// app/[tenant]/(main)/production/[id]/audition-check-in/CheckInBoard.tsx
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -42,27 +42,45 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
     setCurrentNote(student.lobbyNote || '');
   };
 
-const handleUpdateStatus = async (id: string, newStatus: string) => {
-    // Find the current student state to get their edited phone/email
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
     const student = students.find(s => s.id === id);
     if (!student) return;
 
-    // 1. Optimistically update the UI
+    // Cache the previous state for rollback in case of network failure
+    const previousStudentsState = [...students];
+
+    // 1. Optimistically update the UI for instant feedback
     setStudents(students.map(s => s.id === id ? { ...s, status: newStatus, lobbyNote: currentNote } : s));
     setActiveStudent(null);
     setSentLinks([]);
 
-    // 2. Save Check-in state AND updated contact info to Baserow!
-    await saveCheckIn(
-      tenant, 
-      parseInt(id), 
-      newStatus, 
-      currentNote,
-      student.performerId, // The person's ID to patch contact info
-      student.name,
-      student.phone,
-      student.email
-    );
+    try {
+      // 2. Safety Guard: Only send contact info if it was actually modified
+      const originalStudent = initialCast.find(s => s.id === id);
+      
+      // If your backend action expects undefined for "no change", use undefined. 
+      // If it expects null, swap these to null.
+      const nameToSave = student.name !== originalStudent?.name ? student.name : undefined;
+      const phoneToSave = student.phone !== originalStudent?.phone ? student.phone : undefined;
+      const emailToSave = student.email !== originalStudent?.email ? student.email : undefined;
+
+      // 3. Save Check-in state to Baserow
+      await saveCheckIn(
+        tenant, 
+        parseInt(id), 
+        newStatus, 
+        currentNote,
+        student.performerId,
+        nameToSave,
+        phoneToSave,
+        emailToSave
+      );
+    } catch (error) {
+      console.error("Failed to save check-in state:", error);
+      alert("Connection error! The check-in could not be saved. Please try again.");
+      // Rollback the optimistic UI update
+      setStudents(previousStudentsState);
+    }
   };
 
   const handleReassign = (id: string, field: string, value: string) => {

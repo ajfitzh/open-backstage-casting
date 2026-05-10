@@ -1,4 +1,5 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+// app/components/auditions/AuditionsClient.tsx
+ 
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -132,6 +133,14 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
            }
 
            const actorIsCheckedIn = row.checkedIn === true || session === "Walk-In";
+           
+           // FIX: Look in all possible fields where an audio track might be saved
+           const trackUrl = row.backingTrack 
+             || row.musicFileUrl 
+             || row.practiceAudio 
+             || row.auditionPrep?.practiceAudio 
+             || row.auditionPrep?.musicFileUrl 
+             || "";
 
            return {
              id: row.id,
@@ -162,7 +171,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
              adminNotes: row.adminNotes || "",
              isWalkIn: session === "Walk-In",
              isCheckedIn: actorIsCheckedIn,
-             backingTrack: row.backingTrack || "", 
+             backingTrack: trackUrl, 
              lobbyNote: row.lobbyNote || ""        
            };
         });
@@ -196,7 +205,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [productionId, productionTitle, tenant]);
+  }, [productionId, productionTitle, scheduledPerformers.length, tenant]);
 
   const handleChoreoSave = (actorId: number, score: number, notes: string, videoUrl?: string) => {
     const isDelete = videoUrl === "DELETE";
@@ -475,9 +484,24 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
                           <button
                               onClick={(e) => { e.stopPropagation(); window.open(person.video!, "_blank"); }}
                               className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-blue-500 hover:text-blue-400 group-hover:border-blue-500/30 shrink-0"
-                              title="Watch Audition"
+                              title="Watch Audition Tape"
                           >
                               <PlayCircle size={18} />
+                          </button>
+                      )}
+
+                      {/* NEW QUICK PLAY AUDIO BUTTON */}
+                      {person.backingTrack && (
+                          <button
+                              onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Opens player in a tiny popup window
+                                  window.open(person.backingTrack, "AudioPlayer", "width=400,height=100"); 
+                              }}
+                              className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-purple-500 hover:text-purple-400 group-hover:border-purple-500/30 shrink-0"
+                              title="Play Backing Track"
+                          >
+                              <Music size={18} />
                           </button>
                       )}
                       

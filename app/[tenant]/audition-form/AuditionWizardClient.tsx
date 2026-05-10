@@ -151,7 +151,19 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     const data = await res.json();
     if (!data.uploadUrl) throw new Error("Failed to get upload URL");
     
-    await fetch(data.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': type, 'x-amz-acl': 'public-read' } });
+    // FIX: Catch CORS errors explicitly during the browser PUT
+    try {
+      const uploadRes = await fetch(data.uploadUrl, { 
+        method: 'PUT', 
+        body: file, 
+        headers: { 'Content-Type': type, 'x-amz-acl': 'public-read' } 
+      });
+      if (!uploadRes.ok) throw new Error(`Upload Failed: ${uploadRes.statusText}`);
+    } catch (e) {
+      console.error("Direct browser upload failed (likely CORS or ACL config)", e);
+      throw e;
+    }
+
     return data.publicUrl;
   };
 
@@ -204,7 +216,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       }
     } catch (error) {
       console.error(error);
-      alert("Upload failed. Please check your connection.");
+      alert("Upload failed. Please check your connection or bucket configuration.");
     } finally {
       setIsProcessing(false);
     }
