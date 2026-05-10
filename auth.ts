@@ -1,3 +1,4 @@
+// auth.ts
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
@@ -9,17 +10,14 @@ import { findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
 // --- COOKIE SHARING CONFIG ---
 const useSecureCookies = process.env.NODE_ENV === "production"
 const cookiePrefix = useSecureCookies ? "__Secure-" : ""
-// FIXED: Use undefined in local dev so the browser doesn't reject the cookie!
 const sharedDomain = process.env.NODE_ENV === "production" ? ".open-backstage.org" : undefined;
 
 // --- TENANT HELPER ---
 // Dynamically extracts the tenant so auth knows which database to query
-// NEXT.JS 15 FIX: Made this function async to await headers()
 async function getTenantContext() {
-  const hostList = await headers(); // Await the headers promise
+  const hostList = await headers(); 
   const host = hostList.get("host") || "";
 
-  // 🟢 FIXED DEV BYPASS: Now supports local subdomains like e2e.localhost!
   if (process.env.NODE_ENV === "development" && host.includes("localhost")) {
     const currentHost = host.split(":")[0]; // Strips the port
     if (currentHost !== "localhost") {
@@ -80,11 +78,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         
         console.log(`❌ Failed: Email not found in Baserow PEOPLE table.`);
         
-        // THE MASTER KEY (DEV ONLY)
+        // 🟢 THE MASTER KEY (DEV ONLY) - FIXED ID!
         if (process.env.NODE_ENV === "development") {
             console.log(`⚠️ DEV MODE: Bypassing database check. Forcing login!`);
             return { 
-                id: "1", 
+                id: "dev-bypass-9999", 
                 name: "Local Admin Override", 
                 email: email, 
                 role: "Admin" 
@@ -119,7 +117,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const tenant = await getTenantContext(); // Await tenant context
+        const tenant = await getTenantContext(); 
         if (!tenant) return false; 
 
         const email = user.email || "";
@@ -144,13 +142,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async jwt({ token, user, account }) {
-      // 🟢 FIX: Copy the role from the user object to the token object so it persists!
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         
         if (account?.provider === "google" && !token.role) {
-            const tenant = await getTenantContext(); // Await tenant context
+            const tenant = await getTenantContext(); 
             if (tenant) {
               const baserowUser = await findUserByEmail(tenant, user.email || "");
               if (baserowUser) {
@@ -164,7 +161,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async session({ session, token }) {
-      // 🟢 FIX: Pass the role from the token to the session with a strict fallback
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role || "Guest"; 
