@@ -1,16 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-
-  // ^^^ THE BLOCK ABOVE IS THE ONLY CHANGE ^^^
-
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
     ignoreBuildErrors: true,
   },
-
-  // Images config
   images: {
     remotePatterns: [
       {
@@ -31,6 +23,13 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
+      // 🟢 ADDED DIGITALOCEAN SPACES
+      {
+        protocol: 'https',
+        hostname: 'cyt-fredericksburg.nyc3.digitaloceanspaces.com',
+        port: '',
+        pathname: '/**',
+      }
     ],
   },
 };
