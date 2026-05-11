@@ -60,7 +60,7 @@ test.describe('Audition Wizard (Parent Flow)', () => {
     // 🟢 ADDED: Click both signature buttons
     await page.getByRole('button', { name: 'Click to Sign' }).first().click();
     await page.getByRole('button', { name: 'Click to Sign' }).click();
-    await page.getByRole('button', { name: 'Submit' }).click();
+
     // The moment of truth
     await page.getByRole('button', { name: /Submit/i }).click();
 
