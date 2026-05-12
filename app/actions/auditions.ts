@@ -13,7 +13,6 @@ export async function saveStudentBio(tenant: string, auditionId: number, bio: st
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
-    // 🟢 FIXED: Added `tenant`
     return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
         method: "PATCH",
         body: JSON.stringify({ [F.PROGRAM_BIO]: bio })
@@ -26,7 +25,6 @@ export async function saveCongratsAd(tenant: string, auditionId: number, adText:
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
     
-    // 🟢 FIXED: Added `tenant`
     return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
         method: "PATCH",
         body: JSON.stringify({ [F.CONGRATS_AD_TEXT]: adText })
@@ -45,12 +43,10 @@ export async function saveTicketsSold(tenant: string, studentId: number, product
         [`filter__${F.PRODUCTION}__link_row_has`]: productionId
     };
     
-    // 🟢 FIXED: Added `tenant`
     const rows = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params, tenant);
     
     if (Array.isArray(rows) && rows.length > 0) {
         const rowId = rows[0].id;
-        // 🟢 FIXED: Added `tenant`
         return await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/${rowId}/`, {
             method: "PATCH",
             body: JSON.stringify({ [F.TICKETS_SOLD]: tickets })
@@ -126,7 +122,13 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}\nCallbacks: ${formData.callbackStatus || 'No Answer'}\nChair Interest: ${formData.chairInterest || 'No'}`;
+    // 🟢 V2 UPDATE: WE PACKED ROMANCE & VOCAL RANGE IN HERE FOR YOU
+    const extraDataString = `Grade: ${formData.grade || 'N/A'}
+Roles: ${formData.preferredRoles || 'N/A'}
+Vocal Range: ${formData.vocalRange || 'Unsure'}
+Stage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}
+Callbacks: ${formData.callbackStatus || 'No Answer'}
+Chair Interest: ${formData.chairInterest || 'No'}`;
 
     const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
@@ -144,6 +146,9 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature} (S), ${formData.parentSignature} (P)`,
         [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
 
+        // If you DO map Vocal Range directly to field_6081 in the DB, it goes here:
+        [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "Unsure",
+
         [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}`,
       })
     }, {}, tenant);
@@ -151,7 +156,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     if (!audition || audition.error) return { success: false, error: "Database rejected the audition record." };
 
     // ==========================================
-    // 🟢 WRITE TO COMMITTEE_PREFS TABLE
+    // WRITE TO COMMITTEE_PREFS TABLE
     // ==========================================
     if (audition?.id && tables.COMMITTEE_PREFS) {
       try {
@@ -177,10 +182,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       }
     }
 
-    if (audition?.id) {
-       // ... existing resend.emails.send block ...
-    }
-
     return { success: true, auditionId: audition?.id };
   } catch (error) {
     console.error("Submission Error:", error);
@@ -191,7 +192,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
 export async function cancelAudition(tenant: string, auditionId: number) {
   try {
     const tables = await getTenantTableConfig(tenant);
-    // 🟢 FIXED: Added `tenant`
     const response = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
       method: "DELETE"
     }, {}, tenant);
@@ -230,7 +230,6 @@ export async function saveAuditionScore(
        payload[notesField] = scores.notes;
     }
 
-    // 🟢 FIXED: Added `tenant`
     const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
        method: "PATCH",
        body: JSON.stringify(payload)
@@ -265,7 +264,6 @@ export async function acceptRoleAndSign(
       [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
     };
 
-    // 🟢 FIXED: Added `tenant`
     const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
        method: "PATCH",
        body: JSON.stringify(payload)

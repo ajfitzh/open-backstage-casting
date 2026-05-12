@@ -21,6 +21,8 @@ export type AuditionFormData = {
   parentCommitteeAgreement: boolean;
   studentSignature: boolean; 
   parentSignature: boolean;  
+  vocalRange?: string;
+  acceptRomance?: boolean;
 };
 
 export interface AuditionSlot {
