@@ -1,9 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 // app/components/audition-wizard/VocalRangeTester.tsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles } from "lucide-react";
+import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles, RotateCcw } from "lucide-react";
 
 const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -20,7 +19,7 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): number {
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; 
+  if (rms < 0.01) return -1; // Noise gate
 
   let r1 = 0, r2 = SIZE - 1, thres = 0.2;
   for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
@@ -64,15 +63,18 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
   const [playingMidi, setPlayingMidi] = useState<number | null>(null);
 
-  // 🟢 AUTO-TRAINER STATE
+  // Auto-Trainer
   const [trainerDirection, setTrainerDirection] = useState<'up' | 'down' | null>(null);
   const [trainerTarget, setTrainerTarget] = useState<number | null>(null);
   
-  // Refs for background logic loops
   const trainerTargetRef = useRef<number | null>(null);
   const trainerDirectionRef = useRef<'up' | 'down' | null>(null);
   const matchFramesRef = useRef(0);
   const lastAdvanceTimeRef = useRef(0);
+
+  // 🟢 NEW: Glitch Filter Refs
+  const freeSingMidiRef = useRef<number | null>(null);
+  const freeSingFramesRef = useRef(0);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -107,10 +109,9 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     osc.stop(ctx.currentTime + duration);
   };
 
-  // 🟢 START AUTO-TRAINER
   const startAutoTrainer = () => {
       setTrainerDirection('up');
-      setTrainerTarget(60); // Start at Middle C
+      setTrainerTarget(60); 
       trainerDirectionRef.current = 'up';
       trainerTargetRef.current = 60;
       matchFramesRef.current = 0;
@@ -119,7 +120,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
   const switchTrainerToLows = () => {
       setTrainerDirection('down');
-      setTrainerTarget(60); // Reset to Middle C and go down
+      setTrainerTarget(60); 
       trainerDirectionRef.current = 'down';
       trainerTargetRef.current = 60;
       matchFramesRef.current = 0;
@@ -131,6 +132,12 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       setTrainerTarget(null);
       trainerDirectionRef.current = null;
       trainerTargetRef.current = null;
+  };
+
+  // 🟢 NEW: Manual Reset for Glitches
+  const resetRange = () => {
+      setLowestMidi(999);
+      setHighestMidi(0);
   };
 
   const startTest = async () => {
@@ -153,8 +160,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       source.connect(analyser);
 
       setIsRecording(true);
-      setLowestMidi(999); 
-      setHighestMidi(0);
+      resetRange();
       
       detectPitch();
     } catch (err) {
@@ -194,36 +200,37 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       
       setCurrentNote(noteStr);
       setCurrentMidi(midi);
-      setLowestMidi(prev => Math.min(prev, midi));
-      setHighestMidi(prev => Math.max(prev, midi));
 
-      // 🟢 AUTO-TRAINER LOGIC LOOP
+      // 🟢 GLITCH FILTER: Require pitch to be held for 5 frames (~80ms)
+      if (midi === freeSingMidiRef.current) {
+          freeSingFramesRef.current++;
+          if (freeSingFramesRef.current > 5) {
+              setLowestMidi(prev => Math.min(prev, midi));
+              setHighestMidi(prev => Math.max(prev, midi));
+          }
+      } else {
+          freeSingMidiRef.current = midi;
+          freeSingFramesRef.current = 0;
+      }
+
+      // Auto-Trainer Logic
       const target = trainerTargetRef.current;
       const dir = trainerDirectionRef.current;
-      // eslint-disable-next-line react-hooks/purity
       const now = Date.now();
 
-      if (target && dir && (now - lastAdvanceTimeRef.current > 500)) { // 500ms cooldown between advancements
-          // Leniency: +/- 1 half-step for kids
+      if (target && dir && (now - lastAdvanceTimeRef.current > 500)) { 
           if (Math.abs(midi - target) <= 1) {
               matchFramesRef.current++;
-              // If they hold it for ~15 frames (approx 0.25 seconds)
               if (matchFramesRef.current > 15) {
                   const nextTarget = dir === 'up' ? target + 1 : target - 1;
-                  
-                  // Update Refs for logic
                   trainerTargetRef.current = nextTarget;
                   matchFramesRef.current = 0;
                   lastAdvanceTimeRef.current = now;
-                  
-                  // Update State for UI
                   setTrainerTarget(nextTarget);
-                  
-                  // Provide auditory feedback
                   playNote(nextTarget, 1.0);
               }
           } else {
-              matchFramesRef.current = 0; // Reset if they waver off pitch
+              matchFramesRef.current = 0;
           }
       }
 
@@ -231,21 +238,41 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       setCurrentNote("--");
       setCurrentMidi(null);
       matchFramesRef.current = 0;
+      freeSingFramesRef.current = 0;
     }
 
     animationRef.current = requestAnimationFrame(detectPitch);
   };
 
+  // 🟢 NEW: Overlap Classification Algorithm
   const handleApply = () => {
     if (lowestMidi === 999 || highestMidi === 0) return;
-    let voiceType = "Flexible";
-    if (lowestMidi >= 60) voiceType = "Soprano";
-    else if (lowestMidi >= 53) voiceType = "Alto";
-    else if (lowestMidi >= 48) voiceType = "Tenor";
-    else if (lowestMidi >= 43) voiceType = "Baritone";
-    else if (lowestMidi < 43) voiceType = "Bass";
+    
+    const CHORAL_RANGES = {
+        Soprano: { min: 60, max: 81 },  // C4 - A5
+        Alto:    { min: 53, max: 74 },  // F3 - D5
+        Tenor:   { min: 48, max: 67 },  // C3 - G4
+        Baritone:{ min: 43, max: 64 },  // G2 - E4
+        Bass:    { min: 36, max: 60 },  // C2 - C4
+    };
 
-    onRangeFound(voiceType, getNoteString(lowestMidi), getNoteString(highestMidi));
+    let bestMatch = "Flexible";
+    let maxOverlap = 0;
+
+    for (const [type, bounds] of Object.entries(CHORAL_RANGES)) {
+        const overlapMin = Math.max(lowestMidi, bounds.min);
+        const overlapMax = Math.min(highestMidi, bounds.max);
+        const overlap = Math.max(0, overlapMax - overlapMin);
+
+        if (overlap > maxOverlap) {
+            maxOverlap = overlap;
+            bestMatch = type;
+        }
+    }
+
+    if (maxOverlap === 0) bestMatch = "Unsure";
+
+    onRangeFound(bestMatch, getNoteString(lowestMidi), getNoteString(highestMidi));
     stopTest();
   };
 
@@ -331,8 +358,8 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           </div>
 
           <div className="flex-1 flex flex-col gap-3">
-             <div className="grid grid-cols-2 gap-3 flex-1">
-                <div className="bg-zinc-900 rounded-xl border border-white/5 p-3 flex flex-col justify-center shadow-sm">
+             <div className="grid grid-cols-2 gap-3 flex-1 relative">
+                <div className="bg-zinc-900 rounded-xl border border-white/5 p-3 flex flex-col justify-center shadow-sm relative">
                     <span className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest font-black mb-1">Lowest Hit</span>
                     <span className="text-xl sm:text-2xl font-bold text-emerald-400">{lowestMidi !== 999 ? getNoteString(lowestMidi) : "--"}</span>
                 </div>
@@ -340,6 +367,17 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
                     <span className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest font-black mb-1">Highest Hit</span>
                     <span className="text-xl sm:text-2xl font-bold text-purple-400">{highestMidi !== 0 ? getNoteString(highestMidi) : "--"}</span>
                 </div>
+                
+                {/* 🟢 NEW: Manual Reset Button */}
+                {highestMidi !== 0 && (
+                    <button 
+                        onClick={resetRange} 
+                        className="absolute -top-3 -right-2 bg-zinc-800 border border-zinc-700 text-zinc-300 p-1.5 rounded-full hover:bg-zinc-700 hover:text-white transition-all shadow-lg"
+                        title="Reset Range Tracking"
+                    >
+                        <RotateCcw size={12} />
+                    </button>
+                )}
              </div>
              
              {!isRecording ? (
@@ -354,7 +392,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           </div>
       </div>
 
-      {/* 🟢 THE AUTO-TRAINER UI */}
       {isRecording && (
         <div className={`rounded-xl border p-4 mb-6 transition-all duration-300 ${trainerDirection ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-zinc-900 border-white/5'}`}>
            {!trainerDirection ? (
@@ -398,54 +435,56 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
         </div>
       )}
 
-      {/* 🟢 INTERACTIVE PIANO */}
+      {/* 🟢 FAT & SCROLLABLE KEYBOARD */}
       <div className="mb-4">
           <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-2 flex justify-between px-1">
-            <span>Interactive Keyboard (Click to Play)</span>
+            <span>Interactive Keyboard (Swipe to view more)</span>
           </div>
           
-          <div className="relative flex w-full h-24 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner select-none touch-none">
-            {whiteKeys.map((wKey) => {
-              const hasBlackKey = [0, 2, 5, 7, 9].includes(wKey.midi % 12);
-              
-              const inRange = lowestMidi !== 999 && wKey.midi >= lowestMidi && wKey.midi <= highestMidi;
-              const isSung = wKey.midi === currentMidi;
-              const isSynth = wKey.midi === playingMidi || wKey.midi === trainerTarget;
-              
-              let whiteColor = "bg-white";
-              if (inRange) whiteColor = "bg-blue-100";
-              if (isSung) whiteColor = "bg-blue-400 shadow-[inset_0_0_15px_rgba(0,0,0,0.4)]";
-              if (isSynth) whiteColor = "bg-indigo-400 shadow-[inset_0_0_20px_rgba(99,102,241,0.8)]";
+          <div className="w-full overflow-x-auto custom-scrollbar rounded-lg border border-zinc-800 shadow-inner">
+             <div className="relative flex min-w-[700px] sm:min-w-[800px] h-24 sm:h-32 bg-zinc-900 select-none touch-none">
+                {whiteKeys.map((wKey) => {
+                  const hasBlackKey = [0, 2, 5, 7, 9].includes(wKey.midi % 12);
+                  
+                  const inRange = lowestMidi !== 999 && wKey.midi >= lowestMidi && wKey.midi <= highestMidi;
+                  const isSung = wKey.midi === currentMidi;
+                  const isSynth = wKey.midi === playingMidi || wKey.midi === trainerTarget;
+                  
+                  let whiteColor = "bg-white";
+                  if (inRange) whiteColor = "bg-blue-100";
+                  if (isSung) whiteColor = "bg-blue-400 shadow-[inset_0_0_15px_rgba(0,0,0,0.4)]";
+                  if (isSynth) whiteColor = "bg-indigo-400 shadow-[inset_0_0_20px_rgba(99,102,241,0.8)]";
 
-              const bKeyMidi = wKey.midi + 1;
-              const bInRange = lowestMidi !== 999 && bKeyMidi >= lowestMidi && bKeyMidi <= highestMidi;
-              const bIsSung = bKeyMidi === currentMidi;
-              const bIsSynth = bKeyMidi === playingMidi || bKeyMidi === trainerTarget;
+                  const bKeyMidi = wKey.midi + 1;
+                  const bInRange = lowestMidi !== 999 && bKeyMidi >= lowestMidi && bKeyMidi <= highestMidi;
+                  const bIsSung = bKeyMidi === currentMidi;
+                  const bIsSynth = bKeyMidi === playingMidi || bKeyMidi === trainerTarget;
 
-              let blackColor = "bg-zinc-800";
-              if (bInRange) blackColor = "bg-blue-900";
-              if (bIsSung) blackColor = "bg-blue-500 shadow-[0_0_10px_rgba(96,165,250,0.8)]";
-              if (bIsSynth) blackColor = "bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.9)]";
+                  let blackColor = "bg-zinc-800";
+                  if (bInRange) blackColor = "bg-blue-900";
+                  if (bIsSung) blackColor = "bg-blue-500 shadow-[0_0_10px_rgba(96,165,250,0.8)]";
+                  if (bIsSynth) blackColor = "bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.9)]";
 
-              return (
-                <div 
-                  key={wKey.midi} 
-                  onPointerDown={(e) => { e.preventDefault(); playNote(wKey.midi); setPlayingMidi(wKey.midi); }}
-                  onPointerUp={() => setPlayingMidi(null)}
-                  onPointerLeave={() => setPlayingMidi(null)}
-                  className={`relative flex-1 border-r border-zinc-300 last:border-0 transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-200 ${whiteColor}`}
-                >
-                  {hasBlackKey && (
-                      <div 
-                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); playNote(bKeyMidi); setPlayingMidi(bKeyMidi); }}
-                        onPointerUp={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
-                        onPointerLeave={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
-                        className={`absolute top-0 -right-[50%] w-full h-[65%] z-10 border-x border-b border-zinc-950 rounded-b shadow-md transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-700 ${blackColor}`}
-                      />
-                  )}
-                </div>
-              )
-            })}
+                  return (
+                    <div 
+                      key={wKey.midi} 
+                      onPointerDown={(e) => { e.preventDefault(); playNote(wKey.midi); setPlayingMidi(wKey.midi); }}
+                      onPointerUp={() => setPlayingMidi(null)}
+                      onPointerLeave={() => setPlayingMidi(null)}
+                      className={`relative flex-1 border-r border-zinc-300 last:border-0 transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-200 ${whiteColor}`}
+                    >
+                      {hasBlackKey && (
+                          <div 
+                            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); playNote(bKeyMidi); setPlayingMidi(bKeyMidi); }}
+                            onPointerUp={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
+                            onPointerLeave={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
+                            className={`absolute top-0 -right-[50%] w-full h-[65%] z-10 border-x border-b border-zinc-950 rounded-b shadow-md transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-700 ${blackColor}`}
+                          />
+                      )}
+                    </div>
+                  )
+                })}
+             </div>
           </div>
       </div>
 
