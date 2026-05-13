@@ -15,6 +15,7 @@ const RawPersonSchema = z.object({
   'Address': z.any(),
   'City': z.any(),
   'Families': z.any(),
+  'App Password': z.any(), // 🟢 NEW: Tell Zod to look for the password field
 }).passthrough();
 
 export const UserProfileSchema = RawPersonSchema.transform(data => {
@@ -51,9 +52,12 @@ export const UserProfileSchema = RawPersonSchema.transform(data => {
         phone: data['Phone Number'] || null,
         address: `${data.Address || ''}, ${data.City || ''}`.replace(/^, |, $/g, ''),
         role: primaryRole,
-        tags: roles, // Keep the full array for the Kanban board
+        tags: roles, 
         image: avatarUrl,
-        familyId: data.Families?.[0]?.id || null, // Might be 'Families' or 'Family' depending on the table
+        familyId: data.Families?.[0]?.id || null, 
+        
+        // 🟢 NEW: Safely extract the hashed password for NextAuth
+        appPassword: data['App Password'] || null, 
     };
 });
 

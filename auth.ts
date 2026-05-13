@@ -3,6 +3,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
 import { headers } from "next/headers"
+import bcrypt from "bcryptjs" // 🟢 NEW: Added bcryptjs for secure password comparison
 
 // Use the updated standalone functions from our refactored baserow.ts
 import { findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
@@ -52,10 +53,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        // 🟢 Require both email and password
+        if (!credentials?.email || !credentials?.password) return null;
 
         // Clean up autofill spaces!
         const email = (credentials.email as string).trim();
+        const rawPassword = credentials.password as string;
+        
         console.log(`\n🔐 --- LOGIN ATTEMPT ---`);
         console.log(`📧 Email: "${email}"`);
 
@@ -73,7 +77,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (user) {
             console.log(`✅ Success! Found user in Baserow: ${user.name}`);
-            return user;
+            
+            // 🟢 SECURITY FIX: Actually check the password!
+            if (!user.appPassword) {
+                console.log(`❌ Failed: User found, but no password set (Guest account).`);
+                return null;
+            }
+
+            // Compare the typed password against the hash saved in Baserow
+            const isValid = await bcrypt.compare(rawPassword, user.appPassword);
+            
+            if (isValid) {
+                console.log(`✅ Success! Valid password match.`);
+                return user;
+            } else {
+                console.log(`❌ Failed: Invalid password.`);
+                return null;
+            }
         } 
         
         console.log(`❌ Failed: Email not found in Baserow PEOPLE table.`);

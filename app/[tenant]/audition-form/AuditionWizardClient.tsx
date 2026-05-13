@@ -3,10 +3,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit, Lock } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
-
+import { setAccountPassword } from "@/app/actions/auth";
 import { AuditionFormData, AuditionSlot, INITIAL_DATA, PRESET_SONGS } from "@/app/components/audition-wizard/types";
 import { Step1ActorInfo } from "@/app/components/audition-wizard/Step1ActorInfo";
 import { Step2CastingDetails } from "@/app/components/audition-wizard/Step2CastingDetails";
@@ -77,6 +77,25 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     const newErrors = { ...errors };
     Object.keys(fields).forEach(key => delete newErrors[key]);
     setErrors(newErrors);
+  };
+  // 🟢 NEW STATE FOR ACCOUNT CLAIMING
+  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [passwordSetSuccess, setPasswordSetSuccess] = useState(false);
+
+  const handleSetPassword = async (formDataEvent: FormData) => {
+    const password = formDataEvent.get("password") as string;
+    if (!password) return;
+    
+    setIsSettingPassword(true);
+    // lookupData.email contains the email they just verified/used
+    const result = await setAccountPassword(tenant, lookupData.email, password);
+    
+    if (result.success) {
+      setPasswordSetSuccess(true);
+    } else {
+      alert(result.error || "Failed to set password. Please try again.");
+    }
+    setIsSettingPassword(false);
   };
 
   const handleNext = () => {
@@ -243,7 +262,59 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               A confirmation email has been sent to:<br/>
               <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email}</span>
             </p>
+          </div>{/* Drop this into the isSuccess view of AuditionWizardClient */}
+<div className="mt-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left">
+  <div className="flex items-start gap-4">
+    <Lock className="text-amber-500 shrink-0 mt-1" size={24} />
+    <div className="w-full">
+      <h4 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-1">
+        Secure Your Family Hub
+      </h4>
+      <p className="text-zinc-400 text-xs font-medium mb-4">
+        To view the cast list next Friday and accept roles, you need to secure this email address with a password.
+      </p>
+{passwordSetSuccess ? (
+        <div className="mt-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
+           <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+           <div>
+             <h4 className="text-emerald-500 font-black uppercase tracking-widest text-sm">Account Secured</h4>
+             <p className="text-emerald-500/80 text-xs font-medium">Your password is set. You can now securely log in when the Cast List drops!</p>
+           </div>
+        </div>
+      ) : (
+        <div className="mt-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left">
+          <div className="flex items-start gap-4">
+            <Lock className="text-amber-500 shrink-0 mt-1" size={24} />
+            <div className="w-full">
+              <h4 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-1">
+                Secure Your Family Hub
+              </h4>
+              <p className="text-zinc-400 text-xs font-medium mb-4">
+                To view the cast list next Friday and accept roles, you need to secure this email address with a password.
+              </p>
+              <form action={handleSetPassword} className="flex gap-2">
+                <input 
+                  type="password" 
+                  name="password"
+                  placeholder="Create a password..." 
+                  required
+                  className="flex-1 bg-zinc-950 border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-amber-500"
+                />
+                <button 
+                  type="submit"
+                  disabled={isSettingPassword}
+                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-colors"
+                >
+                  {isSettingPassword ? "Saving..." : "Lock Account"}
+                </button>
+              </form>
+            </div>
           </div>
+        </div>
+      )}
+    </div>
+  </div>
+</div>
           
           <div className="space-y-3">
             <button onClick={startNewAudition} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-all active:scale-95 text-center">

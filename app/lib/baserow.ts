@@ -1054,6 +1054,9 @@ export async function findUserByEmail(tenant: string, email: string) {
     email: email,
     image: row[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
     role: assignedRole, 
+    
+    // 🟢 NEW: Pass the hashed password through so NextAuth can verify it!
+    appPassword: row[DB.PEOPLE.FIELDS.APP_PASSWORD] || null,
   };
 }
 
