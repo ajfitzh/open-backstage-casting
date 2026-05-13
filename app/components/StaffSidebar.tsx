@@ -21,9 +21,6 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
-  // 🟢 TENANT FIX: Grab the current tenant from the URL (e.g., 'cytfred')
-  const tenant = pathname?.split('/')[1] || '';
-
   const staffRoles = ["Admin", "Director", "Staff", "Teacher", "SuperAdmin"];
   const isStaff = staffRoles.includes(globalRole);
 
@@ -36,21 +33,17 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       return false;
   };
 
-  // 🟢 TENANT FIX: Safely glue the tenant prefix to every route
+  // 🟢 FIXED: Clean, simple replacement without breaking the subdomain
   const getFinalHref = (href: string) => {
-    if (!href || href === '/') return `/${tenant}`;
-    
-    const prefix = `/${tenant}`;
-    const basePath = href.startsWith(prefix) ? href : `${prefix}${href}`;
-
+    if (!href) return "/";
     return activeProductionId 
-      ? basePath.replace('/active/', `/${activeProductionId}/`) 
-      : basePath;
+      ? href.replace('/active/', `/${activeProductionId}/`) 
+      : href;
   };
 
   const isPathActive = (href: string) => {
       if (!pathname) return false;
-      if (href === '/') return pathname === `/${tenant}` || pathname === `/${tenant}/`;
+      if (href === '/') return pathname === '/';
 
       const targetPath = activeProductionId ? href.replace('/active/', `/${activeProductionId}/`) : href;
       return pathname.includes(targetPath);
@@ -76,8 +69,8 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   return (
     <nav className={`w-full flex flex-col h-full bg-zinc-900 transition-all duration-300 ${isSimulating ? 'border-r-4 border-red-500/30' : ''}`}>
       
-      {/* 🟢 TENANT FIX: Logo links safely back to the tenant dashboard */}
-      <Link href={`/${tenant}`} className={`h-16 flex items-center border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
+      {/* HEADER LOGO */}
+      <Link href="/" className={`h-16 flex items-center border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
         {isCollapsed ? (
             <div className="flex items-center justify-center w-10 h-10 bg-blue-500/10 rounded-lg text-blue-500">
                 <Layers size={24} />
@@ -173,8 +166,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       </div>
 
       <div className="p-3 border-t border-white/5">
-        {/* 🟢 TENANT FIX: Wrap the settings link in getFinalHref */}
-        <NavItem href={getFinalHref('/settings')} icon={<Settings size={18}/>} label="System Settings" active={isPathActive('/settings')} isCollapsed={isCollapsed} />
+        <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={isPathActive('/settings')} isCollapsed={isCollapsed} />
       </div>
     </nav>
   );
