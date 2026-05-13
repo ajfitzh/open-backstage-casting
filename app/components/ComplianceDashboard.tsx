@@ -2,16 +2,19 @@
 
 import React, { useState } from 'react';
 import { CheckCircle2, Circle, User, DollarSign, FileText, Camera, Ruler, AlertCircle, Search } from 'lucide-react';
+import ActorProfileModal from './ActorProfileModal'; // 🟢 Import the modal
 
 export interface Student {
   id: string | number;
   name: string;
   avatar: string | null;
-  status?: string; // 🟢 We need to ensure the schema passes this!
+  status?: string; 
   signedAgreement: boolean;
   paidFees: boolean;
   headshotSubmitted: boolean;
   measurementsTaken: boolean;
+  // allow additional dynamic properties from the database for the profile modal
+  [key: string]: any; 
 }
 
 interface ComplianceDashboardProps {
@@ -22,6 +25,9 @@ interface ComplianceDashboardProps {
 export default function ComplianceDashboard({ students = [], productionTitle = "Select a Production" }: ComplianceDashboardProps) {
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // 🟢 State to track which student is currently being inspected
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
   if (!students || students.length === 0) {
     return (
@@ -145,14 +151,17 @@ export default function ComplianceDashboard({ students = [], productionTitle = "
                     {getStatusBadge(student.status)}
                   </td>
                   
-                  {/* Pass down isCast so we can mute the icons for non-cast members */}
                   <ComplianceCell isCast={isCast} checked={student.signedAgreement} icon={<FileText size={16}/>} />
                   <ComplianceCell isCast={isCast} checked={student.paidFees} icon={<DollarSign size={16}/>} />
                   <ComplianceCell isCast={isCast} checked={student.headshotSubmitted} icon={<Camera size={16}/>} />
                   <ComplianceCell isCast={isCast} checked={student.measurementsTaken} icon={<Ruler size={16}/>} />
                   
                   <td className="px-6 py-4 text-right">
-                    <button className="text-zinc-500 font-bold uppercase tracking-widest hover:text-white text-[10px] hover:bg-zinc-800 px-4 py-2 rounded-lg transition-colors border border-zinc-800 hover:border-zinc-600 shadow-sm">
+                    {/* 🟢 Hooked up onClick to set the selected student */}
+                    <button 
+                      onClick={() => setSelectedStudent(student)}
+                      className="text-zinc-500 font-bold uppercase tracking-widest hover:text-white text-[10px] hover:bg-zinc-800 px-4 py-2 rounded-lg transition-colors border border-zinc-800 hover:border-zinc-600 shadow-sm"
+                    >
                       Profile
                     </button>
                   </td>
@@ -170,11 +179,19 @@ export default function ComplianceDashboard({ students = [], productionTitle = "
           </tbody>
         </table>
       </div>
+
+      {/* 🟢 Render the Actor Profile Modal if a student is selected */}
+      {selectedStudent && (
+        <ActorProfileModal 
+          actor={selectedStudent} 
+          grades={selectedStudent.grades} // Safely passes undefined if no grades exist yet
+          onClose={() => setSelectedStudent(null)} 
+        />
+      )}
     </div>
   );
 }
 
-// 🟢 NEW: Intelligently hides/mutes compliance tasks for kids who aren't in the show yet
 const ComplianceCell = ({ checked, icon, isCast }: { checked: boolean; icon: React.ReactNode; isCast: boolean }) => {
   if (!isCast) {
     return <td className="px-6 py-4 text-center text-zinc-800 font-bold">-</td>;
