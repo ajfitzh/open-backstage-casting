@@ -2,7 +2,7 @@
 import { 
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
-  SlidersHorizontal, Sparkles, FilePlus, Home, ClipboardCheck, 
+  SlidersHorizontal, Sparkles, FilePlus, Home, 
   UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors
 } from 'lucide-react';
 
@@ -21,19 +21,19 @@ export const NAV_CONFIG = [
     permission: "view_cast_list",
     items: [
       { label: "Show Hub", href: "/production", icon: Theater },
-      { label: "Scheduler", href: "/schedule", icon: Calendar },
-      // 🟢 The Director's post-rehearsal dashboard
+      // 🟢 Production-aware routing
+      { label: "Scheduler", href: "/production/active/schedule", icon: Calendar },
       { label: "Nightly Report", href: "/production/active/report", icon: BookOpen, permission: "manage_casting" },
-      { label: "Show Calibration", href: "/analysis", icon: SlidersHorizontal, permission: "manage_casting" },
+      { label: "Show Calibration", href: "/production/active/analysis", icon: SlidersHorizontal, permission: "manage_casting" },
       { 
         label: "Casting Suite", 
         icon: Users, 
         isCollapsible: true,
         permission: "view_auditions",
         children: [
-           { label: "Auditions", href: "/auditions", icon: Mic2 },
-           { label: "Callbacks", href: "/callbacks", icon: Megaphone, permission: "manage_casting" },
-           { label: "Cast Grid", href: "/casting", icon: LayoutGrid, permission: "manage_casting" }
+           { label: "Auditions", href: "/production/active/auditions", icon: Mic2 },
+           { label: "Callbacks", href: "/production/active/callbacks", icon: Megaphone, permission: "manage_casting" },
+           { label: "Cast Grid", href: "/production/active/casting", icon: LayoutGrid, permission: "manage_casting" }
         ]
       }
     ]
@@ -42,14 +42,14 @@ export const NAV_CONFIG = [
     title: "Logistics & Ops",
     color: "text-emerald-500",
     items: [
-      { label: "Master Roster", href: "/roster", icon: UserSquare2, permission: "view_cast_list" },
-      { label: "Conflict Matrix", href: "/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
-      // 🟢 One-click CSV export for the costume team
+      // 🟢 Production-aware routing for Roster and Conflicts
+      { label: "Master Roster", href: "/production/active/roster", icon: UserSquare2, permission: "view_cast_list" },
+      { label: "Conflict Matrix", href: "/production/active/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
       { label: "Costume Wardrobe", href: "/production/active/costumes", icon: Scissors, permission: "view_cast_list" },
       
       { 
         label: "Audition Check-In", 
-        href: "/production/active/audition-check-in", // <-- FIXED ROUTE
+        href: "/production/active/audition-check-in", 
         icon: Mic, 
         permission: "view_checkin", 
         group: "Check In Team"      
@@ -68,8 +68,8 @@ export const NAV_CONFIG = [
         isCollapsible: true,
         permission: "manage_committees",
         children: [
-           { label: "Assignments", href: "/committees", icon: Users },
-           { label: "Weekly Reports", href: "/committees/reports", icon: ClipboardList }
+           { label: "Assignments", href: "/production/active/committees", icon: Users },
+           { label: "Weekly Reports", href: "/production/active/committees/reports", icon: ClipboardList }
         ]
       },
       { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
@@ -81,7 +81,6 @@ export const NAV_CONFIG = [
     permission: "view_financials",
     items: [
       { label: "Reports & Fees", href: "/reports", icon: BarChart3 },
-      // 🟢 Concatenated bios and ads for InDesign
       { label: "Playbill Exporter", href: "/reports/playbill", icon: BookOpen },
       { label: "Show Analytics", href: "/analytics", icon: Banknote },
     ]
