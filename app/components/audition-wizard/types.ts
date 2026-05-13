@@ -10,6 +10,8 @@ export type AuditionFormData = {
   hairColor: string; heightFt: string; heightIn: string; headshotUrl: string | null;
   preferredRoles: string; acceptAnyRole: boolean;
   songTitle: string; musicFileName: string; usePresetSong: boolean; 
+  musicFileUrl?: string | null; // 🟢 Added for file uploads
+  practiceAudio?: string | null; // 🟢 Added for backing tracks
   auditionSlotId: string | null;
   conflicts: Record<string, ConflictEntry>;
   callbackStatus: "" | "in-person" | "virtual" | "unavailable"; 
@@ -24,7 +26,7 @@ export type AuditionFormData = {
   studentSignature: boolean; 
   parentSignature: boolean;  
   vocalRange?: string;
-  voiceType?: string; // 🟢 Added to store the detected voice type
+  voiceType?: string; 
   acceptRomance?: boolean;
 };
 
@@ -92,6 +94,8 @@ export const INITIAL_DATA: AuditionFormData = {
   hairColor: "", heightFt: "", heightIn: "", headshotUrl: null,
   preferredRoles: "", acceptAnyRole: false,
   songTitle: "", musicFileName: "", usePresetSong: false,
+  musicFileUrl: null, // 🟢 Initialized here
+  practiceAudio: null, // 🟢 Initialized here
   auditionSlotId: null,
   conflicts: {}, callbackStatus: "",
   preShow1: "", preShow2: "", preShow3: "",
@@ -101,5 +105,5 @@ export const INITIAL_DATA: AuditionFormData = {
   studentSignature: false, parentSignature: false,
   fearOfHeights: undefined,
   otherTalents: "",
-  voiceType: "" // 🟢 Initiated here
+  voiceType: "" 
 };
