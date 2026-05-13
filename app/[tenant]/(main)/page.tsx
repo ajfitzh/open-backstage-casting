@@ -1,5 +1,3 @@
-// app/[tenant]/(main)/page.tsx
-import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { auth } from "@/auth";
 import { 
@@ -9,10 +7,9 @@ import {
   UserCog, Mic, AlertCircle, CheckCircle2, Clock
 } from 'lucide-react';
 import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard';
-import ChairLogbook from '@/app/components/committees/ChairLogbook'; // 🟢 NEW IMPORT
+import ChairLogbook from '@/app/components/committees/ChairLogbook';
 import { 
   getActiveProduction, 
-  getShowById, 
   getAssignments, 
   getCreativeTeam, 
   getClasses,
@@ -23,7 +20,7 @@ import {
   getAllShows,
   getCommitteeData,
   getExistingAuditions,
-  getUserProfile // 🟢 NEW IMPORT
+  getUserProfile 
 } from '@/app/lib/baserow';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
@@ -32,8 +29,10 @@ import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage({ params }: { params: { tenant: string } }) {
-  const { tenant } = params; 
+export default async function DashboardPage({ params }: { params: Promise<{ tenant: string }> | { tenant: string } }) {
+  // Handle Next.js 15 params promise (safely unwrapping if needed)
+  const resolvedParams = await params;
+  const tenant = resolvedParams.tenant; 
   
   const session = await auth();
   
@@ -41,12 +40,8 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
   const userRole = (session?.user as any)?.role || "Guest";
   const userEmail = session?.user?.email || "";
 
-  const cookieStore = await cookies();
-  const cookieId = cookieStore.get('active_production_id')?.value;
-  let show = null;
-  
-  if (cookieId) show = await getShowById(tenant, cookieId);
-  if (!show) show = await getActiveProduction(tenant);
+  // 🟢 2. No more cookies! The root dashboard defaults to the active production
+  const show = await getActiveProduction(tenant);
 
   if (!show) {
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
@@ -73,7 +68,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
           myAuditions = [...myAuditions, ...upcomingAuditions];
       }
 
-      // 🟢 4. CHAIR LOGBOOK LOGIC: Check if this parent is a Committee Chair
+      // 4. CHAIR LOGBOOK LOGIC: Check if this parent is a Committee Chair
       const userProfile = await getUserProfile(tenant, userEmail);
       const myPersonId = userProfile?.id ? parseInt(userProfile.id) : null;
       
@@ -95,7 +90,7 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
                  </span>
               </div>
 
-              {/* 🟢 THE CHAIR LOGBOOK (Only renders if they are a Chair!) */}
+              {/* THE CHAIR LOGBOOK (Only renders if they are a Chair!) */}
               {chairRecord && myPersonId && (
                  <div className="animate-in fade-in slide-in-from-top-4">
                     <ChairLogbook 
@@ -169,12 +164,12 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       getAssignments(tenant, show.id),
       getCreativeTeam(tenant, show.id),
       getClasses(tenant),
-      getAuditionees(tenant, show.id),
-      getScenes(tenant, show.id),
-      getProductionEvents(tenant, show.id),
+      getAuditionees(tenant, show.id).catch(()=>[]),
+      getScenes(tenant, show.id).catch(()=>[]),
+      getProductionEvents(tenant, show.id).catch(()=>[]),
       getSeasons(tenant),
       getAllShows(tenant),
-      getCommitteeData(tenant, show.id)
+      getCommitteeData(tenant, show.id).catch(()=>[])
   ]);
   
   const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
@@ -289,13 +284,14 @@ export default async function DashboardPage({ params }: { params: { tenant: stri
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
-             <ActionCard href="/schedule" title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
-             <ActionCard href="/casting" title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
+             {/* 🟢 ActionCards are now routing securely using the URL schema */}
+             <ActionCard href={`/production/${show.id}/schedule`} title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
+             <ActionCard href={`/production/${show.id}/casting`} title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
         </div>
         <div className="space-y-4">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics</h3>
-            <ActionCard href="/roster" title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
-            <ActionCard href="/reports" title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
+            <ActionCard href={`/production/${show.id}/roster`} title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
+            <ActionCard href={`/reports`} title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
         </div>
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> Academy & Season</h3>
