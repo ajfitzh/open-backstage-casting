@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
 
@@ -15,8 +15,9 @@ import { Step4AuditionTime } from "@/app/components/audition-wizard/Step4Auditio
 import { Step5Conflicts } from "@/app/components/audition-wizard/Step5Conflicts";
 import { Step6Committees } from "@/app/components/audition-wizard/Step6Committees";
 import { Step7Commitment } from "@/app/components/audition-wizard/Step7Commitment";
+import EditAuditionForm from "@/app/components/casting/EditAuditionForm"; // 🟢 NEW IMPORT
 
-interface ExistingAudition { id: number; name: string; time: string; song: string; }
+interface ExistingAudition { id: number; name: string; time: string; song: string; rawAuditionData?: any; }
 
 interface Props {
   tenant: string;
@@ -43,6 +44,9 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isCanceling, setIsCanceling] = useState<number | null>(null);
+  
+  // 🟢 NEW STATE FOR EDIT MODAL
+  const [editingAudition, setEditingAudition] = useState<ExistingAudition | null>(null);
   const [showCommitteeGuide, setShowCommitteeGuide] = useState(false);
   
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -151,7 +155,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     const data = await res.json();
     if (!data.uploadUrl) throw new Error("Failed to get upload URL");
     
-    // FIX: Catch CORS errors explicitly during the browser PUT
     try {
       const uploadRes = await fetch(data.uploadUrl, { 
         method: 'PUT', 
@@ -299,9 +302,23 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                         <h4 className="font-black text-lg dark:text-white tracking-tighter">{audition.name}</h4>
                         <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1"><Clock size={12} className="text-blue-500" /> {audition.time}</p>
                       </div>
-                      <button onClick={() => handleCancelAudition(audition.id, audition.name)} disabled={isCanceling === audition.id} className="p-3 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl transition-all">
-                        <Trash2 size={16} />
-                      </button>
+                      
+                      {/* 🟢 NEW ACTION BUTTONS */}
+                      <div className="flex gap-2 shrink-0">
+                        <button 
+                          onClick={() => setEditingAudition(audition)} 
+                          className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                        >
+                          <Edit size={14} /> Edit
+                        </button>
+                        <button 
+                          onClick={() => handleCancelAudition(audition.id, audition.name)} 
+                          disabled={isCanceling === audition.id} 
+                          className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                   </div>
                 ))
               ) : (
@@ -364,6 +381,29 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         )}
       </div>
 
+      {/* 🟢 NEW MODAL OVERLAY FOR EDITING EXISTING AUDITIONS */}
+      {editingAudition && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto pt-20">
+          <div className="w-full max-w-3xl relative mb-20 animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setEditingAudition(null)}
+              className="absolute -top-12 right-0 text-white hover:text-zinc-300 font-bold tracking-widest uppercase text-xs transition-colors"
+            >
+              Close
+            </button>
+            <EditAuditionForm 
+              tenant={tenant} 
+              auditionId={editingAudition.id} 
+              initialData={editingAudition.rawAuditionData || { fullName: editingAudition.name }} 
+              onSuccess={() => {
+                setEditingAudition(null);
+                returnToHub(); // Soft refresh the list without doing a hard page reload
+              }} 
+            />
+          </div>
+        </div>
+      )}
+
       {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
       {showCommitteeGuide && (
          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
@@ -375,7 +415,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
               <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">1. Publicity</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Boost attendance. Distribute posters, find 6-8 advertisers.</p></div>
               <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">2. Sets / Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Build, adapt, and transport sets. Be prepared to work weekends.</p></div>
-              {/* Note: Feel free to paste the rest of your committee guide options here! */}
               <p className="text-xs text-zinc-400 italic text-center pt-4">Click outside to close</p>
             </div>
           </div>

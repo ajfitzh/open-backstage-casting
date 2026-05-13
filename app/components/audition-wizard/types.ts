@@ -4,6 +4,8 @@ export type ConflictLevel = "available" | "absent" | "late" | "tentative";
 export type ConflictEntry = { level: ConflictLevel; notes: string; };
 
 export type AuditionFormData = {
+  fearOfHeights: any;
+  otherTalents: string;
   fullName: string; dob: string; sex: string; grade: string;
   hairColor: string; heightFt: string; heightIn: string; headshotUrl: string | null;
   preferredRoles: string; acceptAnyRole: boolean;
@@ -95,5 +97,7 @@ export const INITIAL_DATA: AuditionFormData = {
   show1: "", show2: "", show3: "",
   chairInterest: "", chairPreference: "",
   offBookAgreement: false, parentCommitteeAgreement: false,
-  studentSignature: false, parentSignature: false
+  studentSignature: false, parentSignature: false,
+  fearOfHeights: undefined,
+  otherTalents: ""
 };

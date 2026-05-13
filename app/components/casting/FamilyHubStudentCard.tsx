@@ -4,10 +4,12 @@
 import React, { useState } from "react";
 import { Clock, AlertCircle, CheckCircle2, PenTool, Lock, Ticket, Megaphone } from "lucide-react";
 import AcceptRoleModal from "./AcceptRoleModal";
+import EditAuditionForm from "./EditAuditionForm"; // 🟢 NEW IMPORT
 import { saveStudentBio, saveCongratsAd, saveTicketsSold } from "@/app/actions/auditions"; 
 
 export default function FamilyHubStudentCard({ student, show, tenant, userEmail }: any) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditingAudition, setIsEditingAudition] = useState(false); // 🟢 NEW STATE
   
   // Bio State
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -51,7 +53,7 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
   };
 
   return (
-    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl">
+    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl relative">
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-2xl font-black text-white tracking-tighter">{student.name}</h3>
@@ -59,15 +61,33 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
         </div>
       </div>
 
+      {/* 🟢 NEW PRE-CASTING / AUDITION PHASE UI */}
       {!isCast && (
-         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
-               <Clock size={18} className="text-zinc-500" />
+         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center shrink-0">
+                 <Clock size={18} className="text-zinc-500" />
+              </div>
+              <div>
+                 <p className="font-black text-zinc-300 text-sm uppercase tracking-widest">
+                   {student.checkedIn ? "Audition Complete" : "Audition Pending"}
+                 </p>
+                 <p className="text-xs text-zinc-500 font-medium">
+                   {student.checkedIn 
+                     ? "The directors are currently deliberating. Cast list drops Friday!" 
+                     : `You are scheduled for ${student.timeSlot || 'your slot'}. You can update your form until you arrive.`}
+                 </p>
+              </div>
             </div>
-            <div>
-               <p className="font-black text-zinc-300 text-sm uppercase tracking-widest">Audition Complete</p>
-               <p className="text-xs text-zinc-500 font-medium">The directors are currently deliberating. Cast list drops Friday!</p>
-            </div>
+            
+            {!student.checkedIn && (
+              <button 
+                onClick={() => setIsEditingAudition(true)}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-colors shrink-0"
+              >
+                Edit Details
+              </button>
+            )}
          </div>
       )}
 
@@ -259,6 +279,31 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
 
             </div>
          </div>
+      )}
+
+      {/* 🟢 NEW EDIT MODAL OVERLAY */}
+      {isEditingAudition && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto pt-20">
+          <div className="w-full max-w-3xl relative mb-20">
+            <button 
+              onClick={() => setIsEditingAudition(false)}
+              className="absolute -top-12 right-0 text-white hover:text-zinc-300 font-bold tracking-widest uppercase text-xs"
+            >
+              Close
+            </button>
+            <EditAuditionForm 
+              tenant={tenant} 
+              auditionId={student.id} 
+              /* NOTE: Ensure the parent component passing `student` includes the raw payload here 
+                 or fetch it inside the Edit component if missing. */
+              initialData={student.rawAuditionData || student} 
+              onSuccess={() => {
+                setIsEditingAudition(false);
+                window.location.reload(); 
+              }} 
+            />
+          </div>
+        </div>
       )}
     </div>
   );

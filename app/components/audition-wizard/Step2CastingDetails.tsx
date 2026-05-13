@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Ruler, AlertCircle, Check } from "lucide-react";
+import { Ruler, AlertCircle, Check, Sparkles } from "lucide-react";
 import { AuditionFormData, HAIR_COLORS, INCHES } from "./types";
 
 interface Props {
@@ -14,9 +14,10 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
   return (
     <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
       <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Casting Details</h2>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
         
-        {/* --- HEIGHT FIELD --- */}
+        {/* --- HEIGHT & HAIR COLOR --- */}
         <div id="field-height" className={`bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border space-y-6 transition-colors ${errors.height ? "border-red-500 bg-red-50/50" : "border-zinc-200 dark:border-zinc-800"}`}>
           <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4 flex items-center gap-2"><Ruler size={16} /> Height</label>
           <div className="flex gap-2 sm:gap-4">
@@ -32,7 +33,6 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
           {errors.height && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 flex items-center gap-1"><AlertCircle size={12}/>{errors.height}</p>}
         </div>
 
-        {/* --- HAIR COLOR FIELD --- */}
         <div id="field-hairColor" className="space-y-6">
             <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4">Hair Color</label>
             <div className={`grid grid-cols-2 gap-2 p-2 rounded-2xl ${errors.hairColor ? "bg-red-50 border border-red-200" : ""}`}>
@@ -85,30 +85,74 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
             <span className="font-bold text-sm text-zinc-700 dark:text-zinc-300">I will accept any role</span>
           </label>
 
-          {/* ROMANCE TOGGLE */}
-          <button 
-            type="button" 
-            onClick={() => updateForm({ acceptRomance: !formData.acceptRomance })}
-            className={`w-full p-4 rounded-xl border-2 flex items-center justify-between transition-all ${
-              formData.acceptRomance 
-                ? "bg-blue-900/20 border-blue-500" 
-                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-            }`}
-          >
-            <div className="text-left pr-4">
-              <p className={`font-bold ${formData.acceptRomance ? "text-blue-600 dark:text-blue-400" : "text-zinc-700 dark:text-zinc-300"}`}>
-                Stage Romance Agreement
-              </p>
-              <p className="text-[10px] text-zinc-500 mt-1">
-                I am comfortable performing stage romance or intimacy as required by the script.
-              </p>
-            </div>
-            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
-              formData.acceptRomance ? "border-blue-500 bg-blue-500" : "border-zinc-300 dark:border-zinc-600"
-            }`}>
-              {formData.acceptRomance && <Check size={14} className="text-white" />}
-            </div>
-          </button>
+          {/* --- THE FORGOTTEN FIELDS & ROMANCE TOGGLES --- */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+            
+            <button 
+              type="button" 
+              onClick={() => updateForm({ acceptRomance: !formData.acceptRomance })}
+              className={`w-full p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all text-center ${
+                formData.acceptRomance ? "bg-blue-900/20 border-blue-500" : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                formData.acceptRomance ? "border-blue-500 bg-blue-500" : "border-zinc-300 dark:border-zinc-600"
+              }`}>
+                {formData.acceptRomance && <Check size={14} className="text-white" />}
+              </div>
+              <div>
+                <p className={`font-bold text-xs ${formData.acceptRomance ? "text-blue-600 dark:text-blue-400" : "text-zinc-700 dark:text-zinc-300"}`}>Stage Romance</p>
+                <p className="text-[9px] text-zinc-500 mt-1">Comfortable with intimacy required by script.</p>
+              </div>
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => updateForm({ willingToAlterAppearance: !(formData as any).willingToAlterAppearance } as any)}
+              className={`w-full p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all text-center ${
+                (formData as any).willingToAlterAppearance ? "bg-emerald-900/20 border-emerald-500" : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                (formData as any).willingToAlterAppearance ? "border-emerald-500 bg-emerald-500" : "border-zinc-300 dark:border-zinc-600"
+              }`}>
+                {(formData as any).willingToAlterAppearance && <Check size={14} className="text-white" />}
+              </div>
+              <div>
+                <p className={`font-bold text-xs ${(formData as any).willingToAlterAppearance ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-300"}`}>Alter Appearance</p>
+                <p className="text-[9px] text-zinc-500 mt-1">Willing to cut or dye hair if asked.</p>
+              </div>
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => updateForm({ fearOfHeights: !formData.fearOfHeights })}
+              className={`w-full p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all text-center ${
+                formData.fearOfHeights ? "bg-red-900/20 border-red-500" : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+              }`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                formData.fearOfHeights ? "border-red-500 bg-red-500" : "border-zinc-300 dark:border-zinc-600"
+              }`}>
+                {formData.fearOfHeights && <Check size={14} className="text-white" />}
+              </div>
+              <div>
+                <p className={`font-bold text-xs ${formData.fearOfHeights ? "text-red-600 dark:text-red-400" : "text-zinc-700 dark:text-zinc-300"}`}>Fear of Heights</p>
+                <p className="text-[9px] text-zinc-500 mt-1">Uncomfortable on scaffolding or flying.</p>
+              </div>
+            </button>
+
+          </div>
+
+          <div className="space-y-2 pt-4">
+              <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2 flex items-center gap-2"><Sparkles size={14} /> Other Talents (Optional)</label>
+              <textarea 
+                placeholder="Acrobatics, juggling, plays guitar, stage combat, etc." 
+                value={formData.otherTalents || ''} 
+                onChange={e => updateForm({ otherTalents: e.target.value })} 
+                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-200 resize-none min-h-[80px]" 
+              />
+          </div>
 
         </div>
       </div>

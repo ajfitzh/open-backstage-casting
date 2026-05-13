@@ -130,7 +130,7 @@ Stage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}
 Callbacks: ${formData.callbackStatus || 'No Answer'}
 Chair Interest: ${formData.chairInterest || 'No'}`;
 
-    const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
+const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
       body: JSON.stringify({
         [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
@@ -145,11 +145,20 @@ Chair Interest: ${formData.chairInterest || 'No'}`;
         [DB.AUDITIONS.FIELDS.PARENT_HELP_AGREEMENT]: formData.parentCommitteeAgreement || false,
         [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature} (S), ${formData.parentSignature} (P)`,
         [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
-
-        // If you DO map Vocal Range directly to field_6081 in the DB, it goes here:
         [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "Unsure",
+        [DB.AUDITIONS.FIELDS.GRADE]: formData.grade || null,
 
-        [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${extraDataString}\n\nConflicts:\n${conflictString || "None"}`,
+        // 🟢 THE NEW "REAL FIX" FIELDS (You must create these in Baserow)
+        [DB.AUDITIONS.FIELDS.PREFERRED_ROLES]: formData.preferredRoles || "",
+        [DB.AUDITIONS.FIELDS.STAGE_ROMANCE]: formData.acceptRomance || false,
+        [DB.AUDITIONS.FIELDS.CALLBACK_STATUS]: formData.callbackStatus || "",
+
+        // 🟢 THE FORGOTTEN FIELDS (Already in your DB)
+        [DB.AUDITIONS.FIELDS.WILLING_TO_ALTER_APPEARANCE]: formData.willingToAlterAppearance || false,
+        [DB.AUDITIONS.FIELDS.FEAR_OF_HEIGHTS]: formData.fearOfHeights || false,
+        [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: formData.otherTalents || "",
+
+        [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Conflicts:\n${conflictString || "None"}`,
       })
     }, {}, tenant);
 
