@@ -207,6 +207,46 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       }
     }
 
+    // ==========================================
+    // 🟢 SEND CONFIRMATION EMAIL
+    // ==========================================
+    let showTitle = "Our Upcoming Production";
+    try {
+        const showObj = await getShowById(tenant, productionId);
+        if (showObj && showObj.title) showTitle = showObj.title;
+    } catch (e) {
+        console.error("Could not fetch show title for email", e);
+    }
+
+    try {
+      await resend.emails.send({
+        from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
+        to: lookupEmail,
+        subject: `🎭 Audition Confirmed: ${firstName} for ${showTitle}!`,
+        html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+              <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">You're on the list! 🌟</h2>
+              <p style="font-size: 16px; color: #374151;">Hi there,</p>
+              <p style="font-size: 16px; color: #374151;">This email confirms that <strong>${firstName} ${lastName}</strong> is officially registered to audition for <em>${showTitle}</em>.</p>
+              
+              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #374151;">Audition Details:</h3>
+                  <ul style="margin: 0; color: #4b5563; font-size: 14px; list-style-type: none; padding-left: 0; line-height: 1.6;">
+                     <li>🕒 <strong>Time:</strong> ${slotLabel}</li>
+                     <li>🎵 <strong>Song:</strong> ${formData.songTitle || "None"}</li>
+                  </ul>
+              </div>
+
+              <p style="font-size: 16px; color: #374151;"><strong>Next Steps:</strong> Make sure you have your Family Hub password set up so you can securely view the cast list when it drops next Friday!</p>
+              
+              <p style="font-size: 16px; color: #374151;">Break a leg!</p>
+              <p style="font-size: 14px; color: #6b7280; font-weight: bold; text-transform: uppercase;">- The Directing Team</p>
+          </div>`
+      });
+    } catch (emailError) { 
+      console.error("Audition Confirmation Email failed:", emailError); 
+      // We don't return an error here, because the DB save was successful!
+    }
+
     return { success: true, auditionId: audition?.id };
   } catch (error) {
     console.error("Submission Error:", error);
