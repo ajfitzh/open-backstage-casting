@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { UploadCloud, Sparkles, Music, Volume2, FileAudio, AlertCircle, Mic2 } from "lucide-react";
+import { UploadCloud, Sparkles, Music, Volume2, FileAudio, AlertCircle, Mic2, Info } from "lucide-react";
 import { AuditionFormData, PRESET_SONGS } from "./types";
 import VocalRangeTester from "./VocalRangeTester"; // 🟢 IMPORTED NEW TOOL
 
@@ -134,10 +134,19 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
            </div>
         ) : (
            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row gap-4 items-center bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex-1 text-center sm:text-left pl-2">
-                      <p className="text-sm font-bold text-zinc-900 dark:text-white">Don&apos;t know your range?</p>
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">Try the live microphone test!</p>
+              
+              {/* 🟢 NEW: Gentle Disclaimer Alert Box */}
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 p-4 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start">
+                  <div className="mt-0.5 shrink-0 bg-blue-100 dark:bg-blue-900 p-2 rounded-full">
+                     <Info size={16} className="text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                     <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
+                        Find your comfortable range.
+                     </p>
+                     <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 leading-relaxed">
+                        Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment to help you find your starting voice type. <strong className="text-blue-800 dark:text-blue-200">This will NOT affect your audition chances.</strong> We will do official vocal range checks with our professional Music Director at callbacks.
+                     </p>
                   </div>
               </div>
               
@@ -145,7 +154,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                   onRangeFound={(voiceType, low, high) => {
                       // Saves exactly what the casting engine needs: e.g., "C3-A4"
                       updateForm({ vocalRange: `${low}-${high}` });
-                      alert(`Awesome! You are a ${voiceType} (Range: ${low} to ${high})`);
                   }} 
               />
            </div>
