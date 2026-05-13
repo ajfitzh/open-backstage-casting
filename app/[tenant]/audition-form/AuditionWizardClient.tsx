@@ -15,7 +15,7 @@ import { Step4AuditionTime } from "@/app/components/audition-wizard/Step4Auditio
 import { Step5Conflicts } from "@/app/components/audition-wizard/Step5Conflicts";
 import { Step6Committees } from "@/app/components/audition-wizard/Step6Committees";
 import { Step7Commitment } from "@/app/components/audition-wizard/Step7Commitment";
-import EditAuditionForm from "@/app/components/casting/EditAuditionForm"; // 🟢 NEW IMPORT
+import EditAuditionForm from "@/app/components/casting/EditAuditionForm";
 
 interface ExistingAudition { id: number; name: string; time: string; song: string; rawAuditionData?: any; }
 
@@ -45,13 +45,16 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isSuccess, setIsSuccess] = useState(false);
   const [isCanceling, setIsCanceling] = useState<number | null>(null);
   
-  // 🟢 NEW STATE FOR EDIT MODAL
   const [editingAudition, setEditingAudition] = useState<ExistingAudition | null>(null);
   const [showCommitteeGuide, setShowCommitteeGuide] = useState(false);
   
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const totalSteps = 7;
+
+  // ACCOUNT CLAIMING STATE
+  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [passwordSetSuccess, setPasswordSetSuccess] = useState(false);
 
   useEffect(() => {
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
@@ -78,16 +81,12 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     Object.keys(fields).forEach(key => delete newErrors[key]);
     setErrors(newErrors);
   };
-  // 🟢 NEW STATE FOR ACCOUNT CLAIMING
-  const [isSettingPassword, setIsSettingPassword] = useState(false);
-  const [passwordSetSuccess, setPasswordSetSuccess] = useState(false);
 
   const handleSetPassword = async (formDataEvent: FormData) => {
     const password = formDataEvent.get("password") as string;
     if (!password) return;
     
     setIsSettingPassword(true);
-    // lookupData.email contains the email they just verified/used
     const result = await setAccountPassword(tenant, lookupData.email, password);
     
     if (result.success) {
@@ -182,7 +181,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
       });
       if (!uploadRes.ok) throw new Error(`Upload Failed: ${uploadRes.statusText}`);
     } catch (e) {
-      console.error("Direct browser upload failed (likely CORS or ACL config)", e);
+      console.error("Direct browser upload failed", e);
       throw e;
     }
 
@@ -254,7 +253,8 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         <div className="bg-white dark:bg-zinc-900 p-8 sm:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-2xl text-center max-w-lg w-full border border-zinc-200 dark:border-zinc-800">
           <CheckCircle2 size={64} className="text-green-500 mx-auto mb-6" />
           <h2 className="text-2xl sm:text-4xl font-black dark:text-white mb-4 uppercase italic tracking-tighter">Wish Granted!</h2>
-          <div className="space-y-4 mb-10">
+          
+          <div className="space-y-4 mb-6">
             <p className="text-blue-600 dark:text-blue-400 font-black text-lg sm:text-2xl uppercase italic tracking-tight">
               {firstName} is set up for {selectedSlot?.time}!
             </p>
@@ -262,61 +262,50 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               A confirmation email has been sent to:<br/>
               <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email}</span>
             </p>
-          </div>{/* Drop this into the isSuccess view of AuditionWizardClient */}
-<div className="mt-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left">
-  <div className="flex items-start gap-4">
-    <Lock className="text-amber-500 shrink-0 mt-1" size={24} />
-    <div className="w-full">
-      <h4 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-1">
-        Secure Your Family Hub
-      </h4>
-      <p className="text-zinc-400 text-xs font-medium mb-4">
-        To view the cast list next Friday and accept roles, you need to secure this email address with a password.
-      </p>
-{passwordSetSuccess ? (
-        <div className="mt-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
-           <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
-           <div>
-             <h4 className="text-emerald-500 font-black uppercase tracking-widest text-sm">Account Secured</h4>
-             <p className="text-emerald-500/80 text-xs font-medium">Your password is set. You can now securely log in when the Cast List drops!</p>
-           </div>
-        </div>
-      ) : (
-        <div className="mt-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left">
-          <div className="flex items-start gap-4">
-            <Lock className="text-amber-500 shrink-0 mt-1" size={24} />
-            <div className="w-full">
-              <h4 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-1">
-                Secure Your Family Hub
-              </h4>
-              <p className="text-zinc-400 text-xs font-medium mb-4">
-                To view the cast list next Friday and accept roles, you need to secure this email address with a password.
-              </p>
-              <form action={handleSetPassword} className="flex gap-2">
-                <input 
-                  type="password" 
-                  name="password"
-                  placeholder="Create a password..." 
-                  required
-                  className="flex-1 bg-zinc-950 border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-amber-500"
-                />
-                <button 
-                  type="submit"
-                  disabled={isSettingPassword}
-                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-colors"
-                >
-                  {isSettingPassword ? "Saving..." : "Lock Account"}
-                </button>
-              </form>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
-  </div>
-</div>
+
+          {/* 🟢 FIXED PASSWORD WIDGET (Nested structure removed) */}
+          {passwordSetSuccess ? (
+            <div className="mt-8 mb-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-left">
+               <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+               <div>
+                 <h4 className="text-emerald-500 font-black uppercase tracking-widest text-sm">Account Secured</h4>
+                 <p className="text-emerald-500/80 text-xs font-medium mt-1">Your password is set. You can now securely log in when the Cast List drops!</p>
+               </div>
+            </div>
+          ) : (
+            <div className="mt-8 mb-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left">
+              <div className="flex items-start gap-4">
+                <Lock className="text-amber-500 shrink-0 mt-1" size={24} />
+                <div className="w-full">
+                  <h4 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-1">
+                    Secure Your Family Hub
+                  </h4>
+                  <p className="text-zinc-600 dark:text-zinc-400 text-xs font-medium mb-4">
+                    To view the cast list next Friday and accept roles, you need to secure this email address with a password.
+                  </p>
+                  <form action={handleSetPassword} className="flex flex-col sm:flex-row gap-2">
+                    <input 
+                      type="password" 
+                      name="password"
+                      placeholder="Create a password..." 
+                      required
+                      className="flex-1 bg-white dark:bg-zinc-950 border border-amber-500/30 rounded-xl px-4 py-2 text-sm text-zinc-900 dark:text-white outline-none focus:border-amber-500"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={isSettingPassword}
+                      className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-3 sm:py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-colors whitespace-nowrap"
+                    >
+                      {isSettingPassword ? "Saving..." : "Lock Account"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
           
-          <div className="space-y-3">
+          <div className="space-y-3 mt-4">
             <button onClick={startNewAudition} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 sm:py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs sm:text-sm transition-all active:scale-95 text-center">
               + Add Another Student
             </button>
@@ -374,7 +363,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                         <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1"><Clock size={12} className="text-blue-500" /> {audition.time}</p>
                       </div>
                       
-                      {/* 🟢 NEW ACTION BUTTONS */}
                       <div className="flex gap-2 shrink-0">
                         <button 
                           onClick={() => setEditingAudition(audition)} 
@@ -452,7 +440,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         )}
       </div>
 
-      {/* 🟢 NEW MODAL OVERLAY FOR EDITING EXISTING AUDITIONS */}
+      {/* MODAL OVERLAY FOR EDITING EXISTING AUDITIONS */}
       {editingAudition && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto pt-20">
           <div className="w-full max-w-3xl relative mb-20 animate-in fade-in zoom-in-95 duration-200">
@@ -468,7 +456,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               initialData={editingAudition.rawAuditionData || { fullName: editingAudition.name }} 
               onSuccess={() => {
                 setEditingAudition(null);
-                returnToHub(); // Soft refresh the list without doing a hard page reload
+                returnToHub(); 
               }} 
             />
           </div>
