@@ -1,4 +1,7 @@
+// app/lib/schemas/casting.ts
+
 import { z } from 'zod';
+import { parseRangeString } from '../vocalScience'; // 🟢 NEW IMPORT
 
 const BaserowArrayField = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).nullish().transform(val => val ?? []);
@@ -40,22 +43,32 @@ export const SceneSchema = RawSceneSchema.transform(data => {
   };
 });
 export const SceneListSchema = z.array(SceneSchema);
+
 // ==================================
 //    BLUEPRINT ROLE SCHEMA (Table 605)
 // ==================================
 const RawRoleSchema = z.object({
   id: z.number(),
-  'Role Name': z.any(), // 🚨 Relaxed
-  'Role Type': z.any(), // 🚨 Relaxed
+  'Role Name': z.any(), 
+  'Role Type': z.any(), 
   'Active Scenes': BaserowArrayField(BaserowLinkSchema),
+  'Vocal Range': z.any(), // 🟢 NEW: Tell Zod to look for the new Baserow field
 }).passthrough();
 
-export const RoleSchema = RawRoleSchema.transform(data => ({
-  id: data.id,
-  name: typeof data['Role Name'] === 'string' ? data['Role Name'] : "Unnamed Role",
-  type: typeof data['Role Type'] === 'string' ? data['Role Type'] : "Role",
-  activeScenes: data['Active Scenes'],
-}));
+export const RoleSchema = RawRoleSchema.transform(data => {
+  // Grab the string (e.g., "C3-A4")
+  const rawRange = typeof data['Vocal Range'] === 'string' ? data['Vocal Range'] : "";
+
+  return {
+    id: data.id,
+    name: typeof data['Role Name'] === 'string' ? data['Role Name'] : "Unnamed Role",
+    type: typeof data['Role Type'] === 'string' ? data['Role Type'] : "Role",
+    activeScenes: data['Active Scenes'],
+    
+    // 🟢 Magic happens here: Attach the fully parsed math and label
+    vocalRequirements: parseRangeString(rawRange)
+  };
+});
 export const RoleListSchema = z.array(RoleSchema);
 
 // ==================================
@@ -147,6 +160,7 @@ export const AssignmentSchema = RawAssignmentSchema.transform(data => ({
   _pendingScenes: null, 
 }));
 export const AssignmentListSchema = z.array(AssignmentSchema);
+
 // ==================================
 //  COMMITTEE PREFS SCHEMA (Table 620)
 // ==================================

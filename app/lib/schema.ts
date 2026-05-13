@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/13/2026, 8:22:07 AM
+//    Generated on: 5/13/2026, 9:51:08 AM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -164,6 +164,7 @@ export const DB = {
       "CAST_CREW_ASSIGNMENTS": "field_5797", // link_row
       "ACTIVE_SCENES": "field_6077", // link_row
       "SCENES": "field_6079", // lookup
+      "VOCAL_RANGE": "field_9495", // text
     }
   },
   SIGNATURES: {
