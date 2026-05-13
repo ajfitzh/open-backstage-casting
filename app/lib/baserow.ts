@@ -966,6 +966,24 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(performerName)}&background=27272a&color=60a5fa`;
       }
 
+      // Safely extract the backing track URL
+      let trackUrl = "";
+      const trackField = row[F.BACKING_TRACK];
+      if (Array.isArray(trackField) && trackField.length > 0) {
+          trackUrl = trackField[0].url || trackField[0].value || "";
+      } else if (typeof trackField === "string") {
+          trackUrl = trackField;
+      }
+
+      // Safely extract video URL
+      let videoUrl = "";
+      const videoField = row[F.AUDITION_VIDEO];
+      if (Array.isArray(videoField) && videoField.length > 0) {
+          videoUrl = videoField[0].url || videoField[0].value || "";
+      } else if (typeof videoField === "string") {
+          videoUrl = videoField;
+      }
+
       return {
           id: row.id,
           performerId: performerId, 
@@ -978,6 +996,27 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           avatar: avatarUrl,
           lobbyNote: safeGet(row[F.LOBBY_NOTE], ""),
           checkedIn: row[F.CHECKED_IN] === true,
+
+          // 🟢 FIX: MAP THE MISSING FIELDS FOR THE AUDITION DECK
+          backingTrack: trackUrl,
+          song: safeGet(row[F.SONG], ""),
+          monologue: safeGet(row[F.MONOLOGUE], ""),
+          vocalScore: parseFloat(safeGet(row[F.VOCAL_SCORE], 0)),
+          actingScore: parseFloat(safeGet(row[F.ACTING_SCORE], 0)),
+          danceScore: parseFloat(safeGet(row[F.DANCE_SCORE], 0)),
+          presenceScore: parseFloat(safeGet(row[F.STAGE_PRESENCE_SCORE], 0)),
+          actingNotes: safeGet(row[F.ACTING_NOTES], ""),
+          musicNotes: safeGet(row[F.MUSIC_NOTES], ""),
+          choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], ""),
+          dropInNotes: safeGet(row[F.DROP_IN_NOTES], ""),
+          adminNotes: safeGet(row[F.ADMIN_NOTES], ""),
+          height: safeGet(row[F.HEIGHT], ""),
+          age: safeGet(row[F.AGE], ""),
+          vocalRange: safeGet(row[F.VOCAL_RANGE], ""),
+          dob: safeGet(row[F.BIRTHDATE], ""),
+          conflicts: safeGet(row[F.CONFLICTS], ""),
+          video: videoUrl,
+          showHistory: safeGet(row[F.PAST_PRODUCTIONS], "")
       };
   });
 }
