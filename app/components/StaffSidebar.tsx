@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useParams } from 'next/navigation';
 import { Settings, ChevronDown, ChevronRight, Home, Layers } from 'lucide-react';
 import { hasPermission, Permission } from '@/app/lib/permissions'; 
 import { useSimulation } from '@/app/context/SimulationContext'; 
@@ -18,6 +18,8 @@ interface StaffSidebarProps {
 
 export default function StaffSidebar({ activeProductionId, userGroups = [] }: StaffSidebarProps) {
   const pathname = usePathname();
+  const params = useParams(); 
+  
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
@@ -33,11 +35,13 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       return false;
   };
 
-  // 🟢 FIXED: Clean, simple replacement without breaking the subdomain
+  const urlId = params?.id ? parseInt(params.id as string) : null;
+  const effectiveActiveId = urlId || activeProductionId;
+
   const getFinalHref = (href: string) => {
     if (!href) return "/";
-    return activeProductionId 
-      ? href.replace('/active/', `/${activeProductionId}/`) 
+    return effectiveActiveId 
+      ? href.replace('/active/', `/${effectiveActiveId}/`) 
       : href;
   };
 
@@ -45,7 +49,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       if (!pathname) return false;
       if (href === '/') return pathname === '/';
 
-      const targetPath = activeProductionId ? href.replace('/active/', `/${activeProductionId}/`) : href;
+      const targetPath = effectiveActiveId ? href.replace('/active/', `/${effectiveActiveId}/`) : href;
       return pathname.includes(targetPath);
   };
 
@@ -60,7 +64,7 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
             }
         });
     });
-  }, [pathname, activeProductionId]);
+  }, [pathname, effectiveActiveId]);
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));

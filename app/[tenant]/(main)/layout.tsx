@@ -2,12 +2,10 @@
 
 import React from 'react';
 import { auth } from "@/auth";
-import { cookies } from "next/headers";
 import { 
   getUserProfile, 
   getUserProductionRole, 
-  getActiveProduction, 
-  getShowById 
+  getActiveProduction 
 } from "@/app/lib/baserow";
 import { SimulationProvider } from '@/app/context/SimulationContext';
 import { TenantProvider } from '@/app/components/TenantProvider';
@@ -22,9 +20,10 @@ export default async function MainLayout({
 }: { 
   children: React.ReactNode,
   modal: React.ReactNode, 
-  params: { tenant: string } 
+  params: Promise<{ tenant: string }> | { tenant: string } 
 }) {
-  const currentTenant = params.tenant;
+  const resolvedParams = await params;
+  const currentTenant = resolvedParams.tenant;
   
   const session = await auth();
   const email = session?.user?.email;
@@ -32,18 +31,8 @@ export default async function MainLayout({
   // 1. Resolve User Identity
   const userProfile = email ? await getUserProfile(currentTenant, email) : null; 
 
-  // 2. Resolve Production Context (from Cookies or Active Show)
-  const cookieStore = await cookies();
-  const cookieVal = cookieStore.get('active_production_id')?.value;
-  
-  let activeProduction = null;
-  if (cookieVal) {
-      activeProduction = await getShowById(currentTenant, cookieVal);
-  }
-  if (!activeProduction) {
-      activeProduction = await getActiveProduction(currentTenant);
-  }
-
+  // 🟢 2. NO MORE COOKIES! Strictly DB-driven active show fallback
+  const activeProduction = await getActiveProduction(currentTenant);
   const activeId = activeProduction?.id;
   
   // 3. Resolve Production-Specific Role
@@ -53,9 +42,6 @@ export default async function MainLayout({
   }
 
   const globalRole = userProfile?.role || "Student";
-
-  // 🟢 4. EXTRACT RBAC GROUPS
-  // We handle both arrays and comma-separated strings (e.g., "Check In Team, Committee Team")
   const rawGroups = (session?.user as any)?.groups || "";
   const userGroups = typeof rawGroups === 'string' 
     ? rawGroups.split(',').map((g: string) => g.trim()).filter(Boolean) 
@@ -66,7 +52,6 @@ export default async function MainLayout({
       <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
         <SimulationProvider realGlobalRole={globalRole} realProductionRole={productionRole}>
             <SidebarShell>
-              {/* 🟢 PASS DATA TO SIDEBAR: Fixes crash and enables group visibility */}
               <StaffSidebar 
                 activeProductionId={activeId} 
                 userGroups={userGroups} 
