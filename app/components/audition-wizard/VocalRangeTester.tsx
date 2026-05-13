@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles, RotateCcw } from "lucide-react";
+import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles, RotateCcw, Volume2 } from "lucide-react";
 
 const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -63,16 +63,16 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
   const [playingMidi, setPlayingMidi] = useState<number | null>(null);
 
-  // Auto-Trainer
+  // 🟢 TIMED AUTO-TRAINER STATE
   const [trainerDirection, setTrainerDirection] = useState<'up' | 'down' | null>(null);
   const [trainerTarget, setTrainerTarget] = useState<number | null>(null);
+  const [trainerPhase, setTrainerPhase] = useState<'playing' | 'listening' | null>(null);
   
   const trainerTargetRef = useRef<number | null>(null);
   const trainerDirectionRef = useRef<'up' | 'down' | null>(null);
-  const matchFramesRef = useRef(0);
-  const lastAdvanceTimeRef = useRef(0);
+  const trainerPhaseRef = useRef<'playing' | 'listening' | null>(null);
+  const lastNoteStartTimeRef = useRef(0);
 
-  // 🟢 NEW: Glitch Filter Refs
   const freeSingMidiRef = useRef<number | null>(null);
   const freeSingFramesRef = useRef(0);
 
@@ -84,6 +84,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
     return () => stopTest();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const playNote = (midiNum: number, duration: number = 0.5) => {
@@ -99,42 +100,54 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     osc.type = 'sine'; 
     osc.frequency.value = 440 * Math.pow(2, (midiNum - 69) / 12);
 
+    // 🟢 UPDATED: Flat Sustain Envelope for 3-second holds
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1); 
+    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + duration - 0.2); 
+    gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + duration); 
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
+    osc.stop(ctx.currentTime + duration + 0.1);
   };
 
   const startAutoTrainer = () => {
       setTrainerDirection('up');
       setTrainerTarget(60); 
+      setTrainerPhase('playing');
+      
       trainerDirectionRef.current = 'up';
       trainerTargetRef.current = 60;
-      matchFramesRef.current = 0;
-      playNote(60, 1.0);
+      trainerPhaseRef.current = 'playing';
+      lastNoteStartTimeRef.current = Date.now();
+      
+      playNote(60, 3.0); // Play for 3 full seconds
   };
 
   const switchTrainerToLows = () => {
       setTrainerDirection('down');
       setTrainerTarget(60); 
+      setTrainerPhase('playing');
+      
       trainerDirectionRef.current = 'down';
       trainerTargetRef.current = 60;
-      matchFramesRef.current = 0;
-      playNote(60, 1.0);
+      trainerPhaseRef.current = 'playing';
+      lastNoteStartTimeRef.current = Date.now();
+      
+      playNote(60, 3.0); // Play for 3 full seconds
   };
 
   const stopAutoTrainer = () => {
       setTrainerDirection(null);
       setTrainerTarget(null);
+      setTrainerPhase(null);
+      
       trainerDirectionRef.current = null;
       trainerTargetRef.current = null;
+      trainerPhaseRef.current = null;
   };
 
-  // 🟢 NEW: Manual Reset for Glitches
   const resetRange = () => {
       setLowestMidi(999);
       setHighestMidi(0);
@@ -194,6 +207,43 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     
     const pitchInHz = autoCorrelate(buffer, audioContextRef.current.sampleRate);
     
+    // 🟢 1. UNYIELDING METRONOME LOGIC
+    const target = trainerTargetRef.current;
+    const dir = trainerDirectionRef.current;
+    // eslint-disable-next-line react-hooks/purity
+    const now = Date.now();
+
+    if (target && dir) {
+        const elapsed = now - lastNoteStartTimeRef.current;
+
+        if (elapsed < 3000) {
+            // First 3 seconds: Playing Phase
+            if (trainerPhaseRef.current !== 'playing') {
+                trainerPhaseRef.current = 'playing';
+                setTrainerPhase('playing');
+            }
+        } else if (elapsed < 6000) {
+            // Last 3 seconds: Listening Phase
+            if (trainerPhaseRef.current !== 'listening') {
+                trainerPhaseRef.current = 'listening';
+                setTrainerPhase('listening');
+            }
+        } else {
+            // 6 Seconds elapsed -> Advance to next note
+            const nextTarget = dir === 'up' ? target + 1 : target - 1;
+            
+            trainerTargetRef.current = nextTarget;
+            lastNoteStartTimeRef.current = now;
+            setTrainerTarget(nextTarget);
+
+            trainerPhaseRef.current = 'playing';
+            setTrainerPhase('playing');
+
+            playNote(nextTarget, 3.0); // Start next note
+        }
+    }
+
+    // 🟢 2. PITCH DETECTION BACKGROUND LOOP
     if (pitchInHz !== -1 && pitchInHz > 50 && pitchInHz < 2000) {
       const midi = getMidiNote(pitchInHz);
       const noteStr = getNoteString(midi);
@@ -201,7 +251,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       setCurrentNote(noteStr);
       setCurrentMidi(midi);
 
-      // 🟢 GLITCH FILTER: Require pitch to be held for 5 frames (~80ms)
+      // Glitch Filter: Require pitch to be held for 5 frames (~80ms)
       if (midi === freeSingMidiRef.current) {
           freeSingFramesRef.current++;
           if (freeSingFramesRef.current > 5) {
@@ -212,48 +262,24 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           freeSingMidiRef.current = midi;
           freeSingFramesRef.current = 0;
       }
-
-      // Auto-Trainer Logic
-      const target = trainerTargetRef.current;
-      const dir = trainerDirectionRef.current;
-      const now = Date.now();
-
-      if (target && dir && (now - lastAdvanceTimeRef.current > 500)) { 
-          if (Math.abs(midi - target) <= 1) {
-              matchFramesRef.current++;
-              if (matchFramesRef.current > 15) {
-                  const nextTarget = dir === 'up' ? target + 1 : target - 1;
-                  trainerTargetRef.current = nextTarget;
-                  matchFramesRef.current = 0;
-                  lastAdvanceTimeRef.current = now;
-                  setTrainerTarget(nextTarget);
-                  playNote(nextTarget, 1.0);
-              }
-          } else {
-              matchFramesRef.current = 0;
-          }
-      }
-
     } else {
       setCurrentNote("--");
       setCurrentMidi(null);
-      matchFramesRef.current = 0;
       freeSingFramesRef.current = 0;
     }
 
     animationRef.current = requestAnimationFrame(detectPitch);
   };
 
-  // 🟢 NEW: Overlap Classification Algorithm
   const handleApply = () => {
     if (lowestMidi === 999 || highestMidi === 0) return;
     
     const CHORAL_RANGES = {
-        Soprano: { min: 60, max: 81 },  // C4 - A5
-        Alto:    { min: 53, max: 74 },  // F3 - D5
-        Tenor:   { min: 48, max: 67 },  // C3 - G4
-        Baritone:{ min: 43, max: 64 },  // G2 - E4
-        Bass:    { min: 36, max: 60 },  // C2 - C4
+        Soprano: { min: 60, max: 81 }, 
+        Alto:    { min: 53, max: 74 },  
+        Tenor:   { min: 48, max: 67 },  
+        Baritone:{ min: 43, max: 64 }, 
+        Bass:    { min: 36, max: 60 },  
     };
 
     let bestMatch = "Flexible";
@@ -344,7 +370,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
             <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2 uppercase italic tracking-tighter">
                 <Activity size={20} className="text-blue-500" /> Live Range Finder
             </h3>
-            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Use the Auto-Trainer or Free Sing on the Keyboard!</p>
+            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Use the Call-and-Response Trainer or Free Sing!</p>
         </div>
       </div>
 
@@ -368,7 +394,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
                     <span className="text-xl sm:text-2xl font-bold text-purple-400">{highestMidi !== 0 ? getNoteString(highestMidi) : "--"}</span>
                 </div>
                 
-                {/* 🟢 NEW: Manual Reset Button */}
                 {highestMidi !== 0 && (
                     <button 
                         onClick={resetRange} 
@@ -392,30 +417,35 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           </div>
       </div>
 
+      {/* 🟢 THE CALL AND RESPONSE TRAINER */}
       {isRecording && (
         <div className={`rounded-xl border p-4 mb-6 transition-all duration-300 ${trainerDirection ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-zinc-900 border-white/5'}`}>
            {!trainerDirection ? (
                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                    <div>
-                       <h4 className="text-white font-black uppercase tracking-widest text-sm flex items-center gap-2"><Sparkles size={16} className="text-indigo-400"/> Auto-Trainer</h4>
-                       <p className="text-xs text-zinc-400 mt-1">Let the app guide you up and down the scale automatically!</p>
+                       <h4 className="text-white font-black uppercase tracking-widest text-sm flex items-center gap-2"><Sparkles size={16} className="text-indigo-400"/> Guided Warmup</h4>
+                       <p className="text-xs text-zinc-400 mt-1">We&apos;ll play a pitch, and you sing it back!</p>
                    </div>
                    <button type="button" onClick={startAutoTrainer} className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg active:scale-95 whitespace-nowrap">
-                       Start Guided Test
+                       Start Trainer
                    </button>
                </div>
            ) : (
                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                    <div className="flex items-center gap-4">
-                       <div className="w-12 h-12 rounded-full bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center text-indigo-400 animate-pulse shrink-0">
-                           <Mic size={20} />
+                       <div className={`w-12 h-12 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-300 ${trainerPhase === 'playing' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400 animate-pulse'}`}>
+                           {trainerPhase === 'playing' ? <Volume2 size={20} /> : <Mic size={20} />}
                        </div>
                        <div>
-                           <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">
-                               {trainerDirection === 'up' ? "Testing Highs..." : "Testing Lows..."}
+                           <p className={`text-[10px] font-black uppercase tracking-widest mb-1 transition-colors ${trainerPhase === 'playing' ? 'text-amber-400' : 'text-indigo-400'}`}>
+                               {trainerDirection === 'up' ? "Testing Highs" : "Testing Lows"}
                            </p>
                            <p className="text-sm text-white font-medium">
-                               Match pitch <strong>{getNoteString(trainerTarget!)}</strong> to continue!
+                               {trainerPhase === 'playing' ? (
+                                  <>Listen to <strong>{getNoteString(trainerTarget!)}</strong></>
+                               ) : (
+                                  <>Now sing <strong>{getNoteString(trainerTarget!)}</strong></>
+                               )}
                            </p>
                        </div>
                    </div>
