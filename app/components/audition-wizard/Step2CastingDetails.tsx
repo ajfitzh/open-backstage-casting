@@ -1,3 +1,4 @@
+// app/components/audition-wizard/Step2CastingDetails.tsx
 "use client";
 
 import React from "react";
@@ -43,36 +44,18 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
             {errors.hairColor && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 flex items-center gap-1"><AlertCircle size={12}/>{errors.hairColor}</p>}
         </div>
 
-        {/* --- PREFERRED ROLES & VOCAL RANGE --- */}
+        {/* --- PREFERRED ROLES --- */}
         <div id="field-roles" className="space-y-6 md:col-span-2 pt-6 border-t border-zinc-200 dark:border-zinc-800">
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Preferred Roles</label>
-              <input 
-                type="text" 
-                placeholder="E.g. The Baker, Jack, or Any" 
-                value={formData.preferredRoles || ''} 
-                onChange={e => updateForm({ preferredRoles: e.target.value })} 
-                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-200" 
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Vocal Range</label>
-              <select 
-                value={formData.vocalRange || ''}
-                onChange={(e) => updateForm({ vocalRange: e.target.value })}
-                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-200 appearance-none"
-              >
-                <option value="" disabled>Select a vocal range...</option>
-                <option value="Soprano">Soprano</option>
-                <option value="Alto">Alto</option>
-                <option value="Tenor">Tenor</option>
-                <option value="Bass">Bass</option>
-                <option value="Unsure">Unsure / Still Developing</option>
-              </select>
-            </div>
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Preferred Roles</label>
+            <input 
+              type="text" 
+              placeholder="E.g. The Baker, Jack, or Any" 
+              value={formData.preferredRoles || ''} 
+              onChange={e => updateForm({ preferredRoles: e.target.value })} 
+              className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-200" 
+            />
           </div>
           
           <label className="flex items-center gap-3 p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer transition-colors hover:border-blue-300">

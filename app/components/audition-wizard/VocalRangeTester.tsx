@@ -1,3 +1,4 @@
+// app/components/audition-wizard/VocalRangeTester.tsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
@@ -53,9 +54,10 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): number {
 
 interface VocalRangeTesterProps {
   onRangeFound: (voiceType: string, lowNote: string, highNote: string) => void;
+  onStartTest?: () => void; // 🟢 Added prop
 }
 
-export default function VocalRangeTester({ onRangeFound }: VocalRangeTesterProps) {
+export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRangeTesterProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [currentNote, setCurrentNote] = useState<string>("--");
   
@@ -69,6 +71,8 @@ export default function VocalRangeTester({ onRangeFound }: VocalRangeTesterProps
   const animationRef = useRef<number>(0);
 
   const startTest = async () => {
+    if (onStartTest) onStartTest(); // 🟢 Trigger parent stop action
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;

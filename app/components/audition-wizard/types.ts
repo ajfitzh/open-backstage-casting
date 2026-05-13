@@ -12,11 +12,11 @@ export type AuditionFormData = {
   songTitle: string; musicFileName: string; usePresetSong: boolean; 
   auditionSlotId: string | null;
   conflicts: Record<string, ConflictEntry>;
-  callbackStatus: "" | "in-person" | "virtual" | "unavailable"; // <-- Default is now empty
+  callbackStatus: "" | "in-person" | "virtual" | "unavailable"; 
   
   preShow1: string; preShow2: string; preShow3: string;
   show1: string; show2: string; show3: string;
-  chairInterest: "" | "yes" | "maybe" | "no"; // <-- 3-way choice
+  chairInterest: "" | "yes" | "maybe" | "no"; 
   chairPreference: string;
 
   offBookAgreement: boolean; 
@@ -24,6 +24,7 @@ export type AuditionFormData = {
   studentSignature: boolean; 
   parentSignature: boolean;  
   vocalRange?: string;
+  voiceType?: string; // 🟢 Added to store the detected voice type
   acceptRomance?: boolean;
 };
 
@@ -99,5 +100,6 @@ export const INITIAL_DATA: AuditionFormData = {
   offBookAgreement: false, parentCommitteeAgreement: false,
   studentSignature: false, parentSignature: false,
   fearOfHeights: undefined,
-  otherTalents: ""
+  otherTalents: "",
+  voiceType: "" // 🟢 Initiated here
 };

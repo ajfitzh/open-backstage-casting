@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { UploadCloud, Sparkles, Music, Volume2, FileAudio, AlertCircle, Mic2, Info } from "lucide-react";
 import { AuditionFormData, PRESET_SONGS } from "./types";
-import VocalRangeTester from "./VocalRangeTester"; // 🟢 IMPORTED NEW TOOL
+import VocalRangeTester from "./VocalRangeTester";
 
 interface Props {
   formData: AuditionFormData;
@@ -33,6 +33,14 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
       audioRef.current.play();
       setPlayingTrackId(trackId);
       audioRef.current.onended = () => setPlayingTrackId(null);
+    }
+  };
+
+  // 🟢 Stops preview music when range test starts
+  const handleStartTest = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setPlayingTrackId(null);
     }
   };
 
@@ -108,25 +116,35 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         </div>
       )}
 
-      {/* 🟢 NEW: LIVE VOCAL RANGE FINDER SECTION */}
+      {/* 🟢 LIVE VOCAL RANGE FINDER SECTION */}
       <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800 animate-in slide-in-from-bottom-4">
         <h3 className="text-xl sm:text-2xl font-black uppercase italic tracking-tighter mb-6 flex items-center gap-3">
            <Mic2 className="text-blue-500" /> Vocal Range
         </h3>
         
-        {/* If they already have a range saved (either manually or via the tester), show it! */}
         {formData.vocalRange ? (
            <div className="bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-500 rounded-[2rem] p-8 text-center relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10">
                  <Music size={100} />
               </div>
               <p className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs mb-2">Saved Range Profile</p>
-              <p className="text-3xl sm:text-4xl font-black text-blue-700 dark:text-blue-300 italic">
+              <p className="text-3xl sm:text-4xl font-black text-blue-700 dark:text-blue-300 italic mb-2">
                   {formData.vocalRange}
               </p>
+              
+              {/* 🟢 Congratulations Display */}
+              {formData.voiceType && (
+                 <div className="mt-4 mb-2 inline-block bg-blue-100 dark:bg-blue-900/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm font-bold text-blue-800 dark:text-blue-200">
+                        🎉 Congrats! You&apos;re roughly a <span className="uppercase text-blue-600 dark:text-blue-400">{formData.voiceType}</span>. Confirm with your music teacher!
+                    </p>
+                 </div>
+              )}
+              
+              <br/>
               <button 
                   type="button" 
-                  onClick={() => updateForm({ vocalRange: "" })} 
+                  onClick={() => updateForm({ vocalRange: "", voiceType: "" })} 
                   className="mt-6 px-4 py-2 bg-white dark:bg-zinc-950 text-[10px] uppercase font-bold text-zinc-500 rounded-full hover:text-blue-600 transition-colors shadow-sm"
               >
                   Reset & Retest
@@ -135,7 +153,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         ) : (
            <div className="space-y-6">
               
-              {/* 🟢 NEW: Gentle Disclaimer Alert Box */}
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 p-4 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start">
                   <div className="mt-0.5 shrink-0 bg-blue-100 dark:bg-blue-900 p-2 rounded-full">
                      <Info size={16} className="text-blue-600 dark:text-blue-400" />
@@ -151,9 +168,13 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
               </div>
               
               <VocalRangeTester 
+                  onStartTest={handleStartTest} // 🟢 Triggers music stoppage
                   onRangeFound={(voiceType, low, high) => {
-                      // Saves exactly what the casting engine needs: e.g., "C3-A4"
-                      updateForm({ vocalRange: `${low}-${high}` });
+                      // 🟢 Captures voiceType to the form data
+                      updateForm({ 
+                        vocalRange: `${low}-${high}`,
+                        voiceType: voiceType
+                      });
                   }} 
               />
            </div>
