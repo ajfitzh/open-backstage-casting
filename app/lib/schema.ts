@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/13/2026, 4:08:20 PM
+//    Generated on: 5/13/2026, 4:23:04 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -421,7 +421,7 @@ export const DB = {
       "DROP_IN_NOTES": "field_6075", // long_text
       "ADMIN_NOTES": "field_6076", // long_text
       "GENDER": "field_6080", // lookup
-      "VOCAL_RANGE": "field_6081", // single_select
+      "VOCAL_RANGE": "field_6081", // text
       "AUDITION_VIDEO": "field_6082", // file
       "DANCE_VIDEO": "field_6084", // url
       "COMMITMENT_TO_CHARACTER": "field_6106", // boolean
@@ -453,7 +453,7 @@ export const DB = {
       "PREFERRED_ROLES": "field_9492", // text
       "STAGE_ROMANCE": "field_9493", // boolean
       "CALLBACK_STATUS": "field_9494", // single_select
-      "VOICE_TYPE": "field_9496", // text
+      "VOICE_TYPE": "field_9496", // single_select
     }
   },
   ASSETS: {

@@ -82,38 +82,45 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       const updatePayload: any = {
         [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
         [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
-        [DB.PEOPLE.FIELDS.HEADSHOT]: formData.headshotUrl 
       };
+      
+      // Only update headshot if a new one was actually provided
+      if (formData.headshotUrl) updatePayload[DB.PEOPLE.FIELDS.HEADSHOT] = formData.headshotUrl;
+
       await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
         method: "PATCH",
         body: JSON.stringify(updatePayload)
       }, {}, tenant);
     } else {
+      const newPersonPayload: any = {
+        [DB.PEOPLE.FIELDS.FIRST_NAME]: firstName,
+        [DB.PEOPLE.FIELDS.LAST_NAME]: lastName,
+        [DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL]: lookupEmail,
+        [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
+        [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
+        [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], 
+      };
+      
+      if (formData.headshotUrl) newPersonPayload[DB.PEOPLE.FIELDS.HEADSHOT] = formData.headshotUrl;
+
       const newPerson = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
         method: "POST",
-        body: JSON.stringify({
-          [DB.PEOPLE.FIELDS.FIRST_NAME]: firstName,
-          [DB.PEOPLE.FIELDS.LAST_NAME]: lastName,
-          [DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL]: lookupEmail,
-          [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
-          [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
-          [DB.PEOPLE.FIELDS.HEADSHOT]: formData.headshotUrl,
-          [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], 
-        })
+        body: JSON.stringify(newPersonPayload)
       }, {}, tenant);
+      
+      // Properly catch failures on student creation
       if (!newPerson || Array.isArray(newPerson) || !newPerson.id) {
-        throw new Error("Failed to create student record. Ensure Headshot is a URL field in Baserow.");
+        console.error("Failed to create student record:", newPerson);
+        return { success: false, error: "Failed to create student record. Ensure Headshot is a URL field in Baserow." };
       }
       personId = newPerson.id;
     }
 
     let slotLabel = "your scheduled time";
-    let slotDateTime = "";
     if (formData.auditionSlotId) {
       const slotData = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/${formData.auditionSlotId}/`, {}, {}, tenant);
-      if (slotData && !slotData.error) {
+      if (slotData && !slotData.error && !Array.isArray(slotData)) {
         slotLabel = slotData[DB.AUDITION_SLOTS.FIELDS.TIME_LABEL] || slotLabel;
-        slotDateTime = slotData[DB.AUDITION_SLOTS.FIELDS.DATE_TIME] || "";
       }
     }
 
@@ -122,47 +129,56 @@ export async function submitRealAudition(tenant: string, productionId: number, f
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
        .join("\n");
 
-    // 🟢 V2 UPDATE: WE PACKED ROMANCE & VOCAL RANGE IN HERE FOR YOU
-    const extraDataString = `Grade: ${formData.grade || 'N/A'}
-Roles: ${formData.preferredRoles || 'N/A'}
-Vocal Range: ${formData.vocalRange || 'Unsure'}
-Stage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}
-Callbacks: ${formData.callbackStatus || 'No Answer'}
-Chair Interest: ${formData.chairInterest || 'No'}`;
+    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}\nStage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}\nCallbacks: ${formData.callbackStatus || 'No Answer'}\nChair Interest: ${formData.chairInterest || 'No'}`;
 
-const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
+    // 🟢 THE FIX: Using `auditionPayload` to safely build the request
+    const auditionPayload: any = {
+      [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
+      [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
+      [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
+      [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
+      [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
+      
+      [DB.AUDITIONS.FIELDS.HAIR_COLOR]: formData.hairColor || "",
+      [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: formData.acceptAnyRole || false,
+      [DB.AUDITIONS.FIELDS.OFF_BOOK_AGREEMENT]: formData.offBookAgreement || false,
+      [DB.AUDITIONS.FIELDS.PARENT_HELP_AGREEMENT]: formData.parentCommitteeAgreement || false,
+      [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature ? 'Yes' : 'No'} (S), ${formData.parentSignature ? 'Yes' : 'No'} (P)`,
+      [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
+      [DB.AUDITIONS.FIELDS.GRADE]: formData.grade || null,
+
+      [DB.AUDITIONS.FIELDS.WILLING_TO_ALTER_APPEARANCE]: formData.willingToAlterAppearance || false,
+      [DB.AUDITIONS.FIELDS.FEAR_OF_HEIGHTS]: formData.fearOfHeights || false,
+      [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: formData.otherTalents || "",
+      [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Conflicts:\n${conflictString || "None"}\n\nExtra Info:\n${extraDataString}`,
+
+      // 🟢 THE SPLIT DATA FIX
+      [DB.AUDITIONS.FIELDS.VOICE_TYPE]: formData.voiceType || "Unsure", // Goes to Single Select
+      [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "",     // Goes to Open Text
+    };
+
+    // Safely add optional fields ONLY if they exist in your schema dictionary
+    if (DB.AUDITIONS.FIELDS.PREFERRED_ROLES) auditionPayload[DB.AUDITIONS.FIELDS.PREFERRED_ROLES] = formData.preferredRoles || "";
+    if (DB.AUDITIONS.FIELDS.STAGE_ROMANCE) auditionPayload[DB.AUDITIONS.FIELDS.STAGE_ROMANCE] = formData.acceptRomance || false;
+    if (DB.AUDITIONS.FIELDS.CALLBACK_STATUS) auditionPayload[DB.AUDITIONS.FIELDS.CALLBACK_STATUS] = formData.callbackStatus || "";
+
+    // 🟢 PREVENT 400 ERRORS: Strip out any keys that evaluated to "undefined"
+    delete auditionPayload["undefined"];
+    Object.keys(auditionPayload).forEach(key => {
+        if (auditionPayload[key] === undefined) {
+            delete auditionPayload[key];
+        }
+    });
+
+    const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
       method: "POST",
-      body: JSON.stringify({
-        [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
-        [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
-        [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
-        [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
-        [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-        
-        [DB.AUDITIONS.FIELDS.HAIR_COLOR]: formData.hairColor || "",
-        [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: formData.acceptAnyRole || false,
-        [DB.AUDITIONS.FIELDS.OFF_BOOK_AGREEMENT]: formData.offBookAgreement || false,
-        [DB.AUDITIONS.FIELDS.PARENT_HELP_AGREEMENT]: formData.parentCommitteeAgreement || false,
-        [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature} (S), ${formData.parentSignature} (P)`,
-        [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
-        [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "Unsure",
-        [DB.AUDITIONS.FIELDS.GRADE]: formData.grade || null,
-
-        // 🟢 THE NEW "REAL FIX" FIELDS (You must create these in Baserow)
-        [DB.AUDITIONS.FIELDS.PREFERRED_ROLES]: formData.preferredRoles || "",
-        [DB.AUDITIONS.FIELDS.STAGE_ROMANCE]: formData.acceptRomance || false,
-        [DB.AUDITIONS.FIELDS.CALLBACK_STATUS]: formData.callbackStatus || "",
-
-        // 🟢 THE FORGOTTEN FIELDS (Already in your DB)
-        [DB.AUDITIONS.FIELDS.WILLING_TO_ALTER_APPEARANCE]: formData.willingToAlterAppearance || false,
-        [DB.AUDITIONS.FIELDS.FEAR_OF_HEIGHTS]: formData.fearOfHeights || false,
-        [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: formData.otherTalents || "",
-
-        [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Conflicts:\n${conflictString || "None"}`,
-      })
+      body: JSON.stringify(auditionPayload)
     }, {}, tenant);
 
-    if (!audition || audition.error) return { success: false, error: "Database rejected the audition record." };
+    if (!audition || audition.error || Array.isArray(audition)) {
+        console.error("Database rejected the audition record. Payload:", auditionPayload);
+        return { success: false, error: "Database rejected the audition record. Please check your network and try again." };
+    }
 
     // ==========================================
     // WRITE TO COMMITTEE_PREFS TABLE
