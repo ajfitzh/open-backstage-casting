@@ -2,7 +2,7 @@
  
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   User, Clock, CheckCircle2, Search, UserPlus, PlayCircle, Film, Loader2, Music
 } from "lucide-react";
@@ -548,18 +548,9 @@ export default function AuditionsClient({
                           </button>
                       )}
 
-                      {person.backingTrack && (
-                          <button
-                              onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  window.open(person.backingTrack, "AudioPlayer", "width=400,height=100"); 
-                              }}
-                              className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-purple-500 hover:text-purple-400 group-hover:border-purple-500/30 shrink-0"
-                              title="Play Backing Track"
-                          >
-                              <Music size={18} />
-                          </button>
-                      )}
+{person.backingTrack && (
+    <InlineTrackButton trackUrl={person.backingTrack} />
+)}
                       
                       <button 
                         onClick={() => {
@@ -597,4 +588,52 @@ export default function AuditionsClient({
     {inspectingActor && <ActorProfileModal actor={inspectingActor} grades={grades[inspectingActor.id]} onClose={() => setInspectingActor(null)} />}
   </>
 );
+}
+function InlineTrackButton({ trackUrl }: { trackUrl: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevents the row from clicking open
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      // Force all other audio tags on the page to pause so tracks don't overlap!
+      document.querySelectorAll('audio').forEach(a => a.pause());
+      audioRef.current.play();
+    }
+  };
+
+  return (
+    <div className="shrink-0 flex items-stretch py-1" onClick={e => e.stopPropagation()}>
+      <audio
+        ref={audioRef}
+        src={trackUrl}
+        crossOrigin="anonymous"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+      />
+      <button
+        onClick={togglePlay}
+        className={`px-5 md:px-8 rounded-xl transition-all border-2 flex items-center justify-center gap-3 active:scale-95 ${
+          isPlaying
+            ? "bg-purple-600 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.6)]"
+            : "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/40 text-purple-400"
+        }`}
+        title="Play Backing Track"
+      >
+        {isPlaying ? (
+           <div className="w-5 h-5 bg-white rounded-sm animate-pulse" /> // A clean stop square
+        ) : (
+           <PlayCircle size={28} />
+        )}
+        <span className="font-black text-xs md:text-sm uppercase tracking-widest hidden sm:inline">
+          {isPlaying ? "Playing..." : "Play Track"}
+        </span>
+      </button>
+    </div>
+  );
 }

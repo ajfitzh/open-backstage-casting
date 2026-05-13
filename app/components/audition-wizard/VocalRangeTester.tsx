@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Square, Activity, CheckCircle2, ChevronLeft } from "lucide-react";
+import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, Play, ArrowUp, ArrowDown } from "lucide-react";
 
 // --- PITCH SCIENCE MATH ---
 const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -67,35 +67,83 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   const [lowestMidi, setLowestMidi] = useState<number>(999);
   const [highestMidi, setHighestMidi] = useState<number>(0);
 
+  // 🟢 NEW: Synthesizer & Arpeggio State
+  const [playingMidi, setPlayingMidi] = useState<number | null>(null);
+  const [arpeggioRoot, setArpeggioRoot] = useState<number>(60); // Middle C defaults (C4)
+  const [isArpeggioPlaying, setIsArpeggioPlaying] = useState(false);
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationRef = useRef<number>(0);
 
-  // Clean up audio on unmount
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
     return () => stopTest();
   }, []);
 
-const startTest = async () => {
-    if (onStartTest) onStartTest();
+  // 🟢 SYNTHESIZER: Plays a note when a key is clicked or arpeggio triggers
+  const playNote = (midiNum: number, duration: number = 0.5) => {
+    // If the test hasn't started yet, we need to create the context to let them play
+    if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
 
-    // 🟢 SAFETY: Kill any zombie streams before asking for a new one
-    if (streamRef.current) stopTest();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine'; // Warm, pure tone
+    osc.frequency.value = 440 * Math.pow(2, (midiNum - 69) / 12);
+
+    // Smooth ADSR envelope to prevent clicking sounds
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  };
+
+  // 🟢 ARPEGGIO COACH: 1-3-5-3-1
+  const playArpeggio = async () => {
+      if (isArpeggioPlaying) return;
+      setIsArpeggioPlaying(true);
+      
+      const pattern = [0, 4, 7, 4, 0]; // Major Arpeggio Intervals (Root, Major 3rd, Perfect 5th)
+      
+      for(let i=0; i < pattern.length; i++) {
+          const noteToPlay = arpeggioRoot + pattern[i];
+          setPlayingMidi(noteToPlay);
+          playNote(noteToPlay, 0.6);
+          await new Promise(r => setTimeout(r, 500)); // Wait half a second between notes
+      }
+      
+      setPlayingMidi(null);
+      setIsArpeggioPlaying(false);
+  };
+
+  const startTest = async () => {
+    if (onStartTest) onStartTest();
+    if (streamRef.current) stopTest(); // Safety cleanup
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      audioContextRef.current = audioCtx;
+      if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
       
-      const analyser = audioCtx.createAnalyser();
+      const analyser = audioContextRef.current.createAnalyser();
       analyser.fftSize = 2048;
       analyserRef.current = analyser;
       
-      const source = audioCtx.createMediaStreamSource(stream);
+      const source = audioContextRef.current.createMediaStreamSource(stream);
       source.connect(analyser);
 
       setIsRecording(true);
@@ -114,16 +162,11 @@ const startTest = async () => {
     setCurrentNote("--");
     setCurrentMidi(null);
     
-    if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-    }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
     
-    // 🟢 AGGRESSIVE MIC CLEANUP: Stop tracks AND destroy the reference
     if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => {
-            track.stop(); 
-        });
-        streamRef.current = null; // Forces the browser to drop the mic indicator instantly
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null; 
     }
     
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -131,6 +174,7 @@ const startTest = async () => {
         audioContextRef.current = null;
     }
   };
+
   const detectPitch = () => {
     if (!analyserRef.current || !audioContextRef.current) return;
 
@@ -173,7 +217,6 @@ const startTest = async () => {
   };
 
   // --- PIANO GENERATOR LOGIC ---
-  // Generate keys from Midi 40 (E2 - deep bass) to Midi 88 (E6 - high soprano)
   const keys = [];
   for(let i=40; i<=88; i++) {
      const isBlack = [1, 3, 6, 8, 10].includes(i % 12);
@@ -181,7 +224,6 @@ const startTest = async () => {
   }
   const whiteKeys = keys.filter(k => !k.isBlack);
 
-  // === VIEW: SELECTOR HUB ===
   if (mode === "select") {
       return (
         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 sm:p-8 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -235,9 +277,8 @@ const startTest = async () => {
       );
   }
 
-  // === VIEW: LIVE TESTER ===
   return (
-    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 sm:p-8 w-full relative animate-in zoom-in-95 duration-200">
+    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-8 w-full relative animate-in zoom-in-95 duration-200">
       <button 
          type="button" 
          onClick={() => { stopTest(); setMode("select"); }} 
@@ -251,11 +292,11 @@ const startTest = async () => {
             <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2 uppercase italic tracking-tighter">
                 <Activity size={20} className="text-blue-500" /> Live Range Finder
             </h3>
-            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Sing your lowest note, then glide up to your highest note!</p>
+            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Use the Pitch Coach to find your range!</p>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <div className="w-full sm:w-32 h-24 sm:h-32 bg-zinc-900 rounded-xl border border-white/5 flex flex-col items-center justify-center relative overflow-hidden shrink-0 shadow-inner">
              {isRecording && <div className="absolute inset-0 bg-blue-500/10 animate-pulse"></div>}
              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest absolute top-2 sm:top-3">Current</span>
@@ -278,7 +319,7 @@ const startTest = async () => {
              
              {!isRecording ? (
                 <button type="button" onClick={startTest} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95">
-                    <Mic size={16} /> Start Test
+                    <Mic size={16} /> Start Microphone
                 </button>
             ) : (
                 <button type="button" onClick={stopTest} className="w-full py-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/30 text-xs font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95">
@@ -288,41 +329,87 @@ const startTest = async () => {
           </div>
       </div>
 
-      {/* 🟢 THE PIANO VISUALIZER */}
-      <div className="mt-8 mb-4">
-          <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-2 flex justify-between">
-            <span>Range Map</span>
-            <span>{lowestMidi !== 999 ? "Recording" : "Ready"}</span>
+      {/* 🟢 THE ARPEGGIO PITCH COACH */}
+      <div className="bg-zinc-900 rounded-xl border border-white/5 p-3 sm:p-4 mb-6 flex flex-col sm:flex-row items-center gap-4 shadow-sm">
+         <div className="flex flex-col items-center w-full sm:w-auto shrink-0 border-b sm:border-b-0 sm:border-r border-white/10 pb-3 sm:pb-0 sm:pr-6">
+            <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                <Music size={12}/> Pitch Coach
+            </span>
+            <div className="flex items-center gap-4">
+               <button type="button" onClick={() => setArpeggioRoot(p => p-1)} className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
+                  <ArrowDown size={14} />
+               </button>
+               <div className="flex flex-col items-center justify-center w-12">
+                   <span className="font-mono text-xl font-black text-white leading-none">{getNoteString(arpeggioRoot)}</span>
+               </div>
+               <button type="button" onClick={() => setArpeggioRoot(p => p+1)} className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
+                  <ArrowUp size={14} />
+               </button>
+            </div>
+         </div>
+         
+         <div className="flex-1 w-full">
+            <button 
+                type="button" 
+                onClick={playArpeggio} 
+                disabled={isArpeggioPlaying}
+                className={`w-full py-3 rounded-lg font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                    isArpeggioPlaying 
+                    ? "bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)]" 
+                    : "bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white border border-amber-500/30"
+                }`}
+            >
+                {isArpeggioPlaying ? <Activity size={16} className="animate-pulse" /> : <Play size={16} />} 
+                {isArpeggioPlaying ? "Playing..." : "Play 1-3-5-3-1 Arpeggio"}
+            </button>
+         </div>
+      </div>
+
+      {/* 🟢 THE INTERACTIVE PIANO VISUALIZER */}
+      <div className="mb-4">
+          <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-2 flex justify-between px-1">
+            <span>Interactive Keyboard (Click to Play)</span>
+            <span>{isRecording ? "Recording" : "Mic Off"}</span>
           </div>
           
-          <div className="relative flex w-full h-16 sm:h-20 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner">
+          <div className="relative flex w-full h-24 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner select-none touch-none">
             {whiteKeys.map((wKey) => {
-              // Does this white key have a black key to its right?
               const hasBlackKey = [0, 2, 5, 7, 9].includes(wKey.midi % 12);
               
-              // Highlight logic for White Keys
+              // Color Logic
               const inRange = lowestMidi !== 999 && wKey.midi >= lowestMidi && wKey.midi <= highestMidi;
-              const isActive = wKey.midi === currentMidi;
+              const isSung = wKey.midi === currentMidi;
+              const isSynth = wKey.midi === playingMidi;
               
-              // Highlight logic for Black Keys
+              let whiteColor = "bg-white";
+              if (inRange) whiteColor = "bg-blue-100";
+              if (isSung) whiteColor = "bg-blue-400 shadow-[inset_0_0_15px_rgba(0,0,0,0.4)]";
+              if (isSynth) whiteColor = "bg-amber-400 shadow-[inset_0_0_20px_rgba(245,158,11,0.8)]";
+
               const bKeyMidi = wKey.midi + 1;
               const bInRange = lowestMidi !== 999 && bKeyMidi >= lowestMidi && bKeyMidi <= highestMidi;
-              const bIsActive = bKeyMidi === currentMidi;
+              const bIsSung = bKeyMidi === currentMidi;
+              const bIsSynth = bKeyMidi === playingMidi;
+
+              let blackColor = "bg-zinc-800";
+              if (bInRange) blackColor = "bg-blue-900";
+              if (bIsSung) blackColor = "bg-blue-500 shadow-[0_0_10px_rgba(96,165,250,0.8)]";
+              if (bIsSynth) blackColor = "bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.9)]";
 
               return (
                 <div 
                   key={wKey.midi} 
-                  className={`relative flex-1 border-r border-zinc-800 last:border-0 transition-colors duration-[50ms] ease-in-out
-                    ${inRange ? 'bg-blue-300' : 'bg-zinc-300'} 
-                    ${isActive ? 'bg-blue-500 shadow-[inset_0_0_15px_rgba(0,0,0,0.5)]' : ''}
-                  `}
+                  onPointerDown={(e) => { e.preventDefault(); playNote(wKey.midi); setPlayingMidi(wKey.midi); }}
+                  onPointerUp={() => setPlayingMidi(null)}
+                  onPointerLeave={() => setPlayingMidi(null)}
+                  className={`relative flex-1 border-r border-zinc-300 last:border-0 transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-200 ${whiteColor}`}
                 >
                   {hasBlackKey && (
                       <div 
-                        className={`absolute top-0 -right-[50%] w-full h-[65%] z-10 border-x border-b border-zinc-950 rounded-b shadow-md transition-colors duration-[50ms] ease-in-out
-                          ${bInRange ? 'bg-blue-700' : 'bg-zinc-800'} 
-                          ${bIsActive ? 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]' : ''}
-                        `}
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); playNote(bKeyMidi); setPlayingMidi(bKeyMidi); }}
+                        onPointerUp={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
+                        onPointerLeave={(e) => { e.stopPropagation(); setPlayingMidi(null); }}
+                        className={`absolute top-0 -right-[50%] w-full h-[65%] z-10 border-x border-b border-zinc-950 rounded-b shadow-md transition-colors duration-[50ms] cursor-pointer hover:bg-zinc-700 ${blackColor}`}
                       />
                   )}
                 </div>
