@@ -27,7 +27,7 @@ export interface Performer {
   vocalRange: string;
   dob: string;
   conflicts: string;
-  tenure: string;
+  status: string;
   pastRoles: string | string[];
   song: string;
   monologue: string;
@@ -66,10 +66,18 @@ interface AuditionsClientProps {
   productionTitle: string;
   serverJudgeName: string;
   serverJudgeRole: string;
+  // 🟢 ADD THIS:
+  initialPerformers: Performer[]; 
 }
 
-export default function AuditionsClient({ tenant, productionId, productionTitle, serverJudgeName, serverJudgeRole }: AuditionsClientProps) {
-  
+export default function AuditionsClient({ 
+  tenant, 
+  productionId, 
+  productionTitle, 
+  serverJudgeName, 
+  serverJudgeRole,
+  initialPerformers // 🟢 AND THIS
+}: AuditionsClientProps) { 
   const judgeName = serverJudgeName || "Guest Judge";
 
   // 🟢 SMART ROLE MAPPING: Translates your raw DB role into one of the 5 Deck Themes
@@ -93,7 +101,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
   const [inspectingActor, setInspectingActor] = useState<Performer | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>([]);
+const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(initialPerformers);
   const [allStudents, setAllStudents] = useState<any[]>([]); 
   const [grades, setGrades] = useState<Record<number, any>>({});
   
@@ -155,7 +163,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
              vocalRange: row.vocalRange || "",
              dob: row.dob || "",
              conflicts: row.conflicts || "",
-             tenure: row.status || "Unknown", 
+             status: row.status || "Unknown", 
              pastRoles: row.showHistory || [],
              song: row.auditionPrep?.songTitle || row.song || "",
              monologue: row.auditionPrep?.monologue || row.monologue || "",
@@ -330,7 +338,7 @@ export default function AuditionsClient({ tenant, productionId, productionTitle,
           isCheckedIn: true,
           vocal: 0, acting: 0, dance: 0, presence: 0, 
           actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
-          height: "", vocalRange: "", dob: "", conflicts: "", tenure: "", pastRoles: [], song: "", monologue: "", video: null,
+          height: "", vocalRange: "", dob: "", conflicts: "", status: "", pastRoles: [], song: "", monologue: "", video: null,
           backingTrack: "", lobbyNote: ""
         }));
     }

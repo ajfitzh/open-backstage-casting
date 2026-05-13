@@ -1,14 +1,14 @@
-import { cookies } from 'next/headers';
+// app/[tenant]/(main)/production/[id]/rehearsal-check-in/page.tsx
 import { 
     getShowById, 
     getAssignments, 
     getProductionEvents, 
-    fetchBaserow, 
-    DB, 
+    fetchBaserow,  
     getTenantTableConfig 
 } from '@/app/lib/baserow';
+import { DB } from '@/app/lib/schema';
 import CheckInKioskClient from '@/app/components/production/CheckInKioskClient';
-import { CalendarX } from 'lucide-react'; // 🟢 Added for empty state
+import { CalendarX } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +23,7 @@ async function getTodayAttendance(tenant: string, eventId: number) {
             [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: eventId
         };
         
-        const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params);
+        const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params, tenant);
         if (!Array.isArray(rows)) return [];
 
         return rows.map((r: any) => ({
@@ -37,11 +37,16 @@ async function getTodayAttendance(tenant: string, eventId: number) {
     }
 }
 
-export default async function CheckInPage({ params }: { params: { tenant: string, id: string } }) {
-    const { tenant, id } = params;
+export default async function RehearsalCheckInPage({ 
+  params 
+}: { 
+  params: Promise<{ tenant: string; id: string }> 
+}) {
+    const { tenant, id } = await params;
+    const showId = parseInt(id);
     
     // 1. Fetch Show and Cast
-    const show = await getShowById(tenant, Number(id));
+    const show = await getShowById(tenant, showId);
     if (!show) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 bg-zinc-950">
@@ -51,7 +56,7 @@ export default async function CheckInPage({ params }: { params: { tenant: string
     }
 
     const assignments = await getAssignments(tenant, show.id);
-    const castList = assignments
+    const castList = (assignments || [])
         .filter((a: any) => a.personId)
         .map((a: any) => ({
             personId: a.personId,
@@ -64,10 +69,10 @@ export default async function CheckInPage({ params }: { params: { tenant: string
     const allEvents = await getProductionEvents(tenant, show.id);
     const todayStr = new Date().toISOString().split('T')[0];
     
-    let activeEvent = allEvents.find((e: any) => e.date >= todayStr);
+    let activeEvent = (allEvents || []).find((e: any) => e.date >= todayStr);
     
     // Fallback if no future events exist
-    if (!activeEvent && allEvents.length > 0) {
+    if (!activeEvent && allEvents && allEvents.length > 0) {
         activeEvent = allEvents[allEvents.length - 1]; 
     }
 
@@ -79,7 +84,7 @@ export default async function CheckInPage({ params }: { params: { tenant: string
                     <CalendarX size={40} />
                 </div>
                 <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-3">No Rehearsal Scheduled</h2>
-                <p className="text-zinc-400 max-w-md text-lg">There are no upcoming events scheduled for <strong>{show.title}</strong> today. Enjoy your day off!</p>
+                <p className="text-zinc-400 max-w-md text-lg">There are no upcoming events scheduled for <strong>{show.title}</strong> today.</p>
             </div>
         );
     }

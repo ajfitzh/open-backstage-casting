@@ -48,6 +48,7 @@ type BlueprintRole = { id: number; name: string; activeScenes: BaserowLink[]; ty
 type Scene = { id: number; name: string; order: number; act: string; };
 
 interface CastingClientProps {
+  tenant: string; // 🟢 ADDED: Multi-tenancy context
   assignments: AssignmentRow[];
   blueprintRoles: BlueprintRole[];
   allScenes: Scene[];
@@ -255,7 +256,7 @@ function RosterSidebar({
 // 4. MAIN CLIENT
 // ============================================================================
 
-export default function CastingClient({ assignments = [], blueprintRoles = [], allScenes = [], roster = [], activeId }: CastingClientProps) {
+export default function CastingClient({ tenant, assignments = [], blueprintRoles = [], allScenes = [], roster = [], activeId }: CastingClientProps) {
   const router = useRouter();
   
   const [viewMode, setViewMode] = useState<"matrix" | "chemistry">("matrix");
@@ -279,7 +280,8 @@ export default function CastingClient({ assignments = [], blueprintRoles = [], a
     hasInitialized.current = true;
     setIsLoading(true);
     
-    generateCastingRows(activeId).then(res => {
+    // 🟢 PASS TENANT TO BACKEND ACTION
+    generateCastingRows(tenant, activeId).then(res => {
       if (res.success) {
           router.refresh(); 
       }
@@ -288,7 +290,7 @@ export default function CastingClient({ assignments = [], blueprintRoles = [], a
     }).catch(() => {
         setIsLoading(false);
     });
-  }, [assignments.length, activeId, router]);
+  }, [assignments.length, activeId, router, tenant]);
 
   useEffect(() => { if (assignments.length > 0 && isLoading) setIsLoading(false); }, [assignments.length, isLoading]);
 
@@ -335,7 +337,8 @@ export default function CastingClient({ assignments = [], blueprintRoles = [], a
     }));
 
     if (actorChanges.length || sceneChanges.length || deletedRowIds.length || createdRows.length) {
-      await saveCastingGrid(activeId, actorChanges, sceneChanges, deletedRowIds, createdRows);
+      // 🟢 PASS TENANT TO BACKEND ACTION
+      await saveCastingGrid(tenant, activeId, actorChanges, sceneChanges, deletedRowIds, createdRows);
       setDeletedRowIds([]);
       router.refresh(); 
     }

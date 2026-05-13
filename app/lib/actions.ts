@@ -429,7 +429,7 @@ const TBL_ROLES = 605;
 const TBL_SCENES = 627;
 
 // 1. GENERATE EMPTY ROWS (Initialize Grid)
-export async function generateCastingRows(productionId: number) {
+export async function generateCastingRows(tenant: string, productionId: number) {
   console.log(`[Action] Generating rows for Production ${productionId}`);
   
   // A. Get Master Show ID from the Production
@@ -478,12 +478,7 @@ export async function generateCastingRows(productionId: number) {
 
 // 2. THE MAIN SAVE FUNCTION
 export async function saveCastingGrid(
-  productionId: number, 
-  actorChanges: any[], 
-  sceneChanges: any[],
-  deletedRowIds: number[] = [],
-  createdRows: any[] = []
-) {
+tenant: string, productionId: number, actorChanges: any[], sceneChanges: any[], deletedRowIds: number[] = [], createdRows: any[] = []) {
   console.log(`[Save] Prod: ${productionId} | Actors: ${actorChanges.length} | Scenes: ${sceneChanges.length} | Del: ${deletedRowIds.length} | New: ${createdRows.length}`);
 
   // 🧹 PHASE 1: HANDLE DELETIONS
