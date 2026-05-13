@@ -1,28 +1,26 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // app/components/audition-wizard/VocalRangeTester.tsx
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, Play, ArrowUp, ArrowDown } from "lucide-react";
+import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles } from "lucide-react";
 
-// --- PITCH SCIENCE MATH ---
 const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 function getMidiNote(frequency: number): number {
-  const noteNum = 12 * (Math.log(frequency / 440) / Math.log(2));
-  return Math.round(noteNum) + 69;
+  return Math.round(12 * (Math.log(frequency / 440) / Math.log(2))) + 69;
 }
 
 function getNoteString(midiNote: number): string {
   return NOTE_STRINGS[midiNote % 12] + (Math.floor(midiNote / 12) - 1);
 }
 
-// Standard Autocorrelation Algorithm for finding pitch in a waveform
 function autoCorrelate(buf: Float32Array, sampleRate: number): number {
   let SIZE = buf.length;
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; // Not enough signal (too quiet)
+  if (rms < 0.01) return -1; 
 
   let r1 = 0, r2 = SIZE - 1, thres = 0.2;
   for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
@@ -33,9 +31,7 @@ function autoCorrelate(buf: Float32Array, sampleRate: number): number {
 
   const c = new Array(SIZE).fill(0);
   for (let i = 0; i < SIZE; i++) {
-    for (let j = 0; j < SIZE - i; j++) {
-      c[i] = c[i] + buf[j] * buf[j + i];
-    }
+    for (let j = 0; j < SIZE - i; j++) c[i] = c[i] + buf[j] * buf[j + i];
   }
 
   let d = 0; while (c[d] > c[d + 1]) d++;
@@ -63,14 +59,20 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   const [currentNote, setCurrentNote] = useState<string>("--");
   const [currentMidi, setCurrentMidi] = useState<number | null>(null);
   
-  // Track boundaries
   const [lowestMidi, setLowestMidi] = useState<number>(999);
   const [highestMidi, setHighestMidi] = useState<number>(0);
 
-  // 🟢 NEW: Synthesizer & Arpeggio State
   const [playingMidi, setPlayingMidi] = useState<number | null>(null);
-  const [arpeggioRoot, setArpeggioRoot] = useState<number>(60); // Middle C defaults (C4)
-  const [isArpeggioPlaying, setIsArpeggioPlaying] = useState(false);
+
+  // 🟢 AUTO-TRAINER STATE
+  const [trainerDirection, setTrainerDirection] = useState<'up' | 'down' | null>(null);
+  const [trainerTarget, setTrainerTarget] = useState<number | null>(null);
+  
+  // Refs for background logic loops
+  const trainerTargetRef = useRef<number | null>(null);
+  const trainerDirectionRef = useRef<'up' | 'down' | null>(null);
+  const matchFramesRef = useRef(0);
+  const lastAdvanceTimeRef = useRef(0);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -82,9 +84,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     return () => stopTest();
   }, []);
 
-  // 🟢 SYNTHESIZER: Plays a note when a key is clicked or arpeggio triggers
   const playNote = (midiNum: number, duration: number = 0.5) => {
-    // If the test hasn't started yet, we need to create the context to let them play
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
@@ -94,42 +94,48 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
-    osc.type = 'sine'; // Warm, pure tone
+    osc.type = 'sine'; 
     osc.frequency.value = 440 * Math.pow(2, (midiNum - 69) / 12);
 
-    // Smooth ADSR envelope to prevent clicking sounds
     gain.gain.setValueAtTime(0, ctx.currentTime);
     gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + duration);
   };
 
-  // 🟢 ARPEGGIO COACH: 1-3-5-3-1
-  const playArpeggio = async () => {
-      if (isArpeggioPlaying) return;
-      setIsArpeggioPlaying(true);
-      
-      const pattern = [0, 4, 7, 4, 0]; // Major Arpeggio Intervals (Root, Major 3rd, Perfect 5th)
-      
-      for(let i=0; i < pattern.length; i++) {
-          const noteToPlay = arpeggioRoot + pattern[i];
-          setPlayingMidi(noteToPlay);
-          playNote(noteToPlay, 0.6);
-          await new Promise(r => setTimeout(r, 500)); // Wait half a second between notes
-      }
-      
-      setPlayingMidi(null);
-      setIsArpeggioPlaying(false);
+  // 🟢 START AUTO-TRAINER
+  const startAutoTrainer = () => {
+      setTrainerDirection('up');
+      setTrainerTarget(60); // Start at Middle C
+      trainerDirectionRef.current = 'up';
+      trainerTargetRef.current = 60;
+      matchFramesRef.current = 0;
+      playNote(60, 1.0);
+  };
+
+  const switchTrainerToLows = () => {
+      setTrainerDirection('down');
+      setTrainerTarget(60); // Reset to Middle C and go down
+      trainerDirectionRef.current = 'down';
+      trainerTargetRef.current = 60;
+      matchFramesRef.current = 0;
+      playNote(60, 1.0);
+  };
+
+  const stopAutoTrainer = () => {
+      setTrainerDirection(null);
+      setTrainerTarget(null);
+      trainerDirectionRef.current = null;
+      trainerTargetRef.current = null;
   };
 
   const startTest = async () => {
     if (onStartTest) onStartTest();
-    if (streamRef.current) stopTest(); // Safety cleanup
+    if (streamRef.current) stopTest(); 
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -152,7 +158,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       
       detectPitch();
     } catch (err) {
-      console.error("Mic access denied or error:", err);
+      console.error("Mic error:", err);
       alert("Please allow microphone access to test your range.");
     }
   };
@@ -161,14 +167,13 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     setIsRecording(false);
     setCurrentNote("--");
     setCurrentMidi(null);
+    stopAutoTrainer();
     
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    
     if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null; 
     }
-    
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
         audioContextRef.current = null;
@@ -191,9 +196,41 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       setCurrentMidi(midi);
       setLowestMidi(prev => Math.min(prev, midi));
       setHighestMidi(prev => Math.max(prev, midi));
+
+      // 🟢 AUTO-TRAINER LOGIC LOOP
+      const target = trainerTargetRef.current;
+      const dir = trainerDirectionRef.current;
+      // eslint-disable-next-line react-hooks/purity
+      const now = Date.now();
+
+      if (target && dir && (now - lastAdvanceTimeRef.current > 500)) { // 500ms cooldown between advancements
+          // Leniency: +/- 1 half-step for kids
+          if (Math.abs(midi - target) <= 1) {
+              matchFramesRef.current++;
+              // If they hold it for ~15 frames (approx 0.25 seconds)
+              if (matchFramesRef.current > 15) {
+                  const nextTarget = dir === 'up' ? target + 1 : target - 1;
+                  
+                  // Update Refs for logic
+                  trainerTargetRef.current = nextTarget;
+                  matchFramesRef.current = 0;
+                  lastAdvanceTimeRef.current = now;
+                  
+                  // Update State for UI
+                  setTrainerTarget(nextTarget);
+                  
+                  // Provide auditory feedback
+                  playNote(nextTarget, 1.0);
+              }
+          } else {
+              matchFramesRef.current = 0; // Reset if they waver off pitch
+          }
+      }
+
     } else {
       setCurrentNote("--");
       setCurrentMidi(null);
+      matchFramesRef.current = 0;
     }
 
     animationRef.current = requestAnimationFrame(detectPitch);
@@ -201,7 +238,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
   const handleApply = () => {
     if (lowestMidi === 999 || highestMidi === 0) return;
-    
     let voiceType = "Flexible";
     if (lowestMidi >= 60) voiceType = "Soprano";
     else if (lowestMidi >= 53) voiceType = "Alto";
@@ -209,19 +245,12 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     else if (lowestMidi >= 43) voiceType = "Baritone";
     else if (lowestMidi < 43) voiceType = "Bass";
 
-    const lowStr = getNoteString(lowestMidi);
-    const highStr = getNoteString(highestMidi);
-    
-    onRangeFound(voiceType, lowStr, highStr);
+    onRangeFound(voiceType, getNoteString(lowestMidi), getNoteString(highestMidi));
     stopTest();
   };
 
-  // --- PIANO GENERATOR LOGIC ---
   const keys = [];
-  for(let i=40; i<=88; i++) {
-     const isBlack = [1, 3, 6, 8, 10].includes(i % 12);
-     keys.push({ midi: i, isBlack });
-  }
+  for(let i=40; i<=88; i++) keys.push({ midi: i, isBlack: [1, 3, 6, 8, 10].includes(i % 12) });
   const whiteKeys = keys.filter(k => !k.isBlack);
 
   if (mode === "select") {
@@ -237,8 +266,8 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
              </div>
            </div>
            
-           <div className="text-sm text-zinc-400 mb-8 leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-white/5">
-             Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment to help you find your starting voice type. <strong>This will NOT affect your audition chances.</strong> We will do official vocal range checks with our professional Music Director at callbacks.
+           <div className="text-sm text-zinc-400 mb-8 bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+             Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment. <strong>This will NOT affect your audition chances.</strong> 
            </div>
 
            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mb-6">
@@ -265,11 +294,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
            >
               <div className="text-center">
                  <div className="text-sm font-black text-white flex items-center justify-center gap-2">
-                    <Activity size={16} className="text-blue-500 group-hover:animate-pulse" /> 
-                    Live Range Finder
-                 </div>
-                 <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-widest mt-1">
-                    Sing into your device to test interactively
+                    <Activity size={16} className="text-blue-500 group-hover:animate-pulse" /> Live Range Finder
                  </div>
               </div>
            </button>
@@ -292,7 +317,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
             <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2 uppercase italic tracking-tighter">
                 <Activity size={20} className="text-blue-500" /> Live Range Finder
             </h3>
-            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Use the Pitch Coach to find your range!</p>
+            <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 font-medium">Use the Auto-Trainer or Free Sing on the Keyboard!</p>
         </div>
       </div>
 
@@ -329,72 +354,78 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           </div>
       </div>
 
-      {/* 🟢 THE ARPEGGIO PITCH COACH */}
-      <div className="bg-zinc-900 rounded-xl border border-white/5 p-3 sm:p-4 mb-6 flex flex-col sm:flex-row items-center gap-4 shadow-sm">
-         <div className="flex flex-col items-center w-full sm:w-auto shrink-0 border-b sm:border-b-0 sm:border-r border-white/10 pb-3 sm:pb-0 sm:pr-6">
-            <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                <Music size={12}/> Pitch Coach
-            </span>
-            <div className="flex items-center gap-4">
-               <button type="button" onClick={() => setArpeggioRoot(p => p-1)} className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
-                  <ArrowDown size={14} />
-               </button>
-               <div className="flex flex-col items-center justify-center w-12">
-                   <span className="font-mono text-xl font-black text-white leading-none">{getNoteString(arpeggioRoot)}</span>
+      {/* 🟢 THE AUTO-TRAINER UI */}
+      {isRecording && (
+        <div className={`rounded-xl border p-4 mb-6 transition-all duration-300 ${trainerDirection ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-zinc-900 border-white/5'}`}>
+           {!trainerDirection ? (
+               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                   <div>
+                       <h4 className="text-white font-black uppercase tracking-widest text-sm flex items-center gap-2"><Sparkles size={16} className="text-indigo-400"/> Auto-Trainer</h4>
+                       <p className="text-xs text-zinc-400 mt-1">Let the app guide you up and down the scale automatically!</p>
+                   </div>
+                   <button type="button" onClick={startAutoTrainer} className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg active:scale-95 whitespace-nowrap">
+                       Start Guided Test
+                   </button>
                </div>
-               <button type="button" onClick={() => setArpeggioRoot(p => p+1)} className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
-                  <ArrowUp size={14} />
-               </button>
-            </div>
-         </div>
-         
-         <div className="flex-1 w-full">
-            <button 
-                type="button" 
-                onClick={playArpeggio} 
-                disabled={isArpeggioPlaying}
-                className={`w-full py-3 rounded-lg font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                    isArpeggioPlaying 
-                    ? "bg-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.5)]" 
-                    : "bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white border border-amber-500/30"
-                }`}
-            >
-                {isArpeggioPlaying ? <Activity size={16} className="animate-pulse" /> : <Play size={16} />} 
-                {isArpeggioPlaying ? "Playing..." : "Play 1-3-5-3-1 Arpeggio"}
-            </button>
-         </div>
-      </div>
+           ) : (
+               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                   <div className="flex items-center gap-4">
+                       <div className="w-12 h-12 rounded-full bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center text-indigo-400 animate-pulse shrink-0">
+                           <Mic size={20} />
+                       </div>
+                       <div>
+                           <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">
+                               {trainerDirection === 'up' ? "Testing Highs..." : "Testing Lows..."}
+                           </p>
+                           <p className="text-sm text-white font-medium">
+                               Match pitch <strong>{getNoteString(trainerTarget!)}</strong> to continue!
+                           </p>
+                       </div>
+                   </div>
+                   <div className="flex gap-2 w-full sm:w-auto">
+                       {trainerDirection === 'up' ? (
+                           <button type="button" onClick={switchTrainerToLows} className="flex-1 sm:flex-none px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+                               Too High <ArrowDown size={14}/>
+                           </button>
+                       ) : (
+                           <button type="button" onClick={stopAutoTrainer} className="flex-1 sm:flex-none px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+                               Too Low <CheckCircle2 size={14}/>
+                           </button>
+                       )}
+                   </div>
+               </div>
+           )}
+        </div>
+      )}
 
-      {/* 🟢 THE INTERACTIVE PIANO VISUALIZER */}
+      {/* 🟢 INTERACTIVE PIANO */}
       <div className="mb-4">
           <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-2 flex justify-between px-1">
             <span>Interactive Keyboard (Click to Play)</span>
-            <span>{isRecording ? "Recording" : "Mic Off"}</span>
           </div>
           
           <div className="relative flex w-full h-24 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner select-none touch-none">
             {whiteKeys.map((wKey) => {
               const hasBlackKey = [0, 2, 5, 7, 9].includes(wKey.midi % 12);
               
-              // Color Logic
               const inRange = lowestMidi !== 999 && wKey.midi >= lowestMidi && wKey.midi <= highestMidi;
               const isSung = wKey.midi === currentMidi;
-              const isSynth = wKey.midi === playingMidi;
+              const isSynth = wKey.midi === playingMidi || wKey.midi === trainerTarget;
               
               let whiteColor = "bg-white";
               if (inRange) whiteColor = "bg-blue-100";
               if (isSung) whiteColor = "bg-blue-400 shadow-[inset_0_0_15px_rgba(0,0,0,0.4)]";
-              if (isSynth) whiteColor = "bg-amber-400 shadow-[inset_0_0_20px_rgba(245,158,11,0.8)]";
+              if (isSynth) whiteColor = "bg-indigo-400 shadow-[inset_0_0_20px_rgba(99,102,241,0.8)]";
 
               const bKeyMidi = wKey.midi + 1;
               const bInRange = lowestMidi !== 999 && bKeyMidi >= lowestMidi && bKeyMidi <= highestMidi;
               const bIsSung = bKeyMidi === currentMidi;
-              const bIsSynth = bKeyMidi === playingMidi;
+              const bIsSynth = bKeyMidi === playingMidi || bKeyMidi === trainerTarget;
 
               let blackColor = "bg-zinc-800";
               if (bInRange) blackColor = "bg-blue-900";
               if (bIsSung) blackColor = "bg-blue-500 shadow-[0_0_10px_rgba(96,165,250,0.8)]";
-              if (bIsSynth) blackColor = "bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.9)]";
+              if (bIsSynth) blackColor = "bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.9)]";
 
               return (
                 <div 
