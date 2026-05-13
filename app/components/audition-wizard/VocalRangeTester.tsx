@@ -78,8 +78,11 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     return () => stopTest();
   }, []);
 
-  const startTest = async () => {
+const startTest = async () => {
     if (onStartTest) onStartTest();
+
+    // 🟢 SAFETY: Kill any zombie streams before asking for a new one
+    if (streamRef.current) stopTest();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -110,13 +113,24 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     setIsRecording(false);
     setCurrentNote("--");
     setCurrentMidi(null);
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    
+    if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+    }
+    
+    // 🟢 AGGRESSIVE MIC CLEANUP: Stop tracks AND destroy the reference
+    if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+            track.stop(); 
+        });
+        streamRef.current = null; // Forces the browser to drop the mic indicator instantly
+    }
+    
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
+        audioContextRef.current = null;
     }
   };
-
   const detectPitch = () => {
     if (!analyserRef.current || !audioContextRef.current) return;
 
