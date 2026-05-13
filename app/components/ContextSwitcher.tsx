@@ -1,77 +1,402 @@
 "use client";
+import { handleLogout } from '@/app/lib/actions'; 
+import { useState, useRef, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { usePathname, useParams } from 'next/navigation';
+import { useSimulation } from '@/app/context/SimulationContext'; 
+import { hasPermission } from '@/app/lib/permissions';
+import { NAV_CONFIG } from '@/app/lib/nav-config';
+import { 
+  Menu, X, ChevronRight, ChevronsUpDown, Calendar, 
+  Clock, Rocket, Bug, Wrench, Settings, LogOut
+} from 'lucide-react';
 
-import { useFormStatus } from 'react-dom';
-import { Check, Sparkles } from 'lucide-react';
-import { switchProduction } from '@/app/actions'; // Import the action we just made
-
-// Define the shape of a Production based on your new Baserow setup
-type Production = {
-  id: number;
-  title: string;
-  branch: string; // 'Fredericksburg' | 'Stafford'
-  type: string;   // 'Main Stage' | 'Lite'
-};
-
-export default function ContextSwitcher({ 
+export default function GlobalHeaderClient({ 
   shows, 
-  activeId 
+  activeId, // This is now just a fallback from the layout if we aren't in a show route
+  user 
 }: { 
-  shows: Production[], 
-  activeId: number 
+  shows: any[], 
+  activeId: number, 
+  user?: any 
 }) {
+  const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isContextOpen, setIsContextOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'current' | 'archive'>('current');
+  const [showDebug, setShowDebug] = useState(false);
+
+  // 🚀 CONNECT TO THE MATRIX
+  const { role: effectiveRole, productionRole, isSimulating } = useSimulation();
+
+  const navRef = useRef<HTMLDivElement>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
   
+  // 🟢 URL Extraction
+  const pathname = usePathname();
+  const params = useParams();
+  const cleanPathname = pathname.replace(/^\/[^\/]+/, '') || '/';
+  
+  // 🟢 Force the active ID to match the URL param over the cookie prop
+  const urlId = params?.id ? parseInt(params.id as string) : null;
+  const resolvedActiveId = urlId || activeId;
+
+  // Close menus on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (navRef.current && !navRef.current.contains(event.target as Node)) setIsNavOpen(false);
+      if (contextRef.current && !contextRef.current.contains(event.target as Node)) setIsContextOpen(false);
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) setIsProfileOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- DYNAMIC DATA BUCKETING ---
+  const groupedData = useMemo(() => {
+    const active: Record<string, any[]> = {};
+    const upcoming: Record<string, any[]> = {};
+    const archive: Record<string, any[]> = {};
+    const allSeasons = new Set<string>();
+
+    shows.forEach(show => {
+      const season = show.season || 'Other';
+      allSeasons.add(season);
+
+      if (show.isActive) {
+        if (!active[season]) active[season] = [];
+        active[season].push(show);
+      } 
+      else if (show.status === 'Upcoming' || show.status === 'Pre-Production') {
+        if (!upcoming[season]) upcoming[season] = [];
+        upcoming[season].push(show);
+      } 
+      else {
+        if (!archive[season]) archive[season] = [];
+        archive[season].push(show);
+      }
+    });
+
+    const seasons = Array.from(allSeasons).sort((a, b) => 
+      b.localeCompare(a, undefined, { numeric: true })
+    );
+
+    return { active, upcoming, archive, seasons };
+  }, [shows]);
+
+  // 🟢 Resolves the Active Show based on the URL context!
+  const activeShow = shows.find(s => s.id === resolvedActiveId) || shows[0] || { title: "Select Production", location: "Unknown" };
+  const userInitials = user?.name 
+    ? user.name.split(' ').map((n:string) => n[0]).join('').substring(0,2).toUpperCase() 
+    : "??";
+
   return (
-    <div className="p-2 space-y-1">
-      <div className="px-2 pt-2 pb-1 flex justify-between items-center">
-        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-          Switch Context
-        </span>
-      </div>
-      
-      {shows.map((prod) => {
-        const isActive = activeId === prod.id;
+    <>
+      <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
         
-        return (
-          <form key={prod.id} action={switchProduction}>
-            <input type="hidden" name="productionId" value={prod.id} />
-            <SubmitButton prod={prod} isActive={isActive} />
-          </form>
-        );
-      })}
-    </div>
+        {/* LEFT: NAV & CONTEXT */}
+        <div className="flex items-center gap-4">
+          <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 -ml-2 text-zinc-400 md:hidden">
+            {isNavOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+
+          <div className="relative" ref={contextRef}>
+            <button 
+              onClick={() => setIsContextOpen(!isContextOpen)}
+              className={`flex flex-col items-start p-2 rounded-lg transition-all ${isContextOpen ? 'bg-zinc-900' : 'hover:bg-zinc-900/50'}`}
+            >
+              <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Production Context</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white max-w-[150px] truncate md:max-w-none">{activeShow.title}</span>
+                <ChevronsUpDown size={12} className="text-zinc-600"/>
+              </div>
+            </button>
+
+            {isContextOpen && (
+              <div className="absolute top-full left-0 mt-2 w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[75vh] animate-in fade-in slide-in-from-top-2">
+                
+                {/* TABS */}
+                <div className="bg-zinc-950/80 p-3 border-b border-white/5 grid grid-cols-2 gap-2">
+                   <button 
+                     onClick={() => setViewMode('current')} 
+                     className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'current' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
+                   >
+                     Current
+                   </button>
+                   <button 
+                     onClick={() => setViewMode('archive')} 
+                     className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'archive' ? 'bg-blue-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
+                   >
+                     History
+                   </button>
+                </div>
+
+                <div className="p-2 overflow-y-auto flex-1 custom-scrollbar">
+                  {/* TAB: CURRENT */}
+                  {viewMode === 'current' && (
+                    <div className="space-y-6">
+                      {groupedData.seasons.map(season => {
+                        const hasActive = groupedData.active[season]?.length > 0;
+                        const hasUpcoming = groupedData.upcoming[season]?.length > 0;
+
+                        if (!hasActive && !hasUpcoming) return null;
+
+                        return (
+                          <div key={season} className="space-y-3">
+                            <div className="px-3 py-1 text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/50 rounded">
+                              Season {season}
+                            </div>
+                            
+                            {hasActive && (
+                              <div className="space-y-1">
+                                <div className="px-3 flex items-center gap-2 text-[8px] font-bold text-emerald-500 uppercase italic">
+                                  <Clock size={10} /> Now Playing
+                                </div>
+                                {groupedData.active[season].map(prod => (
+                                  <ProductionItem 
+                                    key={prod.id} 
+                                    prod={prod} 
+                                    activeId={resolvedActiveId} 
+                                    pathname={pathname} 
+                                    onNavigate={() => setIsContextOpen(false)} 
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                            {hasUpcoming && (
+                              <div className="space-y-1">
+                                <div className="px-3 flex items-center gap-2 text-[8px] font-bold text-amber-500 uppercase italic">
+                                  <Rocket size={10} /> Pre-Production
+                                </div>
+                                {groupedData.upcoming[season].map(prod => (
+                                  <ProductionItem 
+                                    key={prod.id} 
+                                    prod={prod} 
+                                    activeId={resolvedActiveId} 
+                                    pathname={pathname} 
+                                    onNavigate={() => setIsContextOpen(false)}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* TAB: HISTORY */}
+                  {viewMode === 'archive' && (
+                    <div className="space-y-2">
+                      {groupedData.seasons.map(season => (
+                        groupedData.archive[season] && (
+                          <details key={season} className="group">
+                            <summary className="flex items-center justify-between px-3 py-2 text-[10px] font-black text-zinc-500 uppercase bg-zinc-950/50 rounded-lg cursor-pointer hover:bg-zinc-800 list-none">
+                              <div className="flex items-center gap-2"><Calendar size={12} /><span>{season}</span></div>
+                              <ChevronRight size={12} className="group-open:rotate-90 transition-transform duration-200" />
+                            </summary>
+                            <div className="pt-2 pl-2 space-y-1">
+                              {groupedData.archive[season].map(prod => (
+                                <ProductionItem 
+                                  key={prod.id} 
+                                  prod={prod} 
+                                  activeId={resolvedActiveId} 
+                                  pathname={pathname} 
+                                  onNavigate={() => setIsContextOpen(false)}
+                                />
+                              ))}
+                            </div>
+                          </details>
+                        )
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT: TOOLS & PROFILE */}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setShowDebug(!showDebug)} 
+            className={`hidden md:block p-2 rounded-full transition-all ${showDebug ? 'text-amber-500 bg-amber-500/10' : 'text-zinc-700 hover:text-zinc-400'}`}
+          >
+            <Wrench size={18} />
+          </button>
+          
+          <div className="relative" ref={profileRef}>
+            <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-3 group">
+              <div className="hidden md:flex flex-col items-end leading-tight text-right">
+                <span className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">{user?.name || "Sign In"}</span>
+                <span className={`text-[10px] font-black uppercase tracking-tighter ${isSimulating ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`}>
+                    {effectiveRole || "Guest"}
+                </span>
+              </div>
+              <div className={`w-8 h-8 rounded-full bg-zinc-800 border flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:border-emerald-500/50 transition-all ${isSimulating ? 'border-red-500/50 ring-2 ring-red-500/20' : 'border-zinc-700'}`}>
+                {user?.image ? <img src={user.image} alt="User Avatar" className="w-full h-full rounded-full object-cover" /> : userInitials}
+              </div>
+            </button>
+
+            {isProfileOpen && (
+              <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-1 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="px-3 py-2 border-b border-white/5 bg-zinc-950/50 rounded-t-lg mb-1">
+                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Session Account</p>
+                  <p className="text-[11px] font-bold text-white truncate">{user?.email || "No email linked"}</p>
+                </div>
+                <Link href="/settings" className="flex items-center gap-2 w-full p-2 text-xs font-bold text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors">
+                  <Settings size={14} /> Settings
+                </Link>
+                <button 
+                  onClick={() => handleLogout()} 
+                  className="flex items-center gap-2 w-full p-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                >
+                  <LogOut size={14} /> Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* MOBILE NAV DRAWER */}
+      {isNavOpen && (
+        <div className="fixed inset-0 z-[100] flex md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsNavOpen(false)} />
+          <div ref={navRef} className="relative w-72 bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-10">
+              
+              {NAV_CONFIG.map((section) => {
+                if (section.permission && !hasPermission(effectiveRole, productionRole, section.permission as any)) return null;
+                if (section.title === "Dashboard") return null;
+
+                return (
+                  <div key={section.title}>
+                    <div className={`px-3 mb-2 text-[10px] font-black uppercase tracking-widest mt-2 ${section.color || 'text-zinc-600'}`}>
+                      {section.title}
+                    </div>
+                    <div className="space-y-1">
+                      {section.items.map((item: any) => {
+                        if (item.permission && !hasPermission(effectiveRole, productionRole, item.permission as any)) return null;
+
+                        if (item.isCollapsible && item.children) {
+                          return (
+                            <div key={item.label} className="pl-2 border-l border-zinc-800 ml-2 mt-2 mb-2 space-y-1">
+                                <div className="text-[9px] font-bold text-zinc-500 uppercase px-3 py-1">{item.label}</div>
+                                {item.children.map((child: any) => (
+                                    (!child.permission || hasPermission(effectiveRole, productionRole, child.permission as any)) && (
+                                        <MenuLink 
+                                            key={child.href}
+                                            onClick={() => setIsNavOpen(false)} 
+                                            href={child.href} 
+                                            icon={<child.icon size={16}/>} 
+                                            label={child.label} 
+                                            active={cleanPathname === child.href} 
+                                        />
+                                    )
+                                ))}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <MenuLink 
+                            key={item.href}
+                            onClick={() => setIsNavOpen(false)} 
+                            href={item.href} 
+                            icon={<item.icon size={18}/>} 
+                            label={item.label} 
+                            active={cleanPathname === item.href} 
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+            </div>
+            
+            <div className="p-4 border-t border-white/5 bg-zinc-950/50">
+               <button onClick={() => handleLogout()} className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors">
+                  <LogOut size={16} /> <span className="text-xs font-bold uppercase">Sign Out</span>
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEBUG CONSOLE */}
+      {showDebug && (
+        <div className="fixed bottom-4 right-4 w-80 bg-black/90 border border-amber-500/50 rounded-xl p-4 font-mono text-[10px] text-amber-500 z-[100] shadow-2xl backdrop-blur-xl animate-in zoom-in-95">
+          <p className="font-black border-b border-amber-500/20 mb-2 pb-1 flex items-center gap-2"><Bug size={12}/> DATA STREAM DEBUG</p>
+          <div className="space-y-1">
+            <p>Total Records: {shows.length}</p>
+            <p className="mt-2 text-white font-black italic">ACTIVE / UPCOMING MAP:</p>
+            {shows.filter(s => s.isActive || s.status === 'Upcoming' || s.status === 'Pre-Production').map(s => (
+              <div key={s.id}>• {s.title} (Status: {s.status})</div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
-// Small helper to handle the "Pending" state during the switch
-function SubmitButton({ prod, isActive }: { prod: Production, isActive: boolean }) {
-  const { pending } = useFormStatus();
+// --- SUB COMPONENTS ---
+
+// 🟢 Replaced Action forms with Next.js <Link> routing
+function ProductionItem({ prod, activeId, pathname, onNavigate }: { prod: any, activeId: number, pathname: string, onNavigate: () => void }) {
+  
+  // Smart Regex to inject the new ID into the current URL path!
+  const match = pathname.match(/\/production\/(\d+)/);
+  let targetUrl = '';
+  if (match) {
+    targetUrl = pathname.replace(/\/production\/\d+/, `/production/${prod.id}`);
+  } else {
+    // Fallback if they are opening a show from the Season Planner or Home screen
+    const tenantMatch = pathname.match(/^\/([^/]+)/);
+    const tenant = tenantMatch ? tenantMatch[1] : 'default';
+    targetUrl = `/${tenant}/production/${prod.id}/roster`; 
+  }
 
   return (
-    <button
-      disabled={pending}
-      className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left group
-        ${isActive ? 'bg-zinc-800/80 border border-zinc-700' : 'hover:bg-zinc-800 border border-transparent'}
-        ${pending ? 'opacity-50 cursor-wait' : ''}
-      `}
+    <Link href={targetUrl} onClick={onNavigate}>
+      <ContextButton prod={prod} isActive={prod.id === activeId} />
+    </Link>
+  )
+}
+
+function MenuLink({ href, icon, label, active, onClick }: any) {
+  return (
+    <Link 
+      href={href} 
+      onClick={onClick}
+      className={`flex items-center gap-4 px-3 py-3 rounded-xl transition-all ${active ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
     >
-      {/* Visual Indicator of Branch */}
-      <div className={`h-8 w-1 rounded-full shrink-0 
-        ${prod.branch === 'Stafford' ? 'bg-amber-500' : 'bg-emerald-500'}
-      `} />
-      
+      {icon}
+      <span className="font-bold text-sm">{label}</span>
+      {active && <ChevronRight size={14} className="ml-auto opacity-50"/>}
+    </Link>
+  )
+}
+
+// 🟢 Stripped out useFormStatus since this is no longer handling actions
+function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
+  return (
+    <div
+      className={`w-full flex items-start gap-3 p-2 rounded-lg transition-all text-left group mt-1 ${isActive ? 'bg-zinc-800 ring-1 ring-zinc-700' : 'hover:bg-zinc-800/50'}`}
+    >
+      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${prod.location?.includes('Fred') ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
       <div className="flex-1 min-w-0">
-        <div className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
-          {prod.title}
-        </div>
-        <div className="flex gap-2 text-[10px] uppercase font-bold text-zinc-600 group-hover:text-zinc-500">
-          <span>{prod.branch}</span>
-          <span>•</span>
-          <span>{prod.type}</span>
+        <div className={`text-xs truncate ${isActive ? 'text-white font-bold' : 'text-zinc-300'}`}>{prod.title}</div>
+        <div className="text-[9px] font-black text-zinc-600 uppercase tracking-tight">
+          {prod.location || "Unknown"} • {prod.status}
         </div>
       </div>
-      
-      {isActive && <Check size={14} className="text-emerald-500" />}
-      {pending && <Sparkles size={14} className="text-zinc-500 animate-spin" />}
-    </button>
+    </div>
   );
 }
