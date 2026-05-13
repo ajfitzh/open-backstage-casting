@@ -69,7 +69,11 @@ const RawAuditionSchema = z.object({
   'Dance Score': z.coerce.number().nullish(),
   'Gender': z.any(), 
   'Headshot': z.any(),
-  // 🟢 NEW COMPLIANCE FIELDS ADDED HERE
+  
+  // 🟢 NEW: Add Status here so Zod knows to look for it
+  'Status': z.any().nullish(), 
+  
+  // COMPLIANCE FIELDS
   'Paid Fees': z.boolean().nullish(),
   'Measurements Taken': z.boolean().nullish(),
   'Commitment to Character': z.boolean().nullish(),
@@ -88,7 +92,7 @@ export const RosterStudentSchema = RawAuditionSchema.transform(data => {
   }
 
   let avatarUrl = "https://placehold.co/150x150/222/888?text=Actor"; 
-  let hasHeadshot = false; // 🟢 Track if they uploaded a real photo
+  let hasHeadshot = false; 
   if (Array.isArray(data.Headshot) && data.Headshot.length > 0) {
      const firstItem = data.Headshot[0];
      if (Array.isArray(firstItem) && firstItem.length > 0 && firstItem[0].url) {
@@ -104,19 +108,23 @@ export const RosterStudentSchema = RawAuditionSchema.transform(data => {
     id: person.id,
     name: personName,
     avatar: avatarUrl, 
+    
+    // 🟢 NEW: Map the Status value down to the frontend!
+    status: data.Status?.value || "Pending",
+    
     vocalScore: data['Vocal Score'] || 0,
     actingScore: data['Acting Score'] || 0,
     danceScore: data['Dance Score'] || 0,
     auditionInfo: { gender: genderVal },
     auditionGrades: { vocal: data['Vocal Score'], acting: data['Acting Score'], dance: data['Dance Score'] },
-    // 🟢 NEW COMPLIANCE MAPPINGS
+    
+    // COMPLIANCE MAPPINGS
     paidFees: !!data['Paid Fees'],
     measurementsTaken: !!data['Measurements Taken'],
     signedAgreement: !!data['Commitment to Character'],
     headshotSubmitted: hasHeadshot
   };
 });
-export const RosterListSchema = z.array(RosterStudentSchema);
 
 
 // ==================================
