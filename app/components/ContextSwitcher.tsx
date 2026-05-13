@@ -350,17 +350,23 @@ export default function GlobalHeaderClient({
 
 // 🟢 Replaced Action forms with Next.js <Link> routing
 function ProductionItem({ prod, activeId, pathname, onNavigate }: { prod: any, activeId: number, pathname: string, onNavigate: () => void }) {
+  const params = useParams();
+  const tenant = params?.tenant as string || 'default';
   
-  // Smart Regex to inject the new ID into the current URL path!
-  const match = pathname.match(/\/production\/(\d+)/);
+  // 🟢 Smart Routing Logic
   let targetUrl = '';
-  if (match) {
-    targetUrl = pathname.replace(/\/production\/\d+/, `/production/${prod.id}`);
+  
+  // Check if we are currently inside a production-specific route
+  const productionRouteMatch = pathname.match(/\/production\/(\d+)(.*)/);
+  
+  if (productionRouteMatch) {
+    // If we are on /tenant/production/123/schedule, swap to /tenant/production/456/schedule
+    const currentSuffix = productionRouteMatch[2] || '';
+    targetUrl = `/${tenant}/production/${prod.id}${currentSuffix}`;
   } else {
-    // Fallback if they are opening a show from the Season Planner or Home screen
-    const tenantMatch = pathname.match(/^\/([^/]+)/);
-    const tenant = tenantMatch ? tenantMatch[1] : 'default';
-    targetUrl = `/${tenant}/production/${prod.id}/roster`; 
+    // We are on a global route (like /education or /season). 
+    // Sending them to the show's dashboard or roster is the safest bet.
+    targetUrl = `/${tenant}/production/${prod.id}`; 
   }
 
   return (
@@ -384,7 +390,6 @@ function MenuLink({ href, icon, label, active, onClick }: any) {
   )
 }
 
-// 🟢 Stripped out useFormStatus since this is no longer handling actions
 function ContextButton({ prod, isActive }: { prod: any, isActive: boolean }) {
   return (
     <div

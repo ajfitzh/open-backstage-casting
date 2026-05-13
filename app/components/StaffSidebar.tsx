@@ -28,6 +28,27 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
+  // 🟢 SMART FALLBACK: Remember the last seen ID even on global routes
+  const [lastKnownId, setLastKnownId] = useState<number | null>(
+    activeProductionId ? Number(activeProductionId) : null
+  );
+
+  useEffect(() => {
+    // If the URL has an ID, save it to state and localStorage
+    if (params?.id) {
+      const currentId = parseInt(params.id as string);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastKnownId(currentId);
+      localStorage.setItem('openBackstage_lastActiveId', currentId.toString());
+    } else {
+      // If we are on a global route, try to retrieve the last known ID
+      const stored = localStorage.getItem('openBackstage_lastActiveId');
+      if (stored && !lastKnownId) {
+        setLastKnownId(parseInt(stored));
+      }
+    }
+  }, [params?.id]);
+
   const canSee = (entity: any) => {
       if (!entity.permission && !entity.group) return true;
       if (entity.permission && hasPermission(globalRole, productionRole, entity.permission as Permission)) return true;
@@ -35,21 +56,34 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       return false;
   };
 
-  const urlId = params?.id ? parseInt(params.id as string) : null;
-  const effectiveActiveId = urlId || activeProductionId;
+  // Determine the effective ID using params first, then last known ID
+  const effectiveActiveId = params?.id ? parseInt(params.id as string) : lastKnownId;
 
   const getFinalHref = (href: string) => {
     if (!href) return "/";
-    return effectiveActiveId 
-      ? href.replace('/active/', `/${effectiveActiveId}/`) 
-      : href;
+    
+    // If this is a production-aware link requiring an ID
+    if (href.includes('/active/')) {
+      if (effectiveActiveId) {
+        // Swap /active/ with the actual ID
+        return href.replace('/active/', `/${effectiveActiveId}/`);
+      } else {
+        // SAFE FALLBACK: If we have absolutely no ID, route them to the Production Hub 
+        // to select a show, rather than 404ing on a broken URL.
+        return `/${params?.tenant || 'default'}/production`; 
+      }
+    }
+    return href;
   };
 
   const isPathActive = (href: string) => {
       if (!pathname) return false;
       if (href === '/') return pathname === '/';
 
-      const targetPath = effectiveActiveId ? href.replace('/active/', `/${effectiveActiveId}/`) : href;
+      const targetPath = getFinalHref(href);
+      // Prevent false positives on the fallback route
+      if (targetPath.endsWith('/production') && pathname !== targetPath) return false;
+      
       return pathname.includes(targetPath);
   };
 
