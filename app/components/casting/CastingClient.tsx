@@ -98,7 +98,27 @@ function extractGender(student: RosterStudent): string {
   
   return String(raw || "").toLowerCase().trim();
 }
+// 1. Convert height strings (e.g., "5'4" or "64") into raw inches for the slider
+function extractHeightInches(student: RosterStudent): number {
+  const info = student.auditionInfo || {};
+  const raw = info.height || info.Height || info["Height"] || 0;
+  
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string') {
+    const match = raw.match(/(\d+)'(\d+)?/);
+    if (match) return parseInt(match[1]) * 12 + (parseInt(match[2]) || 0);
+    return parseInt(raw) || 0;
+  }
+  return 0;
+}
 
+// 2. Safely grab the voice type
+function extractVoiceType(student: RosterStudent): string {
+   const info = student.auditionInfo || {};
+   // If you update RosterStudentSchema to use parseRangeString, it will use .voiceType
+   // Otherwise it falls back to the raw string
+   return (info.voiceType || info.vocalRange || "").toLowerCase();
+}
 // ============================================================================
 // 3. SUB-COMPONENT: ROSTER SIDEBAR
 // ============================================================================
@@ -114,6 +134,10 @@ function RosterSidebar({
   const [showReleased, setShowReleased] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "vocal" | "acting" | "dance">("name");
   const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
+  
+  // 🟢 NEW: Range Finder States
+  const [rangeFilter, setRangeFilter] = useState<string>("all");
+  const [maxHeight, setMaxHeight] = useState<number>(84); // Default to 7'0" (84 inches)
 
   const complianceMap = useMemo(() => {
     const map = new Map();
@@ -134,18 +158,30 @@ function RosterSidebar({
         if (activeTab === "in-progress" && stats.status !== "at-risk") return false;
         if (activeTab === "done" && stats.status !== "compliant") return false;
 
+        // Gender Filter
         if (genderFilter !== "all") {
             const g = extractGender(s);
             if (genderFilter === "F" && !(g.startsWith("f") || g === "girl" || g === "woman" || g.includes("she"))) return false;
             if (genderFilter === "M" && !(g.startsWith("m") || g === "boy" || g === "man" || g.includes("he"))) return false;
         }
+
+        // 🟢 NEW: Height Filter (Only filter if height is known and greater than 0)
+        const studentHeight = extractHeightInches(s);
+        if (studentHeight > 0 && studentHeight > maxHeight) return false;
+
+        // 🟢 NEW: Vocal Range Filter
+        if (rangeFilter !== "all") {
+            const voice = extractVoiceType(s);
+            if (!voice.includes(rangeFilter.toLowerCase())) return false;
+        }
+
         return true;
 
     }).sort((a, b) => {
         if (sortBy === "name") return a.name.localeCompare(b.name);
         return (b[`${sortBy}Score` as keyof RosterStudent] as number || 0) - (a[`${sortBy}Score` as keyof RosterStudent] as number || 0);
     });
-  }, [students, search, showReleased, releasedIds, activeTab, complianceMap, genderFilter, sortBy]);
+  }, [students, search, showReleased, releasedIds, activeTab, complianceMap, genderFilter, sortBy, maxHeight, rangeFilter]);
 
   const counts = useMemo(() => {
      let toCast = 0, inProgress = 0, done = 0;
@@ -183,7 +219,9 @@ function RosterSidebar({
                 <input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded text-xs pl-7 py-1.5 text-white focus:outline-none focus:border-zinc-700" />
             </div>
         </div>
-        <div className="px-3 pb-3 flex items-center justify-between gap-2">
+        
+        {/* Sorting & Gender */}
+        <div className="px-3 pb-2 flex items-center justify-between gap-2">
             <div className="flex bg-zinc-950 rounded border border-zinc-800 p-0.5 gap-[1px]">
                 <button onClick={() => setSortBy("name")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'name' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><ArrowDownAZ size={12} /></button>
                 <button onClick={() => setSortBy("vocal")} className={`px-2 py-1.5 rounded flex items-center justify-center ${sortBy === 'vocal' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Mic2 size={12} /></button>
@@ -195,6 +233,37 @@ function RosterSidebar({
                 <button onClick={() => setGenderFilter("F")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'F' ? 'bg-pink-500/20 text-pink-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>F</button>
                 <button onClick={() => setGenderFilter("M")} className={`px-2.5 py-1.5 rounded text-[9px] font-bold ${genderFilter === 'M' ? 'bg-blue-500/20 text-blue-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}>M</button>
             </div>
+        </div>
+
+        {/* 🟢 NEW: Range Finder Tools (Height & Voice) */}
+        <div className="px-3 pb-3 space-y-2">
+            <div className="flex items-center gap-2">
+                <Ruler size={12} className="text-zinc-500" />
+                <input 
+                    type="range" 
+                    min="36" 
+                    max="84" 
+                    value={maxHeight} 
+                    onChange={(e) => setMaxHeight(parseInt(e.target.value))} 
+                    className="flex-1 accent-blue-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                />
+                <span className="text-[10px] text-zinc-400 font-mono w-12 text-right">
+                    {maxHeight >= 84 ? "Any" : `≤ ${Math.floor(maxHeight / 12)}'${maxHeight % 12}"`}
+                </span>
+            </div>
+            <select 
+                value={rangeFilter} 
+                onChange={(e) => setRangeFilter(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-400 text-[10px] rounded p-1.5 outline-none focus:border-zinc-600 uppercase font-bold tracking-wider"
+            >
+                <option value="all">Any Vocal Range</option>
+                <option value="soprano">Soprano</option>
+                <option value="mezzo">Mezzo-Soprano</option>
+                <option value="alto">Alto</option>
+                <option value="tenor">Tenor</option>
+                <option value="baritone">Baritone</option>
+                <option value="bass">Bass</option>
+            </select>
         </div>
       </div>
 

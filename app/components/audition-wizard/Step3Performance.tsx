@@ -2,8 +2,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { UploadCloud, Sparkles, Music, Volume2, FileAudio, AlertCircle } from "lucide-react";
+import { UploadCloud, Sparkles, Music, Volume2, FileAudio, AlertCircle, Mic2 } from "lucide-react";
 import { AuditionFormData, PRESET_SONGS } from "./types";
+import VocalRangeTester from "./VocalRangeTester"; // 🟢 IMPORTED NEW TOOL
 
 interface Props {
   formData: AuditionFormData;
@@ -39,6 +40,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
     <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
       <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Performance</h2>
       
+      {/* --- BACKING TRACK SECTION --- */}
       <div className="flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-2 rounded-[1.5rem] sm:rounded-[2rem]">
         <button 
           type="button" 
@@ -50,7 +52,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         <button 
           type="button" 
           onClick={() => { 
-            setAudioFile(null); // <-- FIX: Clears out stale uploads
+            setAudioFile(null); // Clears out stale uploads
             updateForm({ usePresetSong: true, songTitle: "", musicFileName: "" }); 
           }} 
           className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${formData.usePresetSong ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
@@ -105,6 +107,51 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
             </div>
         </div>
       )}
+
+      {/* 🟢 NEW: LIVE VOCAL RANGE FINDER SECTION */}
+      <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800 animate-in slide-in-from-bottom-4">
+        <h3 className="text-xl sm:text-2xl font-black uppercase italic tracking-tighter mb-6 flex items-center gap-3">
+           <Mic2 className="text-blue-500" /> Vocal Range
+        </h3>
+        
+        {/* If they already have a range saved (either manually or via the tester), show it! */}
+        {formData.vocalRange ? (
+           <div className="bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-500 rounded-[2rem] p-8 text-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                 <Music size={100} />
+              </div>
+              <p className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs mb-2">Saved Range Profile</p>
+              <p className="text-3xl sm:text-4xl font-black text-blue-700 dark:text-blue-300 italic">
+                  {formData.vocalRange}
+              </p>
+              <button 
+                  type="button" 
+                  onClick={() => updateForm({ vocalRange: "" })} 
+                  className="mt-6 px-4 py-2 bg-white dark:bg-zinc-950 text-[10px] uppercase font-bold text-zinc-500 rounded-full hover:text-blue-600 transition-colors shadow-sm"
+              >
+                  Reset & Retest
+              </button>
+           </div>
+        ) : (
+           <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+                  <div className="flex-1 text-center sm:text-left pl-2">
+                      <p className="text-sm font-bold text-zinc-900 dark:text-white">Don&apos;t know your range?</p>
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">Try the live microphone test!</p>
+                  </div>
+              </div>
+              
+              <VocalRangeTester 
+                  onRangeFound={(voiceType, low, high) => {
+                      // Saves exactly what the casting engine needs: e.g., "C3-A4"
+                      updateForm({ vocalRange: `${low}-${high}` });
+                      alert(`Awesome! You are a ${voiceType} (Range: ${low} to ${high})`);
+                  }} 
+              />
+           </div>
+        )}
+      </div>
+
     </div>
   );
 }

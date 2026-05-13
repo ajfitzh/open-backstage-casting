@@ -27,7 +27,7 @@ export interface Performer {
   vocalRange: string;
   dob: string;
   conflicts: string;
-  status: string;
+  status: string; // 🟢 Updated from 'tenure' to match new schema
   pastRoles: string | string[];
   song: string;
   monologue: string;
@@ -66,8 +66,15 @@ interface AuditionsClientProps {
   productionTitle: string;
   serverJudgeName: string;
   serverJudgeRole: string;
-  // 🟢 ADD THIS:
   initialPerformers: Performer[]; 
+}
+
+// 🟢 NEW: Helper to parse height strings like "5'4" into inches for the slider
+function parseHeightInches(heightStr: string): number {
+  if (!heightStr || heightStr === "N/A") return 0;
+  const match = heightStr.match(/(\d+)'(\d+)?/);
+  if (match) return parseInt(match[1]) * 12 + (parseInt(match[2]) || 0);
+  return parseInt(heightStr) || 0;
 }
 
 export default function AuditionsClient({ 
@@ -76,8 +83,9 @@ export default function AuditionsClient({
   productionTitle, 
   serverJudgeName, 
   serverJudgeRole,
-  initialPerformers // 🟢 AND THIS
+  initialPerformers 
 }: AuditionsClientProps) { 
+  
   const judgeName = serverJudgeName || "Guest Judge";
 
   // 🟢 SMART ROLE MAPPING: Translates your raw DB role into one of the 5 Deck Themes
@@ -96,12 +104,16 @@ export default function AuditionsClient({
   }
 
   const [searchQuery, setSearchQuery] = useState("");
+  // 🟢 NEW: Range Finder States
+  const [maxHeight, setMaxHeight] = useState<number>(84); 
+  const [rangeFilter, setRangeFilter] = useState<string>("all");
+
   const [activeSession, setActiveSession] = useState<AuditionSession>("Scheduled");
   const [selectedPerson, setSelectedPerson] = useState<Performer | null>(null);
   const [inspectingActor, setInspectingActor] = useState<Performer | null>(null);
   const [loading, setLoading] = useState(false);
 
-const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(initialPerformers);
+  const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(initialPerformers || []);
   const [allStudents, setAllStudents] = useState<any[]>([]); 
   const [grades, setGrades] = useState<Record<number, any>>({});
   
@@ -320,34 +332,35 @@ const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(init
     }
   };
 
+  // 🟢 NEW: Filter logic incorporating Height and Range
   const visibleList = useMemo(() => {
     if (activeSession === "Walk-In") {
       if (!searchQuery) return [];
       return allStudents
         .filter(s => s.name?.toLowerCase().includes(searchQuery.toLowerCase()))
         .map(s => ({
-          id: -1, 
-          originalId: s.id, 
-          performerId: s.performerId,
-          name: s.name,
-          avatar: s.avatar || null, 
-          age: s.age,
-          timeSlot: "WALK-IN", 
-          session: "Walk-In" as AuditionSession, 
-          isWalkIn: true,
-          isCheckedIn: true,
-          vocal: 0, acting: 0, dance: 0, presence: 0, 
-          actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
+          id: -1, originalId: s.id, performerId: s.performerId, name: s.name, avatar: s.avatar || null, 
+          age: s.age, timeSlot: "WALK-IN", session: "Walk-In" as AuditionSession, isWalkIn: true, isCheckedIn: true,
+          vocal: 0, acting: 0, dance: 0, presence: 0, actingNotes: "", musicNotes: "", choreoNotes: "", dropInNotes: "", adminNotes: "",
           height: "", vocalRange: "", dob: "", conflicts: "", status: "", pastRoles: [], song: "", monologue: "", video: null,
           backingTrack: "", lobbyNote: ""
         }));
     }
+    
     return scheduledPerformers.filter((p) => {
         const matchesSession = p.session === activeSession;
         const matchesSearch = searchQuery ? p.name.toLowerCase().includes(searchQuery.toLowerCase()) : true;
-        return matchesSession && matchesSearch;
+        
+        // 🟢 Height Filter Check
+        const pHeight = parseHeightInches(p.height);
+        const matchesHeight = pHeight === 0 || pHeight <= maxHeight;
+
+        // 🟢 Vocal Range Filter Check
+        const matchesRange = rangeFilter === "all" || (p.vocalRange || "").toLowerCase().includes(rangeFilter.toLowerCase());
+
+        return matchesSession && matchesSearch && matchesHeight && matchesRange;
     });
-  }, [scheduledPerformers, allStudents, activeSession, searchQuery]);
+  }, [scheduledPerformers, allStudents, activeSession, searchQuery, maxHeight, rangeFilter]);
 
   const grouped = useMemo(() => {
     if (activeSession === "Walk-In") return { "Walk-In Results": visibleList };
@@ -394,6 +407,7 @@ const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(init
       <div className={`flex h-full bg-black text-white shadow-[0_0_50px_-12px_rgba(255,255,255,0.1)]`}>
         <div className="flex-1 flex flex-col min-w-0">
           
+          {/* 🟢 NEW: Header with Range Finder Tools */}
           <header className={`p-4 md:p-6 border-b-2 bg-zinc-950 ${ROLE_THEMES[judgeRole].color} shrink-0`}>
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div className="text-left shrink-0">
@@ -415,9 +429,44 @@ const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(init
               </div>
             </div>
 
-            <div className="mt-4 relative w-full md:w-64">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none text-white" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
+            <div className="mt-4 flex flex-col md:flex-row gap-3">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-zinc-900 rounded-lg py-2 pl-10 text-xs focus:ring-1 ring-white/10 outline-none text-white" placeholder={activeSession === "Walk-In" ? "Type student name..." : "Find in schedule..."} autoFocus={activeSession === "Walk-In"} />
+              </div>
+              
+              {/* 🟢 Range Finder Tools (Only show if not looking at Walk-Ins) */}
+              {activeSession !== "Walk-In" && (
+                <div className="flex items-center gap-3 bg-zinc-900 rounded-lg px-3 py-1.5 border border-white/5">
+                    <div className="flex items-center gap-2 w-32">
+                        <span className="text-zinc-500"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></svg></span>
+                        <input 
+                            type="range" min="36" max="84" 
+                            value={maxHeight} 
+                            onChange={(e) => setMaxHeight(parseInt(e.target.value))} 
+                            className="flex-1 accent-blue-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-[10px] text-zinc-400 font-mono w-8 text-right">
+                            {maxHeight >= 84 ? "Any" : `${Math.floor(maxHeight / 12)}'${maxHeight % 12}"`}
+                        </span>
+                    </div>
+                    <div className="w-px h-4 bg-zinc-800"></div>
+                    <select 
+                        value={rangeFilter} 
+                        onChange={(e) => setRangeFilter(e.target.value)}
+                        className="bg-transparent text-zinc-400 text-[10px] outline-none uppercase font-bold tracking-wider cursor-pointer"
+                    >
+                        <option value="all" className="bg-zinc-900">Any Range</option>
+                        <option value="soprano" className="bg-zinc-900">Soprano</option>
+                        <option value="mezzo" className="bg-zinc-900">Mezzo</option>
+                        <option value="alto" className="bg-zinc-900">Alto</option>
+                        <option value="tenor" className="bg-zinc-900">Tenor</option>
+                        <option value="baritone" className="bg-zinc-900">Baritone</option>
+                        <option value="bass" className="bg-zinc-900">Bass</option>
+                    </select>
+                </div>
+              )}
             </div>
           </header>
 
@@ -499,12 +548,10 @@ const [scheduledPerformers, setScheduledPerformers] = useState<Performer[]>(init
                           </button>
                       )}
 
-                      {/* NEW QUICK PLAY AUDIO BUTTON */}
                       {person.backingTrack && (
                           <button
                               onClick={(e) => { 
                                   e.stopPropagation(); 
-                                  // Opens player in a tiny popup window
                                   window.open(person.backingTrack, "AudioPlayer", "width=400,height=100"); 
                               }}
                               className="w-10 md:px-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors border border-white/5 flex items-center justify-center text-purple-500 hover:text-purple-400 group-hover:border-purple-500/30 shrink-0"
