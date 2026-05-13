@@ -59,8 +59,17 @@ export async function fetchBaserow(
 
     if (!res.ok) {
       if (res.status === 404) return []; 
-      console.error(`❌ [Baserow] API Error [${res.status}] at ${finalUrl}`);
-      return []; 
+      
+      // 🟢 THE FIX: Actually read the error body Baserow sent back!
+      const errorBody = await res.text();
+      console.error(`\n❌ [Baserow] API Error [${res.status}] at ${finalUrl}`);
+      console.error(`🔍 EXACT BASEROW ERROR:\n`, errorBody, `\n`);
+      
+      try {
+         return { error: true, details: JSON.parse(errorBody) };
+      } catch {
+         return { error: true, details: errorBody };
+      }
     }
 
     const data = await res.json();
