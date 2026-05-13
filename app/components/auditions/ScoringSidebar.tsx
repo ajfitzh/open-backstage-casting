@@ -1,7 +1,71 @@
-import React from 'react';
 import { X, MessageSquare, Save, User, Music, Star, Move } from 'lucide-react';
 import { JudgeRole, ROLE_THEMES, Performer } from './AuditionsClient';
+// Drop this near the top of ScoringSidebar.tsx
+import React, { useRef, useState } from 'react';
 
+function NormalizedAudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const contextRef = useRef<AudioContext | null>(null);
+  const [isNormalized, setIsNormalized] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handlePlay = () => {
+    // Browsers require user interaction before starting an AudioContext.
+    // Putting it inside the onPlay event guarantees the user clicked play!
+    if (!audioRef.current || contextRef.current) return;
+
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioContext();
+      contextRef.current = ctx;
+
+      // 1. Grab the audio from the HTML element
+      const source = ctx.createMediaElementSource(audioRef.current);
+
+      // 2. Create the Auto-Leveler (Compressor)
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -30; // Start compressing very early
+      compressor.knee.value = 20;       // Smooth transition
+      compressor.ratio.value = 12;      // Aggressively squash loud peaks
+      compressor.attack.value = 0.003;  // React instantly
+      compressor.release.value = 0.25;  // Smooth release
+
+      // 3. Add Makeup Gain (Boost the overall volume since we squashed the peaks)
+      const makeUpGain = ctx.createGain();
+      makeUpGain.gain.value = 2.5; // Boost by 2.5x
+
+      // 4. Wire it all together: Source -> Compressor -> Gain -> Speakers
+      source.connect(compressor);
+      compressor.connect(makeUpGain);
+      makeUpGain.connect(ctx.destination);
+
+      setIsNormalized(true);
+    } catch (e) {
+      console.error("Web Audio API failed. Playing raw audio.", e);
+      setError(true);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <audio
+        ref={audioRef}
+        controls
+        preload="metadata"
+        crossOrigin="anonymous" // 🚨 CRITICAL for Web Audio API
+        src={src}
+        className="w-full outline-none"
+        onPlay={handlePlay}
+      />
+      {isNormalized && !error && (
+        <div className="flex items-center justify-center gap-1.5 mt-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+          <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Auto-Leveling Active</span>
+        </div>
+      )}
+    </div>
+  );
+}
 // --- HELPER COMPONENT: RUBRIC SLIDER ---
 const RubricSlider = ({ label, val, setVal, disabled }: { label: string, val: number, setVal: (n: number) => void, disabled: boolean }) => (
   <div className={`space-y-3 ${disabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
@@ -91,11 +155,19 @@ export default function ScoringSidebar({
              </div>
           )}
 
-          {/* 🟢 AUDIO PLAYER: Now safely reading direct property */}
+{/* 🟢 AUDIO PLAYER: Now with Auto-Leveling! */}
           {selectedPerson.backingTrack && (
             <div className="bg-zinc-900 border border-white/5 p-4 rounded-xl shadow-inner">
-               <p className="text-[9px] font-black uppercase tracking-widest text-purple-500 mb-2 flex items-center gap-1"><Music size={12}/> Backing Track</p>
-               <audio controls src={selectedPerson.backingTrack} className="w-full h-8" />
+               <p className="text-[9px] font-black uppercase tracking-widest text-purple-500 mb-2 flex items-center gap-1">
+                 <Music size={12}/> Backing Track
+               </p>
+               
+               {/* Use the new component here! */}
+               <NormalizedAudioPlayer src={selectedPerson.backingTrack} />
+               
+               <p className="text-[9px] text-zinc-600 font-bold mt-2 italic text-center">
+                 Make sure your device is connected to the Bluetooth speaker.
+               </p>
             </div>
           )}
 
