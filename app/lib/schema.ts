@@ -1,6 +1,6 @@
 // --------------------------------------------------------
 // 🚨 AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
-//    Generated on: 5/13/2026, 9:51:08 AM
+//    Generated on: 5/13/2026, 4:08:20 PM
 //    Run `node --env-file=.env.local get-schema.js` to update.
 // --------------------------------------------------------
 
@@ -453,6 +453,7 @@ export const DB = {
       "PREFERRED_ROLES": "field_9492", // text
       "STAGE_ROMANCE": "field_9493", // boolean
       "CALLBACK_STATUS": "field_9494", // single_select
+      "VOICE_TYPE": "field_9496", // text
     }
   },
   ASSETS: {
