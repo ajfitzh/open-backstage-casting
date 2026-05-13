@@ -3,49 +3,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles, RotateCcw, Volume2 } from "lucide-react";
-
-const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-function getMidiNote(frequency: number): number {
-  return Math.round(12 * (Math.log(frequency / 440) / Math.log(2))) + 69;
-}
-
-function getNoteString(midiNote: number): string {
-  return NOTE_STRINGS[midiNote % 12] + (Math.floor(midiNote / 12) - 1);
-}
-
-function autoCorrelate(buf: Float32Array, sampleRate: number): number {
-  let SIZE = buf.length;
-  let rms = 0;
-  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
-  rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; // Noise gate
-
-  let r1 = 0, r2 = SIZE - 1, thres = 0.2;
-  for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
-  for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
-
-  buf = buf.subarray(r1, r2);
-  SIZE = buf.length;
-
-  const c = new Array(SIZE).fill(0);
-  for (let i = 0; i < SIZE; i++) {
-    for (let j = 0; j < SIZE - i; j++) c[i] = c[i] + buf[j] * buf[j + i];
-  }
-
-  let d = 0; while (c[d] > c[d + 1]) d++;
-  let maxval = -1, maxpos = -1;
-  for (let i = d; i < SIZE; i++) {
-    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
-  }
-  let T0 = maxpos;
-  const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
-  const a = (x1 + x3 - 2 * x2) / 2;
-  const b = (x3 - x1) / 2;
-  if (a) T0 = T0 - b / (2 * a);
-
-  return sampleRate / T0;
-}
+import { getMidiNote, getNoteString, autoCorrelate, calculateBestVoiceType } from "@/app/lib/vocalScience";
 
 interface VocalRangeTesterProps {
   onRangeFound: (voiceType: string, lowNote: string, highNote: string) => void;
@@ -63,7 +21,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
   const [playingMidi, setPlayingMidi] = useState<number | null>(null);
 
-  // 🟢 TIMED AUTO-TRAINER STATE
   const [trainerDirection, setTrainerDirection] = useState<'up' | 'down' | null>(null);
   const [trainerTarget, setTrainerTarget] = useState<number | null>(null);
   const [trainerPhase, setTrainerPhase] = useState<'playing' | 'listening' | null>(null);
@@ -82,9 +39,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   const animationRef = useRef<number>(0);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability
     return () => stopTest();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const playNote = (midiNum: number, duration: number = 0.5) => {
@@ -100,7 +55,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     osc.type = 'sine'; 
     osc.frequency.value = 440 * Math.pow(2, (midiNum - 69) / 12);
 
-    // 🟢 UPDATED: Flat Sustain Envelope for 3-second holds
     gain.gain.setValueAtTime(0, ctx.currentTime);
     gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.1); 
     gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + duration - 0.2); 
@@ -122,7 +76,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       trainerPhaseRef.current = 'playing';
       lastNoteStartTimeRef.current = Date.now();
       
-      playNote(60, 3.0); // Play for 3 full seconds
+      playNote(60, 3.0); 
   };
 
   const switchTrainerToLows = () => {
@@ -135,7 +89,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       trainerPhaseRef.current = 'playing';
       lastNoteStartTimeRef.current = Date.now();
       
-      playNote(60, 3.0); // Play for 3 full seconds
+      playNote(60, 3.0); 
   };
 
   const stopAutoTrainer = () => {
@@ -207,43 +161,34 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
     
     const pitchInHz = autoCorrelate(buffer, audioContextRef.current.sampleRate);
     
-    // 🟢 1. UNYIELDING METRONOME LOGIC
     const target = trainerTargetRef.current;
     const dir = trainerDirectionRef.current;
-    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
 
     if (target && dir) {
         const elapsed = now - lastNoteStartTimeRef.current;
 
         if (elapsed < 3000) {
-            // First 3 seconds: Playing Phase
             if (trainerPhaseRef.current !== 'playing') {
                 trainerPhaseRef.current = 'playing';
                 setTrainerPhase('playing');
             }
         } else if (elapsed < 6000) {
-            // Last 3 seconds: Listening Phase
             if (trainerPhaseRef.current !== 'listening') {
                 trainerPhaseRef.current = 'listening';
                 setTrainerPhase('listening');
             }
         } else {
-            // 6 Seconds elapsed -> Advance to next note
             const nextTarget = dir === 'up' ? target + 1 : target - 1;
-            
             trainerTargetRef.current = nextTarget;
             lastNoteStartTimeRef.current = now;
             setTrainerTarget(nextTarget);
-
             trainerPhaseRef.current = 'playing';
             setTrainerPhase('playing');
-
-            playNote(nextTarget, 3.0); // Start next note
+            playNote(nextTarget, 3.0);
         }
     }
 
-    // 🟢 2. PITCH DETECTION BACKGROUND LOOP
     if (pitchInHz !== -1 && pitchInHz > 50 && pitchInHz < 2000) {
       const midi = getMidiNote(pitchInHz);
       const noteStr = getNoteString(midi);
@@ -251,7 +196,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       setCurrentNote(noteStr);
       setCurrentMidi(midi);
 
-      // Glitch Filter: Require pitch to be held for 5 frames (~80ms)
       if (midi === freeSingMidiRef.current) {
           freeSingFramesRef.current++;
           if (freeSingFramesRef.current > 5) {
@@ -272,32 +216,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   };
 
   const handleApply = () => {
-    if (lowestMidi === 999 || highestMidi === 0) return;
-    
-    const CHORAL_RANGES = {
-        Soprano: { min: 60, max: 81 }, 
-        Alto:    { min: 53, max: 74 },  
-        Tenor:   { min: 48, max: 67 },  
-        Baritone:{ min: 43, max: 64 }, 
-        Bass:    { min: 36, max: 60 },  
-    };
-
-    let bestMatch = "Flexible";
-    let maxOverlap = 0;
-
-    for (const [type, bounds] of Object.entries(CHORAL_RANGES)) {
-        const overlapMin = Math.max(lowestMidi, bounds.min);
-        const overlapMax = Math.min(highestMidi, bounds.max);
-        const overlap = Math.max(0, overlapMax - overlapMin);
-
-        if (overlap > maxOverlap) {
-            maxOverlap = overlap;
-            bestMatch = type;
-        }
-    }
-
-    if (maxOverlap === 0) bestMatch = "Unsure";
-
+    const bestMatch = calculateBestVoiceType(lowestMidi, highestMidi);
     onRangeFound(bestMatch, getNoteString(lowestMidi), getNoteString(highestMidi));
     stopTest();
   };
@@ -417,14 +336,13 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
           </div>
       </div>
 
-      {/* 🟢 THE CALL AND RESPONSE TRAINER */}
       {isRecording && (
         <div className={`rounded-xl border p-4 mb-6 transition-all duration-300 ${trainerDirection ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-zinc-900 border-white/5'}`}>
            {!trainerDirection ? (
                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                    <div>
                        <h4 className="text-white font-black uppercase tracking-widest text-sm flex items-center gap-2"><Sparkles size={16} className="text-indigo-400"/> Guided Warmup</h4>
-                       <p className="text-xs text-zinc-400 mt-1">We&apos;ll play a pitch, and you sing it back!</p>
+                       <p className="text-xs text-zinc-400 mt-1">We'll play a pitch, and you sing it back!</p>
                    </div>
                    <button type="button" onClick={startAutoTrainer} className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg active:scale-95 whitespace-nowrap">
                        Start Trainer
@@ -465,7 +383,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
         </div>
       )}
 
-      {/* 🟢 FAT & SCROLLABLE KEYBOARD */}
       <div className="mb-4">
           <div className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-2 flex justify-between px-1">
             <span>Interactive Keyboard (Swipe to view more)</span>

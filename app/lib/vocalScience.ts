@@ -1,12 +1,58 @@
 // app/lib/vocalScience.ts
 
+export const NOTE_STRINGS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
 const NOTE_MAP: Record<string, number> = {
   'C': 0, 'C#': 1, 'DB': 1, 'D': 2, 'D#': 3, 'EB': 3, 
   'E': 4, 'F': 5, 'F#': 6, 'GB': 6, 'G': 7, 'G#': 8, 
   'AB': 8, 'A': 9, 'A#': 10, 'BB': 10, 'B': 11
 };
 
-// 1. Converts "C4" into integer 60 (Standard MIDI number)
+// --- AUDIO PROCESSING MATH ---
+
+export function getMidiNote(frequency: number): number {
+  return Math.round(12 * (Math.log(frequency / 440) / Math.log(2))) + 69;
+}
+
+export function getNoteString(midiNote: number): string {
+  return NOTE_STRINGS[midiNote % 12] + (Math.floor(midiNote / 12) - 1);
+}
+
+export function autoCorrelate(buf: Float32Array, sampleRate: number): number {
+  let SIZE = buf.length;
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.01) return -1; // Noise gate
+
+  let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+  for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+  for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+
+  buf = buf.subarray(r1, r2);
+  SIZE = buf.length;
+
+  const c = new Array(SIZE).fill(0);
+  for (let i = 0; i < SIZE; i++) {
+    for (let j = 0; j < SIZE - i; j++) c[i] = c[i] + buf[j] * buf[j + i];
+  }
+
+  let d = 0; while (c[d] > c[d + 1]) d++;
+  let maxval = -1, maxpos = -1;
+  for (let i = d; i < SIZE; i++) {
+    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+  }
+  let T0 = maxpos;
+  const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+  const a = (x1 + x3 - 2 * x2) / 2;
+  const b = (x3 - x1) / 2;
+  if (a) T0 = T0 - b / (2 * a);
+
+  return sampleRate / T0;
+}
+
+// --- DATA PARSING & CLASSIFICATION ---
+
 export function noteToInt(noteStr: string): number | null {
   if (!noteStr) return null;
   const match = noteStr.toUpperCase().trim().match(/^([A-G][#B]?)(-?\d+)$/);
@@ -18,26 +64,43 @@ export function noteToInt(noteStr: string): number | null {
   return NOTE_MAP[note] + (octave + 1) * 12;
 }
 
-// 2. Looks at the integers and gives you the "Quick Look" Voice Type
-export function classifyVoiceType(lowStr: string, highStr: string): string {
-  const low = noteToInt(lowStr);
-  const high = noteToInt(highStr);
-  
-  if (!low || !high) return "Unknown";
+export function calculateBestVoiceType(lowestMidi: number, highestMidi: number): string {
+    if (lowestMidi === 999 || highestMidi === 0) return "Unknown";
 
-  // Approximate standard ranges in MIDI values
-  // Middle C (C4) = 60
-  if (low >= 60 && high >= 84) return "Soprano";       // C4 - C6
-  if (low >= 55 && high >= 81) return "Mezzo-Soprano"; // G3 - A5
-  if (low >= 53 && high >= 77) return "Alto";          // F3 - F5
-  if (low >= 48 && high >= 72) return "Tenor";         // C3 - C5
-  if (low >= 43 && high >= 67) return "Baritone";      // G2 - G4
-  if (low >= 40 && high >= 64) return "Bass";          // E2 - E4
+    const CHORAL_RANGES = {
+        Soprano: { min: 60, max: 81 }, 
+        Alto:    { min: 53, max: 74 },  
+        Tenor:   { min: 48, max: 67 },  
+        Baritone:{ min: 43, max: 64 }, 
+        Bass:    { min: 36, max: 60 },  
+    };
 
-  return "Flexible"; // If it spans weirdly, they are a flexible singer
+    let bestMatch = "Flexible";
+    let maxOverlap = 0;
+
+    for (const [type, bounds] of Object.entries(CHORAL_RANGES)) {
+        const overlapMin = Math.max(lowestMidi, bounds.min);
+        const overlapMax = Math.min(highestMidi, bounds.max);
+        const overlap = Math.max(0, overlapMax - overlapMin);
+
+        if (overlap > maxOverlap) {
+            maxOverlap = overlap;
+            bestMatch = type;
+        }
+    }
+
+    if (maxOverlap === 0) bestMatch = "Unsure";
+    return bestMatch;
 }
 
-// 3. The master parser for your schema
+// Backwards compatibility for parsing existing string ranges
+export function classifyVoiceType(lowStr: string, highStr: string): string {
+  const low = noteToInt(lowStr) || 0;
+  const high = noteToInt(highStr) || 0;
+  if (!low || !high) return "Unknown";
+  return calculateBestVoiceType(low, high);
+}
+
 export function parseRangeString(rangeStr: string) {
   if (!rangeStr || typeof rangeStr !== 'string' || !rangeStr.includes('-')) {
     return { raw: rangeStr || "", lowNote: null, highNote: null, lowInt: 0, highInt: 0, voiceType: "Unknown" };

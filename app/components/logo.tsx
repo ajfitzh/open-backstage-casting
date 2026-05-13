@@ -1,36 +1,63 @@
+// app/components/logo.tsx
 import React from 'react';
 
-export const OpenBackstageLogo = ({ className = "w-10 h-10" }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 512 512" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg" 
-    className={className}
-    aria-label="Open Backstage Logo"
-  >
-    <rect width="512" height="512" rx="128" className="fill-zinc-950"/>
-    
-    <defs>
-      <linearGradient id="showGradient" x1="156" y1="200" x2="356" y2="200" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" className="stop-blue-400" stopColor="#60a5fa" />
-        <stop offset="50%" className="stop-purple-400" stopColor="#c084fc" />
-        <stop offset="100%" className="stop-emerald-400" stopColor="#34d399" />
-      </linearGradient>
-    </defs>
+interface LogoProps {
+  tenantSlug?: string;
+  className?: string;
+  collapsed?: boolean;
+}
 
-    {/* CYT Letters */}
-    <path d="M165 140H125V180C125 195 135 205 150 205H165" stroke="white" strokeWidth="35" strokeLinecap="round"/>
-    <path d="M256 205V140M220 140H292" stroke="white" strokeWidth="35" strokeLinecap="round"/>
-    <path d="M347 140H387V140" stroke="white" strokeWidth="35" strokeLinecap="round"/>
-    <path d="M367 140V205" stroke="white" strokeWidth="35" strokeLinecap="round"/>
+export default function Logo({ tenantSlug, className = "", collapsed = false }: LogoProps) {
+  // Map the URL slug to the official organization name
+  const getTenantName = (slug?: string) => {
+    if (!slug || slug === 'default') return null;
+    if (slug.includes('cytfred')) return 'CYT FREDERICKSBURG';
+    if (slug.includes('cyt')) return 'CYT';
+    return slug.toUpperCase();
+  };
 
-    {/* Stage Arch */}
-    <path d="M140 380V280C140 230 180 230 256 230C332 230 372 230 372 280V380" stroke="#27272a" strokeWidth="25" strokeLinecap="round"/>
-    <rect x="120" y="380" width="272" height="20" rx="10" fill="#27272a"/>
+  const tenantName = getTenantName(tenantSlug);
 
-    {/* Spotlight Beams */}
-    <path d="M256 250 L200 380 H312 L256 250Z" fill="url(#showGradient)" opacity="0.9"/>
-    <path d="M256 250 L160 380 H180 L256 250Z" fill="#60a5fa" opacity="0.4"/>
-    <path d="M256 250 L352 380 H332 L256 250Z" fill="#34d399" opacity="0.4"/>
-  </svg>
-);
+  if (collapsed) {
+    return (
+      <div className={`flex items-center justify-center w-10 h-10 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-500 shadow-inner ${className}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+          <path d="M2 10h20" />
+          <path d="M12 2v20" />
+          <path d="m4.93 4.93 14.14 14.14" />
+          <path d="m19.07 4.93-14.14 14.14" />
+          <circle cx="12" cy="12" r="3" className="fill-blue-500/20" />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-col justify-center ${className}`}>
+      {/* Optional Tenant Badge (e.g., CYT FREDERICKSBURG) */}
+      {tenantName && (
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[8px] font-black text-zinc-400 uppercase tracking-[0.2em]">
+            {tenantName}
+          </span>
+        </div>
+      )}
+
+      {/* Main OpenBackstage Wordmark */}
+      <div className="flex items-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-blue-500 shrink-0">
+            {/* Stylized Stage/Spotlight Icon */}
+            <path d="M12 2L2 22h20L12 2z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" className="fill-blue-500/10"/>
+            <path d="M12 10L6 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M12 10L18 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="10" r="2" fill="currentColor" />
+        </svg>
+        <h1 className="text-lg font-black tracking-tighter leading-none">
+          <span className="text-blue-500">OPEN</span>
+          <span className="text-zinc-100">BACKSTAGE</span>
+        </h1>
+      </div>
+    </div>
+  );
+}

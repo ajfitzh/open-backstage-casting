@@ -164,18 +164,46 @@ export default function EditAuditionForm({ tenant, auditionId, initialData, onSu
         </button>
       </div>
 
-      {/* COMMITTEE GUIDE OVERLAY */}
+      {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
       {showCommitteeGuide && (
          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
-           <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[80vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+           <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[85vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+            
             <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950 shrink-0">
               <h3 className="font-black text-xl uppercase italic tracking-widest text-zinc-900 dark:text-white">Committee Guide</h3>
               <button onClick={() => setShowCommitteeGuide(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-3xl leading-none">&times;</button>
             </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
-              <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">1. Publicity</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Boost attendance. Distribute posters, find 6-8 advertisers.</p></div>
-              <div className="space-y-2"><h4 className="font-black text-blue-600 uppercase">2. Sets / Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-300">Build, adapt, and transport sets. Be prepared to work weekends.</p></div>
-              <button onClick={() => setShowCommitteeGuide(false)} className="w-full mt-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white py-3 rounded-xl font-bold uppercase tracking-widest text-xs">Close Guide</button>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-8">
+              
+              {/* PRE-SHOW */}
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Pre-Show Committees</h3>
+                <div className="space-y-4">
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Sets & Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Build, paint, texture, and transport set pieces. Requires weekend availability leading up to tech week.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Props</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Gather, build, organize, and track all hand-held items used by actors on stage.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Costumes</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sew, measure, alter, and organize costumes. Basic sewing skills are helpful but not strictly required!</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Publicity</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Boost attendance by distributing posters, securing program ads, and promoting the show in the community.</p></div>
+                </div>
+              </div>
+
+              {/* SHOW WEEK */}
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Show Week Committees</h3>
+                <div className="space-y-4">
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Box Office / House</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sell tickets at the door, hand out programs, usher patrons to their seats, and handle will-call.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Greenroom / Backstage</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Supervise and manage cast members in the holding areas when they are not actively on stage.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Ninjas / Set Movers</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Dressed in all black, move heavy set pieces swiftly and safely in the dark during scene changes.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Concessions & Raffles</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Set up and sell snacks, drinks, flowers, and raffle tickets in the lobby before the show and during intermission.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Makeup & Hair</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Assist actors with stage makeup, styling hair, and attaching wigs or specialized character prosthetics before curtain.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Security</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Monitor theater doors and hallways to ensure the safety of the kids and ensure only authorized personnel enter backstage.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Tech</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Operate follow spots, run the light board, or assist the sound engineer. (Often requires specific training).</p></div>
+                </div>
+              </div>
+
+              <button onClick={() => setShowCommitteeGuide(false)} className="w-full mt-4 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors">
+                Close Guide
+              </button>
             </div>
           </div>
          </div>
