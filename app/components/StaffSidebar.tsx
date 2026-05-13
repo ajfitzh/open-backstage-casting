@@ -21,13 +21,14 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   const { role: globalRole, productionRole, isSimulating } = useSimulation();
   const { isCollapsed } = useSidebar(); 
 
-  // 🟢 Role-awareness for branding
+  // 🟢 TENANT FIX: Grab the current tenant from the URL (e.g., 'cytfred')
+  const tenant = pathname?.split('/')[1] || '';
+
   const staffRoles = ["Admin", "Director", "Staff", "Teacher", "SuperAdmin"];
   const isStaff = staffRoles.includes(globalRole);
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  // RBAC evaluation helper
   const canSee = (entity: any) => {
       if (!entity.permission && !entity.group) return true;
       if (entity.permission && hasPermission(globalRole, productionRole, entity.permission as Permission)) return true;
@@ -35,11 +36,24 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       return false;
   };
 
-  // Helper to determine active path
+  // 🟢 TENANT FIX: Safely glue the tenant prefix to every route
+  const getFinalHref = (href: string) => {
+    if (!href || href === '/') return `/${tenant}`;
+    
+    const prefix = `/${tenant}`;
+    const basePath = href.startsWith(prefix) ? href : `${prefix}${href}`;
+
+    return activeProductionId 
+      ? basePath.replace('/active/', `/${activeProductionId}/`) 
+      : basePath;
+  };
+
   const isPathActive = (href: string) => {
       if (!pathname) return false;
-      if (href === '/') return pathname === '/';
-      return pathname.includes(href);
+      if (href === '/') return pathname === `/${tenant}` || pathname === `/${tenant}/`;
+
+      const targetPath = activeProductionId ? href.replace('/active/', `/${activeProductionId}/`) : href;
+      return pathname.includes(targetPath);
   };
 
   useEffect(() => {
@@ -53,24 +67,17 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
             }
         });
     });
-  }, [isPathActive, pathname]);
+  }, [pathname, activeProductionId]);
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  const getFinalHref = (href: string) => {
-    if (!href) return "/";
-    return activeProductionId 
-      ? href.replace('/active/', `/${activeProductionId}/`) 
-      : href;
-  };
-
   return (
     <nav className={`w-full flex flex-col h-full bg-zinc-900 transition-all duration-300 ${isSimulating ? 'border-r-4 border-red-500/30' : ''}`}>
       
-      {/* HEADER LOGO */}
-      <Link href="/" className={`h-16 flex items-center border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
+      {/* 🟢 TENANT FIX: Logo links safely back to the tenant dashboard */}
+      <Link href={`/${tenant}`} className={`h-16 flex items-center border-b border-white/5 mb-4 shrink-0 hover:bg-white/5 transition-colors group ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
         {isCollapsed ? (
             <div className="flex items-center justify-center w-10 h-10 bg-blue-500/10 rounded-lg text-blue-500">
                 <Layers size={24} />
@@ -166,7 +173,8 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       </div>
 
       <div className="p-3 border-t border-white/5">
-        <NavItem href="/settings" icon={<Settings size={18}/>} label="System Settings" active={isPathActive('/settings')} isCollapsed={isCollapsed} />
+        {/* 🟢 TENANT FIX: Wrap the settings link in getFinalHref */}
+        <NavItem href={getFinalHref('/settings')} icon={<Settings size={18}/>} label="System Settings" active={isPathActive('/settings')} isCollapsed={isCollapsed} />
       </div>
     </nav>
   );
