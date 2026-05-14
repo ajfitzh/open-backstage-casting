@@ -1,25 +1,31 @@
 "use client";
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { 
-  Calendar, UserPlus, ArrowRight, PlayCircle, Star, MapPin, 
-  X, Clock, AlertTriangle, CheckCircle2 
+  Calendar, UserPlus, ArrowRight, Star, MapPin, 
+  X, Clock, AlertTriangle, CheckCircle2, FlaskConical, ShoppingBag
 } from 'lucide-react';
 
-export default function Home() {
+export default function SandboxHome() {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100 selection:bg-blue-200 dark:selection:bg-blue-900 transition-colors duration-300">
       
-      {/* NAVIGATION (unchanged) */}
+      {/* NAVIGATION */}
       <nav className="bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div className="font-black text-2xl tracking-tight uppercase">
-          CYT <span className="text-blue-600 dark:text-blue-500">Fredericksburg</span>
+          OPEN <span className="text-blue-600 dark:text-blue-500">BACKSTAGE</span>
         </div>
-        <button className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-5 py-2 rounded-lg font-bold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-300 transition-all">
-          Family Login
-        </button>
+        <div className="flex items-center gap-4">
+          <Link href="/sandbox/checkout" className="text-zinc-500 hover:text-zinc-100 transition-colors">
+            <ShoppingBag size={20} />
+          </Link>
+          <button className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-5 py-2 rounded-lg font-bold text-sm hover:bg-zinc-800 dark:hover:bg-zinc-300 transition-all">
+            Family Login
+          </button>
+        </div>
       </nav>
 
       {/* HERO SECTION */}
@@ -52,8 +58,9 @@ export default function Home() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                {/* 🔵 UPDATED: Routes to the Checkout Sandbox */}
                 <Link 
-                  href="/sandbox/audition-form" 
+                  href="/sandbox/checkout" 
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 group"
                 >
                   <UserPlus size={20} />
@@ -61,7 +68,6 @@ export default function Home() {
                   <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                 </Link>
                 
-                {/* 🟢 SCHEDULE BUTTON TRIGGER */}
                 <button 
                   onClick={() => setIsScheduleOpen(true)}
                   className="flex-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white px-8 py-4 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95"
@@ -96,14 +102,26 @@ export default function Home() {
         </div>
       </main>
 
-      {/* 🟢 SCHEDULE MODAL */}
+      {/* DEBUG SANDBOX FOOTER */}
+      <footer className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/90 border border-zinc-800 px-6 py-3 rounded-full backdrop-blur-xl flex items-center gap-6 shadow-2xl">
+        <div className="flex items-center gap-2 text-zinc-500 border-r border-zinc-800 pr-6">
+          <FlaskConical size={18} className="text-blue-500" />
+          <span className="text-xs font-bold uppercase tracking-tighter">Sandbox Tools</span>
+        </div>
+        <div className="flex gap-4">
+          <Link href="/sandbox/checkout" className="text-xs font-bold text-zinc-400 hover:text-white transition-colors">Stripe Sandbox</Link>
+          <Link href="/sandbox/audition-form" className="text-xs font-bold text-zinc-400 hover:text-white transition-colors">Audition Form</Link>
+          <Link href="/sandbox/master-roster" className="text-xs font-bold text-zinc-400 hover:text-white transition-colors">Master Roster</Link>
+        </div>
+      </footer>
+
+      {/* SCHEDULE MODAL */}
       {isScheduleOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-zinc-900/60 backdrop-blur-sm" onClick={() => setIsScheduleOpen(false)} />
           
           <div className="relative bg-white dark:bg-zinc-900 w-full max-w-3xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-zinc-200 dark:border-zinc-800">
             
-            {/* Modal Header */}
             <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/50">
               <div>
                 <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight uppercase">Production Schedule</h2>
@@ -114,10 +132,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Modal Content (Scrollable) */}
             <div className="overflow-y-auto p-6 space-y-8">
-              
-              {/* Attendance Warning */}
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl flex gap-4">
                 <AlertTriangle className="text-amber-600 shrink-0" />
                 <p className="text-sm text-amber-800 dark:text-amber-400 font-medium">
@@ -125,7 +140,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Phase 1: Pre-Production */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 font-black uppercase text-xs tracking-widest text-zinc-400">
                   <Star size={14} /> Pre-Production (Highly Encouraged)
@@ -144,7 +158,6 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Phase 2: Intensives */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 font-black uppercase text-xs tracking-widest text-zinc-400">
                   <Clock size={14} /> Intensive Rehearsal Weeks (Mandatory)
@@ -169,42 +182,10 @@ export default function Home() {
                       <p className="text-sm font-black italic">9am - 6pm</p>
                     </div>
                   </div>
-                  <div className="flex justify-between p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30">
-                    <div>
-                      <p className="font-bold">Week 2: July 13 - July 16</p>
-                      <p className="text-sm text-blue-700 dark:text-blue-400">Split Shift: Daytime & Evening Tech</p>
-                    </div>
-                    <div className="text-right font-bold">
-                      <p className="text-sm">10am-1pm</p>
-                      <p className="text-sm">5pm-9pm</p>
-                    </div>
-                  </div>
                 </div>
               </section>
-
-              {/* Phase 3: Shows */}
-              <section className="space-y-3">
-                <h3 className="flex items-center gap-2 font-black uppercase text-xs tracking-widest text-zinc-400">
-                  <CheckCircle2 size={14} /> Performances
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-black uppercase tracking-tighter text-blue-600">Weekend 1</p>
-                    <p className="text-sm"><strong>July 17:</strong> 7:00pm Show (5pm Call)</p>
-                    <p className="text-sm"><strong>July 18:</strong> 2:00pm & 7:00pm (12pm Call)</p>
-                  </div>
-                  <div className="space-y-2 border-t sm:border-t-0 sm:border-l border-zinc-100 dark:border-zinc-800 sm:pl-6 pt-4 sm:pt-0">
-                    <p className="text-xs font-black uppercase tracking-tighter text-blue-600">Weekend 2</p>
-                    <p className="text-sm"><strong>July 23:</strong> 4pm-9pm (Tech Night)</p>
-                    <p className="text-sm"><strong>July 24:</strong> 7:00pm Show (5pm Call)</p>
-                    <p className="text-sm"><strong>July 25:</strong> 2:00pm & 7:00pm (12pm Call)</p>
-                  </div>
-                </div>
-              </section>
-
             </div>
             
-            {/* Modal Footer */}
             <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
               <button 
                 onClick={() => setIsScheduleOpen(false)}
