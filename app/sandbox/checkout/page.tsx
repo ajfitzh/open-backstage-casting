@@ -23,7 +23,7 @@ function CheckoutContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/checkout-sandbox", {
+      const res = await fetch("/api/checkout", {
         method: "POST",
       });
       const data = await res.json();
