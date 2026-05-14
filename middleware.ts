@@ -6,11 +6,20 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
   const pathname = nextUrl.pathname
 
+  // 🟢 1. CRITICAL: API & STATIC BYPASS
+  // This ensures your Stripe sandbox and other APIs never get rewritten or 
+  // caught in tenant logic.
+  if (
+    pathname.startsWith("/api") || 
+    pathname.startsWith("/_next") || 
+    pathname.includes(".") // Catch files like favicon.ico, etc.
+  ) {
+    return NextResponse.next();
+  }
+
   // ==========================================
-  // 1. TOP-LEVEL ROUTES (Bypass Rewrites)
+  // 2. TOP-LEVEL ROUTES (Sandbox)
   // ==========================================
-  // Because /sandbox is in the root `app/sandbox` folder, it cannot be rewritten
-  // to /home or /[tenant]. We must handle it first and pass it through.
   if (pathname.startsWith("/sandbox")) {
     if (pathname !== "/sandbox/login") {
       const sandboxAuth = req.cookies.get("sandbox_access")?.value;
@@ -18,65 +27,58 @@ export default auth((req) => {
         return NextResponse.redirect(new URL("/sandbox/login", req.url));
       }
     }
-    // Let Next.js render app/sandbox/... directly without path alterations
     return NextResponse.next();
   }
 
   // ==========================================
-  // 2. DOMAIN & TENANT EXTRACTION
+  // 3. DOMAIN & TENANT EXTRACTION
   // ==========================================
   const hostname = req.headers.get('host') || '';
+  
+  // On Vercel, use your actual production domain
   const mainDomain = process.env.NODE_ENV === 'production' 
     ? 'open-backstage.org' 
     : 'localhost:3000';
 
-  // Extract just the host without the port for clean comparison
   const currentHost = hostname.split(':')[0];
   const baseHost = mainDomain.split(':')[0];
 
-  const isMainDomain = currentHost === baseHost;
+  const isMainDomain = currentHost === baseHost || currentHost === `www.${baseHost}`;
+  
   const tenant = currentHost.endsWith(`.${baseHost}`) && currentHost !== `www.${baseHost}`
     ? currentHost.replace(`.${baseHost}`, '')
     : null;
 
   // ==========================================
-  // 3. PUBLIC MARKETING SITE LOGIC
+  // 4. PUBLIC MARKETING SITE LOGIC
   // ==========================================
-  if (isMainDomain || currentHost === `www.${baseHost}`) {
-    // Bypass auth entirely for the public marketing site.
-    // Rewrite to the /home folder to avoid dynamic route conflicts
+  if (isMainDomain) {
     return NextResponse.rewrite(new URL(`/home${pathname}${nextUrl.search}`, req.url));
   }
 
   // ==========================================
-  // 4. TENANT DASHBOARD LOGIC (Subdomains)
+  // 5. TENANT DASHBOARD LOGIC (cytfred.open-backstage.org)
   // ==========================================
   if (tenant) {
     const isOnLoginPage = pathname.startsWith("/login");
-    
-    // 🟢 Identify public tenant routes that do not require auth!
     const isPublicTenantRoute = pathname.startsWith("/audition-form");
 
-    // Protect all standard tenant routes EXCEPT login and public routes
     if (!isLoggedIn && !isOnLoginPage && !isPublicTenantRoute) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
-    // If they are already logged in, keep them away from the login page
     if (isLoggedIn && isOnLoginPage) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // --- THE FINAL REWRITE ---
-    // Secretly render the [tenant] folder!
+    // Rewrite to the [tenant] dynamic folder
     return NextResponse.rewrite(new URL(`/${tenant}${pathname}${nextUrl.search}`, req.url));
   }
 
-  // Fallback for anything else
   return NextResponse.next();
 })
 
 export const config = {
-  // 🟢 Removed audition-form from here so the middleware CAN process the subdomain rewrite!
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // Keeping the matcher clean
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
