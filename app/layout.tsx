@@ -9,6 +9,9 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Open Backstage',
   description: 'CYT Production Hub',
+  icons: {
+    icon: '/logo.svg', // 🟢 This forces Vercel to inject the icon from the public folder!
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
