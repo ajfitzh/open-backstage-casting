@@ -1260,6 +1260,7 @@ export async function getExistingAuditions(tenant: string, email: string, produc
       time: a[DB.AUDITIONS.FIELDS.AUDITION_SLOTS]?.[0]?.value || "Pending Time",
       song: a[DB.AUDITIONS.FIELDS.SONG] || "No Song Selected",
       adminNotes: a[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "",
+      isCheckedIn: a[DB.AUDITIONS.FIELDS.CHECKED_IN] || false, // <-- ADDED THIS LINE
     }));
   } catch (error) {
     console.error("Failed to fetch existing auditions:", error);

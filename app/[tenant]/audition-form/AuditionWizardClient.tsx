@@ -17,8 +17,7 @@ import { Step6Committees } from "@/app/components/audition-wizard/Step6Committee
 import { Step7Commitment } from "@/app/components/audition-wizard/Step7Commitment";
 import EditAuditionForm from "@/app/components/casting/EditAuditionForm";
 
-interface ExistingAudition { id: number; name: string; time: string; song: string; rawAuditionData?: any; }
-
+interface ExistingAudition { id: number; name: string; time: string; song: string; rawAuditionData?: any; isCheckedIn?: boolean; }
 interface Props {
   tenant: string;
   productionId: number;
@@ -362,25 +361,29 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                         <h4 className="font-black text-lg dark:text-white tracking-tighter">{audition.name}</h4>
                         <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1"><Clock size={12} className="text-blue-500" /> {audition.time}</p>
                       </div>
-                      
-                      <div className="flex gap-2 shrink-0">
-                        <button 
-                          onClick={() => setEditingAudition(audition)} 
-                          className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
-                        >
-                          <Edit size={14} /> Edit
-                        </button>
-                        <button 
-                          onClick={() => handleCancelAudition(audition.id, audition.name)} 
-                          disabled={isCanceling === audition.id} 
-                          className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                  </div>
-                ))
-              ) : (
+<div className="flex gap-2 shrink-0">
+  {audition.isCheckedIn ? (
+    <div className="px-4 py-3 bg-zinc-100 dark:bg-zinc-800/50 text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+      <Lock size={14} /> Locked
+    </div>
+  ) : (
+    <>
+      <button 
+        onClick={() => setEditingAudition(audition)} 
+        className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+      >
+        <Edit size={14} /> Edit
+      </button>
+      <button 
+        onClick={() => handleCancelAudition(audition.id, audition.name)} 
+        disabled={isCanceling === audition.id} 
+        className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all"
+      >
+        <Trash2 size={16} />
+      </button>
+    </>
+  )}
+</div> : (
                 <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-950 rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800">
                   <p className="text-zinc-500 font-bold text-sm">No students registered for this show yet.</p>
                 </div>

@@ -1,4 +1,3 @@
- 
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -206,6 +205,20 @@ export default function ActorProfileModal({ actor, grades, onClose }: ActorProfi
                     <p className="text-sm font-bold text-white">{actor.tenure}</p>
                   </div>
                 </div>
+
+                <section>
+                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <FileText size={14} /> Registration Data
+                  </h4>
+                  <div className="bg-zinc-900 p-4 rounded-xl border border-white/5 space-y-4">
+                     <div>
+                       <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Form Conflicts & Extras</p>
+                       <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">
+                         {actor.adminNotes || "No extra data provided."}
+                       </pre>
+                     </div>
+                  </div>
+                </section>
 
                 <section>
                   <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
