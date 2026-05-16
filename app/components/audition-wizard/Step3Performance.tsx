@@ -1,4 +1,3 @@
-// app/components/audition-wizard/Step3Performance.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -109,12 +108,11 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 ) : (
                   <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
                 )}
-                {/* 🟢 iOS FIX: Changed accept to */* */}
+                {/* 🟢 iOS FIX */}
                 <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); } }} accept="*/*" />
               </button>
               {errors.musicFile && <p className="text-red-500 text-[10px] uppercase font-bold mt-4 text-center flex justify-center items-center gap-1"><AlertCircle size={12}/>{errors.musicFile}</p>}
 
-              {/* 🟢 LINK FALLBACK ADDED HERE */}
               <div className="mt-6 flex items-center gap-4 w-full">
                 <div className="h-px bg-zinc-200 dark:bg-zinc-800 flex-1" />
                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">OR</span>
@@ -139,7 +137,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 </p>
               </div>
             </div>
-            {/* 🟢 ENSURE THIS DIV IS CLOSED */}
         </div>
       )}
 
@@ -159,7 +156,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                   {formData.vocalRange}
               </p>
               
-              {/* Congratulations Display */}
               {formData.voiceType && (
                  <div className="mt-4 mb-2 inline-block bg-blue-100 dark:bg-blue-900/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
                     <p className="text-sm font-bold text-blue-800 dark:text-blue-200">
@@ -195,9 +191,8 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
               </div>
               
               <VocalRangeTester 
-                  onStartTest={handleStartTest} // Triggers music stoppage
+                  onStartTest={handleStartTest}
                   onRangeFound={(voiceType, low, high) => {
-                      // Captures voiceType to the form data
                       updateForm({ 
                         vocalRange: `${low}-${high}`,
                         voiceType: voiceType
