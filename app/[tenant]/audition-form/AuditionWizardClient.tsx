@@ -263,7 +263,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </p>
           </div>
 
-          {/* 🟢 FIXED PASSWORD WIDGET (Nested structure removed) */}
+{/* 🟢 FIXED PASSWORD WIDGET */}
           {passwordSetSuccess ? (
             <div className="mt-8 mb-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-left">
                <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
@@ -281,7 +281,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                     Secure Your Family Hub
                   </h4>
                   <p className="text-zinc-600 dark:text-zinc-400 text-xs font-medium mb-4">
-                    To view the cast list next Friday and accept roles, you need to secure this email address with a password.
+                    To securely view the cast list when it drops and accept roles, you need to secure this email address with a password.
                   </p>
                   <form action={handleSetPassword} className="flex flex-col sm:flex-row gap-2">
                     <input 
