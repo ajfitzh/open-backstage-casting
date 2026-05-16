@@ -1,4 +1,3 @@
-// app/[tenant]/audition-form/AuditionWizardClient.tsx
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
@@ -263,7 +262,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             </p>
           </div>
 
-{/* 🟢 FIXED PASSWORD WIDGET */}
           {passwordSetSuccess ? (
             <div className="mt-8 mb-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-left">
                <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
@@ -317,6 +315,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     );
   }
 
+  // === MAIN VIEW ===
   return (
     <div className="py-4 px-2 sm:px-4 flex flex-col items-center justify-center font-sans overflow-x-hidden">
       <div className="max-w-3xl w-full space-y-4">
@@ -469,7 +468,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         </div>
       )}
 
-{/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
+      {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
       {showCommitteeGuide && (
          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
            <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[85vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
