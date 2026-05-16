@@ -42,7 +42,10 @@ const GLOBAL_ROLES: Record<string, Permission[]> = {
   'Staff': [
       'view_cast_list', 'manage_casting', 'edit_compliance', 'view_auditions'
   ], 
-
+// 🟢 ADD THIS: Give Contractors a baseline view so the dashboard doesn't look broken
+'Contractor': [
+    'view_cast_list' 
+],
   // 🛡️ THE NEW HYPER-FOCUSED ROLE 🛡️
   'Committee Team': [
       'manage_committees'
