@@ -59,7 +59,7 @@ export function Step6Committees({ formData, updateForm, errors, setShowCommittee
                   <option value="" disabled>Select a committee...</option>
                   {/* 🟢 NEW: Added Anywhere Needed as a valid manual option too */}
                   <option value="Anywhere Needed" className="font-black text-emerald-600">🌟 Anywhere Needed</option>
-                  {PRE_SHOW_COMMITTEES.map(c => <option key={c} value={c}>{c}</option>)}
+              {PRE_SHOW_COMMITTEES.map(c => <option key={c} value={c} disabled={[formData.preShow1, formData.preShow2, formData.preShow3].includes(c) && formData[fieldName] !== c}>{c}</option>)}
                 </select>
               </div>
             );
@@ -79,7 +79,7 @@ export function Step6Committees({ formData, updateForm, errors, setShowCommittee
                 <select required value={formData[fieldName] as string} onChange={(e) => updateForm({ [fieldName]: e.target.value })} className={`w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border font-bold outline-none text-sm cursor-pointer shadow-sm focus:border-blue-500 ${num === 1 && errors.show1 ? "border-red-500 ring-2 ring-red-100" : "border-zinc-200 dark:border-zinc-800"}`}>
                   <option value="" disabled>Select a committee...</option>
                   <option value="Anywhere Needed" className="font-black text-emerald-600">🌟 Anywhere Needed</option>
-                  {SHOW_COMMITTEES.map(c => <option key={c} value={c}>{c}</option>)}
+                {SHOW_COMMITTEES.map(c => <option key={c} value={c} disabled={[formData.show1, formData.show2, formData.show3].includes(c) && formData[fieldName] !== c}>{c}</option>)}
                 </select>
               </div>
             );
