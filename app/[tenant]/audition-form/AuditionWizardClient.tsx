@@ -469,7 +469,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         </div>
       )}
 
-      {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
+{/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
       {showCommitteeGuide && (
          <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
            <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[85vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
@@ -485,10 +485,15 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               <div>
                 <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Pre-Show Committees</h3>
                 <div className="space-y-4">
-                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Sets & Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Build, paint, texture, and transport set pieces. Requires weekend availability leading up to tech week.</p></div>
-                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Props</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Gather, build, organize, and track all hand-held items used by actors on stage.</p></div>
-                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Costumes</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sew, measure, alter, and organize costumes. Basic sewing skills are helpful but not strictly required!</p></div>
                   <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Publicity</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Boost attendance by distributing posters, securing program ads, and promoting the show in the community.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Sets</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Build, assemble, and transport the large structural set pieces. Requires weekend availability leading up to tech week.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Set Dressing</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Paint, texture, and decorate the set pieces to make them look realistic and stage-ready.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Raffles (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Solicit community donations and assemble the raffle baskets prior to move-in weekend.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Greenroom / Backstage (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Organize the cast holding bins, prep activities for downtime, and help set up the physical greenroom space.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Costume / Quick Change (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sew, measure, alter, and organize costumes. Basic sewing skills are helpful but not strictly required!</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Props (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Gather, build, organize, and track all hand-held items used by actors on stage prior to tech week.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Makeup (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Organize makeup kits, ensure hygiene standards, and practice specific character designs.</p></div>
+                  <div><h4 className="font-bold text-blue-600 dark:text-blue-400">Hair (Pre-Show)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Organize, clean, and style wigs, and plan out complex hair styles before tech week.</p></div>
                 </div>
               </div>
 
@@ -496,13 +501,17 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               <div>
                 <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-4">Show Week Committees</h3>
                 <div className="space-y-4">
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Box Office / House</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sell tickets at the door, hand out programs, usher patrons to their seats, and handle will-call.</p></div>
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Greenroom / Backstage</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Supervise and manage cast members in the holding areas when they are not actively on stage.</p></div>
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Ninjas / Set Movers</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Dressed in all black, move heavy set pieces swiftly and safely in the dark during scene changes.</p></div>
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Concessions & Raffles</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Set up and sell snacks, drinks, flowers, and raffle tickets in the lobby before the show and during intermission.</p></div>
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Makeup & Hair</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Assist actors with stage makeup, styling hair, and attaching wigs or specialized character prosthetics before curtain.</p></div>
-                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Security</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Monitor theater doors and hallways to ensure the safety of the kids and ensure only authorized personnel enter backstage.</p></div>
                   <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Tech</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Operate follow spots, run the light board, or assist the sound engineer. (Often requires specific training).</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Ninjas / Set Movers</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Dressed in all black, move heavy set pieces swiftly and safely in the dark during scene changes.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Box Office / House</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sell tickets at the door, hand out programs, usher patrons to their seats, and handle will-call.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Concessions</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Set up and sell snacks, drinks, and flowers in the lobby before the show and during intermission.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Security</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Monitor theater doors and hallways to ensure the safety of the kids and ensure only authorized personnel enter backstage.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Raffles (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Sell raffle tickets in the lobby during the show and manage the drawing of winners.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Greenroom / Backstage (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Supervise and manage cast members in the holding areas when they are not actively on stage.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Costume / Quick Change (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Assist actors backstage with incredibly fast costume changes during the actual performances.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Props (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Manage the prop tables backstage, ensure actors have their items before entering, and collect them when they exit.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Makeup (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Apply stage makeup and specialized character prosthetics to the actors before the curtain goes up.</p></div>
+                  <div><h4 className="font-bold text-emerald-600 dark:text-emerald-400">Hair (Show Week)</h4><p className="text-sm text-zinc-600 dark:text-zinc-400">Style hair and attach wigs securely for the actors before performances.</p></div>
                 </div>
               </div>
 
