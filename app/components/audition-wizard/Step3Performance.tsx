@@ -107,9 +107,19 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 {formData.musicFileName ? (
                   <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
                 ) : (
-                  <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
-                )}
-              <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); } }} accept="audio/*,.mp3,.wav,.m4a,.aac,application/octet-stream" />
+                  <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</>
+<input 
+  type="file" 
+  ref={fileInputRef} 
+  className="hidden" 
+  onChange={(e) => { 
+    if (e.target.files?.[0]) { 
+      setAudioFile(e.target.files[0]); 
+      updateForm({ musicFileName: e.target.files[0].name }); 
+    } 
+  }} 
+  accept="*/*" // <-- THIS is the magic unlock key for iOS
+/>
 
               </button>
               {errors.musicFile && <p className="text-red-500 text-[10px] uppercase font-bold mt-4 text-center flex justify-center items-center gap-1"><AlertCircle size={12}/>{errors.musicFile}</p>}
