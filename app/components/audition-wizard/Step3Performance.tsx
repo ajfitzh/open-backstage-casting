@@ -36,7 +36,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
     }
   };
 
-  // 🟢 Stops preview music when range test starts
+  // Stops preview music when range test starts
   const handleStartTest = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -107,27 +107,43 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 {formData.musicFileName ? (
                   <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
                 ) : (
-                  <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</>
-<input 
-  type="file" 
-  ref={fileInputRef} 
-  className="hidden" 
-  onChange={(e) => { 
-    if (e.target.files?.[0]) { 
-      setAudioFile(e.target.files[0]); 
-      updateForm({ musicFileName: e.target.files[0].name }); 
-    } 
-  }} 
-  accept="*/*" // <-- THIS is the magic unlock key for iOS
-/>
-
+                  <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
+                )}
+                {/* 🟢 iOS FIX: Changed accept to */* */}
+                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); } }} accept="*/*" />
               </button>
               {errors.musicFile && <p className="text-red-500 text-[10px] uppercase font-bold mt-4 text-center flex justify-center items-center gap-1"><AlertCircle size={12}/>{errors.musicFile}</p>}
+
+              {/* 🟢 LINK FALLBACK ADDED HERE */}
+              <div className="mt-6 flex items-center gap-4 w-full">
+                <div className="h-px bg-zinc-200 dark:bg-zinc-800 flex-1" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">OR</span>
+                <div className="h-px bg-zinc-200 dark:bg-zinc-800 flex-1" />
+              </div>
+
+              <div className="mt-6">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
+                  Paste a Link Instead
+                </label>
+                <input 
+                  type="url" 
+                  placeholder="Paste a Google Drive or YouTube link..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium focus:border-blue-500 outline-none"
+                  onChange={(e) => {
+                    updateForm({ musicFileName: e.target.value });
+                    setAudioFile(null); 
+                  }}
+                />
+                <p className="text-[10px] text-zinc-400 font-bold mt-2">
+                  *Please ensure Google Drive links are set to "Anyone with the link can view".
+                </p>
+              </div>
             </div>
+            {/* 🟢 ENSURE THIS DIV IS CLOSED */}
         </div>
       )}
 
-      {/* 🟢 LIVE VOCAL RANGE FINDER SECTION */}
+      {/* LIVE VOCAL RANGE FINDER SECTION */}
       <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800 animate-in slide-in-from-bottom-4">
         <h3 className="text-xl sm:text-2xl font-black uppercase italic tracking-tighter mb-6 flex items-center gap-3">
            <Mic2 className="text-blue-500" /> Vocal Range
@@ -143,11 +159,11 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                   {formData.vocalRange}
               </p>
               
-              {/* 🟢 Congratulations Display */}
+              {/* Congratulations Display */}
               {formData.voiceType && (
                  <div className="mt-4 mb-2 inline-block bg-blue-100 dark:bg-blue-900/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
                     <p className="text-sm font-bold text-blue-800 dark:text-blue-200">
-                        🎉 Congrats! You&apos;re roughly a <span className="uppercase text-blue-600 dark:text-blue-400">{formData.voiceType}</span>. Confirm with your music teacher!
+                        Congrats! You&apos;re roughly a <span className="uppercase text-blue-600 dark:text-blue-400">{formData.voiceType}</span>. Confirm with your music teacher!
                     </p>
                  </div>
               )}
@@ -179,9 +195,9 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
               </div>
               
               <VocalRangeTester 
-                  onStartTest={handleStartTest} // 🟢 Triggers music stoppage
+                  onStartTest={handleStartTest} // Triggers music stoppage
                   onRangeFound={(voiceType, low, high) => {
-                      // 🟢 Captures voiceType to the form data
+                      // Captures voiceType to the form data
                       updateForm({ 
                         vocalRange: `${low}-${high}`,
                         voiceType: voiceType
