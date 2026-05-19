@@ -220,12 +220,19 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
                   <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20 text-indigo-400 flex flex-col justify-center">
                     <p className="font-black text-[10px] uppercase tracking-widest mb-2">✨ Welcome Back</p>
                     <div className="space-y-1 border-t border-indigo-500/20 pt-2 mt-1">
-                      {activeStudent.showHistory?.length > 0 ? activeStudent.showHistory.slice(0,2).map((show: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center text-xs">
-                          <span className="truncate pr-2 opacity-80">{show.title}</span>
-                          <span className="font-bold whitespace-nowrap">{show.role}</span>
-                        </div>
-                      )) : <span className="text-xs opacity-80">Returning Student</span>}
+                      {/* 🟢 THE FIX: Safely handling strings vs arrays for showHistory */}
+                      {Array.isArray(activeStudent.showHistory) && activeStudent.showHistory.length > 0 ? (
+                        activeStudent.showHistory.slice(0,2).map((show: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-xs">
+                            <span className="truncate pr-2 opacity-80">{typeof show === 'string' ? show : show.title}</span>
+                            {typeof show !== 'string' && <span className="font-bold whitespace-nowrap">{show.role}</span>}
+                          </div>
+                        ))
+                      ) : typeof activeStudent.showHistory === 'string' && activeStudent.showHistory.trim() !== '' ? (
+                         <div className="text-xs opacity-80 truncate">{activeStudent.showHistory}</div>
+                      ) : (
+                         <span className="text-xs opacity-80">Returning Student</span>
+                      )}
                     </div>
                   </div>
                 )}
