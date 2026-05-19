@@ -1006,7 +1006,7 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           lobbyNote: safeGet(row[F.LOBBY_NOTE], ""),
           checkedIn: row[F.CHECKED_IN] === true,
 
-          // 🟢 FIX: MAP THE MISSING FIELDS FOR THE AUDITION DECK
+          // Core Audition Data
           backingTrack: trackUrl,
           song: safeGet(row[F.SONG], ""),
           monologue: safeGet(row[F.MONOLOGUE], ""),
@@ -1019,6 +1019,14 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           choreoNotes: safeGet(row[F.CHOREOGRAPHY_NOTES], ""),
           dropInNotes: safeGet(row[F.DROP_IN_NOTES], ""),
           adminNotes: safeGet(row[F.ADMIN_NOTES], ""),
+          
+          // 🟢 NEW: Form Data & Logistics
+          auditionNumber: safeGet(row[F.AUDITION_NUMBER], ""),
+          preferredRoles: safeGet(row[F.PREFERRED_ROLES], ""),
+          stageRomance: row[F.STAGE_ROMANCE] === true,
+          willingToAlterAppearance: row[F.WILLING_TO_ALTER_APPEARANCE] === true,
+          otherTalents: safeGet(row[F.OTHER_TALENTS], ""),
+          hairColor: safeGet(row[F.HAIR_COLOR], ""),
           height: safeGet(row[F.HEIGHT], ""),
           age: safeGet(row[F.AGE], ""),
           vocalRange: safeGet(row[F.VOCAL_RANGE], ""),
