@@ -1,6 +1,5 @@
 import { BaserowClient } from '@/app/lib/BaserowClient';
-import { getAuditionees, fetchBaserow, getDB } from '@/app/lib/baserow';
-import { getTenantTableConfig } from '@/app/lib/tenant-config';
+import { getAuditionees, fetchBaserow, getDB, getTenantTableConfig } from '@/app/lib/baserow';
 import ComplianceDashboard from '@/app/components/ComplianceDashboard'; 
 import { cancelAudition } from '@/app/actions/auditions';
 import { revalidatePath } from 'next/cache';
@@ -51,12 +50,10 @@ export default async function RosterPage({
   const castNames = new Set(combinedRoster.map((s: any) => s.name));
 
   (auditioners || []).forEach((auditioner: any) => {
-      // If they haven't been promoted to the official cast yet, add them as an Auditionee
       if (!castNames.has(auditioner.name)) {
           combinedRoster.push({
               ...auditioner,
               role: auditioner.role || "Auditionee",
-              // Ensure we don't accidentally overwrite roster-specific flags
               isCast: false 
           });
       }
@@ -75,7 +72,6 @@ export default async function RosterPage({
     const tables = await getTenantTableConfig(tenant);
     const DB = getDB(tenant);
 
-    // 1. Try to find a matching slot by the label the user typed
     const slotsParams = {
         filter_type: "AND",
         [`filter__${DB.AUDITION_SLOTS.FIELDS.TIME_LABEL}__equal`]: newSlotLabel,
@@ -85,16 +81,12 @@ export default async function RosterPage({
     const slotList = Array.isArray(slotsRes) ? slotsRes : (slotsRes?.results || []);
 
     if (slotList.length > 0) {
-        // Found the slot, link it to the audition record!
         const slotId = slotList[0].id;
         await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
             method: "PATCH",
-            body: JSON.stringify({
-                [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: [slotId]
-            })
+            body: JSON.stringify({ [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: [slotId] })
         }, {}, tenant);
     } else {
-        // Fallback: If they typed a custom string that doesn't match a real slot, append a warning to admin notes
         const existingAud = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {}, {}, tenant);
         const notes = existingAud[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "";
         await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
@@ -104,8 +96,59 @@ export default async function RosterPage({
             })
         }, {}, tenant);
     }
-    
-    // Refresh the page data
+    revalidatePath(`/${tenant}/production/${showId}/roster`);
+  }
+
+  // 🟢 SERVER ACTION: Batch Assign Missing Numbers
+  async function handleAssignMissingNumbers() {
+    "use server";
+    const tables = await getTenantTableConfig(tenant);
+    const DB = getDB(tenant);
+
+    // Fetch all auditions for this show directly from Baserow
+    const existingRows = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, {
+        filter_type: "AND",
+        [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: showId
+    }, tenant);
+    const rowList = Array.isArray(existingRows) ? existingRows : (existingRows?.results || []);
+
+    let existingNumbers = new Set<number>();
+    const missingRows: any[] = [];
+
+    // Parse out who has a number and who doesn't
+    rowList.forEach((row: any) => {
+        const numStr = row[DB.AUDITIONS.FIELDS.AUDITION_NUMBER];
+        if (numStr && numStr.trim() !== "" && numStr !== "N/A") {
+            const num = parseInt(numStr);
+            if (!isNaN(num)) existingNumbers.add(num);
+        } else {
+            missingRows.push(row);
+        }
+    });
+
+    if (missingRows.length === 0) return;
+
+    // Generate pool of available numbers (1-200)
+    let availableNumbers: number[] = [];
+    for (let i = 1; i <= 200; i++) {
+        if (!existingNumbers.has(i)) availableNumbers.push(i);
+    }
+
+    // Shuffle the available numbers to feel random like the frontend
+    availableNumbers.sort(() => Math.random() - 0.5);
+
+    // Prepare the payload for Baserow's Batch Update endpoint
+    const itemsToUpdate = missingRows.map((row, idx) => ({
+        id: row.id,
+        [DB.AUDITIONS.FIELDS.AUDITION_NUMBER]: availableNumbers[idx].toString()
+    }));
+
+    // Send the batch update
+    await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/batch/`, {
+        method: "PATCH",
+        body: JSON.stringify({ items: itemsToUpdate })
+    }, {}, tenant);
+
     revalidatePath(`/${tenant}/production/${showId}/roster`);
   }
 
@@ -116,6 +159,7 @@ export default async function RosterPage({
         students={combinedRoster}
         onDeleteAudition={handleDeleteAudition}
         onChangeTimeSlot={handleChangeTimeSlot}
+        onAssignMissingNumbers={handleAssignMissingNumbers}
       />
     </main>
   );

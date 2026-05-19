@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { 
   CheckCircle2, User, DollarSign, FileText, Camera, 
   Ruler, AlertCircle, Search, ChevronDown, ChevronUp, 
-  Trash2, CalendarClock, Hash
+  Trash2, CalendarClock, Hash, Sparkles
 } from 'lucide-react';
 import ActorProfileModal from './ActorProfileModal'; 
 
@@ -31,7 +31,6 @@ export interface Student {
   conflicts?: string;
   otherTalents?: string;
 
-  // Allow additional dynamic properties
   [key: string]: any; 
 }
 
@@ -40,20 +39,21 @@ interface ComplianceDashboardProps {
   productionTitle: string; 
   onDeleteAudition?: (id: string | number) => void;
   onChangeTimeSlot?: (id: string | number, newSlotId: string) => void;
+  onAssignMissingNumbers?: () => void; // 🟢 NEW PROP
 }
 
 export default function ComplianceDashboard({ 
   students = [], 
   productionTitle = "Select a Production",
   onDeleteAudition,
-  onChangeTimeSlot
+  onChangeTimeSlot,
+  onAssignMissingNumbers
 }: ComplianceDashboardProps) {
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isFixing, setIsFixing] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  
-  // 🟢 State to track which row is expanded for Admin View
   const [expandedRowId, setExpandedRowId] = useState<string | number | null>(null);
   
   if (!students || students.length === 0) {
@@ -97,6 +97,9 @@ export default function ComplianceDashboard({
     setExpandedRowId(expandedRowId === id ? null : id);
   };
 
+  // 🟢 Detect how many students are missing an audition number
+  const missingNumbersCount = students.filter(s => !s.auditionNumber || s.auditionNumber.trim() === '' || s.auditionNumber === 'N/A').length;
+
   return (
     <div className="bg-zinc-950 text-zinc-50 p-6 md:p-10 pb-32 min-h-screen font-sans">
       <header className="mb-8 border-b border-zinc-900 pb-8">
@@ -107,12 +110,34 @@ export default function ComplianceDashboard({
               {productionTitle}
             </p>
           </div>
-          <div className="flex gap-4">
-             <div className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-center">
+          <div className="flex flex-wrap gap-4">
+             {/* 🟢 BULK FIX BUTTON */}
+             {missingNumbersCount > 0 && (
+                <div className="bg-amber-900/20 border border-amber-500/30 px-6 py-3 rounded-2xl flex flex-col justify-center items-center shrink-0">
+                  <div className="text-[10px] text-amber-500 uppercase font-black tracking-widest mb-2 flex items-center gap-1">
+                    <AlertCircle size={12}/> {missingNumbersCount} Missing #s
+                  </div>
+                  <button
+                    disabled={isFixing}
+                    onClick={async () => {
+                        if(window.confirm(`Generate and assign random unique numbers to the ${missingNumbersCount} students missing them?`)) {
+                            setIsFixing(true);
+                            if(onAssignMissingNumbers) await onAssignMissingNumbers();
+                            setIsFixing(false);
+                        }
+                    }}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Sparkles size={12} /> {isFixing ? "Fixing..." : "Auto-Assign"}
+                  </button>
+                </div>
+             )}
+
+             <div className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-center flex-1 md:flex-none">
                <div className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Total Auditions</div>
                <div className="text-3xl font-black text-white leading-none">{students.length}</div>
              </div>
-             <div className="bg-emerald-900/20 border border-emerald-500/20 px-6 py-3 rounded-2xl text-center">
+             <div className="bg-emerald-900/20 border border-emerald-500/20 px-6 py-3 rounded-2xl text-center flex-1 md:flex-none">
                <div className="text-[10px] text-emerald-500/70 uppercase font-black tracking-widest mb-1">Total Cast</div>
                <div className="text-3xl font-black text-emerald-400 leading-none">
                  {students.filter(s => s.status === 'Cast').length}
@@ -177,7 +202,7 @@ export default function ComplianceDashboard({
                         <span className="text-zinc-200 group-hover:text-white transition-colors text-base block">
                           {student.name}
                         </span>
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                        <span className={`text-[10px] uppercase tracking-widest font-bold ${!student.auditionNumber || student.auditionNumber === 'N/A' ? 'text-amber-500' : 'text-zinc-500'}`}>
                           #{student.auditionNumber || 'N/A'} • {student.timeSlot || 'No Slot'}
                         </span>
                       </div>
@@ -190,7 +215,6 @@ export default function ComplianceDashboard({
                     <ComplianceCell isCast={isCast} checked={student.signedAgreement} icon={<FileText size={16}/>} />
                     <ComplianceCell isCast={isCast} checked={student.paidFees} icon={<DollarSign size={16}/>} />
                     
-                    {/* Combined Paperwork cell for cleaner table */}
                     <td className="px-6 py-4 text-center">
                       <div className="flex gap-2 justify-center">
                         <div className={`p-1.5 rounded-full ${student.headshotSubmitted ? 'bg-emerald-500/20 text-emerald-500' : 'bg-zinc-800 text-zinc-600'}`} title="Headshot">
@@ -211,7 +235,6 @@ export default function ComplianceDashboard({
                           Profile
                         </button>
                         
-                        {/* 🟢 NEW EXPAND BUTTON */}
                         <button 
                           onClick={() => toggleExpand(student.id)}
                           className={`flex items-center gap-1 font-bold uppercase tracking-widest text-[10px] px-3 py-2 rounded-lg transition-colors border shadow-sm ${
@@ -224,13 +247,11 @@ export default function ComplianceDashboard({
                     </td>
                   </tr>
 
-                  {/* 🟢 EXPANDED ADMIN ROW */}
                   {isExpanded && (
                     <tr className="bg-black/40 border-b border-zinc-800 shadow-inner">
                       <td colSpan={6} className="px-8 py-8">
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             
-                            {/* Card 1: Audition Actions */}
                             <div className="space-y-4">
                                <h4 className="text-blue-500 font-black uppercase tracking-widest text-xs border-b border-zinc-800 pb-2 flex items-center gap-2">
                                  <CalendarClock size={14} /> Audition & Scheduling
@@ -238,7 +259,7 @@ export default function ComplianceDashboard({
                                <div className="space-y-3 text-sm">
                                   <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex justify-between items-center">
                                      <span className="text-zinc-500 text-[10px] uppercase font-black tracking-widest flex items-center gap-1"><Hash size={12}/> Audition Number</span>
-                                     <span className="font-black text-white text-lg">#{student.auditionNumber || 'N/A'}</span>
+                                     <span className={`font-black text-lg ${!student.auditionNumber || student.auditionNumber === 'N/A' ? 'text-amber-500' : 'text-white'}`}>#{student.auditionNumber || 'N/A'}</span>
                                   </div>
                                   <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col gap-2">
                                      <span className="text-zinc-500 text-[10px] uppercase font-black tracking-widest">Current Time Slot</span>
@@ -248,7 +269,6 @@ export default function ComplianceDashboard({
                                           onClick={() => {
                                             const newSlot = prompt("Enter new time slot (e.g. 5:00 PM - 6:00 PM Block):", student.timeSlot);
                                             if (newSlot && onChangeTimeSlot) onChangeTimeSlot(student.id, newSlot);
-                                            else if (newSlot) alert("Note: Make sure to hook up `onChangeTimeSlot` prop in page.tsx!");
                                           }}
                                           className="text-[10px] bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg text-zinc-300 font-black uppercase tracking-widest transition-colors"
                                         >
@@ -262,7 +282,6 @@ export default function ComplianceDashboard({
                                    onClick={() => {
                                      if(window.confirm(`Are you sure you want to delete the audition record for ${student.name}? This cannot be undone.`)) {
                                        if(onDeleteAudition) onDeleteAudition(student.id);
-                                       else alert("Note: Make sure to hook up `onDeleteAudition` prop in page.tsx to call `cancelAudition()`!");
                                      }
                                    }}
                                    className="w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
@@ -272,7 +291,6 @@ export default function ComplianceDashboard({
                                </div>
                             </div>
                             
-                            {/* Card 2: Casting Form Data */}
                             <div className="space-y-4">
                                <h4 className="text-emerald-500 font-black uppercase tracking-widest text-xs border-b border-zinc-800 pb-2">
                                  Raw Form Data
@@ -305,7 +323,6 @@ export default function ComplianceDashboard({
                                </div>
                             </div>
 
-                            {/* Card 3: Conflicts & Notes */}
                             <div className="space-y-4">
                                <h4 className="text-amber-500 font-black uppercase tracking-widest text-xs border-b border-zinc-800 pb-2">
                                  Conflicts & Talents
