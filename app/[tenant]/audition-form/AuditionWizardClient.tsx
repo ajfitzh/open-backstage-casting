@@ -41,6 +41,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [lookupData, setLookupData] = useState({ email: initialEmail || "", dob: "" });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [assignedAuditionNumber, setAssignedAuditionNumber] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState<number | null>(null);
   
   const [editingAudition, setEditingAudition] = useState<ExistingAudition | null>(null);
@@ -144,7 +145,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
   const startNewAudition = () => {
     setFormData(INITIAL_DATA);
-    setCurrentStep(1); setMaxStepReached(1); setIsSuccess(false); setView("wizard");
+    setCurrentStep(1); setMaxStepReached(1); setIsSuccess(false); setAssignedAuditionNumber(null); setView("wizard");
   };
 
   const returnToHub = async () => {
@@ -229,6 +230,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
 
       if (result?.success) {
         setIsSuccess(true);
+        setAssignedAuditionNumber(result.auditionNumber?.toString() || null);
         localStorage.removeItem(STORAGE_KEY);
       } else {
         alert(result?.error || "Something went wrong saving your audition. Please try again.");
@@ -261,6 +263,19 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
               <span className="font-bold text-zinc-900 dark:text-white">{lookupData.email}</span>
             </p>
           </div>
+
+          {/* 🎲 NEW: DISPLAY ASSIGNED AUDITION NUMBER */}
+          {assignedAuditionNumber && (
+            <div className="mb-8 p-6 sm:p-8 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 rounded-[2rem] animate-in zoom-in-95 duration-500 delay-300">
+                <p className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs mb-2">Your Audition Number</p>
+                <p className="text-5xl sm:text-7xl font-black text-blue-700 dark:text-blue-300 italic tracking-tighter">
+                  #{assignedAuditionNumber}
+                </p>
+                <p className="text-blue-600/80 dark:text-blue-400/80 text-xs font-medium mt-3 leading-relaxed">
+                  Please remember this number! We will use it to easily identify you during auditions and callbacks.
+                </p>
+            </div>
+          )}
 
           {passwordSetSuccess ? (
             <div className="mt-8 mb-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-left">

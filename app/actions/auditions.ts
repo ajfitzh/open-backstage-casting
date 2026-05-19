@@ -84,7 +84,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
       };
       
-      // Only update headshot if a new one was actually provided
       if (formData.headshotUrl) updatePayload[DB.PEOPLE.FIELDS.HEADSHOT] = formData.headshotUrl;
 
       await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
@@ -108,10 +107,9 @@ export async function submitRealAudition(tenant: string, productionId: number, f
         body: JSON.stringify(newPersonPayload)
       }, {}, tenant);
       
-      // Properly catch failures on student creation
       if (!newPerson || Array.isArray(newPerson) || !newPerson.id) {
         console.error("Failed to create student record:", newPerson);
-        return { success: false, error: "Failed to create student record. Ensure Headshot is a URL field in Baserow." };
+        return { success: false, error: "Failed to create student record." };
       }
       personId = newPerson.id;
     }
@@ -124,6 +122,42 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       }
     }
 
+    // ==========================================
+    // 🎲 GENERATE UNIQUE RANDOM AUDITION NUMBER
+    // ==========================================
+    const existingAuditionsParams = {
+        filter_type: "AND",
+        [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId
+    };
+    const existingRows = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, existingAuditionsParams, tenant);
+    
+    let existingNumbers = new Set<number>();
+    const rowList = Array.isArray(existingRows) ? existingRows : (existingRows?.results || []);
+    
+    rowList.forEach((row: any) => {
+        const num = parseInt(row[DB.AUDITIONS.FIELDS.AUDITION_NUMBER]);
+        if (!isNaN(num)) existingNumbers.add(num);
+    });
+    
+    let availableNumbers = [];
+    // Try to find a number between 1 and 50
+    for (let i = 1; i <= 50; i++) {
+        if (!existingNumbers.has(i)) availableNumbers.push(i);
+    }
+    
+    let assignedNumber = 0;
+    if (availableNumbers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableNumbers.length);
+        assignedNumber = availableNumbers[randomIndex];
+    } else {
+        // Fallback: If 50 kids already signed up, pick a random number between 51 and 200
+        let fallbackFound = false;
+        while (!fallbackFound) {
+            assignedNumber = Math.floor(Math.random() * 150) + 51;
+            if (!existingNumbers.has(assignedNumber)) fallbackFound = true;
+        }
+    }
+
     const conflictString = Object.entries(formData.conflicts || {})
        .filter(([key, val]: any) => val.level !== "available")
        .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
@@ -131,7 +165,6 @@ export async function submitRealAudition(tenant: string, productionId: number, f
 
     const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}\nStage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}\nCallbacks: ${formData.callbackStatus || 'No Answer'}\nChair Interest: ${formData.chairInterest || 'No'}`;
 
-    // 🟢 THE FIX: Using `auditionPayload` to safely build the request
     const auditionPayload: any = {
       [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
       [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
@@ -152,17 +185,17 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: formData.otherTalents || "",
       [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Conflicts:\n${conflictString || "None"}\n\nExtra Info:\n${extraDataString}`,
 
-      // 🟢 THE SPLIT DATA FIX
-      [DB.AUDITIONS.FIELDS.VOICE_TYPE]: formData.voiceType || "Unsure", // Goes to Single Select
-      [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "",     // Goes to Open Text
+      [DB.AUDITIONS.FIELDS.VOICE_TYPE]: formData.voiceType || "Unsure",
+      [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "",     
+      
+      // 🎲 ASSIGN THE RANDOM NUMBER
+      [DB.AUDITIONS.FIELDS.AUDITION_NUMBER]: assignedNumber!.toString(),
     };
 
-    // Safely add optional fields ONLY if they exist in your schema dictionary
     if (DB.AUDITIONS.FIELDS.PREFERRED_ROLES) auditionPayload[DB.AUDITIONS.FIELDS.PREFERRED_ROLES] = formData.preferredRoles || "";
     if (DB.AUDITIONS.FIELDS.STAGE_ROMANCE) auditionPayload[DB.AUDITIONS.FIELDS.STAGE_ROMANCE] = formData.acceptRomance || false;
     if (DB.AUDITIONS.FIELDS.CALLBACK_STATUS) auditionPayload[DB.AUDITIONS.FIELDS.CALLBACK_STATUS] = formData.callbackStatus || "";
 
-    // 🟢 PREVENT 400 ERRORS: Strip out any keys that evaluated to "undefined"
     delete auditionPayload["undefined"];
     Object.keys(auditionPayload).forEach(key => {
         if (auditionPayload[key] === undefined) {
@@ -208,7 +241,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     }
 
     // ==========================================
-    // 🟢 SEND CONFIRMATION EMAIL
+    // SEND CONFIRMATION EMAIL
     // ==========================================
     let showTitle = "Our Upcoming Production";
     try {
@@ -231,6 +264,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
               <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                   <h3 style="margin-top: 0; color: #374151;">Audition Details:</h3>
                   <ul style="margin: 0; color: #4b5563; font-size: 14px; list-style-type: none; padding-left: 0; line-height: 1.6;">
+                     <li>🔢 <strong>Audition Number:</strong> ${assignedNumber}</li>
                      <li>🕒 <strong>Time:</strong> ${slotLabel}</li>
                      <li>🎵 <strong>Song:</strong> ${formData.songTitle || "None"}</li>
                   </ul>
@@ -244,10 +278,10 @@ export async function submitRealAudition(tenant: string, productionId: number, f
       });
     } catch (emailError) { 
       console.error("Audition Confirmation Email failed:", emailError); 
-      // We don't return an error here, because the DB save was successful!
     }
 
-    return { success: true, auditionId: audition?.id };
+    // 🟢 RETURN THE NUMBER TO THE CLIENT
+    return { success: true, auditionId: audition?.id, auditionNumber: assignedNumber };
   } catch (error) {
     console.error("Submission Error:", error);
     return { success: false, error: "Submission failed." };
