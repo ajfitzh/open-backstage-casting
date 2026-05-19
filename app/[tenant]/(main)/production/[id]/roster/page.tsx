@@ -1,6 +1,9 @@
 import { BaserowClient } from '@/app/lib/BaserowClient';
-import { getAuditionees } from '@/app/lib/baserow';
+import { getAuditionees, fetchBaserow, getDB } from '@/app/lib/baserow';
+import { getTenantTableConfig } from '@/app/lib/tenant-config';
 import ComplianceDashboard from '@/app/components/ComplianceDashboard'; 
+import { cancelAudition } from '@/app/actions/auditions';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,11 +62,60 @@ export default async function RosterPage({
       }
   });
 
+  // 🟢 SERVER ACTION: Delete Audition
+  async function handleDeleteAudition(auditionId: string | number) {
+    "use server";
+    await cancelAudition(tenant, parseInt(auditionId.toString()));
+    revalidatePath(`/${tenant}/production/${showId}/roster`);
+  }
+
+  // 🟢 SERVER ACTION: Change Time Slot
+  async function handleChangeTimeSlot(auditionId: string | number, newSlotLabel: string) {
+    "use server";
+    const tables = await getTenantTableConfig(tenant);
+    const DB = getDB(tenant);
+
+    // 1. Try to find a matching slot by the label the user typed
+    const slotsParams = {
+        filter_type: "AND",
+        [`filter__${DB.AUDITION_SLOTS.FIELDS.TIME_LABEL}__equal`]: newSlotLabel,
+        [`filter__${DB.AUDITION_SLOTS.FIELDS.PRODUCTION}__link_row_has`]: showId
+    };
+    const slotsRes = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, slotsParams, tenant);
+    const slotList = Array.isArray(slotsRes) ? slotsRes : (slotsRes?.results || []);
+
+    if (slotList.length > 0) {
+        // Found the slot, link it to the audition record!
+        const slotId = slotList[0].id;
+        await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+            method: "PATCH",
+            body: JSON.stringify({
+                [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: [slotId]
+            })
+        }, {}, tenant);
+    } else {
+        // Fallback: If they typed a custom string that doesn't match a real slot, append a warning to admin notes
+        const existingAud = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {}, {}, tenant);
+        const notes = existingAud[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "";
+        await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+            method: "PATCH",
+            body: JSON.stringify({
+                [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `${notes}\n\n[SYSTEM]: Tried to move actor to slot '${newSlotLabel}' but no matching slot was found in the database.`
+            })
+        }, {}, tenant);
+    }
+    
+    // Refresh the page data
+    revalidatePath(`/${tenant}/production/${showId}/roster`);
+  }
+
   return (
     <main className="h-full bg-zinc-950">
       <ComplianceDashboard 
         productionTitle={production.title || "Active Production"} 
         students={combinedRoster}
+        onDeleteAudition={handleDeleteAudition}
+        onChangeTimeSlot={handleChangeTimeSlot}
       />
     </main>
   );
