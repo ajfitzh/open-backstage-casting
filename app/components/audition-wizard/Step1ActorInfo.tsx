@@ -81,6 +81,7 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
                 <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Full Name</label>
                 <input 
                   type="text" 
+                  required
                   value={formData.fullName} 
                   onChange={e => updateForm({fullName: e.target.value})} 
                   className={`w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border font-bold outline-none text-lg transition-colors focus:ring-2 ${errors.fullName ? "border-red-500 bg-red-50 focus:ring-red-200" : "border-zinc-200 dark:border-zinc-800 focus:ring-blue-200"}`} 
@@ -93,6 +94,7 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
                     <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">DOB</label>
                     <input 
                       type="date" 
+                      required
                       value={formData.dob} 
                       onChange={e => updateForm({ dob: e.target.value })} 
                       className={`w-full p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border font-bold outline-none text-lg transition-colors focus:ring-2 ${errors.dob ? "border-red-500 bg-red-50 focus:ring-red-200" : "border-zinc-200 dark:border-zinc-800 focus:ring-blue-200"}`} 

@@ -17,19 +17,30 @@ export function Step7Commitment({ formData, updateForm, errors }: Props) {
       <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Commitment</h2>
       
       <div className="space-y-4 sm:space-y-6">
-        <label className="flex items-start p-6 sm:p-10 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer">
-            <input type="checkbox" required checked={formData.offBookAgreement} onChange={e => updateForm({ offBookAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-blue-600 rounded-lg mt-1 shrink-0" />
+        <label className="flex items-start p-6 sm:p-10 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer hover:border-blue-300 transition-colors">
+            <input type="checkbox" required checked={formData.offBookAgreement} onChange={e => updateForm({ offBookAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-blue-600 rounded-lg mt-1 shrink-0 cursor-pointer" />
             <div className="ml-4 sm:ml-8 space-y-2 sm:space-y-4">
                 <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter">OFF-BOOK</h4>
                 <p className="text-blue-900/80 dark:text-blue-400/80 text-xs sm:text-lg font-medium leading-relaxed">I commit to being **OFF BOOK** (lines and music memorized) by July 6.</p>
             </div>
         </label>
 
-        <label className="flex items-start p-6 sm:p-10 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer">
-            <input type="checkbox" required checked={formData.parentCommitteeAgreement} onChange={e => updateForm({ parentCommitteeAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-zinc-600 rounded-lg mt-1 shrink-0" />
+        <label className="flex items-start p-6 sm:p-10 bg-zinc-50 dark:bg-zinc-950 border-2 border-zinc-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer hover:border-zinc-300 transition-colors">
+            <input type="checkbox" required checked={formData.parentCommitteeAgreement} onChange={e => updateForm({ parentCommitteeAgreement: e.target.checked })} className="h-6 w-6 sm:h-10 sm:w-10 text-zinc-600 rounded-lg mt-1 shrink-0 cursor-pointer" />
             <div className="ml-4 sm:ml-8 space-y-2 sm:space-y-4">
-                <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter">Parent Help</h4>
+                <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter">Ticket Sales</h4>
                 <p className="text-zinc-500 dark:text-zinc-400 text-xs sm:text-lg font-medium leading-relaxed">I understand parents are expected to help sell **10 tickets** for the show.</p>
+            </div>
+        </label>
+
+        {/* NEW LITE SHOW CHECKBOX */}
+        <label className="flex items-start p-6 sm:p-10 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 rounded-[1.5rem] sm:rounded-[3rem] cursor-pointer hover:border-emerald-300 transition-colors">
+            <input type="checkbox" required checked={(formData as any).liteShowCommitment} onChange={e => updateForm({ liteShowCommitment: e.target.checked } as any)} className="h-6 w-6 sm:h-10 sm:w-10 text-emerald-600 rounded-lg mt-1 shrink-0 cursor-pointer" />
+            <div className="ml-4 sm:ml-8 space-y-2 sm:space-y-4">
+                <h4 className="text-lg sm:text-2xl font-black dark:text-white italic uppercase tracking-tighter text-emerald-800 dark:text-emerald-400">Lite Show Commitment</h4>
+                <p className="text-emerald-900/80 dark:text-emerald-400/80 text-xs sm:text-lg font-medium leading-relaxed">
+                  I acknowledge that while parents don&apos;t have to serve on a traditional committee and work is being done to make the burden less than a mainstage show, the parent will have some commitment to help put the show up during the two weeks of rehearsals and/or two weeks for the show.
+                </p>
             </div>
         </label>
       </div>

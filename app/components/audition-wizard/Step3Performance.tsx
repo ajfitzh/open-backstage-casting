@@ -1,3 +1,4 @@
+// app/components/audition-wizard/Step3Performance.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -21,6 +22,12 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
     return () => { audioRef.current?.pause(); };
   }, []);
 
+  const scrollToNext = (id: string) => {
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  };
+
   const togglePreview = (e: React.MouseEvent, trackId: string, url: string) => {
     e.stopPropagation(); 
     if (playingTrackId === trackId) {
@@ -35,7 +42,6 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
     }
   };
 
-  // Stops preview music when range test starts
   const handleStartTest = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -51,7 +57,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
       <div className="flex bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-2 rounded-[1.5rem] sm:rounded-[2rem]">
         <button 
           type="button" 
-          onClick={() => updateForm({ usePresetSong: false, songTitle: "", musicFileName: "" })} 
+          onClick={() => { updateForm({ usePresetSong: false, songTitle: "", musicFileName: "" }); scrollToNext('field-songTitle'); }} 
           className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${!formData.usePresetSong ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
         >
           <UploadCloud size={24} className={!formData.usePresetSong ? "text-blue-600" : "opacity-50"} /> Upload My Own
@@ -59,8 +65,9 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         <button 
           type="button" 
           onClick={() => { 
-            setAudioFile(null); // Clears out stale uploads
+            setAudioFile(null); 
             updateForm({ usePresetSong: true, songTitle: "", musicFileName: "" }); 
+            scrollToNext('field-songTitle');
           }} 
           className={`flex-1 py-4 sm:py-6 rounded-xl sm:rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-sm transition-all flex flex-col items-center gap-2 ${formData.usePresetSong ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
         >
@@ -69,7 +76,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
       </div>
 
       {formData.usePresetSong ? (
-        <div id="field-songTitle" className={`space-y-6 animate-in slide-in-from-top-4 p-4 rounded-3xl ${errors.songTitle ? "bg-red-50 border border-red-200" : ""}`}>
+        <div id="field-songTitle" className={`space-y-6 animate-in slide-in-from-top-4 p-4 rounded-3xl scroll-mt-24 ${errors.songTitle ? "bg-red-50 border border-red-200" : ""}`}>
           <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm sm:text-base text-center max-w-xl mx-auto">
             Choose an &quot;easy-start&quot; song from the show. We will provide the backing track at your audition!
           </p>
@@ -81,7 +88,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
               const isPlaying = playingTrackId === s.id;
               return (
                 <div key={s.id} className="relative group">
-                  <button type="button" onClick={() => updateForm({ songTitle: s.title })} className={`w-full p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${isSelected ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
+                  <button type="button" onClick={() => { updateForm({ songTitle: s.title }); scrollToNext('field-vocalRange'); }} className={`w-full p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border-2 text-left transition-all ${isSelected ? "bg-blue-600 border-blue-600 text-white shadow-xl scale-105" : "bg-white dark:bg-zinc-900 border-zinc-200 hover:border-blue-400"}`}>
                     <Music size={24} className={`mb-4 ${isSelected ? "text-white" : "text-blue-600"} opacity-50`} />
                     <p className="font-black text-sm sm:text-xl uppercase italic leading-tight pr-8">{s.title}</p>
                   </button>
@@ -95,9 +102,9 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         </div>
       ) : (
         <div className="space-y-4 animate-in slide-in-from-top-4">
-            <div id="field-songTitle">
+            <div id="field-songTitle" className="scroll-mt-24">
               <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Song Title</label>
-              <input type="text" value={formData.songTitle} onChange={(e) => updateForm({ songTitle: e.target.value })} className={`w-full rounded-xl border bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 text-zinc-900 dark:text-white font-black text-xl sm:text-3xl italic outline-none shadow-inner transition-colors ${errors.songTitle ? "border-red-500 focus:ring-2 focus:ring-red-200" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="E.g. On My Own" />
+              <input type="text" required value={formData.songTitle} onChange={(e) => updateForm({ songTitle: e.target.value })} className={`w-full rounded-xl border bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 text-zinc-900 dark:text-white font-black text-xl sm:text-3xl italic outline-none shadow-inner transition-colors ${errors.songTitle ? "border-red-500 focus:ring-2 focus:ring-red-200" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="E.g. On My Own" />
               {errors.songTitle && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 flex items-center gap-1"><AlertCircle size={12}/>{errors.songTitle}</p>}
             </div>
             
@@ -108,8 +115,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 ) : (
                   <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
                 )}
-                {/* 🟢 iOS FIX */}
-                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); } }} accept="*/*" />
+                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); scrollToNext('field-vocalRange'); } }} accept="*/*" />
               </button>
               {errors.musicFile && <p className="text-red-500 text-[10px] uppercase font-bold mt-4 text-center flex justify-center items-center gap-1"><AlertCircle size={12}/>{errors.musicFile}</p>}
 
@@ -132,75 +138,64 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                     setAudioFile(null); 
                   }}
                 />
-                <p className="text-[10px] text-zinc-400 font-bold mt-2">
-                  *Please ensure Google Drive links are set to "Anyone with the link can view".
-                </p>
               </div>
             </div>
         </div>
       )}
 
       {/* LIVE VOCAL RANGE FINDER SECTION */}
-      <div className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800 animate-in slide-in-from-bottom-4">
+      <div id="field-vocalRange" className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800 animate-in slide-in-from-bottom-4 scroll-mt-24">
         <h3 className="text-xl sm:text-2xl font-black uppercase italic tracking-tighter mb-6 flex items-center gap-3">
            <Mic2 className="text-blue-500" /> Vocal Range
         </h3>
         
-        {formData.vocalRange ? (
-           <div className="bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-500 rounded-[2rem] p-8 text-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <Music size={100} />
-              </div>
-              <p className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-xs mb-2">Saved Range Profile</p>
-              <p className="text-3xl sm:text-4xl font-black text-blue-700 dark:text-blue-300 italic mb-2">
-                  {formData.vocalRange}
-              </p>
-              
-              {formData.voiceType && (
-                 <div className="mt-4 mb-2 inline-block bg-blue-100 dark:bg-blue-900/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
-                    <p className="text-sm font-bold text-blue-800 dark:text-blue-200">
-                        Congrats! You&apos;re roughly a <span className="uppercase text-blue-600 dark:text-blue-400">{formData.voiceType}</span>. Confirm with your music teacher!
+        {/* NEW: Manual Text Input */}
+        <div className="mb-8">
+          <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Write in your Voice Part or Range</label>
+          <input 
+            type="text" 
+            required
+            placeholder="e.g. Alto, Tenor, or C3-G5" 
+            value={formData.vocalRange || ''} 
+            onChange={e => updateForm({ vocalRange: e.target.value })} 
+            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+          />
+        </div>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+            <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="bg-white dark:bg-zinc-950 px-3 text-[10px] font-black uppercase tracking-widest text-zinc-400">Or use our interactive tool</span>
+          </div>
+        </div>
+
+        <div className="mt-8 space-y-6">
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 p-4 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start">
+                <div className="mt-0.5 shrink-0 bg-blue-100 dark:bg-blue-900 p-2 rounded-full">
+                    <Info size={16} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
+                      Find your comfortable range.
                     </p>
-                 </div>
-              )}
-              
-              <br/>
-              <button 
-                  type="button" 
-                  onClick={() => updateForm({ vocalRange: "", voiceType: "" })} 
-                  className="mt-6 px-4 py-2 bg-white dark:bg-zinc-950 text-[10px] uppercase font-bold text-zinc-500 rounded-full hover:text-blue-600 transition-colors shadow-sm"
-              >
-                  Reset & Retest
-              </button>
-           </div>
-        ) : (
-           <div className="space-y-6">
-              
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 p-4 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start">
-                  <div className="mt-0.5 shrink-0 bg-blue-100 dark:bg-blue-900 p-2 rounded-full">
-                     <Info size={16} className="text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                     <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
-                        Find your comfortable range.
-                     </p>
-                     <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 leading-relaxed">
-                        Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment to help you find your starting voice type. <strong className="text-blue-800 dark:text-blue-200">This will NOT affect your audition chances.</strong> We will do official vocal range checks with our professional Music Director at callbacks.
-                     </p>
-                  </div>
-              </div>
-              
-              <VocalRangeTester 
-                  onStartTest={handleStartTest}
-                  onRangeFound={(voiceType, low, high) => {
-                      updateForm({ 
-                        vocalRange: `${low}-${high}`,
-                        voiceType: voiceType
-                      });
-                  }} 
-              />
-           </div>
-        )}
+                    <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 leading-relaxed">
+                      Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment. <strong className="text-blue-800 dark:text-blue-200">This will NOT affect your audition chances.</strong>
+                    </p>
+                </div>
+            </div>
+            
+            <VocalRangeTester 
+                onStartTest={handleStartTest}
+                onRangeFound={(voiceType, low, high) => {
+                    updateForm({ 
+                      vocalRange: `${low}-${high} (${voiceType})`,
+                      voiceType: voiceType
+                    });
+                }} 
+            />
+        </div>
       </div>
 
     </div>

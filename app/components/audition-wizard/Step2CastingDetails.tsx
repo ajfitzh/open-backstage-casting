@@ -12,13 +12,20 @@ interface Props {
 }
 
 export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
+  // Helper to auto-scroll to the next section after a quick-tap
+  const scrollToNext = (id: string) => {
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  };
+
   return (
     <div className="space-y-8 sm:space-y-12 animate-in slide-in-from-right-8 duration-500">
       <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">Casting Details</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
         
-        {/* --- HEIGHT & HAIR COLOR --- */}
+        {/* --- HEIGHT --- */}
         <div id="field-height" className={`bg-zinc-50 dark:bg-zinc-950 p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] border space-y-6 transition-colors ${errors.height ? "border-red-500 bg-red-50/50" : "border-zinc-200 dark:border-zinc-800"}`}>
           <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4 flex items-center gap-2"><Ruler size={16} /> Height</label>
           <div className="flex gap-2 sm:gap-4">
@@ -28,48 +35,52 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
           </div>
           <div className="grid grid-cols-6 gap-1 sm:gap-2">
             {INCHES.map(inch => (
-              <button key={inch} type="button" onClick={() => updateForm({ heightIn: inch })} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}>{inch}&quot;</button>
+              <button key={inch} type="button" onClick={() => { updateForm({ heightIn: inch }); scrollToNext('field-hairColor'); }} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}>{inch}&quot;</button>
             ))}
           </div>
           {errors.height && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 flex items-center gap-1"><AlertCircle size={12}/>{errors.height}</p>}
         </div>
 
-        <div id="field-hairColor" className="space-y-6">
+        {/* --- HAIR COLOR --- */}
+        <div id="field-hairColor" className="space-y-6 scroll-mt-24">
             <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4">Hair Color</label>
             <div className={`grid grid-cols-2 gap-2 p-2 rounded-2xl ${errors.hairColor ? "bg-red-50 border border-red-200" : ""}`}>
               {HAIR_COLORS.map(c => (
-                <button key={c} type="button" onClick={() => updateForm({ hairColor: c })} className={`py-3 sm:py-4 rounded-xl font-black text-[9px] uppercase border transition-all ${formData.hairColor === c ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md" : "bg-white dark:bg-zinc-900 border-zinc-200 text-zinc-400"}`}>{c}</button>
+                <button key={c} type="button" onClick={() => { updateForm({ hairColor: c }); scrollToNext('field-roles'); }} className={`py-3 sm:py-4 rounded-xl font-black text-[9px] uppercase border transition-all ${formData.hairColor === c ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md" : "bg-white dark:bg-zinc-900 border-zinc-200 text-zinc-400"}`}>{c}</button>
               ))}
             </div>
             {errors.hairColor && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 flex items-center gap-1"><AlertCircle size={12}/>{errors.hairColor}</p>}
         </div>
 
-        {/* --- PREFERRED ROLES --- */}
-        <div id="field-roles" className="space-y-6 md:col-span-2 pt-6 border-t border-zinc-200 dark:border-zinc-800">
+        {/* --- PREFERRED ROLES (REDESIGNED TO POP) --- */}
+        <div id="field-roles" className="space-y-6 md:col-span-2 pt-6 border-t border-zinc-200 dark:border-zinc-800 scroll-mt-24">
           
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Preferred Roles</label>
-            <input 
-              type="text" 
-              placeholder="E.g. The Baker, Jack, or Any" 
-              value={formData.preferredRoles || ''} 
-              onChange={e => updateForm({ preferredRoles: e.target.value })} 
-              className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-200" 
-            />
+          <div className="bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-200 dark:border-blue-800 p-6 sm:p-8 rounded-[1.5rem] space-y-6">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black uppercase text-blue-800 dark:text-blue-300 tracking-widest mb-2">What role do you want?</label>
+              <input 
+                type="text" 
+                required
+                placeholder="E.g. The Baker, Jack, or Any" 
+                value={formData.preferredRoles || ''} 
+                onChange={e => updateForm({ preferredRoles: e.target.value })} 
+                className="w-full p-4 rounded-xl bg-white dark:bg-zinc-900 border border-blue-200 font-bold outline-none text-sm transition-colors focus:ring-2 focus:ring-blue-500 shadow-sm" 
+              />
+            </div>
+            
+            <label className="flex items-center gap-3 p-4 bg-white dark:bg-zinc-900 rounded-xl border border-blue-200 cursor-pointer transition-colors hover:border-blue-400 shadow-sm">
+              <input 
+                type="checkbox" 
+                checked={formData.acceptAnyRole || false} 
+                onChange={e => { updateForm({ acceptAnyRole: e.target.checked }); if(e.target.checked) scrollToNext('field-romance'); }} 
+                className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer" 
+              />
+              <span className="font-bold text-sm text-blue-900 dark:text-blue-100">I will accept any role</span>
+            </label>
           </div>
-          
-          <label className="flex items-center gap-3 p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer transition-colors hover:border-blue-300">
-            <input 
-              type="checkbox" 
-              checked={formData.acceptAnyRole || false} 
-              onChange={e => updateForm({ acceptAnyRole: e.target.checked })} 
-              className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer" 
-            />
-            <span className="font-bold text-sm text-zinc-700 dark:text-zinc-300">I will accept any role</span>
-          </label>
 
           {/* --- THE FORGOTTEN FIELDS & ROMANCE TOGGLES --- */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+          <div id="field-romance" className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 scroll-mt-24">
             
             <button 
               type="button" 
@@ -85,7 +96,7 @@ export function Step2CastingDetails({ formData, updateForm, errors }: Props) {
               </div>
               <div>
                 <p className={`font-bold text-xs ${formData.acceptRomance ? "text-blue-600 dark:text-blue-400" : "text-zinc-700 dark:text-zinc-300"}`}>Stage Romance</p>
-                <p className="text-[9px] text-zinc-500 mt-1">Comfortable with intimacy required by script.</p>
+                <p className="text-[9px] text-zinc-500 mt-1">Comfortable being cast in a role that includes romantic scene work? (Note: CYT Fred no longer allows stage kissing).</p>
               </div>
             </button>
 
