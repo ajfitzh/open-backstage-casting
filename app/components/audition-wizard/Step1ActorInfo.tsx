@@ -16,8 +16,17 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const headshotInputRef = useRef<HTMLInputElement>(null);
+  
+  // 🟢 FIX: Store the stream in a ref so we can stop it even after the DOM unmounts
+  const streamRef = useRef<MediaStream | null>(null);
 
   const stopCamera = useCallback(() => {
+    // 1. Stop via our saved stream reference
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    // 2. Fallback check for the video element
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
@@ -39,6 +48,18 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
       updateForm({ headshotUrl: canvasRef.current.toDataURL("image/jpeg") });
       stopCamera();
     }
+  };
+
+  const startCamera = () => {
+    setIsCameraOpen(true); 
+    setTimeout(() => { 
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(s => { 
+          streamRef.current = s; // Save the stream specifically
+          if (videoRef.current) videoRef.current.srcObject = s; 
+        })
+        .catch(err => console.error("Camera error:", err));
+    }, 100);
   };
 
   return (
@@ -63,10 +84,9 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => { setIsCameraOpen(true); setTimeout(() => { navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(s => { if(videoRef.current) videoRef.current.srcObject = s; }); }, 100); }} className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors">
+                  <button type="button" onClick={startCamera} className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors">
                     <Camera size={14} /> {formData.headshotUrl ? "Retake" : "Camera"}
                   </button>
-                  {/* 🟢 FIX: Upload button is now permanently visible */}
                   <button type="button" onClick={() => headshotInputRef.current?.click()} className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
                     Upload {formData.headshotUrl ? "New" : ""}
                   </button>

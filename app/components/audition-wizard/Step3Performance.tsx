@@ -15,8 +15,20 @@ interface Props {
 
 export function Step3Performance({ formData, updateForm, errors, setAudioFile }: Props) {
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  
+  // Local state to track which input box the string currently belongs to
+  const [musicInputMode, setMusicInputMode] = useState<"file" | "link">("file");
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize mode if returning to a saved draft with a link
+  useEffect(() => {
+    if (formData.musicFileName && (formData.musicFileName.startsWith('http') || formData.musicFileName.startsWith('www'))) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMusicInputMode("link");
+    }
+  }, [formData.musicFileName]);
 
   useEffect(() => {
     return () => { audioRef.current?.pause(); };
@@ -109,13 +121,20 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
             </div>
             
             <div id="field-musicFile" className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800">
-              <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${formData.musicFileName && !formData.musicFileName.startsWith('http') ? "bg-green-50 border-green-500 text-green-600" : errors.musicFile ? "bg-red-50 border-red-400 text-red-500" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
-                {formData.musicFileName && !formData.musicFileName.startsWith('http') ? (
+              <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${musicInputMode === "file" && formData.musicFileName ? "bg-green-50 border-green-500 text-green-600" : errors.musicFile ? "bg-red-50 border-red-400 text-red-500" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
+                {musicInputMode === "file" && formData.musicFileName ? (
                   <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
                 ) : (
                   <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
                 )}
-                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setAudioFile(e.target.files[0]); updateForm({ musicFileName: e.target.files[0].name }); scrollToNext('field-vocalRange'); } }} accept="*/*" />
+                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { 
+                  if (e.target.files?.[0]) { 
+                    setMusicInputMode("file");
+                    setAudioFile(e.target.files[0]); 
+                    updateForm({ musicFileName: e.target.files[0].name }); 
+                    scrollToNext('field-vocalRange'); 
+                  } 
+                }} accept="*/*" />
               </button>
               {errors.musicFile && <p className="text-red-500 text-[10px] uppercase font-bold mt-4 text-center flex justify-center items-center gap-1"><AlertCircle size={12}/>{errors.musicFile}</p>}
 
@@ -134,14 +153,14 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                     type="url" 
                     placeholder="YouTube or Google Drive link..."
                     className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium focus:border-blue-500 outline-none"
-                    value={formData.musicFileName && formData.musicFileName.startsWith('http') ? formData.musicFileName : ''}
+                    value={musicInputMode === "link" ? formData.musicFileName : ''}
                     onChange={(e) => {
+                      setMusicInputMode("link");
                       updateForm({ musicFileName: e.target.value });
                       setAudioFile(null); 
                     }}
                   />
                 </div>
-                {/* 🟢 FIX: Added Cue Time block for YouTube links */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
                     Start Time (Cue Point)
@@ -167,7 +186,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
            <Mic2 className="text-blue-500" /> Vocal Range
         </h3>
         
-        {/* NEW: Manual Text Input */}
+        {/* Manual Text Input */}
         <div className="mb-8">
           <label className="block text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2">Write in your Voice Part or Range</label>
           <input 
@@ -190,20 +209,7 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
         </div>
 
         <div className="mt-8 space-y-6">
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 p-4 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start">
-                <div className="mt-0.5 shrink-0 bg-blue-100 dark:bg-blue-900 p-2 rounded-full">
-                    <Info size={16} className="text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                    <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
-                      Find your comfortable range.
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1 leading-relaxed">
-                      Please do not strain or try to &quot;max out&quot; your voice! This is just a generalized self-assessment. <strong className="text-blue-800 dark:text-blue-200">This will NOT affect your audition chances.</strong>
-                    </p>
-                </div>
-            </div>
-            
+            {/* 🟢 FIX: Removed the duplicate warning box. It is safely embedded in the VocalRangeTester component! */}
             <VocalRangeTester 
                 onStartTest={handleStartTest}
                 onRangeFound={(voiceType, low, high) => {
