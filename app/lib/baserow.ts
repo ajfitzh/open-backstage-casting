@@ -15,10 +15,8 @@ const HEADERS = {
 };
 
 // 🟢 The Multi-Tenant Schema Switcher!
-// 🟢 The Multi-Tenant Schema Switcher (with TS Fix & Fallbacks!)
 export const getDB = (tenant: string): any => {
   if (tenant === "e2e" || tenant === "sandbox") {
-    // 🟢 Shallow merge! Overwrites with E2E tables, but keeps Prod tables (like SEASONS) if missing.
     return { ...PROD_DB, ...E2E_DB }; 
   }
   return PROD_DB;
@@ -60,7 +58,6 @@ export async function fetchBaserow(
     if (!res.ok) {
       if (res.status === 404) return []; 
       
-      // 🟢 THE FIX: Actually read the error body Baserow sent back!
       const errorBody = await res.text();
       console.error(`\n❌ [Baserow] API Error [${res.status}] at ${finalUrl}`);
       console.error(`🔍 EXACT BASEROW ERROR:\n`, errorBody, `\n`);
@@ -904,43 +901,26 @@ export async function getAuditionSlots(tenant: string, productionId: number) {
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   
-  // Failsafe: If the table doesn't exist for this tenant, return nothing
   if (!tables.AUDITION_SLOTS) return [];
   
   const F = DB.AUDITION_SLOTS.FIELDS;
 
-  // Fetch from Baserow using your dynamic registry
   const data = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, {
     size: "100",
     [`filter__${F.PRODUCTION}__link_row_has`]: productionId
   }, tenant);
 
-  // If no slots exist in the DB, exit cleanly so the UI can show the "TBD" state
-  if (!Array.isArray(data) || data.length === 0) {
-      console.log(`⚠️ No audition slots found for production  ${productionId}.`);
-      return [];
-  }
-
-  // Uncomment this next line if you ever need to inspect the raw JSON keys again!
-  // console.log("🕵️ RAW BASEROW ROW:", JSON.stringify(data[0], null, 2));
+  if (!Array.isArray(data) || data.length === 0) return [];
 
   return data.map((row: any) => {
-    // --- 1. IRONCLAD LABEL EXTRACTION ---
-    // Try the F registry first, fallback to the CSV column names
     let rawLabel = row[F.TIME_LABEL] ?? row["Time Label"] ?? "TBD TBD";
     
-    // Unpack Baserow's Array/Object formats for Formula and Lookup fields
     if (Array.isArray(rawLabel)) rawLabel = rawLabel[0]?.value || rawLabel[0];
     if (typeof rawLabel === 'object' && rawLabel !== null) rawLabel = rawLabel.value;
     if (typeof rawLabel !== 'string') rawLabel = "TBD TBD";
 
-    // --- 2. SAFE NUMBER PARSING ---
-    // Try F registry, fallback to CSV column names
     const capacity = parseInt(row[F.CAPACITY] ?? row["Capacity"] ?? 0) || 0;
     const taken = parseInt(row[F.TAKEN] ?? row["Taken"] ?? 0) || 0;
-    
-    // --- 3. EXPLICIT UI CALCULATION ---
-    // Calculate remaining manually to guarantee the UI gets exactly what it expects
     const remaining = capacity - taken; 
 
     return {
@@ -949,11 +929,12 @@ export async function getAuditionSlots(tenant: string, productionId: number) {
       time: rawLabel.split(' ').slice(1).join(' ') || rawLabel, 
       capacity,
       taken,
-      remaining, // <-- The crucial piece for the UI ("8 Left")
+      remaining, 
       isFull: remaining <= 0 || row[F.IS_FULL] === true || row["Is Full?"] === true
     };
   });
 }
+
 export async function getAuditionees(tenant: string, productionId?: number) {
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
@@ -975,7 +956,6 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(performerName)}&background=27272a&color=60a5fa`;
       }
 
-      // Safely extract the backing track URL
       let trackUrl = "";
       const trackField = row[F.BACKING_TRACK];
       if (Array.isArray(trackField) && trackField.length > 0) {
@@ -984,7 +964,6 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           trackUrl = trackField;
       }
 
-      // Safely extract video URL
       let videoUrl = "";
       const videoField = row[F.AUDITION_VIDEO];
       if (Array.isArray(videoField) && videoField.length > 0) {
@@ -1020,7 +999,6 @@ export async function getAuditionees(tenant: string, productionId?: number) {
           dropInNotes: safeGet(row[F.DROP_IN_NOTES], ""),
           adminNotes: safeGet(row[F.ADMIN_NOTES], ""),
           
-          // 🟢 NEW: Form Data & Logistics
           auditionNumber: safeGet(row[F.AUDITION_NUMBER], ""),
           preferredRoles: safeGet(row[F.PREFERRED_ROLES], ""),
           stageRomance: row[F.STAGE_ROMANCE] === true,
@@ -1110,8 +1088,6 @@ export async function findUserByEmail(tenant: string, email: string) {
     email: email,
     image: row[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
     role: assignedRole, 
-    
-    // 🟢 NEW: Pass the hashed password through so NextAuth can verify it!
     appPassword: row[DB.PEOPLE.FIELDS.APP_PASSWORD] || null,
   };
 }
@@ -1262,14 +1238,46 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     const results = await Promise.all(auditionPromises);
     const auditions = results.flat().filter(a => a && !a.error);
 
-    return auditions.map((a: any) => ({
-      id: a.id,
-      name: a[DB.AUDITIONS.FIELDS.PERFORMER]?.[0]?.value || "Student",
-      time: a[DB.AUDITIONS.FIELDS.AUDITION_SLOTS]?.[0]?.value || "Pending Time",
-      song: a[DB.AUDITIONS.FIELDS.SONG] || "No Song Selected",
-      adminNotes: a[DB.AUDITIONS.FIELDS.ADMIN_NOTES] || "",
-      isCheckedIn: a[DB.AUDITIONS.FIELDS.CHECKED_IN] || false, // <-- ADDED THIS LINE
-    }));
+    const F = DB.AUDITIONS.FIELDS;
+
+    return auditions.map((a: any) => {
+      // Safely parse out inches for the React form fields
+      const totalInches = parseInt(a[F.HEIGHT] || "0");
+      const ft = totalInches > 0 ? Math.floor(totalInches / 12).toString() : "";
+      const inch = totalInches > 0 ? (totalInches % 12).toString() : "";
+
+      // Extract music track URL safely
+      let trackUrl = "";
+      if (Array.isArray(a[F.BACKING_TRACK]) && a[F.BACKING_TRACK].length > 0) trackUrl = a[F.BACKING_TRACK][0].url || a[F.BACKING_TRACK][0].value || "";
+      else if (typeof a[F.BACKING_TRACK] === "string") trackUrl = a[F.BACKING_TRACK];
+
+      return {
+        id: a.id,
+        name: a[F.PERFORMER]?.[0]?.value || "Student",
+        time: a[F.AUDITION_SLOTS]?.[0]?.value || "Pending Time",
+        song: a[F.SONG] || "No Song Selected",
+        adminNotes: a[F.ADMIN_NOTES] || "",
+        isCheckedIn: a[F.CHECKED_IN] || false,
+        
+        // 🟢 FIX: We now explicitly map the database fields back to the form structure!
+        rawAuditionData: {
+          fullName: a[F.PERFORMER]?.[0]?.value || "",
+          dob: a[F.BIRTHDATE] || "",
+          grade: a[F.GRADE]?.value || a[F.GRADE] || "",
+          heightFt: ft,
+          heightIn: inch,
+          hairColor: a[F.HAIR_COLOR] || "",
+          songTitle: a[F.SONG] || "",
+          musicFileName: trackUrl,
+          vocalRange: a[F.VOCAL_RANGE] || "",
+          auditionSlotId: a[F.AUDITION_SLOTS]?.[0]?.id || "",
+          conflicts: a[F.CONFLICTS] || "",
+          headshotUrl: a[F.HEADSHOT]?.[0]?.url || null,
+          cytWebsiteRegistered: true,
+          callbackStatus: a[F.CALLBACK_STATUS]?.value || a[F.CALLBACK_STATUS] || "Unknown",
+        }
+      };
+    });
   } catch (error) {
     console.error("Failed to fetch existing auditions:", error);
     return [];
