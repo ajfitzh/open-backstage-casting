@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit, Lock, CalendarOff } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
 import { setAccountPassword } from "@/app/actions/auth";
@@ -45,6 +45,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
   const [isCanceling, setIsCanceling] = useState<number | null>(null);
   
   const [editingAudition, setEditingAudition] = useState<ExistingAudition | null>(null);
+  const [isViewOnly, setIsViewOnly] = useState(false); // 🟢 FIX: Track if we are in Read-Only mode
   const [showCommitteeGuide, setShowCommitteeGuide] = useState(false);
   
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -117,12 +118,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
     if (currentStep === 5) {
       if (!formData.callbackStatus) newErrors.callbackStatus = "Please select your callback availability.";
-    }
-    if (currentStep === 6) {
-      // 🟢 FIX: Disabled validation for Master Camp since the inputs are hidden in the UI
-      // if (!formData.preShow1) newErrors.preShow1 = "Please select a 1st Choice Pre-Show Committee.";
-      // if (!formData.show1) newErrors.show1 = "Please select a 1st Choice Show Week Committee.";
-      // if (!formData.chairInterest) newErrors.chairInterest = "Please indicate if you are interested in chairing.";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -242,6 +237,16 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Safe parser for Modal
+  const getModalData = () => {
+    if (!editingAudition) return {};
+    let parsed = editingAudition.rawAuditionData;
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch(e) { parsed = {}; }
+    }
+    return parsed || { fullName: editingAudition.name };
   };
 
   const firstName = formData.fullName.split(" ")[0] || "Actor";
@@ -369,37 +374,63 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             
             <div className="space-y-4 mb-8">
               {existingAuditions.length > 0 ? (
-                existingAuditions.map(audition => (
-                  <div key={audition.id} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 rounded-2xl flex items-center justify-between gap-4">
-                      <div>
-                        <h4 className="font-black text-lg dark:text-white tracking-tighter">{audition.name}</h4>
-                        <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1"><Clock size={12} className="text-blue-500" /> {audition.time}</p>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        {audition.isCheckedIn ? (
-                          <div className="px-4 py-3 bg-zinc-100 dark:bg-zinc-800/50 text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                            <Lock size={14} /> Locked
+                existingAuditions.map(audition => {
+                  // 🟢 FIX: Safely parse JSON for the inline Conflicts view
+                  let parsedData: any = {};
+                  if (audition.rawAuditionData) {
+                    try { parsedData = typeof audition.rawAuditionData === 'string' ? JSON.parse(audition.rawAuditionData) : audition.rawAuditionData; } catch(e) {}
+                  }
+
+                  return (
+                    <div key={audition.id} className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 rounded-2xl flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-black text-lg dark:text-white tracking-tighter">{audition.name}</h4>
+                          <p className="text-xs text-zinc-500 font-bold flex items-center gap-2 mt-1"><Clock size={12} className="text-blue-500" /> {audition.time}</p>
+                          
+                          {/* 🟢 FIX: At-a-glance conflicts view */}
+                          <div className="mt-3 max-w-sm">
+                            {parsedData?.conflicts ? (
+                              <p className="text-[10px] sm:text-xs text-amber-700 dark:text-amber-500 font-bold flex items-start gap-1.5 bg-amber-50 dark:bg-amber-900/10 p-2 rounded-lg border border-amber-100 dark:border-amber-900/30">
+                                <CalendarOff size={14} className="shrink-0 mt-0.5" /> 
+                                <span className="line-clamp-2">{parsedData.conflicts}</span>
+                              </p>
+                            ) : (
+                              <p className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-500 font-bold flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                                <CheckCircle2 size={14} /> No conflicts
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                          {audition.isCheckedIn ? (
                             <button 
-                              onClick={() => setEditingAudition(audition)} 
-                              className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                              onClick={() => { setEditingAudition(audition); setIsViewOnly(true); }}
+                              className="px-4 py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
                             >
-                              <Edit size={14} /> Edit
+                              <Lock size={14} /> View
                             </button>
-                            <button 
-                              onClick={() => handleCancelAudition(audition.id, audition.name)} 
-                              disabled={isCanceling === audition.id} 
-                              className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                  </div>
-                ))
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => { setEditingAudition(audition); setIsViewOnly(false); }} 
+                                className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                              >
+                                <Edit size={14} /> Edit
+                              </button>
+                              <button 
+                                onClick={() => handleCancelAudition(audition.id, audition.name)} 
+                                disabled={isCanceling === audition.id} 
+                                className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl transition-all flex items-center justify-center"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                    </div>
+                  );
+                })
               ) : (
                 <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-950 rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800">
                   <p className="text-zinc-500 font-bold text-sm">No students registered for this show yet.</p>
@@ -473,9 +504,11 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
             <EditAuditionForm 
               tenant={tenant} 
               auditionId={editingAudition.id} 
-              initialData={editingAudition.rawAuditionData || { fullName: editingAudition.name }} 
+              isReadOnly={isViewOnly} // 🟢 FIX: Tell the form to lock inputs
+              initialData={getModalData()} // 🟢 FIX: Use our safe parser
               onSuccess={() => {
                 setEditingAudition(null);
+                setIsViewOnly(false);
                 returnToHub(); 
               }} 
             />
@@ -483,32 +516,6 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         </div>
       )}
 
-      {/* MODAL OVERLAY FOR COMMITTEE GUIDE */}
-      {showCommitteeGuide && (
-         <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4" onClick={() => setShowCommitteeGuide(false)}>
-           <div className="bg-white dark:bg-zinc-900 w-full max-w-2xl max-h-[85vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
-            
-            <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-950 shrink-0">
-              <h3 className="font-black text-xl uppercase italic tracking-widest text-zinc-900 dark:text-white">Committee Guide</h3>
-              <button onClick={() => setShowCommitteeGuide(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-3xl leading-none">&times;</button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto custom-scrollbar space-y-8">
-              {/* OMITTED FOR BREVITY IN PREVIEW - LEAVE YOUR STATIC GUIDE HERE */}
-              <button onClick={() => setShowCommitteeGuide(false)} className="w-full mt-4 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-colors">
-                Close Guide
-              </button>
-            </div>
-          </div>
-         </div>
-      )}
-
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        @media (min-width: 640px) { .custom-scrollbar::-webkit-scrollbar { width: 8px; } }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 4px; }
-      `}</style>
     </div>
   );
 }
