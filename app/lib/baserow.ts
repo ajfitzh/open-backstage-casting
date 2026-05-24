@@ -1241,40 +1241,38 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     const F = DB.AUDITIONS.FIELDS;
 
     return auditions.map((a: any) => {
-      // Safely parse out inches for the React form fields
       const totalInches = parseInt(a[F.HEIGHT] || "0");
       const ft = totalInches > 0 ? Math.floor(totalInches / 12).toString() : "";
       const inch = totalInches > 0 ? (totalInches % 12).toString() : "";
 
-      // Extract music track URL safely
       let trackUrl = "";
       if (Array.isArray(a[F.BACKING_TRACK]) && a[F.BACKING_TRACK].length > 0) trackUrl = a[F.BACKING_TRACK][0].url || a[F.BACKING_TRACK][0].value || "";
       else if (typeof a[F.BACKING_TRACK] === "string") trackUrl = a[F.BACKING_TRACK];
 
       return {
         id: a.id,
-        name: a[F.PERFORMER]?.[0]?.value || "Student",
-        time: a[F.AUDITION_SLOTS]?.[0]?.value || "Pending Time",
-        song: a[F.SONG] || "No Song Selected",
-        adminNotes: a[F.ADMIN_NOTES] || "",
+        name: extractName(a[F.PERFORMER], "Student"),
+        time: safeGet(a[F.AUDITION_SLOTS], "Pending Time"),
+        song: safeGet(a[F.SONG], "No Song Selected"),
+        adminNotes: safeGet(a[F.ADMIN_NOTES], ""),
         isCheckedIn: a[F.CHECKED_IN] || false,
         
-        // 🟢 FIX: We now explicitly map the database fields back to the form structure!
+        // 🟢 FIX: Wrap everything in safeGet so React gets raw text instead of {id, value} objects!
         rawAuditionData: {
-          fullName: a[F.PERFORMER]?.[0]?.value || "",
-          dob: a[F.BIRTHDATE] || "",
-          grade: a[F.GRADE]?.value || a[F.GRADE] || "",
+          fullName: extractName(a[F.PERFORMER], ""),
+          dob: safeGet(a[F.BIRTHDATE], ""),
+          grade: safeGet(a[F.GRADE], ""),
           heightFt: ft,
           heightIn: inch,
-          hairColor: a[F.HAIR_COLOR] || "",
-          songTitle: a[F.SONG] || "",
+          hairColor: safeGet(a[F.HAIR_COLOR], ""),
+          songTitle: safeGet(a[F.SONG], ""),
           musicFileName: trackUrl,
-          vocalRange: a[F.VOCAL_RANGE] || "",
-          auditionSlotId: a[F.AUDITION_SLOTS]?.[0]?.id || "",
-          conflicts: a[F.CONFLICTS] || "",
+          vocalRange: safeGet(a[F.VOCAL_RANGE], ""),
+          auditionSlotId: safeId(a[F.AUDITION_SLOTS]) || "",
+          conflicts: safeGet(a[F.CONFLICTS], ""), 
           headshotUrl: a[F.HEADSHOT]?.[0]?.url || null,
           cytWebsiteRegistered: true,
-          callbackStatus: a[F.CALLBACK_STATUS]?.value || a[F.CALLBACK_STATUS] || "Unknown",
+          callbackStatus: safeGet(a[F.CALLBACK_STATUS], "Unknown"),
         }
       };
     });
