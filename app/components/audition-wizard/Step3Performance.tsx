@@ -109,8 +109,8 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
             </div>
             
             <div id="field-musicFile" className="pt-8 sm:pt-12 border-t border-zinc-100 dark:border-zinc-800">
-              <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${formData.musicFileName ? "bg-green-50 border-green-500 text-green-600" : errors.musicFile ? "bg-red-50 border-red-400 text-red-500" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
-                {formData.musicFileName ? (
+              <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full p-8 sm:p-16 border-4 border-dashed rounded-[2rem] sm:rounded-[3rem] flex flex-col items-center gap-4 sm:gap-6 transition-all ${formData.musicFileName && !formData.musicFileName.startsWith('http') ? "bg-green-50 border-green-500 text-green-600" : errors.musicFile ? "bg-red-50 border-red-400 text-red-500" : "border-zinc-200 dark:border-zinc-800 hover:border-blue-500 text-zinc-400"}`}>
+                {formData.musicFileName && !formData.musicFileName.startsWith('http') ? (
                   <><FileAudio size={48} /><span className="font-black text-sm sm:text-2xl italic">{formData.musicFileName}</span></>
                 ) : (
                   <><UploadCloud size={32} /><span className="font-black uppercase tracking-widest text-[10px] sm:text-xl text-center">Upload MP3 Backing Track</span></>
@@ -125,19 +125,37 @@ export function Step3Performance({ formData, updateForm, errors, setAudioFile }:
                 <div className="h-px bg-zinc-200 dark:bg-zinc-800 flex-1" />
               </div>
 
-              <div className="mt-6">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
-                  Paste a Link Instead
-                </label>
-                <input 
-                  type="url" 
-                  placeholder="Paste a Google Drive or YouTube link..."
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium focus:border-blue-500 outline-none"
-                  onChange={(e) => {
-                    updateForm({ musicFileName: e.target.value });
-                    setAudioFile(null); 
-                  }}
-                />
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
+                    Paste a Link Instead
+                  </label>
+                  <input 
+                    type="url" 
+                    placeholder="YouTube or Google Drive link..."
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium focus:border-blue-500 outline-none"
+                    value={formData.musicFileName && formData.musicFileName.startsWith('http') ? formData.musicFileName : ''}
+                    onChange={(e) => {
+                      updateForm({ musicFileName: e.target.value });
+                      setAudioFile(null); 
+                    }}
+                  />
+                </div>
+                {/* 🟢 FIX: Added Cue Time block for YouTube links */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
+                    Start Time (Cue Point)
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 1:45 or 0:30"
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium focus:border-blue-500 outline-none"
+                    value={(formData as any).musicStartTime || ''}
+                    onChange={(e) => {
+                      updateForm({ musicStartTime: e.target.value } as any);
+                    }}
+                  />
+                </div>
               </div>
             </div>
         </div>
