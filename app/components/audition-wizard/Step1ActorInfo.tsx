@@ -63,8 +63,13 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => { setIsCameraOpen(true); setTimeout(() => { navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(s => { if(videoRef.current) videoRef.current.srcObject = s; }); }, 100); }} className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors"><Camera size={14} /> {formData.headshotUrl ? "Retake Photo" : "Camera"}</button>
-                  {!formData.headshotUrl && <button type="button" onClick={() => headshotInputRef.current?.click()} className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200">Upload</button>}
+                  <button type="button" onClick={() => { setIsCameraOpen(true); setTimeout(() => { navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(s => { if(videoRef.current) videoRef.current.srcObject = s; }); }, 100); }} className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-600 transition-colors">
+                    <Camera size={14} /> {formData.headshotUrl ? "Retake" : "Camera"}
+                  </button>
+                  {/* 🟢 FIX: Upload button is now permanently visible */}
+                  <button type="button" onClick={() => headshotInputRef.current?.click()} className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-[9px] uppercase tracking-widest border border-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+                    Upload {formData.headshotUrl ? "New" : ""}
+                  </button>
                 </>
               )}
               <input type="file" ref={headshotInputRef} className="hidden" accept="image/*" onChange={(e) => {
@@ -75,8 +80,30 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
         
         <div className="flex-1 space-y-6 sm:space-y-10">
             <h2 className="text-2xl sm:text-4xl font-black dark:text-white uppercase italic tracking-tighter">The Actor</h2>
+            
+            {/* CYT REGISTRATION GATEKEEPER */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 sm:p-5 rounded-2xl mb-6">
+              <h3 className="text-amber-800 dark:text-amber-400 font-black uppercase tracking-widest text-xs flex items-center gap-2 mb-2">
+                <AlertCircle size={16} /> Stop! CYT Registration Required
+              </h3>
+              <p className="text-amber-700/90 dark:text-amber-500/90 text-xs sm:text-sm font-medium mb-4">
+                For this trial production, you <strong>must</strong> be officially registered for the show on the main CYT website before filling out this digital audition paperwork.
+              </p>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  required 
+                  checked={(formData as any).cytWebsiteRegistered || false}
+                  onChange={e => updateForm({ cytWebsiteRegistered: e.target.checked } as any)}
+                  className="mt-0.5 w-5 h-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+                <span className="text-sm font-bold text-amber-900 dark:text-amber-200 group-hover:text-amber-700 transition-colors">
+                  I confirm that I have already registered this student for the show on the main CYT website.
+                </span>
+              </label>
+            </div>
+
             <div className="space-y-4 sm:space-y-6">
-              
               <div id="field-fullName">
                 <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-2">Full Name</label>
                 <input 
