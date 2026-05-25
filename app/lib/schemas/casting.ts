@@ -83,13 +83,28 @@ const RawAuditionSchema = z.object({
   'Gender': z.any(), 
   'Headshot': z.any(),
   
-  // 🟢 NEW: Add Status here so Zod knows to look for it
+  // 🟢 Status
   'Status': z.any().nullish(), 
   
   // COMPLIANCE FIELDS
   'Paid Fees': z.boolean().nullish(),
   'Measurements Taken': z.boolean().nullish(),
   'Commitment to Character': z.boolean().nullish(),
+
+  // 🟢 NEW: Tell Zod to look for the Audition Form fields
+  'Grade': z.any().nullish(),
+  'Height': z.any().nullish(),
+  'Hair Color': z.any().nullish(),
+  'Song': z.any().nullish(),
+  'Backing Track': z.any().nullish(),
+  'Accept Any Role': z.boolean().nullish(),
+  'Willing To Alter Appearance?': z.boolean().nullish(),
+  'Fear Of Heights?': z.boolean().nullish(),
+  'Stage Romance': z.boolean().nullish(),
+  'Other Talents': z.any().nullish(),
+  'Preferred Roles': z.any().nullish(),
+  'Voice Type': z.any().nullish(),
+  'Conflicts': z.any().nullish(),
 }).passthrough();
 
 export const RosterStudentSchema = RawAuditionSchema.transform(data => {
@@ -122,7 +137,10 @@ export const RosterStudentSchema = RawAuditionSchema.transform(data => {
     name: personName,
     avatar: avatarUrl, 
     
-    // 🟢 NEW: Map the Status value down to the frontend!
+    // 🟢 NEW: Map avatarUrl to headshotUrl so the form sees the current image
+    headshotUrl: avatarUrl,
+    
+    // Map the Status value down to the frontend!
     status: data.Status?.value || "Pending",
     
     vocalScore: data['Vocal Score'] || 0,
@@ -135,7 +153,23 @@ export const RosterStudentSchema = RawAuditionSchema.transform(data => {
     paidFees: !!data['Paid Fees'],
     measurementsTaken: !!data['Measurements Taken'],
     signedAgreement: !!data['Commitment to Character'],
-    headshotSubmitted: hasHeadshot
+    headshotSubmitted: hasHeadshot,
+
+    // 🟢 NEW: Map the Raw Baserow fields to the form's `AuditionFormData` shape
+    grade: data['Grade']?.value || data['Grade'] || "",
+    height: typeof data['Height'] === 'string' ? data['Height'] : (data['Height']?.value || ""),
+    hairColor: data['Hair Color'] || "",
+    songTitle: data['Song'] || "",
+    musicFileUrl: data['Backing Track'] || "",
+    practiceAudio: data['Backing Track'] || "",
+    acceptAnyRole: !!data['Accept Any Role'],
+    willingToAlterAppearance: !!data['Willing To Alter Appearance?'],
+    fearOfHeights: !!data['Fear Of Heights?'],
+    stageRomance: !!data['Stage Romance'],
+    otherTalents: data['Other Talents'] || "",
+    preferredRoles: data['Preferred Roles'] || "",
+    voiceType: data['Voice Type']?.value || data['Voice Type'] || "",
+    conflicts: data['Conflicts'] || "",
   };
 });
 
