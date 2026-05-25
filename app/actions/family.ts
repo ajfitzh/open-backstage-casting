@@ -32,24 +32,61 @@ export async function updateAuditionDetails(tenant: string, auditionId: number, 
     return { success: false, error: "Audition is locked. Please speak to the stage manager to make changes." };
   }
 
-  // 2. Process the patch (Mapping directly to the new schema!)
-  const payload = {
+  // 🟢 Extract Performer ID so we can update their global People record (Headshot, Height)
+  const performerField = currentRecord[DB.AUDITIONS.FIELDS.PERFORMER];
+  const personId = performerField && performerField.length > 0 ? performerField[0].id : null;
+
+  // 2. Process the Audition patch
+  const auditionPayload = {
     [DB.AUDITIONS.FIELDS.HAIR_COLOR]: updateData.hairColor,
     [DB.AUDITIONS.FIELDS.PREFERRED_ROLES]: updateData.preferredRoles,
-    [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: updateData.vocalRange,
+    [DB.AUDITIONS.FIELDS.VOICE_TYPE]: updateData.voiceType, // Fixed from vocalRange
     [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: updateData.acceptAnyRole,
-    [DB.AUDITIONS.FIELDS.STAGE_ROMANCE]: updateData.acceptRomance,
+    [DB.AUDITIONS.FIELDS.STAGE_ROMANCE]: updateData.stageRomance, // Fixed from acceptRomance
     [DB.AUDITIONS.FIELDS.WILLING_TO_ALTER_APPEARANCE]: updateData.willingToAlterAppearance,
     [DB.AUDITIONS.FIELDS.FEAR_OF_HEIGHTS]: updateData.fearOfHeights,
     [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: updateData.otherTalents,
+    
+    // 🟢 Added the missing form fields!
+    [DB.AUDITIONS.FIELDS.SONG]: updateData.songTitle,
+    [DB.AUDITIONS.FIELDS.BACKING_TRACK]: updateData.musicFileUrl,
+    [DB.AUDITIONS.FIELDS.GRADE]: updateData.grade,
+    [DB.AUDITIONS.FIELDS.CONFLICTS]: updateData.conflicts,
   };
 
-  const response = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+  const auditionResponse = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
     method: "PATCH",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(auditionPayload)
   }, {}, tenant);
 
-  return { success: !response.error, data: response };
+  if (auditionResponse.error) {
+    return { success: false, error: auditionResponse.error };
+  }
+
+  // 3. 🟢 Process the People patch (For the Lookup fields!)
+  if (personId && (updateData.headshotUrl || updateData.height)) {
+    const peoplePayload: any = {};
+    
+    // According to schema.ts, HEADSHOT is a 'url' field type (field_5776)
+    // Only save if it's a real URL (not a base64 data string from an incomplete upload)
+    if (updateData.headshotUrl && !updateData.headshotUrl.startsWith('data:')) {
+      peoplePayload[DB.PEOPLE.FIELDS.HEADSHOT] = updateData.headshotUrl;
+    }
+    
+    // According to schema.ts, HEIGHT_TOTAL_INCHES is a 'number' field (field_5777)
+    if (updateData.height) {
+      peoplePayload[DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES] = parseInt(updateData.height, 10);
+    }
+
+    if (Object.keys(peoplePayload).length > 0) {
+      await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(peoplePayload)
+      }, {}, tenant);
+    }
+  }
+
+  return { success: true, data: auditionResponse };
 }
 // Fetch all people tied to the parent's email
 export async function getFamilyMembers(tenant: string, email: string) {
