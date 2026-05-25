@@ -31,21 +31,18 @@ use: {
     trace: 'on-first-retry',
   },
 
-// Inside playwright.config.ts
-projects: [
-  {
-    name: 'setup',
-    testMatch: /auth\.setup\.ts/, // <--- Make sure this matches your filename!
-  },
-  {
-    name: 'chromium',
-    use: { 
-      ...devices['Desktop Chrome'],
-      storageState: 'playwright/.auth/user.json', 
+
+  projects: [
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/, 
     },
-    //dependencies: ['setup'], // <--- This tells Playwright to run setup FIRST
-  },
-]
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'], // 🟢 UNCOMMENTED! This forces setup to finish FIRST.
+    },
+  ]
 ,
 webServer: {
     command: 'npm run dev',
