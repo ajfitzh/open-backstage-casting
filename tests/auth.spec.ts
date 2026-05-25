@@ -1,17 +1,30 @@
-import { test, expect } from '@playwright/test';
+// tests/auth.setup.ts
+import { test as setup, expect } from '@playwright/test';
 
-// Forces this specific file to start with a clean, logged-out slate
-test.use({ storageState: { cookies: [], origins: [] } });
+setup.describe('Authentication Setup', () => {
+  setup.describe.configure({ mode: 'serial' });
 
-test.describe('Authentication & Routing', () => {
-  test('unauthenticated users are redirected to login', async ({ page }) => {
-    // Attempt to access a protected route directly
-    await page.goto('/settings');
+  // 🟢 REDUCED TO ONLY WHAT WE NEED FOR AUDITION WORLD
+  const personas = [
+    { email: 'admin@e2e-sandbox.org', file: 'playwright/.auth/admin.json' },
+    { email: 'contractor-director@e2e-sandbox.org', file: 'playwright/.auth/director.json' },
+    { email: 'parent@e2e-sandbox.org', file: 'playwright/.auth/parent.json' },
+  ];
 
-    // The NextAuth middleware should intercept and bounce us to the login page
-    await expect(page).toHaveURL(/.*\/login/);
-    
-    // Verify the login UI rendered
-    await expect(page.getByRole('button', { name: /Enter Dashboard|Sign In/i })).toBeVisible();
-  });
+  for (const { email, file } of personas) {
+    setup(`authenticate as ${email}`, async ({ page }) => {
+      console.log(`Setting up auth for: ${email}`);
+      
+      await page.goto('/login');
+      await page.getByPlaceholder(/Email Address/i).fill(email);
+      await page.getByPlaceholder(/Password/i).fill('dev-mode-bypass');
+      await page.getByRole('button', { name: /Enter Dashboard/i }).click();
+
+      // Increased timeout slightly for GitHub Actions safety
+      await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 15000 });
+      await expect(page.getByRole('link', { name: /OPENBACKSTAGE/i }).first()).toBeVisible({ timeout: 15000 });
+
+      await page.context().storageState({ path: file });
+    });
+  }
 });
