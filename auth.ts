@@ -75,10 +75,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Fetch user from the specific tenant's database
         const user = await findUserByEmail(tenant, email);
 
+        // 🟢 DEV BYPASS: Intercept BEFORE strict password checking!
+        if (process.env.NODE_ENV === "development" && rawPassword === "dev-mode-bypass") {
+            console.log(`⚠️ DEV MODE: Bypassing password check. Forcing login!`);
+            // If the user exists in the DB, log in as them. Otherwise, forge a local admin session.
+            return user ? user : { 
+                id: "dev-bypass-9999", 
+                name: "Local Admin", 
+                email: email, 
+                role: "Admin" 
+            };
+        }
+
+        // --- NORMAL PROD LOGIN ---
         if (user) {
             console.log(`✅ Success! Found user in Baserow: ${user.name}`);
             
-            // 🟢 SECURITY FIX: Actually check the password!
+            // SECURITY FIX: Actually check the password!
             if (!user.appPassword) {
                 console.log(`❌ Failed: User found, but no password set (Guest account).`);
                 return null;
@@ -97,18 +110,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } 
         
         console.log(`❌ Failed: Email not found in Baserow PEOPLE table.`);
-        
-        // 🟢 THE MASTER KEY (DEV ONLY) - FIXED ID!
-        if (process.env.NODE_ENV === "development") {
-            console.log(`⚠️ DEV MODE: Bypassing database check. Forcing login!`);
-            return { 
-                id: "dev-bypass-9999", 
-                name: "Local Admin Override", 
-                email: email, 
-                role: "Admin" 
-            };
-        }
-
         return null;
       }
     })
