@@ -2,6 +2,7 @@
 "use server";
 
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
+import { requirePermission } from "@/app/lib/auth-guard";
 
 export async function saveCheckIn(
   tenant: string, 
@@ -13,6 +14,9 @@ export async function saveCheckIn(
   updatedPhone?: string,
   updatedEmail?: string
 ) {
+  const guard = await requirePermission(tenant, "view_checkin");
+  if (!guard.ok) return { success: false, error: guard.error };
+
   try {
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
@@ -27,7 +31,7 @@ export async function saveCheckIn(
            [DB.AUDITIONS.FIELDS.LOBBY_NOTE]: lobbyNote || "",
            [DB.AUDITIONS.FIELDS.CHECKED_IN]: isCheckedIn
        })
-    });
+    }, {}, tenant);
 
     // 3. If they edited contact info, Patch the Master People Table!
     if (performerId && (updatedPhone || updatedEmail || updatedName)) {
@@ -45,7 +49,7 @@ export async function saveCheckIn(
         await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${performerId}/`, {
             method: "PATCH",
             body: JSON.stringify(peopleUpdate)
-        });
+        }, {}, tenant);
     }
 
     return { success: !auditionRes.error };

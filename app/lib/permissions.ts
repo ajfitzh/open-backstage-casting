@@ -30,7 +30,7 @@ const GLOBAL_ROLES: Record<string, Permission[]> = {
 
   // Jenny: Logistics + Casting
   'Production Coordinator': [
-      'edit_compliance', 'manage_casting', 'view_cast_list', 'view_sensitive_reports', 'view_auditions', 'manage_committees'
+      'edit_compliance', 'manage_casting', 'view_cast_list', 'view_sensitive_reports', 'view_auditions', 'manage_committees', 'view_checkin'
   ],
   
   // Elizabeth: Education + Casting Visibility
@@ -40,7 +40,7 @@ const GLOBAL_ROLES: Record<string, Permission[]> = {
 
   // Generic Staff
   'Staff': [
-      'view_cast_list', 'manage_casting', 'edit_compliance', 'view_auditions'
+      'view_cast_list', 'manage_casting', 'edit_compliance', 'view_auditions', 'view_checkin'
   ], 
 // 🟢 ADD THIS: Give Contractors a baseline view so the dashboard doesn't look broken
 'Contractor': [
@@ -67,12 +67,44 @@ const PRODUCTION_ROLES: Record<string, Permission[]> = {
       'manage_casting', 'view_cast_list', 'view_auditions'
   ],
   'Stage Manager': [
-      'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees'
+      'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees', 'view_checkin'
   ],
   'Producer': [
-      'view_financials', 'view_sensitive_reports', 'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees'
+      'view_financials', 'view_sensitive_reports', 'view_cast_list', 'edit_compliance', 'view_auditions', 'manage_committees', 'view_checkin'
   ]
 };
+
+export const ASSIGNABLE_GLOBAL_ROLES = Object.keys(GLOBAL_ROLES);
+
+export const STAFF_PERMISSIONS: Permission[] = [
+  'view_cast_list',
+  'view_financials',
+  'edit_compliance',
+  'manage_casting',
+  'manage_committees',
+  'view_checkin',
+  'view_auditions',
+];
+
+function parseRoles(roleInput: string | string[] | null | undefined): string[] {
+  if (!roleInput) return [];
+  if (Array.isArray(roleInput)) return roleInput.map((r) => r.trim()).filter(Boolean);
+  return roleInput.split(',').map((r) => r.trim()).filter(Boolean);
+}
+
+export function isAdminRole(globalRole: string | string[] | null | undefined): boolean {
+  const roles = parseRoles(globalRole);
+  return roles.includes('Admin') || roles.includes('Executive Director');
+}
+
+export function isStaffRole(
+  globalRole: string | string[] | null | undefined,
+  productionRole: string | string[] | null = null
+): boolean {
+  const roles = parseRoles(globalRole);
+  if (roles.includes('SuperAdmin') || roles.includes('Teacher')) return true;
+  return STAFF_PERMISSIONS.some((perm) => hasPermission(globalRole || '', productionRole, perm));
+}
 
 export function hasPermission(
   globalRole: string | string[], 

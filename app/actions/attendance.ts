@@ -2,6 +2,7 @@
 "use server";
 
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
+import { requirePermission } from "@/app/lib/auth-guard";
 
 export async function toggleAttendance(
     tenant: string, 
@@ -10,6 +11,9 @@ export async function toggleAttendance(
     eventId: number, 
     action: "IN" | "OUT" | "ABSENT"
 ) {
+    const guard = await requirePermission(tenant, "view_checkin", productionId);
+    if (!guard.ok) return { success: false, error: guard.error };
+
     try {
         const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);

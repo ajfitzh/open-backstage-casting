@@ -457,9 +457,12 @@ export async function getPeople(tenant: string) {
   return allRows.map((row: any) => ({
     id: row.id,
     name: row[F.FULL_NAME] || `${row[F.FIRST_NAME] || ""} ${row[F.LAST_NAME] || ""}`.trim(),
-    headshot: row[F.HEADSHOT]?.[0]?.url || null,
-    email: row[F.CYT_ACCOUNT_PERSONAL_EMAIL] || row[F.CYT_NATIONAL_INDIVIDUAL_EMAIL],
-    phone: row[F.PHONE_NUMBER]
+    headshot: typeof row[F.HEADSHOT] === "string" ? row[F.HEADSHOT] : (row[F.HEADSHOT]?.[0]?.url || null),
+    email: row[F.CYT_ACCOUNT_PERSONAL_EMAIL] || row[F.CYT_NATIONAL_INDIVIDUAL_EMAIL] || "",
+    phone: row[F.PHONE_NUMBER] || "",
+    roles: Array.isArray(row[F.STATUS])
+      ? row[F.STATUS].map((s: any) => s?.value).filter(Boolean)
+      : (typeof row[F.STATUS] === "string" && row[F.STATUS] ? [row[F.STATUS]] : [])
   }));
 }
 
@@ -1120,7 +1123,9 @@ export async function getUserProfile(tenant: string, email: string) {
     phone: safeGet(user[DB.PEOPLE.FIELDS.PHONE_NUMBER]),
     address: `${safeGet(user[DB.PEOPLE.FIELDS.ADDRESS])}, ${safeGet(user[DB.PEOPLE.FIELDS.CITY])}`,
     role: safeGet(user[DB.PEOPLE.FIELDS.STATUS], "User"),
-    image: user[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null,
+    image: typeof user[DB.PEOPLE.FIELDS.HEADSHOT] === "string"
+      ? user[DB.PEOPLE.FIELDS.HEADSHOT]
+      : (user[DB.PEOPLE.FIELDS.HEADSHOT]?.[0]?.url || null),
     familyMembers: [] as any[]
   };
 

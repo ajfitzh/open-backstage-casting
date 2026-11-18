@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { auth } from '@/auth';
 
 // Initialize Stripe. In production, ensure STRIPE_SECRET_KEY is set in your .env
 // We use a fallback dummy key so the code doesn't crash on initialization if missing.
@@ -8,6 +9,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy', {
 });
 
 export async function POST(req: NextRequest) {
+  const sessionAuth = await auth();
+  const sandboxCookie = req.cookies.get('sandbox_access')?.value;
+  const hasSandboxAccess =
+    Boolean(process.env.SANDBOX_PASSWORD) && sandboxCookie === process.env.SANDBOX_PASSWORD;
+
+  if (!sessionAuth?.user && !hasSandboxAccess) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     // Determine the origin for our return URLs
     const origin = req.headers.get('origin') || 'http://localhost:3000';

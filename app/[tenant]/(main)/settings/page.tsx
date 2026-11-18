@@ -5,8 +5,10 @@ import {
   getUserProfile, 
   getAllShows, 
   getActiveProduction, 
-  getUserProductionRole 
+  getUserProductionRole,
+  getPeople
 } from "@/app/lib/baserow";
+import { isAdminRole } from "@/app/lib/permissions";
 import SettingsClient from "@/app/components/settings/SettingsClient";
 
 // 🟢 FIX 1: Add `params` to the component signature
@@ -38,12 +40,14 @@ export default async function SettingsPage({
 
   const effectiveActiveId = activeId || defaultShow?.id || 0;
 
-  let productionRole = null;
-  
-  if (userProfile && effectiveActiveId) {
-      // 🟢 FIX 4: Pass the tenant here as well
-      productionRole = await getUserProductionRole(tenant, Number(userProfile.id), effectiveActiveId);
-  }
+  const [productionRole, directoryPeople] = await Promise.all([
+    userProfile && effectiveActiveId
+      ? getUserProductionRole(tenant, Number(userProfile.id), effectiveActiveId)
+      : Promise.resolve(null),
+    userProfile && isAdminRole(userProfile.role)
+      ? getPeople(tenant)
+      : Promise.resolve([])
+  ]);
 
   if (!userProfile) {
     return (
@@ -60,10 +64,12 @@ export default async function SettingsPage({
   return (
     <div className="min-h-screen bg-zinc-950 p-6 lg:p-12 text-white">
       <SettingsClient 
+        tenant={tenant}
         shows={allShows} 
         activeId={effectiveActiveId} 
         initialUser={userProfile} 
-        realProductionRole={productionRole} 
+        realProductionRole={productionRole}
+        directoryPeople={directoryPeople}
       />
     </div>
   );

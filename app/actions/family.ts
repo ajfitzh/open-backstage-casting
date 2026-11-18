@@ -3,9 +3,13 @@
 
 import { getDB, fetchBaserow } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
+import { requireAuthenticatedUser } from "@/app/lib/auth-guard";
 
 // Fetch the existing audition record for editing
 export async function getStudentAuditionForEdit(tenant: string, studentId: number, productionId: number) {
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return null;
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   
@@ -23,6 +27,9 @@ export async function getStudentAuditionForEdit(tenant: string, studentId: numbe
 
 // Save the updated details
 export async function updateAuditionDetails(tenant: string, auditionId: number, updateData: any) {
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   

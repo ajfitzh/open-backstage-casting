@@ -3,9 +3,13 @@
 
 import { fetchBaserow, getDB } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
+import { requirePermission } from "@/app/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 
 export async function generateCastingRows(tenant: string, productionId: number) {
+  const guard = await requirePermission(tenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   console.log(`Generating casting rows for Production ${productionId} on tenant ${tenant}...`);
 
   try {
@@ -22,7 +26,7 @@ export async function generateCastingRows(tenant: string, productionId: number) 
         size: "200", 
         page: page.toString(),
         "user_field_names": "true" 
-      });
+      }, tenant);
 
       // Handle how fetchBaserow formats the return (it might return the array directly or a results object)
       const batch = Array.isArray(response) ? response : (response?.results || []);
@@ -62,7 +66,7 @@ export async function generateCastingRows(tenant: string, productionId: number) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: chunk })
-      });
+      }, {}, tenant);
     }
 
     revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');

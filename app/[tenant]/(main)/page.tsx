@@ -20,8 +20,10 @@ import {
   getAllShows,
   getCommitteeData,
   getExistingAuditions,
-  getUserProfile 
+  getUserProfile,
+  getUserProductionRole
 } from '@/app/lib/baserow';
+import { isStaffRole } from '@/app/lib/permissions';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
 import SeasonContext from '@/app/components/dashboard/SeasonContext';
@@ -47,9 +49,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
   }
 
-  // Define exactly who is allowed to see the heavy backend
-  const staffRoles = ["Admin", "Director", "Staff", "Teacher", "SuperAdmin"];
-  const isStaff = staffRoles.includes(userRole);
+  // Check global role and show-specific production role using shared RBAC permissions
+  const sessionUserId = Number((session?.user as any)?.id);
+  let productionRole: string | null = null;
+  if (!isStaffRole(userRole) && !Number.isNaN(sessionUserId) && sessionUserId > 0) {
+      productionRole = await getUserProductionRole(tenant, sessionUserId, show.id);
+  }
+  const isStaff = isStaffRole(userRole, productionRole);
+  const tenantDisplayName = tenant === "cytfred" ? "CYT Fredericksburg" : tenant.replace(/[-_]/g, " ");
 
   // ==========================================
   // 👨‍👩‍👧‍👦 THE FAMILY HUB (Parents & Students)
@@ -86,7 +93,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
                     <p className="text-zinc-400 text-sm font-medium">Logged in as {userEmail}</p>
                  </div>
                  <span className="px-3 py-1 bg-zinc-900 border border-white/10 rounded-full text-[10px] text-zinc-400 font-black uppercase tracking-widest">
-                    CYT Fredericksburg
+                    {tenantDisplayName}
                  </span>
               </div>
 

@@ -1,8 +1,15 @@
 "use server";
 
 import { Resend } from 'resend';
+import { requireStaffAccess } from '@/app/lib/auth-guard';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing RESEND_API_KEY environment variable.");
+  }
+  return new Resend(apiKey);
+}
 
 interface NightlyReportPayload {
     emails: string[];
@@ -14,6 +21,9 @@ interface NightlyReportPayload {
 }
 
 export async function sendNightlyReport(payload: NightlyReportPayload) {
+  const guard = await requireStaffAccess();
+  if (!guard.ok) return { success: false, error: guard.error };
+
   try {
     // 1. Build the dynamic HTML for Absences
     const absencesHtml = payload.absences.length === 0 
@@ -33,6 +43,7 @@ export async function sendNightlyReport(payload: NightlyReportPayload) {
     const formattedNotes = payload.notes.replace(/\n/g, '<br/>');
 
     // 4. Send the Email via Resend
+    const resend = getResend();
     const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM_ADDRESS || 'Stage Management <stage@open-backstage.org>',
       // Resend allows an array of up to 50 emails in the 'bcc' field for bulk sending

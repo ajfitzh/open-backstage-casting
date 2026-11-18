@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { validateUploadRequest } from '@/app/lib/upload-validation';
 
 // 🟢 Clean the endpoint to ensure we don't accidentally double up on "https://"
 const rawEndpoint = process.env.DO_SPACES_ENDPOINT || "nyc3.digitaloceanspaces.com";
@@ -17,16 +18,20 @@ const s3Client = new S3Client({
 
 export async function POST(request: Request) {
   try {
-    const { filename, fileType } = await request.json();
+    const body = await request.json();
+    const validation = validateUploadRequest(body?.filename, body?.fileType);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
 
     // 1. Create a unique file name
-    const uniqueFilename = `${Date.now()}-${filename.replace(/\s/g, '-')}`;
+    const uniqueFilename = `${Date.now()}-${validation.safeFilename}`;
 
     // 2. Prepare the command
     const command = new PutObjectCommand({
       Bucket: process.env.DO_SPACES_BUCKET,
       Key: uniqueFilename,
-      ContentType: fileType,
+      ContentType: validation.contentType,
       ACL: 'public-read', // Makes the video viewable by your staff
     });
 

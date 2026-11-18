@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { BaserowClient } from '@/app/lib/BaserowClient';
+import { getActiveProduction } from '@/app/lib/baserow';
 import ReportsClient from '@/app/components/reports/ReportsClient';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,12 @@ export default async function ReportsPage({ params }: { params: { tenant: string
   // 🟢 3. Await cookies (Best practice for Next.js 15+)
   const cookieStore = await cookies();
   const savedShowId = cookieStore.get('active_production_id')?.value;
-  const showId = parseInt(savedShowId || "94", 10);
+  let showId = savedShowId ? parseInt(savedShowId, 10) : NaN;
+
+  if (isNaN(showId)) {
+    const activeShow = await getActiveProduction(tenant);
+    showId = activeShow?.id ?? NaN;
+  }
 
   if (isNaN(showId)) {
     return <div className="h-screen flex items-center justify-center text-zinc-500 font-bold uppercase tracking-widest">Error: No active production selected.</div>;

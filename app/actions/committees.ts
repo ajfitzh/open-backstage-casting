@@ -3,8 +3,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
+import { requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
 
 export async function submitCommitteeReport(tenant: string, data: any) {
+  const authGuard = await requireAuthenticatedUser();
+  if (!authGuard.ok) return { success: false, error: authGuard.error };
+
   try {
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
@@ -49,6 +53,9 @@ export async function saveCommitteeAssignments(
     assignments: Record<number, string>,
     chairs: Record<number, boolean> 
 ) {
+    const guard = await requirePermission(tenant, "manage_committees");
+    if (!guard.ok) return { success: false, error: guard.error };
+
     if (process.env.ENABLE_DRY_RUN === "true") {
         console.log(`\n💾 --- DRY RUN SAVE: ${phase} ---`);
         console.log(`🏢 Tenant: ${tenant}`);
@@ -81,6 +88,9 @@ export async function saveCommitteeAssignments(
 // --- NEW CRUD ACTIONS ---
 
 export async function addCommitteeVolunteer(tenant: string, data: { name: string, email: string, phone: string }) {
+    const guard = await requirePermission(tenant, "manage_committees");
+    if (!guard.ok) return { success: false, error: guard.error };
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_PREFS.FIELDS;
@@ -99,6 +109,9 @@ export async function addCommitteeVolunteer(tenant: string, data: { name: string
 }
 
 export async function updateCommitteeVolunteer(tenant: string, rowId: number, data: { name: string, email: string, phone: string }) {
+    const guard = await requirePermission(tenant, "manage_committees");
+    if (!guard.ok) return { success: false, error: guard.error };
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_PREFS.FIELDS;
@@ -117,6 +130,9 @@ export async function updateCommitteeVolunteer(tenant: string, rowId: number, da
 }
 
 export async function deleteCommitteeVolunteer(tenant: string, rowId: number) {
+    const guard = await requirePermission(tenant, "manage_committees");
+    if (!guard.ok) return { success: false, error: guard.error };
+
     const tables = await getTenantTableConfig(tenant);
     
     await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/${rowId}/`, {
