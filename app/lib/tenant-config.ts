@@ -6,7 +6,9 @@ const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASER
 
 // 🟢 THE BYPASS: A safe dummy configuration for non-tenant routes
 const SYSTEM_DUMMY_CONFIG = {
+    TENANT_NAME: null as string | null,
     PEOPLE: "0", PRODUCTIONS: "0", ASSIGNMENTS: "0", COMMITTEE_PREFS: "0",
+    COMMITTEE_REPORTS: "0", STAFF_INTEREST: "0",
     CONFLICTS: "0", EVENTS: "0", SCENES: "0", SCENE_ASSIGNMENTS: "0",
     AUDITIONS: "0", CLASSES: "0", VENUES: "0", PERFORMANCES: "0",
     SPACES: "0", RENTAL_RATES: "0", SEASONS: "0", BLUEPRINT_ROLES: "0",
@@ -47,11 +49,15 @@ export async function getTenantTableConfig(tenantSlug: string) {
 
   // Perfectly mapped to your specific schema keys, while aliasing to match baserow.ts
   return {
+    TENANT_NAME: tenantRow.Name || tenantRow.NAME || null,
+
     // Direct matches
     PEOPLE: tenantRow.PEOPLE || null,
     PRODUCTIONS: tenantRow.PRODUCTIONS || null,
     ASSIGNMENTS: tenantRow.ASSIGNMENTS || null,
     COMMITTEE_PREFS: tenantRow.COMMITTEE_PREFS || null,
+    COMMITTEE_REPORTS: tenantRow.COMMITTEE_REPORTS || null,
+    STAFF_INTEREST: tenantRow.STAFF_INTEREST || null,
     CONFLICTS: tenantRow.CONFLICTS || null,
     EVENTS: tenantRow.EVENTS || null,
     SCENES: tenantRow.SCENES || null,

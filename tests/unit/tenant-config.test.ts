@@ -55,9 +55,11 @@ describe('getTenantTableConfig', () => {
         JSON.stringify({
           results: [
             {
+              Name: 'CYT Fredericksburg',
               PEOPLE: 599,
               PRODUCTIONS: 601,
               AUDITIONS: 630,
+              COMMITTEE_REPORTS: 773,
               RATES: 700,
               SESSIONS: 632,
               ROLES: 605,
@@ -75,9 +77,11 @@ describe('getTenantTableConfig', () => {
     const cfg = await getTenantTableConfig('cytfred');
 
     assert.match(requestedUrl, /^https:\/\/db\.example\.test\/api\/database\/rows\/table\/999\/\?filter__Slug__equal=cytfred/);
+    assert.equal(cfg.TENANT_NAME, 'CYT Fredericksburg');
     assert.equal(cfg.PEOPLE, 599);
     assert.equal(cfg.PRODUCTIONS, 601);
     assert.equal(cfg.AUDITIONS, 630);
+    assert.equal(cfg.COMMITTEE_REPORTS, 773);
     // Aliases
     assert.equal(cfg.RENTAL_RATES, 700);
     assert.equal(cfg.SEASONS, 632);

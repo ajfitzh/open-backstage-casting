@@ -19,23 +19,45 @@ export default async function NightlyReportPage({ params }: { params: { tenant: 
     const todayStr = new Date().toISOString().split('T')[0];
     let activeEvent = allEvents.find((e: any) => e.date >= todayStr) || allEvents[allEvents.length - 1];
 
-    // Fetch today's attendance to find absences
+    // Fetch today's attendance and scheduled scenes in parallel
     let attendance: { name: any; status: any; }[] = [];
+    let scenesWorked: string[] = [];
     if (activeEvent) {
         const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);
         const F = DB.ATTENDANCE.FIELDS;
         const tableId = tables.ATTENDANCE || DB.ATTENDANCE.ID;
-        const res = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, {
-            filter_type: "AND",
-            [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: activeEvent.id
-        }, tenant);
+        const slotsTableId = tables.SCHEDULE_SLOTS || DB.SCHEDULE_SLOTS.ID;
+        const SLF = DB.SCHEDULE_SLOTS.FIELDS;
+
+        const [attendanceRes, slotsRes] = await Promise.all([
+            fetchBaserow(`/database/rows/table/${tableId}/`, {}, {
+                filter_type: "AND",
+                [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: activeEvent.id
+            }, tenant),
+            fetchBaserow(`/database/rows/table/${slotsTableId}/`, {}, {
+                filter_type: "AND",
+                [`filter__${SLF.EVENT_LINK}__link_row_has`]: activeEvent.id
+            }, tenant),
+        ]);
         
-        if (Array.isArray(res)) {
-            attendance = res.map(r => ({
+        if (Array.isArray(attendanceRes)) {
+            attendance = attendanceRes.map(r => ({
                 name: r[F.PERSON]?.[0]?.value || "Unknown",
                 status: r[F.STATUS]?.value || "Present"
             }));
+        }
+
+        if (Array.isArray(slotsRes)) {
+            const seen = new Set<string>();
+            for (const slot of slotsRes) {
+                const sceneVal = slot[SLF.SCENE]?.[0]?.value;
+                const sceneName = typeof sceneVal === "string" ? sceneVal : sceneVal?.value;
+                if (sceneName && !seen.has(sceneName)) {
+                    seen.add(sceneName);
+                    scenesWorked.push(sceneName);
+                }
+            }
         }
     }
 
@@ -48,7 +70,7 @@ export default async function NightlyReportPage({ params }: { params: { tenant: 
             <NightlyReportClient 
                 todayEvent={activeEvent}
                 attendance={attendance}
-                scenesWorked={["Act 1, Scene 2", "Opening Number"]} // Hardcoded for MVP display
+                scenesWorked={scenesWorked}
                 castEmails={castEmails}
             />
         </div>

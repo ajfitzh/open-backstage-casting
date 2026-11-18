@@ -1,56 +1,78 @@
 "use server";
-import { signOut } from "@/auth" // Import the SERVER version from your auth config
 
+import { signOut } from "@/auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { 
-  getClassRoster, 
-  fetchBaserow
-} from "@/app/lib/baserow";
-import { DB } from "@/app/lib/schema";
-// 🎯 HARDCODED IDs
-const TBL_CLASSES = 633;
-const FLD_CLASS_NAME = 'field_6115';
-const FLD_CLASS_TEACHER = 'field_6117'; // Notice this is a Link Row field
-const FLD_CLASS_STATUS = 'field_6241';  // Single Select
-const FLD_CLASS_DESC = 'field_6242';
-const FLD_CLASS_OBJ = 'field_6243';
-const FLD_CLASS_TYPE = 'field_6217';    // Single Select
-const FLD_CLASS_SESSION = 'field_6116'; // Link Row
-const TBL_SESSIONS = 632;
-const TBL_PEOPLE = 599;
+import { fetchBaserow, getDB } from "@/app/lib/baserow";
+import { getTenantTableConfig } from "@/app/lib/tenant-config";
+import { resolveTenant } from "@/app/lib/tenant-server";
+import { requirePermission, requireStaffAccess } from "@/app/lib/auth-guard";
+
 // --- HELPERS ---
 
+async function getTenantContext(explicitTenant?: string) {
+  const tenant = await resolveTenant(explicitTenant);
+  const DB = getDB(tenant);
+  const tables = await getTenantTableConfig(tenant);
+  return { tenant, DB, tables };
+}
+
+const formatTimeHHMM = (decimal: number) => {
+  const h = Math.floor(decimal);
+  const m = Math.round((decimal % 1) * 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+};
+
 export async function handleLogout() {
-  // Use 'redirectTo' instead of 'callbackUrl' for the server-side signOut
   await signOut({ redirectTo: "/login" });
 }
-export async function getSeasonBoard(seasonId: string) {
+
+export async function getSeasonBoard(seasonId: string, explicitTenant?: string) {
   try {
+    const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+    const seasonsTable = tables.SEASONS || DB.SEASONS.ID;
+    const staffInterestTable = tables.STAFF_INTEREST || DB.STAFF_INTEREST.ID;
+    const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
+
     const seasonRes = await fetchBaserow(
-      `/database/rows/table/${DB.SEASONS.ID}/${seasonId}/?user_field_names=true`
+      `/database/rows/table/${seasonsTable}/${seasonId}/?user_field_names=true`,
+      {},
+      {},
+      tenant
     );
-    
+
     if (!seasonRes || seasonRes.error) {
       console.error("Season Fetch Error:", seasonRes);
       return null;
     }
 
     const staffRes = await fetchBaserow(
-      `/database/rows/table/${DB.STAFF_INTEREST.ID}/?user_field_names=true&filter__field_${DB.STAFF_INTEREST.FIELDS.SEASON}__link_row_has=${seasonId}`
+      `/database/rows/table/${staffInterestTable}/`,
+      {},
+      {
+        user_field_names: "true",
+        [`filter__${DB.STAFF_INTEREST.FIELDS.SEASON}__link_row_has`]: seasonId,
+      },
+      tenant
     );
-    const talentPool = Array.isArray(staffRes) ? staffRes : (staffRes.results || []);
+    const talentPool = Array.isArray(staffRes) ? staffRes : staffRes?.results || [];
 
     const prodRes = await fetchBaserow(
-      `/database/rows/table/${DB.PRODUCTIONS.ID}/?user_field_names=true&filter__field_${DB.PRODUCTIONS.FIELDS.SEASON_LINKED}__link_row_has=${seasonId}`
+      `/database/rows/table/${productionsTable}/`,
+      {},
+      {
+        user_field_names: "true",
+        [`filter__${DB.PRODUCTIONS.FIELDS.SEASON_LINKED}__link_row_has`]: seasonId,
+      },
+      tenant
     );
-    const productions = Array.isArray(prodRes) ? prodRes : (prodRes.results || []);
+    const productions = Array.isArray(prodRes) ? prodRes : prodRes?.results || [];
 
     return {
       season: seasonRes,
-      talentPool: talentPool,
-      productions: productions
+      talentPool,
+      productions,
     };
   } catch (error) {
     console.error("Failed to load Season Board:", error);
@@ -58,97 +80,145 @@ export async function getSeasonBoard(seasonId: string) {
   }
 }
 
-const formatTimeHHMM = (decimal: number) => {
-  const h = Math.floor(decimal);
-  const m = Math.round((decimal % 1) * 60);
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-};
-
 // --- EDUCATION ACTIONS ---
 
-export async function submitProposalAction(data: any) {
-  // 1. We must find the Session ID for the string "Winter 2025"
-  const sessionRes = await fetchBaserow(`/database/rows/table/${TBL_SESSIONS}/?user_field_names=true&filter__field_6109__equal=${data.session}&size=1`);
+export async function submitProposalAction(data: any, explicitTenant?: string) {
+  const guard = await requireStaffAccess();
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const sessionsTable = tables.SEASONS || DB.SESSIONS.ID;
+  const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
+  const classesTable = tables.CLASSES || DB.CLASSES.ID;
+  const CF = DB.CLASSES.FIELDS;
+
+  const sessionRes = await fetchBaserow(
+    `/database/rows/table/${sessionsTable}/`,
+    {},
+    {
+      user_field_names: "true",
+      [`filter__${DB.SESSIONS.FIELDS.SESSION_NAME}__equal`]: data.session,
+      size: "1",
+    },
+    tenant
+  );
   const sessionId = Array.isArray(sessionRes) && sessionRes.length > 0 ? sessionRes[0].id : null;
 
-  // 2. We must find the Person ID for the teacher name
-  const teacherRes = await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/?user_field_names=true&filter__field_5735__equal=${data.teacher}&size=1`);
+  const teacherRes = await fetchBaserow(
+    `/database/rows/table/${peopleTable}/`,
+    {},
+    {
+      user_field_names: "true",
+      [`filter__${DB.PEOPLE.FIELDS.FULL_NAME}__equal`]: data.teacher,
+      size: "1",
+    },
+    tenant
+  );
   const teacherId = Array.isArray(teacherRes) && teacherRes.length > 0 ? teacherRes[0].id : null;
 
   try {
-      await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/`, {
+    await fetchBaserow(
+      `/database/rows/table/${classesTable}/`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          [FLD_CLASS_NAME]: data.name,
-          [FLD_CLASS_DESC]: data.description,
-          [FLD_CLASS_OBJ]: data.objectives,
-          // Since these are link_row fields, we must send an array containing the ID
-          ...(sessionId && { [FLD_CLASS_SESSION]: [sessionId] }),
-          ...(teacherId && { [FLD_CLASS_TEACHER]: [teacherId] }),
-          // Send the string values for Single Selects
-          [FLD_CLASS_TYPE]: data.type, 
-          [FLD_CLASS_STATUS]: "Proposed" 
-        })
-      });
-      revalidatePath("/education/portal");
-      return { success: true };
+          [CF.CLASS_NAME]: data.name,
+          [CF.DESCRIPTION]: data.description,
+          [CF.OBJECTIVES]: data.objectives,
+          ...(sessionId && { [CF.SESSION]: [sessionId] }),
+          ...(teacherId && { [CF.TEACHER]: [teacherId] }),
+          [CF.TYPE]: data.type,
+          [CF.STATUS]: "Proposed",
+        }),
+      },
+      {},
+      tenant
+    );
+    revalidatePath(`/${tenant}/education/portal`);
+    return { success: true };
   } catch (e) {
-      console.error("Failed to submit proposal:", e);
-      return { success: false };
+    console.error("Failed to submit proposal:", e);
+    return { success: false };
   }
 }
 
+export async function claimBountyAction(classId: number, teacherName: string, explicitTenant?: string) {
+  const guard = await requireStaffAccess();
+  if (!guard.ok) return { success: false, error: guard.error };
 
-export async function claimBountyAction(classId: number, teacherName: string) {
-  // 1. Find the Person ID for the teacher claiming it
-  const teacherRes = await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/?user_field_names=true&filter__field_5735__equal=${teacherName}&size=1`);
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
+  const classesTable = tables.CLASSES || DB.CLASSES.ID;
+  const CF = DB.CLASSES.FIELDS;
+
+  const teacherRes = await fetchBaserow(
+    `/database/rows/table/${peopleTable}/`,
+    {},
+    {
+      user_field_names: "true",
+      [`filter__${DB.PEOPLE.FIELDS.FULL_NAME}__equal`]: teacherName,
+      size: "1",
+    },
+    tenant
+  );
   const teacherId = Array.isArray(teacherRes) && teacherRes.length > 0 ? teacherRes[0].id : null;
 
   if (!teacherId) return { success: false, error: "Teacher not found in database" };
 
   try {
-      await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/${classId}/`, {
+    await fetchBaserow(
+      `/database/rows/table/${classesTable}/${classId}/`,
+      {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          [FLD_CLASS_TEACHER]: [teacherId], // Link the teacher
-          [FLD_CLASS_STATUS]: "Proposed"    // Change status from Seeking to Proposed
-        })
-      });
-      revalidatePath("/education/portal");
-      revalidatePath("/education/proposals");
-      return { success: true };
+          [CF.TEACHER]: [teacherId],
+          [CF.STATUS]: "Proposed",
+        }),
+      },
+      {},
+      tenant
+    );
+    revalidatePath(`/${tenant}/education/portal`);
+    revalidatePath(`/${tenant}/education/proposals`);
+    return { success: true };
   } catch (e) {
-      console.error("Failed to claim bounty:", e);
-      return { success: false };
+    console.error("Failed to claim bounty:", e);
+    return { success: false };
   }
 }
-export async function updateApplicantStatus(personId: number, oldTags: string[], newTag: string) {
-  // Table 599 is PEOPLE
-  // Field 5782 is Status (Multiple Select)
-  const TBL_PEOPLE = 599;
-  const FLD_STATUS = 'field_5782';
 
+export async function updateApplicantStatus(
+  personId: number,
+  oldTags: string[],
+  newTag: string,
+  explicitTenant?: string
+) {
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "edit_compliance");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
   const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
-  
-  // Keep all tags that AREN'T hiring tags (e.g. keep "Parent", "Student")
-  const keptTags = oldTags.filter(t => !hiringTags.includes(t));
-  
-  // Add the new hiring column tag
+  const keptTags = oldTags.filter((t) => !hiringTags.includes(t));
   const newTags = [...keptTags, newTag];
 
   try {
-    await fetchBaserow(`/database/rows/table/${TBL_PEOPLE}/${personId}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        // Baserow Multiple Select fields expect an array of strings
-        [FLD_STATUS]: newTags 
-      })
-    });
-    
-    revalidatePath("/education/hiring");
+    await fetchBaserow(
+      `/database/rows/table/${peopleTable}/${personId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [DB.PEOPLE.FIELDS.STATUS]: newTags,
+        }),
+      },
+      {},
+      tenant
+    );
+
+    revalidatePath(`/${tenant}/education/hiring`);
     return { success: true };
   } catch (error) {
     console.error("Failed to update applicant status:", error);
@@ -156,99 +226,108 @@ export async function updateApplicantStatus(personId: number, oldTags: string[],
   }
 }
 
-export async function fetchRosterAction(classId: number) {
-  // 🟢 THE FIX: Grab the correct URL from your environment variables!
-  const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
-  
-  // Table 599 is PEOPLE. Field 6151 is Classes.
-  const url = `${BASE_URL}/api/database/rows/table/599/?user_field_names=true&filter__field_6151__link_row_has=${classId}&size=200`;
-  
+export async function fetchRosterAction(classId: number, explicitTenant?: string) {
+  const guard = await requireStaffAccess();
+  if (!guard.ok) return [];
+
   try {
-    const res = await fetch(url, {
-      headers: { 
-        "Authorization": `Token ${process.env.BASEROW_API_TOKEN}`,
-        "Content-Type": "application/json"
+    const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+    const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
+    const PF = DB.PEOPLE.FIELDS;
+
+    const students = await fetchBaserow(
+      `/database/rows/table/${peopleTable}/`,
+      {},
+      {
+        user_field_names: "true",
+        [`filter__${PF.CLASSES_STUDENTS}__link_row_has`]: classId,
+        size: "200",
       },
-      cache: 'no-store'
-    });
-    
-    if (!res.ok) {
-        console.error("❌ [fetchRosterAction] Failed:", res.status, res.statusText);
-        return [];
-    }
-    
-    const data = await res.json();
-    const students = data.results || data;
-    
+      tenant
+    );
+
+    if (!Array.isArray(students)) return [];
+
     return students.map((row: any) => ({
       id: row.id,
-      name: row['Full Name'] || 'Unknown Student',
-      age: row['Age'] || '?',
-      email: row['CYT Account Personal Email'] || '',
-      phone: row['Phone Number'] || ''
+      name: row["Full Name"] || row[PF.FULL_NAME] || "Unknown Student",
+      age: row["Age"] || row[PF.AGE] || "?",
+      email: row["CYT Account Personal Email"] || row[PF.CYT_ACCOUNT_PERSONAL_EMAIL] || "",
+      phone: row["Phone Number"] || row[PF.PHONE_NUMBER] || "",
     }));
   } catch (error) {
-    console.error("❌ [fetchRosterAction] Network Error:", error);
+    console.error("❌ [fetchRosterAction] Error:", error);
     return [];
   }
 }
 
-
 export async function updateClassSchedule(
-  classId: number, 
-  payload: { day: string; time: string; location: string; status: string }
+  classId: number,
+  payload: { day: string; time: string; location: string; status: string },
+  explicitTenant?: string
 ) {
-  // Table 633 is CLASSES
-  const TBL_CLASSES = 633;
-  
-  // Field IDs from schema dump
-  const FLD_CLASS_DAY = 'field_6119';    // Single Select
-  const FLD_CLASS_TIME = 'field_6120';   // Single Select
-  const FLD_CLASS_LOC = 'field_6118';    // Single Select
-  const FLD_CLASS_STATUS = 'field_6241'; // Single Select
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "edit_compliance");
+  if (!guard.ok) return { success: false, error: guard.error };
 
-  await fetchBaserow(`/database/rows/table/${TBL_CLASSES}/${classId}/`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      // Because these are Single Select fields in Baserow, we pass the string value.
-      // Baserow is smart enough to match the string to the correct select option ID.
-      // If we pass an empty string "", it clears the field.
-      [FLD_CLASS_DAY]: payload.day || "",
-      [FLD_CLASS_TIME]: payload.time || "",
-      [FLD_CLASS_LOC]: payload.location || "",
-      [FLD_CLASS_STATUS]: payload.status 
-    })
-  });
+  const classesTable = tables.CLASSES || DB.CLASSES.ID;
+  const CF = DB.CLASSES.FIELDS;
 
-  revalidatePath("/education/planning");
-  revalidatePath("/education"); 
+  await fetchBaserow(
+    `/database/rows/table/${classesTable}/${classId}/`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        [CF.DAY]: payload.day || "",
+        [CF.TIME_SLOT]: payload.time || "",
+        [CF.LOCATION]: payload.location || "",
+        [CF.STATUS]: payload.status,
+      }),
+    },
+    {},
+    tenant
+  );
+
+  revalidatePath(`/${tenant}/education/planning`);
+  revalidatePath(`/${tenant}/education`);
+  return { success: true };
 }
 
 // --- WORKFLOW ACTIONS ---
 
-export async function toggleWorkflowTag(productionId: number, tagKey: string) {
+export async function toggleWorkflowTag(productionId: number, tagKey: string, explicitTenant?: string) {
   if (!productionId) return;
 
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "manage_casting", productionId);
+  if (!guard.ok) return;
+
+  const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
   const keyMap: Record<string, string> = {
-    'auditions': 'Auditions',
-    'callbacks': 'Callbacks',
-    'casting': 'Casting',
-    'first_reh': 'FirstRehearsal',
-    'superSat': 'SuperSaturday',
-    'tech_mon': 'Tech_Mon',
-    'tech_tue': 'Tech_Tue',
-    'tech_wed': 'Tech_Wed',
-    'tech_thu': 'Tech_Thu',
-    'tech_fri': 'Tech_Fri',
-    'weekend1': 'ShowWeekend1',
-    'weekend2': 'ShowWeekend2',
+    auditions: "Auditions",
+    callbacks: "Callbacks",
+    casting: "Casting",
+    first_reh: "FirstRehearsal",
+    superSat: "SuperSaturday",
+    tech_mon: "Tech_Mon",
+    tech_tue: "Tech_Tue",
+    tech_wed: "Tech_Wed",
+    tech_thu: "Tech_Thu",
+    tech_fri: "Tech_Fri",
+    weekend1: "ShowWeekend1",
+    weekend2: "ShowWeekend2",
   };
-  
+
   const targetTag = keyMap[tagKey] || tagKey;
 
   try {
-    const freshRow = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
+    const freshRow = await fetchBaserow(
+      `/database/rows/table/${productionsTable}/${productionId}/`,
+      {},
+      {},
+      tenant
+    );
     if (!freshRow || freshRow.error) throw new Error("Fetch failed");
 
     const currentTags = freshRow[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [];
@@ -258,343 +337,450 @@ export async function toggleWorkflowTag(productionId: number, tagKey: string) {
       ? currentValues.filter((v: string) => v !== targetTag)
       : [...currentValues, targetTag];
 
-    await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues
-      }),
-    });
-    
+    await fetchBaserow(
+      `/database/rows/table/${productionsTable}/${productionId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES]: newValues,
+        }),
+      },
+      {},
+      tenant
+    );
+
+    revalidatePath(`/${tenant}`);
     revalidatePath("/");
-    revalidatePath("/dashboard");
   } catch (e) {
-      console.error("Toggle Failed:", e);
+    console.error("Toggle Failed:", e);
   }
 }
 
 export async function switchProduction(formData: FormData) {
   const productionId = formData.get("productionId")?.toString();
-  const redirectPath = formData.get("redirectPath")?.toString() || "/dashboard";
+  const redirectPath = formData.get("redirectPath")?.toString() || "/";
 
   if (productionId) {
     (await cookies()).set("active_production_id", productionId, {
-      maxAge: 60 * 60 * 24 * 30, 
+      maxAge: 60 * 60 * 24 * 30,
       path: "/",
     });
   }
   redirect(redirectPath);
 }
 
-export async function markStepComplete(productionId: number, stepKey: string) {
+export async function markStepComplete(productionId: number, stepKey: string, explicitTenant?: string) {
   if (!productionId) return;
-  await toggleWorkflowTag(productionId, stepKey); 
+  await toggleWorkflowTag(productionId, stepKey, explicitTenant);
 }
 
 // --- SCENE ANALYSIS ACTIONS ---
 
-type SceneLoadUpdate = {
-  id: number;
-  load: { music: number; dance: number; block: number; };
-};
+export async function updateSceneLoads(
+  updates: { id: number; load: { music: number; dance: number; block: number } }[],
+  explicitTenant?: string
+) {
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "manage_casting");
+  if (!guard.ok) return { success: false, error: guard.error };
 
-export async function updateSceneLoads(updates: {id: number, load: {music: number, dance: number, block: number}}[]) {
-  // Table 627 is SCENES
-  const promises = updates.map(async (update) => {
-    await fetchBaserow(`/database/rows/table/627/${update.id}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        'field_6222': update.load.music, // Music Load
-        'field_6223': update.load.dance, // Dance Load
-        'field_6224': update.load.block, // Blocking Load
-      }),
-    });
-  });
-  await Promise.all(promises);
-  revalidatePath("/analysis");
+  const scenesTable = tables.SCENES || DB.SCENES.ID;
+  const SF = DB.SCENES.FIELDS;
+
+  await Promise.all(
+    updates.map((update) =>
+      fetchBaserow(
+        `/database/rows/table/${scenesTable}/${update.id}/`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            [SF.MUSIC_LOAD]: update.load.music,
+            [SF.DANCE_LOAD]: update.load.dance,
+            [SF.BLOCKING_LOAD]: update.load.block,
+          }),
+        },
+        {},
+        tenant
+      )
+    )
+  );
+
+  revalidatePath(`/${tenant}/production`);
   return { success: true };
 }
 
+export async function updateSceneStatus(
+  sceneId: number,
+  field: "music" | "dance" | "block",
+  status: string,
+  explicitTenant?: string
+) {
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "manage_casting");
+  if (!guard.ok) return;
 
-export async function updateSceneStatus(sceneId: number, field: 'music' | 'dance' | 'block', status: string) {
-  const F = DB.SCENES.FIELDS;
+  const scenesTable = tables.SCENES || DB.SCENES.ID;
+  const SF = DB.SCENES.FIELDS;
   const fieldMap = {
-    'music': F.MUSIC_STATUS,
-    'dance': F.DANCE_STATUS,
-    'block': F.BLOCKING_STATUS 
+    music: SF.MUSIC_STATUS,
+    dance: SF.DANCE_STATUS,
+    block: SF.BLOCKING_STATUS,
   };
-  await fetchBaserow(`/database/rows/table/${DB.SCENES.ID}/${sceneId}/`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ [fieldMap[field]]: status }),
-  });
-  revalidatePath("/production");
+
+  await fetchBaserow(
+    `/database/rows/table/${scenesTable}/${sceneId}/`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [fieldMap[field]]: status }),
+    },
+    {},
+    tenant
+  );
+  revalidatePath(`/${tenant}/production`);
 }
 
 // ============================================================================
 // --- SCHEDULING ACTIONS ---
 // ============================================================================
 
-// 🎯 HARDCODED IDs FOR STABILITY
-const TBL_EVENTS = 625;
-const FLD_EV_PROD = 'field_6007';
-const FLD_EV_DATE = 'field_6008';
-const FLD_EV_START = 'field_6010';
-const FLD_EV_END = 'field_6011';
+export async function saveScheduleBatch(productionId: number, items: any[], explicitTenant?: string) {
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
 
-const TBL_SLOTS = 640;
-const FLD_SL_EVENT = 'field_6230';
-const FLD_SL_SCENE = 'field_6233';
-const FLD_SL_TRACK = 'field_6235';
-const FLD_SL_START = 'field_6236';
-const FLD_SL_DURATION = 'field_6238';
+  const eventsTable = tables.EVENTS || DB.EVENTS.ID;
+  const slotsTable = tables.SCHEDULE_SLOTS || DB.SCHEDULE_SLOTS.ID;
+  const EF = DB.EVENTS.FIELDS;
+  const SLF = DB.SCHEDULE_SLOTS.FIELDS;
 
-
-export async function saveScheduleBatch(productionId: number, items: any[]) {
-  console.log(`[Save] Schedule Batch for Prod ${productionId}: ${items.length} items`);
-  
-  // Group slots by day so we can create one parent Event per day
   const itemsByDate: Record<string, any[]> = {};
-  items.forEach(item => {
-      if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
-      itemsByDate[item.date].push(item);
+  items.forEach((item) => {
+    if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
+    itemsByDate[item.date].push(item);
   });
 
   const promises = Object.entries(itemsByDate).map(async ([date, dayItems]) => {
-      let parentEventId = dayItems[0].existingParentEventId; 
-      
-      // 1. CREATE PARENT EVENT (If it doesn't exist)
-      if (!parentEventId) {
-          const minTime = Math.min(...dayItems.map((i:any) => i.startTime)); 
-          const maxTime = Math.max(...dayItems.map((i:any) => i.startTime + (i.duration/60))); 
-          
-          const parentRes = await fetchBaserow(`/database/rows/table/${TBL_EVENTS}/`, {
+    let parentEventId = dayItems[0].existingParentEventId;
+
+    if (!parentEventId) {
+      const minTime = Math.min(...dayItems.map((i: any) => i.startTime));
+      const maxTime = Math.max(...dayItems.map((i: any) => i.startTime + i.duration / 60));
+
+      const parentRes = await fetchBaserow(
+        `/database/rows/table/${eventsTable}/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            [EF.PRODUCTION]: [productionId],
+            [EF.EVENT_DATE]: date,
+            [EF.START_TIME]: `${date}T${formatTimeHHMM(minTime)}:00`,
+            [EF.END_TIME]: `${date}T${formatTimeHHMM(maxTime)}:00`,
+          }),
+        },
+        {},
+        tenant
+      );
+      if (parentRes && !parentRes.error) parentEventId = parentRes.id;
+    }
+
+    if (parentEventId) {
+      await Promise.all(
+        dayItems.map((item) =>
+          fetchBaserow(
+            `/database/rows/table/${slotsTable}/`,
+            {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                  [FLD_EV_PROD]: [productionId],
-                  [FLD_EV_DATE]: date,
-                  [FLD_EV_START]: `${date}T${formatTimeHHMM(minTime)}:00`,
-                  [FLD_EV_END]: `${date}T${formatTimeHHMM(maxTime)}:00`,
-              })
-          });
-          if (parentRes && !parentRes.error) parentEventId = parentRes.id;
-      }
-
-      // 2. CREATE CHILD SLOTS
-      if (parentEventId) {
-        const slotPromises = dayItems.map(item => {
-             return fetchBaserow(`/database/rows/table/${TBL_SLOTS}/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    [FLD_SL_EVENT]: [parentEventId], 
-                    [FLD_SL_SCENE]: [item.sceneId],       
-                    [FLD_SL_TRACK]: item.track,           
-                    [FLD_SL_START]: `${date}T${formatTimeHHMM(item.startTime)}:00`,
-                    [FLD_SL_DURATION]: item.duration
-                })
-             });
-        });
-        await Promise.all(slotPromises);
-      }
+                [SLF.EVENT_LINK]: [parentEventId],
+                [SLF.SCENE]: [item.sceneId],
+                [SLF.TRACK]: item.track,
+                [SLF.START_TIME]: `${date}T${formatTimeHHMM(item.startTime)}:00`,
+                [SLF.DURATION]: item.duration,
+              }),
+            },
+            {},
+            tenant
+          )
+        )
+      );
+    }
   });
-  
+
   await Promise.all(promises);
-  revalidatePath("/schedule");
+  revalidatePath(`/${tenant}/production/${productionId}/schedule`);
   return { success: true };
 }
-
 
 // ============================================================================
 // --- CASTING ACTIONS ---
 // ============================================================================
 
-// 🎯 HARDCODED IDs FOR STABILITY
-// Pulled directly from the schema dump to prevent "undefined field" errors during saves.
-const TBL_ASSIGNMENTS = 603;
-const FLD_ASSIGN_PERSON = 'field_5786';
-const FLD_ASSIGN_PROD = 'field_5787';
-const FLD_ASSIGN_ROLE = 'field_5796'; // Performance Identity
-
-const TBL_SCENE_ASSIGNMENTS = 628;
-const FLD_SA_PERSON = 'field_6032';
-const FLD_SA_SCENE = 'field_6033';
-const FLD_SA_PROD = 'field_6036';
-
-const TBL_ROLES = 605;
-const TBL_SCENES = 627;
-
-// 1. GENERATE EMPTY ROWS (Initialize Grid)
 export async function generateCastingRows(tenant: string, productionId: number) {
-  console.log(`[Action] Generating rows for Production ${productionId}`);
-  
-  // A. Get Master Show ID from the Production
-  const production = await fetchBaserow(`/database/rows/table/${DB.PRODUCTIONS.ID}/${productionId}/?user_field_names=true`);
+  const { tenant: resolvedTenant, DB, tables } = await getTenantContext(tenant);
+  const guard = await requirePermission(resolvedTenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
+  const rolesTable = tables.BLUEPRINT_ROLES || DB.BLUEPRINT_ROLES.ID;
+  const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
+  const AF = DB.ASSIGNMENTS.FIELDS;
+
+  const production = await fetchBaserow(
+    `/database/rows/table/${productionsTable}/${productionId}/`,
+    {},
+    { user_field_names: "true" },
+    resolvedTenant
+  );
   if (!production) return { success: false, error: "Production not found" };
-  
-  const masterShowId = production['Master Show Database']?.[0]?.id;
+
+  const masterShowId = production["Master Show Database"]?.[0]?.id;
   if (!masterShowId) return { success: false, error: "No Master Show linked" };
 
-  // B. Fetch Blueprint Roles for this specific Master Show
-  const blueprintRoles = await fetchBaserow(`/database/rows/table/${TBL_ROLES}/`, {}, { 
-      [`filter__field_5794__link_row_has`]: masterShowId, // 5794 is 'Master Show Database' on Roles
-      size: "200" 
-  });
+  const blueprintRoles = await fetchBaserow(
+    `/database/rows/table/${rolesTable}/`,
+    {},
+    {
+      [`filter__${DB.BLUEPRINT_ROLES.FIELDS.MASTER_SHOW_DATABASE}__link_row_has`]: masterShowId,
+      size: "200",
+    },
+    resolvedTenant
+  );
   if (!Array.isArray(blueprintRoles)) return { success: false, error: "Failed to fetch blueprint" };
 
-  // C. Fetch Existing Assignments to avoid creating duplicates
-  const existing = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {}, {
-      [`filter__${FLD_ASSIGN_PROD}__link_row_has`]: productionId,
-      size: "200"
-  });
-  
-  const existingRoleIds = new Set(
-    Array.isArray(existing) ? existing.map((r: any) => r[FLD_ASSIGN_ROLE]?.[0]?.id) : []
+  const existing = await fetchBaserow(
+    `/database/rows/table/${assignmentsTable}/`,
+    {},
+    {
+      [`filter__${AF.PRODUCTION}__link_row_has`]: productionId,
+      size: "200",
+    },
+    resolvedTenant
   );
 
-  // D. Create Missing Rows
-  const rolesToCreate = blueprintRoles.filter(role => !existingRoleIds.has(role.id));
+  const existingRoleIds = new Set(
+    Array.isArray(existing) ? existing.map((r: any) => r[AF.PERFORMANCE_IDENTITY]?.[0]?.id) : []
+  );
+
+  const rolesToCreate = blueprintRoles.filter((role) => !existingRoleIds.has(role.id));
   if (rolesToCreate.length === 0) return { success: true, count: 0, message: "Already up to date" };
 
-  const createPromises = rolesToCreate.map(role => 
-    fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [FLD_ASSIGN_PROD]: [productionId],
-        [FLD_ASSIGN_ROLE]: [role.id]
-      })
-    })
+  await Promise.all(
+    rolesToCreate.map((role) =>
+      fetchBaserow(
+        `/database/rows/table/${assignmentsTable}/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            [AF.PRODUCTION]: [productionId],
+            [AF.PERFORMANCE_IDENTITY]: [role.id],
+          }),
+        },
+        {},
+        resolvedTenant
+      )
+    )
   );
 
-  await Promise.all(createPromises);
-  revalidatePath("/casting");
+  revalidatePath(`/${resolvedTenant}/production/${productionId}/casting`);
   return { success: true, count: rolesToCreate.length };
 }
 
-// 2. THE MAIN SAVE FUNCTION
 export async function saveCastingGrid(
-tenant: string, productionId: number, actorChanges: any[], sceneChanges: any[], deletedRowIds: number[] = [], createdRows: any[] = []) {
-  console.log(`[Save] Prod: ${productionId} | Actors: ${actorChanges.length} | Scenes: ${sceneChanges.length} | Del: ${deletedRowIds.length} | New: ${createdRows.length}`);
+  tenant: string,
+  productionId: number,
+  actorChanges: any[],
+  sceneChanges: any[],
+  deletedRowIds: number[] = [],
+  createdRows: any[] = []
+) {
+  const { tenant: resolvedTenant, DB, tables } = await getTenantContext(tenant);
+  const guard = await requirePermission(resolvedTenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
 
-  // 🧹 PHASE 1: HANDLE DELETIONS
+  const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
+  const sceneAssignmentsTable = tables.SCENE_ASSIGNMENTS || DB.SCENE_ASSIGNMENTS.ID;
+  const AF = DB.ASSIGNMENTS.FIELDS;
+  const SAF = DB.SCENE_ASSIGNMENTS.FIELDS;
+
+  // PHASE 1: DELETIONS
   if (deletedRowIds.length > 0) {
-    await Promise.all(deletedRowIds.map(id => 
-      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${id}/`, { method: "DELETE" })
-    ));
+    await Promise.all(
+      deletedRowIds.map((id) =>
+        fetchBaserow(
+          `/database/rows/table/${assignmentsTable}/${id}/`,
+          { method: "DELETE" },
+          {},
+          resolvedTenant
+        )
+      )
+    );
   }
 
-  // 🏗️ PHASE 2: HANDLE CREATED ROWS (Custom Roles added in UI)
+  // PHASE 2: CREATED ROWS
   if (createdRows.length > 0) {
-    await Promise.all(createdRows.map(row => 
-      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [FLD_ASSIGN_PROD]: [productionId],
-          [FLD_ASSIGN_PERSON]: row.assignedStudentIds || [],
-          // Note: If you want the custom name to save, you'd need a text field on Assignments for "Custom Role Name"
-        })
-      })
-    ));
-  }
-
-  // 🎭 PHASE 3: UPDATE ACTORS IN EXISTING ROLES
-  for (const change of actorChanges) {
-    await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${change.assignmentId}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        [FLD_ASSIGN_PERSON]: change.studentIds // Baserow expects an array of IDs: [1, 2]
-      })
-    });
-  }
-
-  // 🎬 PHASE 4: UPDATE SCENE ASSIGNMENTS (The Junction Table)
-  for (const change of sceneChanges) {
-    const { assignmentId, addedSceneIds, removedSceneIds } = change;
-    
-    // We need to know who is in the role to assign them to the scene.
-    // Check if we just updated them in Phase 3, otherwise fetch the current row.
-    let studentIds: number[] = [];
-    const actorUpdate = actorChanges.find(a => a.assignmentId === assignmentId);
-    
-    if (actorUpdate) {
-      studentIds = actorUpdate.studentIds;
-    } else {
-      const row = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${assignmentId}/?user_field_names=true`);
-      if (row && row.Person) studentIds = row.Person.map((p: any) => p.id);
-    }
-
-    if (studentIds.length === 0) continue; 
-
-    // For every Actor in this Role, Add/Remove the specific Scene Links
-    for (const studentId of studentIds) {
-      
-      // ADDITIONS
-      for (const sceneId of addedSceneIds) {
-         await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {
+    await Promise.all(
+      createdRows.map((row) =>
+        fetchBaserow(
+          `/database/rows/table/${assignmentsTable}/`,
+          {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                [FLD_SA_PERSON]: [studentId],
-                [FLD_SA_SCENE]: [sceneId],
-                [FLD_SA_PROD]: [productionId]
-            })
-         });
+              [AF.PRODUCTION]: [productionId],
+              [AF.PERSON]: row.assignedStudentIds || [],
+            }),
+          },
+          {},
+          resolvedTenant
+        )
+      )
+    );
+  }
+
+  // PHASE 3: UPDATE ACTORS IN EXISTING ROLES
+  for (const change of actorChanges) {
+    await fetchBaserow(
+      `/database/rows/table/${assignmentsTable}/${change.assignmentId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [AF.PERSON]: change.studentIds,
+        }),
+      },
+      {},
+      resolvedTenant
+    );
+  }
+
+  // PHASE 4: UPDATE SCENE ASSIGNMENTS
+  for (const change of sceneChanges) {
+    const { assignmentId, addedSceneIds, removedSceneIds } = change;
+
+    let studentIds: number[] = [];
+    const actorUpdate = actorChanges.find((a) => a.assignmentId === assignmentId);
+
+    if (actorUpdate) {
+      studentIds = actorUpdate.studentIds;
+    } else {
+      const row = await fetchBaserow(
+        `/database/rows/table/${assignmentsTable}/${assignmentId}/`,
+        {},
+        { user_field_names: "true" },
+        resolvedTenant
+      );
+      if (row && row.Person) studentIds = row.Person.map((p: any) => p.id);
+    }
+
+    if (studentIds.length === 0) continue;
+
+    for (const studentId of studentIds) {
+      for (const sceneId of addedSceneIds) {
+        await fetchBaserow(
+          `/database/rows/table/${sceneAssignmentsTable}/`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              [SAF.PERSON]: [studentId],
+              [SAF.SCENE]: [sceneId],
+              [SAF.PRODUCTION]: [productionId],
+            }),
+          },
+          {},
+          resolvedTenant
+        );
       }
 
-      // REMOVALS
       for (const sceneId of removedSceneIds) {
-        // Find the specific junction row linking this Person to this Scene
-        const existing = await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {}, {
+        const existing = await fetchBaserow(
+          `/database/rows/table/${sceneAssignmentsTable}/`,
+          {},
+          {
             filter_type: "AND",
-            [`filter__${FLD_SA_PERSON}__link_row_has`]: studentId,
-            [`filter__${FLD_SA_SCENE}__link_row_has`]: sceneId,
-            [`filter__${FLD_SA_PROD}__link_row_has`]: productionId
-        });
+            [`filter__${SAF.PERSON}__link_row_has`]: studentId,
+            [`filter__${SAF.SCENE}__link_row_has`]: sceneId,
+            [`filter__${SAF.PRODUCTION}__link_row_has`]: productionId,
+          },
+          resolvedTenant
+        );
 
         if (Array.isArray(existing) && existing.length > 0) {
-            // Delete it (and clean up duplicates if they exist)
-            for (const item of existing) {
-                await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/${item.id}/`, { method: "DELETE" });
-            }
+          for (const item of existing) {
+            await fetchBaserow(
+              `/database/rows/table/${sceneAssignmentsTable}/${item.id}/`,
+              { method: "DELETE" },
+              {},
+              resolvedTenant
+            );
+          }
         }
       }
     }
   }
 
-  // Tell Next.js to clear the cache so the page reloads with fresh data
-  revalidatePath("/casting");
+  revalidatePath(`/${resolvedTenant}/production/${productionId}/casting`);
   return { success: true };
 }
 
-// 3. CLEAR ALL CASTING DATA (Nuke button)
-export async function clearCastingData(productionId: number) {
-  // A. Delete Scene Assignments
-  const sceneAssigns = await fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/`, {}, {
-    [`filter__${FLD_SA_PROD}__link_row_has`]: productionId,
-    size: "200"
-  });
+export async function clearCastingData(productionId: number, explicitTenant?: string) {
+  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const guard = await requirePermission(tenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const sceneAssignmentsTable = tables.SCENE_ASSIGNMENTS || DB.SCENE_ASSIGNMENTS.ID;
+  const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
+
+  const sceneAssigns = await fetchBaserow(
+    `/database/rows/table/${sceneAssignmentsTable}/`,
+    {},
+    {
+      [`filter__${DB.SCENE_ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+      size: "200",
+    },
+    tenant
+  );
   if (Array.isArray(sceneAssigns)) {
-    await Promise.all(sceneAssigns.map(row => 
-      fetchBaserow(`/database/rows/table/${TBL_SCENE_ASSIGNMENTS}/${row.id}/`, { method: "DELETE" })
-    ));
+    await Promise.all(
+      sceneAssigns.map((row) =>
+        fetchBaserow(
+          `/database/rows/table/${sceneAssignmentsTable}/${row.id}/`,
+          { method: "DELETE" },
+          {},
+          tenant
+        )
+      )
+    );
   }
 
-  // B. Delete Roles/Assignments
-  const castAssigns = await fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/`, {}, {
-    [`filter__${FLD_ASSIGN_PROD}__link_row_has`]: productionId,
-    size: "200"
-  });
+  const castAssigns = await fetchBaserow(
+    `/database/rows/table/${assignmentsTable}/`,
+    {},
+    {
+      [`filter__${DB.ASSIGNMENTS.FIELDS.PRODUCTION}__link_row_has`]: productionId,
+      size: "200",
+    },
+    tenant
+  );
   if (Array.isArray(castAssigns)) {
-    await Promise.all(castAssigns.map(row => 
-      fetchBaserow(`/database/rows/table/${TBL_ASSIGNMENTS}/${row.id}/`, { method: "DELETE" })
-    ));
+    await Promise.all(
+      castAssigns.map((row) =>
+        fetchBaserow(
+          `/database/rows/table/${assignmentsTable}/${row.id}/`,
+          { method: "DELETE" },
+          {},
+          tenant
+        )
+      )
+    );
   }
 
-  revalidatePath("/casting");
+  revalidatePath(`/${tenant}/production/${productionId}/casting`);
   return { success: true };
 }

@@ -5,6 +5,7 @@ import { useState, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Lock, Loader2, AlertCircle, Chrome } from 'lucide-react';
+import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
 
 export default function LoginPage() {
   const params = useParams();
@@ -16,14 +17,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const router = useRouter();
 
-  // Helper to format the tenant slug into a pretty name
-  const formatTenantName = (slug: string) => {
-      if (slug === 'cytfred') return "CYT Fredericksburg";
-      if (slug === 'sandbox') return "Open Backstage";
-      return slug.charAt(0).toUpperCase() + slug.slice(1);
-  };
-
-  const orgName = formatTenantName(tenant);
+  const orgName = formatTenantDisplayName(tenant);
 
   // 1. Handle Google Login
   const handleGoogleLogin = () => {

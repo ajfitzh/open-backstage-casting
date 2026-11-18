@@ -23,6 +23,8 @@ import {
   getUserProfile,
   getUserProductionRole
 } from '@/app/lib/baserow';
+import { getTenantTableConfig } from '@/app/lib/tenant-config';
+import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
 import { isStaffRole } from '@/app/lib/permissions';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
@@ -56,7 +58,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       productionRole = await getUserProductionRole(tenant, sessionUserId, show.id);
   }
   const isStaff = isStaffRole(userRole, productionRole);
-  const tenantDisplayName = tenant === "cytfred" ? "CYT Fredericksburg" : tenant.replace(/[-_]/g, " ");
+  const tenantTables = await getTenantTableConfig(tenant).catch(() => null);
+  const tenantDisplayName = formatTenantDisplayName(tenant, tenantTables?.TENANT_NAME);
 
   // ==========================================
   // 👨‍👩‍👧‍👦 THE FAMILY HUB (Parents & Students)
