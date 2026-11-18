@@ -38,7 +38,7 @@ export default async function AuditionsPage({
         productionTitle={String(production.title || "Active Production")}
         serverJudgeName={session.user.name || "Unknown Judge"}
         serverJudgeRole={(session.user as any).role || "Drop-In"}
-        initialPerformers={roster || []} // 🟢 Now matches the updated interface!
+        initialPerformers={(roster || []) as any} // 🟢 Now matches the updated interface!
       />
     </main>
   );

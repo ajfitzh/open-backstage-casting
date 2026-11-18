@@ -112,17 +112,28 @@ export default function AuditionWizard() {
     setIsCameraOpen(false);
   }, []);
 
+  if (currentStep > maxStepReached) {
+    setMaxStepReached(currentStep);
+  }
+
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) try { setFormData(JSON.parse(saved)); } catch (e) {}
+    if (!saved) return;
+    const frame = requestAnimationFrame(() => {
+      try {
+        setFormData(JSON.parse(saved));
+      } catch {
+        // Ignore invalid draft JSON
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    if (currentStep > maxStepReached) setMaxStepReached(currentStep);
     if (currentStep > 0 && !isSuccess) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [formData, currentStep, isSuccess, maxStepReached]);
+  }, [formData, currentStep, isSuccess]);
 
   const updateForm = (fields: Partial<AuditionFormData>) => {
     setFormData((prev) => ({ ...prev, ...fields }));
@@ -207,7 +218,7 @@ export default function AuditionWizard() {
               <div className="space-y-2">
                  <p><strong>Parent:</strong> {formData.parentSignature}</p>
                  <p><strong>Email:</strong> {lookupData.email}</p>
-                 <p><strong>Height:</strong> {formData.heightFt}'{formData.heightIn}"</p>
+                 <p><strong>Height:</strong> {formData.heightFt}&apos;{formData.heightIn}&quot;</p>
               </div>
            </div>
         </div>
@@ -331,12 +342,12 @@ export default function AuditionWizard() {
                         <label className="block text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-4 flex items-center gap-2"><Ruler size={16} /> Height</label>
                         <div className="flex gap-2 sm:gap-4">
                           {["4","5","6"].map(ft => (
-                            <button key={ft} type="button" onClick={() => updateForm({ heightFt: ft })} className={`flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${formData.heightFt === ft ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-400"}`}>{ft}'</button>
+                            <button key={ft} type="button" onClick={() => updateForm({ heightFt: ft })} className={`flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black text-lg transition-all ${formData.heightFt === ft ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-400"}`}>{ft}&apos;</button>
                           ))}
                         </div>
                         <div className="grid grid-cols-6 gap-1 sm:gap-2">
                           {INCHES.map(inch => (
-                            <button key={inch} type="button" onClick={() => updateForm({ heightIn: inch })} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100 dark:border-zinc-800"}`}>{inch}"</button>
+                            <button key={inch} type="button" onClick={() => updateForm({ heightIn: inch })} className={`py-2 rounded-lg font-black text-[10px] transition-all ${formData.heightIn === inch ? "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900" : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100 dark:border-zinc-800"}`}>{inch}&quot;</button>
                           ))}
                         </div>
                       </div>
@@ -359,7 +370,7 @@ export default function AuditionWizard() {
                       <input type="checkbox" checked={formData.usePresetSong} readOnly className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 rounded-lg mt-1" />
                       <div>
                         <h4 className="font-black text-zinc-900 dark:text-white text-lg sm:text-2xl uppercase tracking-tighter italic">Trouble Deciding?</h4>
-                        <p className="text-zinc-500 dark:text-zinc-400 font-medium mt-1 text-sm sm:text-lg">Choose an "easy-start" song from the show. We'll have the music ready!</p>
+                        <p className="text-zinc-500 dark:text-zinc-400 font-medium mt-1 text-sm sm:text-lg">Choose an &quot;easy-start&quot; song from the show. We&apos;ll have the music ready!</p>
                       </div>
                     </div>
 

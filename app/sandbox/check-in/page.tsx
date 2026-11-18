@@ -63,7 +63,8 @@ const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   }
 };
 
-export default function CheckInBoard({ productionTitle }: { productionTitle: string }) {
+export default function CheckInBoard() {
+  const productionTitle = "Sandbox Production";
   const [students, setStudents] = useState<any[]>(MOCK_CAST);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStudent, setActiveStudent] = useState<any | null>(null);

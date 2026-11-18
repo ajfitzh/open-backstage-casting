@@ -1,12 +1,13 @@
 // app/[tenant]/(main)/(staff)/reports/playbill/page.tsx
 import { cookies } from 'next/headers';
-import { fetchBaserow, DB, getTenantTableConfig, getShowById, getActiveProduction } from '@/app/lib/baserow';
+import { fetchBaserow, getDB, getTenantTableConfig, getShowById, getActiveProduction } from '@/app/lib/baserow';
 import PlaybillExporterClient from '@/app/components/reports/PlaybillExporterClient';
 
 export const dynamic = 'force-dynamic';
 
 async function getPlaybillData(tenant: string, showId: number) {
     try {
+        const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);
         const F = DB.AUDITIONS.FIELDS;
         
@@ -17,7 +18,7 @@ async function getPlaybillData(tenant: string, showId: number) {
             [`filter__${F.STATUS}__equal`]: "Cast"
         };
 
-        const rows = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params);
+        const rows = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, params, tenant);
         if (!Array.isArray(rows)) return [];
 
         return rows.map((r: any) => ({

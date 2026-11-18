@@ -26,44 +26,57 @@ interface CastingContextType {
 
 const CastingContext = createContext<CastingContextType | null>(null);
 
-export function CastingProvider({ children }: { children: React.ReactNode }) {
+export function CastingProvider({ children, tenant = 'cytfred' }: { children: React.ReactNode; tenant?: string }) {
   const [performers, setPerformers] = useState<Performer[]>([]);
   const [grades, setGrades] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(true);
 
+  const mapPerformers = useCallback((data: any[]): Performer[] => {
+    return data.map((row: any) => ({
+      id: row.id,
+      // Match these exactly to your Baserow field names
+      name: row["Full Name"] || "Unnamed Performer",
+      age: row["Age"] || "N/A",
+      height: row["Height (Feet)"] || "-",
+      dob: row["Date of Birth"] || "",
+      headshotUrl: row["Headshot"]?.[0]?.url || null,
+      // Status is often a single-select in Baserow, which returns an object
+      tenure: typeof row["Status"] === 'object' ? row["Status"]?.value : row["Status"] || "Student",
+      conflicts: row["Rehearsal Conflicts"] || "No known conflicts",
+      pastRoles: row["Cast/Crew Assignments"]
+        ? row["Cast/Crew Assignments"].map((a: any) => a.value)
+        : [],
+    }));
+  }, []);
+
   const refreshData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAuditionees();
-      
-      // 2. Map raw Baserow People (599) fields to our App's Performer interface
-      const mapped: Performer[] = data.map((row: any) => ({
-        id: row.id,
-        // Match these exactly to your Baserow field names
-        name: row["Full Name"] || "Unnamed Performer",
-        age: row["Age"] || "N/A",
-        height: row["Height (Feet)"] || "-", 
-        dob: row["Date of Birth"] || "",
-        headshotUrl: row["Headshot"]?.[0]?.url || null,
-        // Status is often a single-select in Baserow, which returns an object
-        tenure: typeof row["Status"] === 'object' ? row["Status"]?.value : row["Status"] || "Student",
-        conflicts: row["Rehearsal Conflicts"] || "No known conflicts",
-        pastRoles: row["Cast/Crew Assignments"] 
-          ? row["Cast/Crew Assignments"].map((a: any) => a.value) 
-          : [],
-      }));
-
-      setPerformers(mapped);
+      const data = await getAuditionees(tenant);
+      setPerformers(mapPerformers(data));
     } catch (e) {
       console.error("Baserow Sync Error:", e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenant, mapPerformers]);
 
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    let cancelled = false;
+    getAuditionees(tenant)
+      .then((data) => {
+        if (!cancelled) setPerformers(mapPerformers(data));
+      })
+      .catch((e) => {
+        console.error("Baserow Sync Error:", e);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant, mapPerformers]);
 
   // 3. The new "Save" logic that creates a record in the Auditions (630) table
   const saveAssessment = async (performerId: number, productionId: number, newGrades: any) => {
@@ -75,7 +88,7 @@ export function CastingProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // POSTs a new row to the Auditions table
-      await submitAudition(performerId, productionId, newGrades);
+      await submitAudition(tenant, performerId, productionId, newGrades);
       console.log(`Audition record created for performer ${performerId}`);
     } catch (e) {
       console.error("Failed to save audition record:", e);

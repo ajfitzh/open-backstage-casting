@@ -72,7 +72,7 @@ export default function SceneAnalysisClient({ scenes }: { scenes: Scene[] }) {
               <h3 className="font-bold text-white">Calibration Mode</h3>
               <p className="text-zinc-400 text-sm mt-1">
                 Drag the sliders (0-5) to estimate the teaching difficulty for each scene. 
-                This data powers the "Show Readiness" burn-up chart on your dashboard.
+                This data powers the &quot;Show Readiness&quot; burn-up chart on your dashboard.
               </p>
            </div>
         </div>

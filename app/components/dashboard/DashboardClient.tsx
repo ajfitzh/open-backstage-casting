@@ -59,47 +59,45 @@ export default function DashboardClient({ scenes, demographics }: any) {
 
 // --- SUB-COMPONENT: ROW & CLICK LOGIC ---
 
-function SceneRow({ scene }: any) {
-  
-  // Helper to render a clickable status dot
-  const StatusCell = ({ type, value, load }: any) => {
-    let [isPending, startTransition] = useTransition();
+function StatusCell({ sceneId, type, value, load }: any) {
+  const [isPending, startTransition] = useTransition();
 
-    // If load is 0 (e.g., No Dance in this scene), show nothing
-    if (load === 0) return <div className="text-zinc-800">-</div>;
+  // If load is 0 (e.g., No Dance in this scene), show nothing
+  if (load === 0) return <div className="text-zinc-800">-</div>;
 
-    // Cycle Logic: New -> Draft -> Polished -> New
-    const getNextStatus = (current: string) => {
-       if (!current || current === 'New') return 'Draft';
-       if (current === 'Draft') return 'Polished';
-       return 'New';
-    };
-
-    // Color Logic
-    const getColor = (status: string) => {
-       if (status === 'Polished') return 'bg-emerald-500 text-emerald-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]';
-       if (status === 'Draft') return 'bg-amber-500 text-amber-950 shadow-[0_0_15px_rgba(245,158,11,0.2)]';
-       return 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'; // "New"
-    };
-
-    const label = value || "New";
-
-    return (
-       <button 
-         disabled={isPending}
-         onClick={() => startTransition(() => updateSceneStatus(scene.id, type, getNextStatus(value)))}
-         className={`
-            w-24 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all transform active:scale-95
-            flex items-center justify-center gap-2
-            ${getColor(value)}
-            ${isPending ? 'opacity-50 cursor-not-allowed' : ''}
-         `}
-       >
-         {isPending ? <Loader2 size={10} className="animate-spin" /> : label}
-       </button>
-    );
+  // Cycle Logic: New -> Draft -> Polished -> New
+  const getNextStatus = (current: string) => {
+     if (!current || current === 'New') return 'Draft';
+     if (current === 'Draft') return 'Polished';
+     return 'New';
   };
 
+  // Color Logic
+  const getColor = (status: string) => {
+     if (status === 'Polished') return 'bg-emerald-500 text-emerald-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]';
+     if (status === 'Draft') return 'bg-amber-500 text-amber-950 shadow-[0_0_15px_rgba(245,158,11,0.2)]';
+     return 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'; // "New"
+  };
+
+  const label = value || "New";
+
+  return (
+     <button 
+       disabled={isPending}
+       onClick={() => startTransition(() => updateSceneStatus(sceneId, type, getNextStatus(value)))}
+       className={`
+          w-24 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all transform active:scale-95
+          flex items-center justify-center gap-2
+          ${getColor(value)}
+          ${isPending ? 'opacity-50 cursor-not-allowed' : ''}
+       `}
+     >
+       {isPending ? <Loader2 size={10} className="animate-spin" /> : label}
+     </button>
+  );
+}
+
+function SceneRow({ scene }: any) {
   return (
     <tr className="hover:bg-white/[0.02] transition-colors group">
        <td className="p-4 text-center font-mono text-zinc-600 text-xs">{scene.order}</td>
@@ -107,9 +105,9 @@ function SceneRow({ scene }: any) {
           <div className="font-bold text-white group-hover:text-blue-200 transition-colors">{scene.name}</div>
           <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">{scene.pages ? `p. ${scene.pages}` : ''}</div>
        </td>
-       <td className="p-4 text-center flex justify-center"><StatusCell type="music" value={scene.status.music} load={scene.load.music} /></td>
-       <td className="p-4 text-center"><div className="flex justify-center"><StatusCell type="dance" value={scene.status.dance} load={scene.load.dance} /></div></td>
-       <td className="p-4 text-center"><div className="flex justify-center"><StatusCell type="block" value={scene.status.block} load={scene.load.block} /></div></td>
+       <td className="p-4 text-center flex justify-center"><StatusCell sceneId={scene.id} type="music" value={scene.status.music} load={scene.load.music} /></td>
+       <td className="p-4 text-center"><div className="flex justify-center"><StatusCell sceneId={scene.id} type="dance" value={scene.status.dance} load={scene.load.dance} /></div></td>
+       <td className="p-4 text-center"><div className="flex justify-center"><StatusCell sceneId={scene.id} type="block" value={scene.status.block} load={scene.load.block} /></div></td>
     </tr>
   );
 }

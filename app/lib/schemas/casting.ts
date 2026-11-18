@@ -1,7 +1,7 @@
 // app/lib/schemas/casting.ts
 
 import { z } from 'zod';
-import { parseRangeString } from '../vocalScience'; // 🟢 NEW IMPORT
+import { parseRangeString } from '../vocalScience.ts'; // 🟢 NEW IMPORT
 
 const BaserowArrayField = <T extends z.ZodTypeAny>(schema: T) =>
   z.array(schema).nullish().transform(val => val ?? []);
@@ -172,6 +172,7 @@ export const RosterStudentSchema = RawAuditionSchema.transform(data => {
     conflicts: data['Conflicts'] || "",
   };
 });
+export const RosterListSchema = z.array(RosterStudentSchema);
 
 
 // ==================================

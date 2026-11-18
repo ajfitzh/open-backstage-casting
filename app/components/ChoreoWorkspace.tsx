@@ -32,10 +32,10 @@ export default function ChoreoWorkspace({
   onSave: (id: number, score: number, tags: string, videoUrl?: string) => void;
 }) {
   // --- STATE ---
-  const [activeSlot, setActiveSlot] = useState<string>("");
+  const [selectedSlot, setActiveSlot] = useState<string>("");
   const [viewMode, setViewMode] = useState<'group' | 'grade'>('group');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [localNotes, setLocalNotes] = useState("");
+  const [noteDraft, setNoteDraft] = useState<{ key: string; value: string } | null>(null);
   
   // UPLOAD STATE
   const [isUploading, setIsUploading] = useState(false);
@@ -57,10 +57,7 @@ export default function ChoreoWorkspace({
   }, [people]);
 
   const slots = Object.keys(groupedPeople).sort();
-  
-  useEffect(() => {
-      if (slots.length > 0 && !activeSlot) setActiveSlot(slots[0]);
-  }, [slots, activeSlot]);
+  const activeSlot = selectedSlot || slots[0] || "";
 
   const currentGroup = groupedPeople[activeSlot] || [];
   const activeStudent = currentGroup[selectedIndex];
@@ -70,9 +67,9 @@ export default function ChoreoWorkspace({
       ? (initialGrades[currentGroup[0].id]?.video || currentGroup[0].video) 
       : null;
 
-  useEffect(() => {
-      setLocalNotes(activeGrade.choreoNotes || "");
-  }, [activeStudent?.id, activeGrade.choreoNotes]);
+  const noteKey = `${activeStudent?.id ?? ''}|${activeGrade.choreoNotes ?? ''}`;
+  const localNotes = noteDraft?.key === noteKey ? noteDraft.value : (activeGrade.choreoNotes || "");
+  const setLocalNotes = (value: string) => setNoteDraft({ key: noteKey, value });
 
 
   // --- ACTIONS ---

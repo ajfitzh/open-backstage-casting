@@ -54,12 +54,14 @@ export default function SeasonContext({
   }, [seasons]);
 
   const [selectedSeasonName, setSelectedSeasonName] = useState(activeSeasonName || sortedSeasons[0]?.name);
+  const [prevActiveSeasonName, setPrevActiveSeasonName] = useState(activeSeasonName);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lineupFilter, setLineupFilter] = useState("All"); 
 
-  useEffect(() => {
+  if (activeSeasonName !== prevActiveSeasonName) {
+    setPrevActiveSeasonName(activeSeasonName);
     if (activeSeasonName) setSelectedSeasonName(activeSeasonName);
-  }, [activeSeasonName]);
+  }
 
   // 2. FILTER DATA FOR SELECTED SEASON
   const seasonData = useMemo(() => {

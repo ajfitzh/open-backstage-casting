@@ -26,7 +26,7 @@ export default async function CallbacksPage({
   if (!production) return <div className="p-10 text-zinc-500 text-center">Production Not Found.</div>;
 
   // 🟢 FIXED: Typed 's' as Performer to remove the 'any' error
-  const callbackRoster = (roster as Performer[]).filter((s: Performer) => s.status === 'Called Back');
+  const callbackRoster = (roster as unknown as Performer[]).filter((s: Performer) => s.status === 'Called Back');
 
   return (
     <main className="h-full bg-zinc-950">

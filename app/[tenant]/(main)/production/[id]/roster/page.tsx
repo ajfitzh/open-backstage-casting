@@ -155,7 +155,7 @@ export default async function RosterPage({
   return (
     <main className="h-full bg-zinc-950">
       <ComplianceDashboard 
-        productionTitle={production.title || "Active Production"} 
+        productionTitle={String(production.title || "Active Production")} 
         students={combinedRoster}
         onDeleteAudition={handleDeleteAudition}
         onChangeTimeSlot={handleChangeTimeSlot}

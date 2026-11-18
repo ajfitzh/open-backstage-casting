@@ -6,9 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { 
   getClassRoster, 
-  fetchBaserow, 
-  submitClassProposal, 
-  claimBounty
+  fetchBaserow
 } from "@/app/lib/baserow";
 import { DB } from "@/app/lib/schema";
 // 🎯 HARDCODED IDs

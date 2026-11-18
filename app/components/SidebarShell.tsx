@@ -1,10 +1,35 @@
 "use client";
 
-import React, { useState, createContext, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // 1. Create Context
 const SidebarContext = createContext<{ isCollapsed: boolean } | undefined>(undefined);
+
+const SIDEBAR_STORAGE_KEY = 'sidebar-collapsed';
+const SIDEBAR_STORAGE_EVENT = 'sidebar-collapsed-change';
+
+function subscribeSidebar(onStoreChange: () => void) {
+  window.addEventListener('storage', onStoreChange);
+  window.addEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener('storage', onStoreChange);
+    window.removeEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+  };
+}
+
+function getSidebarSnapshot(): boolean {
+  try {
+    const savedState = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    return savedState !== null ? Boolean(JSON.parse(savedState)) : false;
+  } catch {
+    return false;
+  }
+}
+
+function getSidebarServerSnapshot(): boolean {
+  return false;
+}
 
 export function useSidebar() {
   const context = useContext(SidebarContext);
@@ -13,25 +38,18 @@ export function useSidebar() {
 }
 
 export default function SidebarShell({ children }: { children: React.ReactNode }) {
-  // Default to FALSE (Expanded) to match server-side rendering
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  // Add a generic "mounted" flag to prevent hydration mismatches
-  const [isMounted, setIsMounted] = useState(false);
+  // Default to FALSE (Expanded) on server, sync with localStorage on client
+  const isCollapsed = useSyncExternalStore(
+    subscribeSidebar,
+    getSidebarSnapshot,
+    getSidebarServerSnapshot
+  );
 
-  // 2. Load preference from localStorage on client mount
-  useEffect(() => {
-    setIsMounted(true);
-    const savedState = localStorage.getItem('sidebar-collapsed');
-    if (savedState !== null) {
-      setIsCollapsed(JSON.parse(savedState));
-    }
-  }, []);
-
-  // 3. Save preference whenever it changes (but only after mounting)
+  // 2. Save preference whenever it changes
   const toggleSidebar = () => {
     const newState = !isCollapsed;
-    setIsCollapsed(newState);
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(newState));
+    window.dispatchEvent(new Event(SIDEBAR_STORAGE_EVENT));
   };
 
   // Prevent flash of incorrect state if possible, or just render default

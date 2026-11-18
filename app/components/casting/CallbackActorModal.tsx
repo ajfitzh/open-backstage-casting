@@ -169,7 +169,7 @@ export default function CallbackActorModal({ actor, grades, timeline, onClose }:
                               <item.i size={12} className={item.c} />
                               <p className={`text-[10px] font-bold uppercase ${item.c}`}>{item.l}</p>
                           </div>
-                          <p className="text-xs text-zinc-300 italic">"{item.v || "No notes."}"</p>
+                          <p className="text-xs text-zinc-300 italic">&quot;{item.v || "No notes."}&quot;</p>
                       </div>
                     ))}
                   </div>

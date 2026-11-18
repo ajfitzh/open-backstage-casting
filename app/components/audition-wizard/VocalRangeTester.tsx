@@ -39,7 +39,17 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
   const animationRef = useRef<number>(0);
 
   useEffect(() => {
-    return () => stopTest();
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+    };
   }, []);
 
   const playNote = (midiNum: number, duration: number = 0.5) => {
@@ -128,7 +138,69 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
 
       setIsRecording(true);
       resetRange();
-      
+
+      const detectPitch = () => {
+        if (!analyserRef.current || !audioContextRef.current) return;
+
+        const buffer = new Float32Array(analyserRef.current.fftSize);
+        analyserRef.current.getFloatTimeDomainData(buffer);
+        
+        const pitchInHz = autoCorrelate(buffer, audioContextRef.current.sampleRate);
+        
+        const target = trainerTargetRef.current;
+        const dir = trainerDirectionRef.current;
+        const now = Date.now();
+
+        if (target && dir) {
+            const elapsed = now - lastNoteStartTimeRef.current;
+
+            if (elapsed < 3000) {
+                if (trainerPhaseRef.current !== 'playing') {
+                    trainerPhaseRef.current = 'playing';
+                    setTrainerPhase('playing');
+                }
+            } else if (elapsed < 6000) {
+                if (trainerPhaseRef.current !== 'listening') {
+                    trainerPhaseRef.current = 'listening';
+                    setTrainerPhase('listening');
+                }
+            } else {
+                const nextTarget = dir === 'up' ? target + 1 : target - 1;
+                trainerTargetRef.current = nextTarget;
+                lastNoteStartTimeRef.current = now;
+                setTrainerTarget(nextTarget);
+                trainerPhaseRef.current = 'playing';
+                setTrainerPhase('playing');
+                playNote(nextTarget, 3.0);
+            }
+        }
+
+        if (pitchInHz !== -1 && pitchInHz > 50 && pitchInHz < 2000) {
+          const midi = getMidiNote(pitchInHz);
+          const noteStr = getNoteString(midi);
+          
+          setCurrentNote(noteStr);
+          setCurrentMidi(midi);
+
+          if (midi === freeSingMidiRef.current) {
+              freeSingFramesRef.current++;
+              if (freeSingFramesRef.current > 5) {
+                  setLowestMidi(prev => Math.min(prev, midi));
+                  setHighestMidi(prev => Math.max(prev, midi));
+              }
+          } else {
+              freeSingMidiRef.current = midi;
+              freeSingFramesRef.current = 0;
+          }
+        } else {
+          setCurrentNote("--");
+          setCurrentMidi(null);
+          freeSingFramesRef.current = 0;
+        }
+
+        animationRef.current = requestAnimationFrame(detectPitch);
+      };
+
       detectPitch();
     } catch (err) {
       console.error("Mic error:", err);
@@ -151,68 +223,6 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
         audioContextRef.current.close();
         audioContextRef.current = null;
     }
-  };
-
-  const detectPitch = () => {
-    if (!analyserRef.current || !audioContextRef.current) return;
-
-    const buffer = new Float32Array(analyserRef.current.fftSize);
-    analyserRef.current.getFloatTimeDomainData(buffer);
-    
-    const pitchInHz = autoCorrelate(buffer, audioContextRef.current.sampleRate);
-    
-    const target = trainerTargetRef.current;
-    const dir = trainerDirectionRef.current;
-    const now = Date.now();
-
-    if (target && dir) {
-        const elapsed = now - lastNoteStartTimeRef.current;
-
-        if (elapsed < 3000) {
-            if (trainerPhaseRef.current !== 'playing') {
-                trainerPhaseRef.current = 'playing';
-                setTrainerPhase('playing');
-            }
-        } else if (elapsed < 6000) {
-            if (trainerPhaseRef.current !== 'listening') {
-                trainerPhaseRef.current = 'listening';
-                setTrainerPhase('listening');
-            }
-        } else {
-            const nextTarget = dir === 'up' ? target + 1 : target - 1;
-            trainerTargetRef.current = nextTarget;
-            lastNoteStartTimeRef.current = now;
-            setTrainerTarget(nextTarget);
-            trainerPhaseRef.current = 'playing';
-            setTrainerPhase('playing');
-            playNote(nextTarget, 3.0);
-        }
-    }
-
-    if (pitchInHz !== -1 && pitchInHz > 50 && pitchInHz < 2000) {
-      const midi = getMidiNote(pitchInHz);
-      const noteStr = getNoteString(midi);
-      
-      setCurrentNote(noteStr);
-      setCurrentMidi(midi);
-
-      if (midi === freeSingMidiRef.current) {
-          freeSingFramesRef.current++;
-          if (freeSingFramesRef.current > 5) {
-              setLowestMidi(prev => Math.min(prev, midi));
-              setHighestMidi(prev => Math.max(prev, midi));
-          }
-      } else {
-          freeSingMidiRef.current = midi;
-          freeSingFramesRef.current = 0;
-      }
-    } else {
-      setCurrentNote("--");
-      setCurrentMidi(null);
-      freeSingFramesRef.current = 0;
-    }
-
-    animationRef.current = requestAnimationFrame(detectPitch);
   };
 
   const handleApply = () => {
@@ -342,7 +352,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                    <div>
                        <h4 className="text-white font-black uppercase tracking-widest text-sm flex items-center gap-2"><Sparkles size={16} className="text-indigo-400"/> Guided Warmup</h4>
-                       <p className="text-xs text-zinc-400 mt-1">We'll play a pitch, and you sing it back!</p>
+                       <p className="text-xs text-zinc-400 mt-1">We&apos;ll play a pitch, and you sing it back!</p>
                    </div>
                    <button type="button" onClick={startAutoTrainer} className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg active:scale-95 whitespace-nowrap">
                        Start Trainer

@@ -3,13 +3,13 @@ import { auth } from "@/auth";
 import { getAllShows } from '@/app/lib/baserow';
 import GlobalHeaderClient from './client';
 
-export default async function GlobalHeader() {
+export default async function GlobalHeader({ tenant = 'cytfred' }: { tenant?: string } = {}) {
   const session = await auth();
   const cookieStore = await cookies();
   const activeId = Number(cookieStore.get('active_production_id')?.value);
   
   // Note: Using getAllShows since getActiveShows was not exported in baserow.ts
-  const shows = await getAllShows();
+  const shows = await getAllShows(tenant);
 
   const user = session?.user ? {
     name: session.user.name || "Cast Member",

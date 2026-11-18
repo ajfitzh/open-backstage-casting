@@ -1,4 +1,4 @@
-import { getShowById, getProductionEvents, fetchBaserow, DB, getTenantTableConfig, getAssignments } from '@/app/lib/baserow';
+import { getShowById, getProductionEvents, fetchBaserow, getDB, getTenantTableConfig, getAssignments } from '@/app/lib/baserow';
 import NightlyReportClient from '@/app/components/production/NightlyReportClient';
 
 export const dynamic = 'force-dynamic';
@@ -22,13 +22,14 @@ export default async function NightlyReportPage({ params }: { params: { tenant: 
     // Fetch today's attendance to find absences
     let attendance: { name: any; status: any; }[] = [];
     if (activeEvent) {
+        const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);
         const F = DB.ATTENDANCE.FIELDS;
         const tableId = tables.ATTENDANCE || DB.ATTENDANCE.ID;
         const res = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, {
             filter_type: "AND",
             [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: activeEvent.id
-        });
+        }, tenant);
         
         if (Array.isArray(res)) {
             attendance = res.map(r => ({

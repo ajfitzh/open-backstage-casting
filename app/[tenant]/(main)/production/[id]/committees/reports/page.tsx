@@ -8,7 +8,7 @@ import {
   getActiveProduction, 
   getShowById, 
   fetchBaserow, 
-  DB, 
+  getDB, 
   getTenantTableConfig 
 } from '@/app/lib/baserow';
 
@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 // 1. Helper to fetch the new reports
 async function getCommitteeReports(tenant: string, productionId: number) {
   try {
+    const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_REPORTS.FIELDS;
     
@@ -28,7 +29,7 @@ async function getCommitteeReports(tenant: string, productionId: number) {
       [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
     };
 
-    const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params);
+    const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params, tenant);
     if (!Array.isArray(rows)) return [];
 
     return rows.map((r: any) => ({

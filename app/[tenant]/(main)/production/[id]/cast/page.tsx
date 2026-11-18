@@ -28,7 +28,7 @@ export default async function CastGridPage({
       <CastGridClient 
         tenant={tenant}
         activeId={showId}               // 🟢 Renamed from 'id' to 'activeId'
-        assignments={assignments || []} // 🟢 Renamed from 'initialAssignments'
+        assignments={(assignments || []) as any} // 🟢 Renamed from 'initialAssignments'
         blueprintRoles={roles || []}    // 🟢 Renamed from 'roles'
         allScenes={scenes || []}        // 🟢 Added missing scenes
         roster={roster || []}           // 🟢 Added missing roster

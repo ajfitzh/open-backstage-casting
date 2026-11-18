@@ -5,7 +5,13 @@ import { Resend } from 'resend';
 import { getShowById, fetchBaserow, getDB } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing RESEND_API_KEY environment variable.");
+  }
+  return new Resend(apiKey);
+}
 
 // 1. Save the Program Bio (AUDITIONS table)
 export async function saveStudentBio(tenant: string, auditionId: number, bio: string) {
@@ -252,7 +258,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
     }
 
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
         to: lookupEmail,
         subject: `🎭 Audition Confirmed: ${firstName} for ${showTitle}!`,
@@ -374,7 +380,7 @@ export async function acceptRoleAndSign(
     }
 
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
         to: parentEmail,
         subject: `🎭 Role Accepted: ${studentName} in ${showTitle}!`,
