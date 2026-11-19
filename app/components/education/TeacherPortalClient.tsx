@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { toast } from '@/app/components/ToastProvider';
 import { 
   Sparkles, History, Plus, Copy, CheckCircle2, 
   AlertCircle, BookOpen, Clock, ArrowRight, Loader2
@@ -50,7 +51,7 @@ export default function TeacherPortalClient({
         await submitProposalAction({ ...formData, teacher: teacherName, session: currentSession });
         setIsSubmitting(false);
         setView('dashboard');
-        alert("Proposal Submitted!");
+        toast.success("Proposal Submitted!");
     };
 
     // --- DERIVED LISTS ---

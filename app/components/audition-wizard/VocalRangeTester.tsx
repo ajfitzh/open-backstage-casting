@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Mic, Square, Activity, CheckCircle2, ChevronLeft, Music, ArrowUp, ArrowDown, Sparkles, RotateCcw, Volume2 } from "lucide-react";
 import { getMidiNote, getNoteString, autoCorrelate, calculateBestVoiceType } from "@/app/lib/vocalScience";
+import { toast } from "@/app/components/ToastProvider";
 
 interface VocalRangeTesterProps {
   onRangeFound: (voiceType: string, lowNote: string, highNote: string) => void;
@@ -204,7 +205,7 @@ export default function VocalRangeTester({ onRangeFound, onStartTest }: VocalRan
       detectPitch();
     } catch (err) {
       console.error("Mic error:", err);
-      alert("Please allow microphone access to test your range.");
+      toast.warning("Please allow microphone access to test your range.");
     }
   };
 

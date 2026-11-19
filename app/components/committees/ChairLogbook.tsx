@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { ClipboardList, Users, AlertTriangle, DollarSign, Target, CheckCircle2, Send } from "lucide-react";
 import { submitCommitteeReport } from "@/app/actions/committees";
+import { toast } from "@/app/components/ToastProvider";
 
 const PHASES = [
   "Pre-Show Week 1", "Pre-Show Week 2", "Pre-Show Week 3", 
@@ -48,7 +49,7 @@ export default function ChairLogbook({ tenant, productionId, submitterId, commit
         setMoneySpent("");
       }, 3000);
     } else {
-      alert(res.error);
+      toast.error(res.error || "Failed to submit committee report.");
     }
     setIsSubmitting(false);
   };

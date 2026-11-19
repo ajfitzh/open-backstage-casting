@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { toast } from "@/app/components/ToastProvider";
 import {
   User, Clock, CheckCircle2, Search, UserPlus, PlayCircle, Film, Loader2, Music
 } from "lucide-react";
@@ -305,7 +306,7 @@ export default function AuditionsClient({
 
       if (isWalkIn) {
         await submitAudition(tenant, originalId, productionId, payload);
-        alert("Walk-In Created!");
+        toast.success("Walk-In Created!");
       } else {
         await updateAuditionSlot(tenant, personId, payload);
       }
@@ -314,7 +315,7 @@ export default function AuditionsClient({
       
     } catch (err) {
       console.error(err);
-      alert("Save failed! Check connection.");
+      toast.error("Save failed! Check connection.");
     }
   };
 
@@ -491,7 +492,7 @@ export default function AuditionsClient({
                       <button
                         onClick={() => {
                           if (!person.isCheckedIn) {
-                            alert("This actor has not been checked in yet.");
+                            toast.warning("This actor has not been checked in yet.");
                             return;
                           }
                           
@@ -555,7 +556,7 @@ export default function AuditionsClient({
                       <button 
                         onClick={() => {
                           if (!person.isCheckedIn) {
-                            alert("Profile locked until actor checks in.");
+                            toast.warning("Profile locked until actor checks in.");
                             return;
                           }
                           setInspectingActor(person);

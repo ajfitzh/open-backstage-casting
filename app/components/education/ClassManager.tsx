@@ -1,19 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Search, ArrowLeft, 
   Building2, Waves, Compass, Anchor, Navigation, 
   Filter, X, CalendarDays,
-  Map as MapIcon, LayoutGrid, CheckCircle2, Clock, UserX, MoreHorizontal, ChevronRight
+  Map as MapIcon, LayoutGrid, CheckCircle2, Clock, UserX, MoreHorizontal, ChevronRight, Loader2
 } from 'lucide-react';
-
-// --- MOCK CONFIG ---
-const SESSIONS = [
-    { id: 'winter2026', label: 'Winter 2026', current: true },
-    { id: 'fall2025', label: 'Fall 2025', current: false },
-    { id: 'spring2025', label: 'Spring 2025', current: false },
-];
+import { fetchRosterAction } from '@/app/lib/actions';
 
 const AGE_GROUPS = ["5-8", "8-12", "13-18"];
 const DAYS = ["Monday", "Tuesday", "Thursday"];
@@ -27,27 +21,62 @@ const VENUE_LAYOUTS: Record<string, any[]> = {
         { id: "102", name: "Rm 102", capacity: 20, type: "small", col: "col-span-1" },
         { id: "hall", name: "Hall", capacity: 100, type: "medium", col: "col-span-2" },
     ],
-    // Add others as needed
 };
 
-// --- MOCK STUDENTS FOR ATTENDANCE ---
-const MOCK_ROSTER = [
-    { id: 1, name: "Sarah Smith", status: 'present' },
-    { id: 2, name: "James Johnson", status: 'present' },
-    { id: 3, name: "Emily Davis", status: 'absent' },
-    { id: 4, name: "Michael Brown", status: 'present' },
-    { id: 5, name: "Jessica Wilson", status: 'late' },
-];
+interface RosterStudent {
+  id: number;
+  name: string;
+  age?: string | number;
+  email?: string;
+  phone?: string;
+}
 
 export default function ClassManager({ classes }: any) {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<any>(null);
-  
+  const [roster, setRoster] = useState<RosterStudent[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [attendanceMap, setAttendanceMap] = useState<Record<number, 'present' | 'late' | 'absent'>>({});
+
+  // Derive available sessions from real class data
+  const sessions = useMemo(() => {
+    const unique = Array.from(new Set(classes.map((c: any) => c.session).filter(Boolean))) as string[];
+    const list = [{ id: 'all', label: 'All Sessions' }];
+    unique.forEach((s) => list.push({ id: s, label: s }));
+    return list;
+  }, [classes]);
+
   // Filters
-  const [currentSession, setCurrentSession] = useState(SESSIONS[0]); 
+  const [currentSession, setCurrentSession] = useState<{ id: string; label: string }>({ id: 'all', label: 'All Sessions' });
   const [filterDay, setFilterDay] = useState<string | null>(null);
   const [filterAge, setFilterAge] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Load real student roster from Baserow when a class drawer opens
+  useEffect(() => {
+    if (!selectedClass?.id) return;
+    let cancelled = false;
+    fetchRosterAction(selectedClass.id)
+      .then((students) => {
+        if (!cancelled) {
+          setRoster(students);
+          setAttendanceMap({});
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRoster(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClass?.id]);
+
+  const openClassDrawer = (cls: any) => {
+    setRoster([]);
+    setAttendanceMap({});
+    setLoadingRoster(true);
+    setSelectedClass(cls);
+  };
 
   // --- 🧠 SMART VIEW LOGIC ---
   // If a User filters/searches, we break out of "Location Mode" and show a "Master List"
@@ -55,7 +84,9 @@ export default function ClassManager({ classes }: any) {
   
   const filteredClasses = useMemo(() => {
       let data = classes;
-      if (currentSession.id !== 'winter2026') return []; 
+      if (currentSession.id !== 'all') {
+          data = data.filter((c: any) => c.session === currentSession.id);
+      }
 
       // 1. Location Filter (Only if NOT searching globally)
       if (selectedLocation && !isGlobalSearch) {
@@ -64,7 +95,7 @@ export default function ClassManager({ classes }: any) {
 
       // 2. Global Filters
       if (filterDay) data = data.filter((c:any) => c.day === filterDay);
-      if (filterAge) data = data.filter((c:any) => c.ages.includes(filterAge));
+      if (filterAge) data = data.filter((c:any) => (c.ages || c.ageRange || "").includes(filterAge));
       if (searchTerm) {
           const lower = searchTerm.toLowerCase();
           data = data.filter((c:any) => 
@@ -133,6 +164,23 @@ export default function ClassManager({ classes }: any) {
                             className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-2.5 text-sm focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600"
                         />
                     </div>
+
+                    {/* Session Selector */}
+                    {sessions.length > 1 && (
+                        <select
+                            aria-label="Filter by session"
+                            value={currentSession.id}
+                            onChange={(e) => {
+                                const found = sessions.find((s) => s.id === e.target.value);
+                                if (found) setCurrentSession(found);
+                            }}
+                            className="bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold text-zinc-200 outline-none focus:border-blue-500"
+                        >
+                            {sessions.map((s) => (
+                                <option key={s.id} value={s.id}>{s.label}</option>
+                            ))}
+                        </select>
+                    )}
 
                     {/* Filter Pills */}
                     <div className="flex items-center gap-2 bg-zinc-900 p-1.5 rounded-xl border border-white/5 overflow-x-auto max-w-full">
@@ -216,7 +264,7 @@ export default function ClassManager({ classes }: any) {
                         {filteredClasses.map((c: any) => (
                             <div 
                                 key={c.id} 
-                                onClick={() => setSelectedClass(c)}
+                                onClick={() => openClassDrawer(c)}
                                 className="group bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col md:flex-row md:items-center gap-6 hover:bg-zinc-800 hover:border-white/10 transition-all cursor-pointer relative overflow-hidden"
                             >
                                 {/* Left Color Bar */}
@@ -289,32 +337,90 @@ export default function ClassManager({ classes }: any) {
                     {/* Attendance List */}
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-4">
                         <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">Student List ({MOCK_ROSTER.length})</h3>
-                            <button className="text-[10px] text-blue-400 font-bold uppercase hover:text-white">Mark All Present</button>
+                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                                Student List ({roster.length})
+                            </h3>
+                            {roster.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const allPresent: Record<number, 'present' | 'late' | 'absent'> = {};
+                                        roster.forEach((s) => { allPresent[s.id] = 'present'; });
+                                        setAttendanceMap(allPresent);
+                                    }}
+                                    className="text-[10px] text-blue-400 font-bold uppercase hover:text-white"
+                                >
+                                    Mark All Present
+                                </button>
+                            )}
                         </div>
 
-                        {MOCK_ROSTER.map((student) => (
-                            <div key={student.id} className="flex items-center justify-between p-4 bg-zinc-900 border border-white/5 rounded-2xl group hover:border-white/10 transition-all">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
-                                        {student.name.charAt(0)}
-                                    </div>
-                                    <span className="font-bold text-zinc-200 text-lg">{student.name}</span>
-                                </div>
-                                
-                                <div className="flex items-center gap-2">
-                                    <button className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all">
-                                        <CheckCircle2 size={20}/>
-                                    </button>
-                                    <button className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all">
-                                        <Clock size={20}/>
-                                    </button>
-                                    <button className="w-10 h-10 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center border border-red-500/20 hover:bg-red-500 hover:text-white transition-all">
-                                        <UserX size={20}/>
-                                    </button>
-                                </div>
+                        {loadingRoster ? (
+                            <div className="py-12 flex flex-col items-center justify-center gap-3 text-zinc-500">
+                                <Loader2 size={24} className="animate-spin text-blue-500" />
+                                <p className="text-xs font-bold uppercase tracking-widest">Loading Roster...</p>
                             </div>
-                        ))}
+                        ) : roster.length === 0 ? (
+                            <div className="p-10 border border-dashed border-zinc-800 rounded-2xl text-center text-zinc-500 text-sm">
+                                No students enrolled in this class yet.
+                            </div>
+                        ) : (
+                            roster.map((student) => {
+                                const status = attendanceMap[student.id];
+                                return (
+                                    <div key={student.id} className="flex items-center justify-between p-4 bg-zinc-900 border border-white/5 rounded-2xl group hover:border-white/10 transition-all">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
+                                                {student.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <span className="font-bold text-zinc-200 text-lg block">{student.name}</span>
+                                                {student.age && <span className="text-xs text-zinc-500">Age {student.age}</span>}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                aria-label={`Mark ${student.name} present`}
+                                                onClick={() => setAttendanceMap((prev) => ({ ...prev, [student.id]: 'present' }))}
+                                                className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                                                    status === 'present'
+                                                        ? 'bg-emerald-500 text-white border-emerald-400'
+                                                        : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500 hover:text-white'
+                                                }`}
+                                            >
+                                                <CheckCircle2 size={20}/>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label={`Mark ${student.name} late`}
+                                                onClick={() => setAttendanceMap((prev) => ({ ...prev, [student.id]: 'late' }))}
+                                                className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                                                    status === 'late'
+                                                        ? 'bg-amber-500 text-white border-amber-400'
+                                                        : 'bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500 hover:text-white'
+                                                }`}
+                                            >
+                                                <Clock size={20}/>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label={`Mark ${student.name} absent`}
+                                                onClick={() => setAttendanceMap((prev) => ({ ...prev, [student.id]: 'absent' }))}
+                                                className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
+                                                    status === 'absent'
+                                                        ? 'bg-red-500 text-white border-red-400'
+                                                        : 'bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500 hover:text-white'
+                                                }`}
+                                            >
+                                                <UserX size={20}/>
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                     
                     {/* Footer */}

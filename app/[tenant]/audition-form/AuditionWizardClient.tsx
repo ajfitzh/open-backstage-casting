@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ChevronLeft, ChevronRight, CheckCircle2, Send, Search, Clock, Plus, User, Trash2, Edit, Lock, CalendarOff } from "lucide-react";
 import { submitRealAudition, cancelAudition } from "@/app/actions/auditions";
+import { toast } from "@/app/components/ToastProvider";
 import { getExistingAuditions } from "@/app/lib/baserow"; 
 import { setAccountPassword } from "@/app/actions/auth";
 import { AuditionFormData, AuditionSlot, INITIAL_DATA, PRESET_SONGS } from "@/app/components/audition-wizard/types";
@@ -92,7 +93,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     if (result.success) {
       setPasswordSetSuccess(true);
     } else {
-      alert(result.error || "Failed to set password. Please try again.");
+      toast.error(result.error || "Failed to set password. Please try again.");
     }
     setIsSettingPassword(false);
   };
@@ -156,7 +157,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     setIsCanceling(auditionId);
     const res = await cancelAudition(tenant, auditionId);
     if (res.success) setExistingAuditions(prev => prev.filter(a => a.id !== auditionId));
-    else alert("Failed to cancel. Please try again.");
+    else toast.error("Failed to cancel. Please try again.");
     setIsCanceling(null);
   };
 
@@ -229,11 +230,11 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
         setAssignedAuditionNumber(result.auditionNumber?.toString() || null);
         localStorage.removeItem(STORAGE_KEY);
       } else {
-        alert(result?.error || "Something went wrong saving your audition. Please try again.");
+        toast.error(result?.error || "Something went wrong saving your audition. Please try again.");
       }
     } catch (error) {
       console.error(error);
-      alert("Upload failed. Please check your connection or bucket configuration.");
+      toast.error("Upload failed. Please check your connection or bucket configuration.");
     } finally {
       setIsProcessing(false);
     }

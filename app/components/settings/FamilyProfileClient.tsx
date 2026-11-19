@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { User, Home, HeartPulse, Shirt, Phone, Save, CheckCircle2, ShieldAlert } from "lucide-react";
 import { updateStudentMasterProfile } from "@/app/actions/family";
+import { toast } from "@/app/components/ToastProvider";
 
 const T_SHIRT_SIZES = ["Youth S", "Youth M", "Youth L", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult XXL"];
 
@@ -32,7 +33,7 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
         setSuccessId(person.id);
         setTimeout(() => setSuccessId(null), 3000);
     } else {
-        alert(res.error);
+        toast.error(res.error || "Failed to save profile.");
     }
     setSavingId(null);
   };

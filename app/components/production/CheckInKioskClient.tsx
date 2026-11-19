@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Search, UserCheck, UserMinus, LogOut, Clock, CheckCircle2 } from 'lucide-react';
 import { toggleAttendance } from '@/app/actions/attendance';
+import { toast } from '@/app/components/ToastProvider';
 
 export default function CheckInKioskClient({ tenant, productionId, event, castList, initialAttendance }: any) {
     const [search, setSearch] = useState("");
@@ -47,7 +48,7 @@ export default function CheckInKioskClient({ tenant, productionId, event, castLi
                 }
             });
         } else {
-            alert("Failed to record attendance. Please try again.");
+            toast.error("Failed to record attendance. Please try again.");
         }
         setProcessingId(null);
     };

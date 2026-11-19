@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "@/app/components/ToastProvider";
 import { 
   ArrowLeft, ArrowRight, Move, 
   AlertTriangle, Star, Zap, Smile, ThumbsUp, MessageSquare,
@@ -129,7 +130,7 @@ export default function ChoreoWorkspace({
           });
           if (!uploadRes.ok) throw new Error("Upload failed");
 
-          alert("Video Uploaded! Linking to all dancers in this group...");
+          toast.success("Video uploaded! Linking to all dancers in this group...");
           currentGroup.forEach(student => {
               const oldNotes = initialGrades[student.id]?.choreoNotes || "";
               const oldScore = initialGrades[student.id]?.dance || 0;
@@ -140,7 +141,7 @@ export default function ChoreoWorkspace({
           });
       } catch (err) {
           console.error(err);
-          alert("Upload failed. Use Camera Roll.");
+          toast.error("Upload failed. Use Camera Roll.");
       } finally {
           setIsUploading(false);
           setUploadProgress("0%");

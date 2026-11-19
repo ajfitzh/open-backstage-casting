@@ -4,6 +4,7 @@
 import React from "react";
 import { MessageSquare, MapPin, Video, UserX, AlertCircle } from "lucide-react";
 import { AuditionFormData, REHEARSAL_DATES, ConflictLevel, ConflictEntry } from "./types";
+import { toast } from "@/app/components/ToastProvider";
 
 interface Props {
   formData: AuditionFormData;
@@ -44,7 +45,7 @@ export function Step5Conflicts({ formData, updateForm, errors }: Props) {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 shrink-0">
                       {[{ id: "available", label: "Free", color: "bg-green-600" }, { id: "late", label: "Late", color: "bg-amber-500" }, { id: "tentative", label: "Partial", color: "bg-orange-400" }, { id: "absent", label: "Absent", color: "bg-red-600" }].map(l => (
                         <button key={l.id} type="button" onClick={() => {
-                          if ((d.type === "mandatory" || d.type === "critical") && l.id !== "available") { alert("This date is a mandatory rehearsal. Conflicts are not permitted."); return; }
+                          if ((d.type === "mandatory" || d.type === "critical") && l.id !== "available") { toast.warning("This date is a mandatory rehearsal. Conflicts are not permitted."); return; }
                           updateForm({ conflicts: {...formData.conflicts, [d.id]: {level: l.id as ConflictLevel, notes: curr.notes} } });
                         }} className={`px-2 sm:px-4 py-2 sm:py-3 text-[8px] sm:text-[9px] font-black uppercase rounded-lg sm:rounded-xl transition-all ${curr.level === l.id ? `${l.color} text-white shadow-md` : "bg-white dark:bg-zinc-900 text-zinc-400 border border-zinc-100"}`}>{l.label}</button>
                       ))}

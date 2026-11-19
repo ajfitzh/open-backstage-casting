@@ -2,6 +2,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getAuditionees, submitAudition } from './baserow';
+import { toast } from '@/app/components/ToastProvider';
 
 // 1. Define the shape of our data to kill the "redlines"
 export interface Performer {
@@ -92,7 +93,7 @@ export function CastingProvider({ children, tenant = 'cytfred' }: { children: Re
       console.log(`Audition record created for performer ${performerId}`);
     } catch (e) {
       console.error("Failed to save audition record:", e);
-      alert("Error saving to Baserow. Check console.");
+      toast.error("Error saving to Baserow. Check console.");
     }
   };
 

@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { toast } from "@/app/components/ToastProvider";
 import { ChevronLeft, Search, Check, Clock, X, AlertTriangle } from "lucide-react";
 import { saveCheckIn } from "@/app/actions/checkin";
 
@@ -77,7 +78,7 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
       );
     } catch (error) {
       console.error("Failed to save check-in state:", error);
-      alert("Connection error! The check-in could not be saved. Please try again.");
+      toast.error("Connection error! The check-in could not be saved. Please try again.");
       // Rollback the optimistic UI update
       setStudents(previousStudentsState);
     }
