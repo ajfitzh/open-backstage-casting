@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { auth } from '@/auth';
-
-// Initialize Stripe. In production, ensure STRIPE_SECRET_KEY is set in your .env
-// We use a fallback dummy key so the code doesn't crash on initialization if missing.
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy', {
-  apiVersion: '2026-04-22.dahlia', // Use your preferred/latest API version
-});
+import { fetchBaserow, getDB } from '@/app/lib/baserow';
+import { getTenantTableConfig } from '@/app/lib/tenant-config';
+import {
+  buildCheckoutLineItems,
+  getStripeClient,
+  sanitizeReturnPath,
+} from '@/app/lib/stripe-helpers';
 
 export async function POST(req: NextRequest) {
   const sessionAuth = await auth();
@@ -19,46 +19,121 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Determine the origin for our return URLs
-    const origin = req.headers.get('origin') || 'http://localhost:3000';
+    const body = await req.json().catch(() => ({}));
+    const origin = req.headers.get('origin') || 'http://localhost:3001';
+    const stripe = getStripeClient();
 
-    // Create a Stripe Checkout Session
+    // 1. SANDBOX DEMO MODE (keeps /sandbox/checkout working)
+    const isSandboxRequest =
+      Boolean(body?.sandbox) || (!body?.auditionId && !body?.productionId && hasSandboxAccess);
+
+    if (isSandboxRequest) {
+      const lineItems = buildCheckoutLineItems({
+        showTitle: 'Spring Musical (Sandbox Demo)',
+        studentName: 'Sandbox Student',
+        productionFeeDollars: 150,
+        extraItems: [{ name: 'Show T-Shirt', description: 'Adult L', amountDollars: 20 }],
+      });
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: `${origin}/sandbox/checkout?status=success`,
+        cancel_url: `${origin}/sandbox/checkout?status=cancelled`,
+      });
+
+      return NextResponse.json({ url: session.url });
+    }
+
+    // 2. REAL PRODUCTION FEE CHECKOUT
+    if (!sessionAuth?.user) {
+      return NextResponse.json({ error: 'Please sign in to pay production fees.' }, { status: 401 });
+    }
+
+    const tenant = typeof body?.tenant === 'string' ? body.tenant.trim() : '';
+    const auditionId = Number(body?.auditionId);
+    const productionId = Number(body?.productionId);
+
+    if (!tenant || !Number.isInteger(auditionId) || auditionId <= 0 || !Number.isInteger(productionId) || productionId <= 0) {
+      return NextResponse.json(
+        { error: 'Missing or invalid tenant, auditionId, or productionId.' },
+        { status: 400 }
+      );
+    }
+
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+
+    // Always read authoritative fee & student details from Baserow (never trust client amounts)
+    const [productionRow, auditionRow] = await Promise.all([
+      fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${productionId}/`, {}, {}, tenant),
+      fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {}, {}, tenant),
+    ]);
+
+    if (!productionRow || productionRow.error) {
+      return NextResponse.json({ error: 'Production not found.' }, { status: 404 });
+    }
+    if (!auditionRow || auditionRow.error) {
+      return NextResponse.json({ error: 'Audition record not found.' }, { status: 404 });
+    }
+
+    if (auditionRow[DB.AUDITIONS.FIELDS.PAID_FEES]) {
+      return NextResponse.json(
+        { error: 'Production fee has already been paid for this student.' },
+        { status: 409 }
+      );
+    }
+
+    const showTitle =
+      productionRow[DB.PRODUCTIONS.FIELDS.TITLE] ||
+      productionRow[DB.PRODUCTIONS.FIELDS.FULL_TITLE] ||
+      'Production';
+    const productionFeeDollars = Number(productionRow[DB.PRODUCTIONS.FIELDS.PRODUCTION_FEE] ?? 0);
+
+    if (!Number.isFinite(productionFeeDollars) || productionFeeDollars <= 0) {
+      return NextResponse.json(
+        { error: `No production fee is configured for "${showTitle}". Please contact your administrator.` },
+        { status: 400 }
+      );
+    }
+
+    const performerLink = auditionRow[DB.AUDITIONS.FIELDS.PERFORMER]?.[0];
+    const studentName =
+      typeof performerLink?.value === 'string'
+        ? performerLink.value
+        : performerLink?.value?.value || 'Cast Member';
+    const studentId = performerLink?.id ? String(performerLink.id) : '';
+
+    const lineItems = buildCheckoutLineItems({
+      showTitle: String(showTitle),
+      studentName: String(studentName),
+      productionFeeDollars,
+    });
+
+    const returnPath = sanitizeReturnPath(body?.returnPath, '/');
+    const separator = returnPath.includes('?') ? '&' : '?';
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: 'Spring Production Fee: Austin Fitzhugh',
-              description: 'Participation fee for the Spring Musical',
-            },
-            unit_amount: 15000, // $150.00 (amount must be in cents)
-          },
-          quantity: 1,
-        },
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: 'Show T-Shirt',
-              description: 'Adult L',
-            },
-            unit_amount: 2000, // $20.00 (amount must be in cents)
-          },
-          quantity: 1,
-        },
-      ],
+      customer_email: sessionAuth.user.email || undefined,
+      line_items: lineItems,
       mode: 'payment',
-      success_url: `${origin}/sandbox/checkout?status=success`,
-      cancel_url: `${origin}/sandbox/checkout?status=cancelled`,
+      metadata: {
+        tenant,
+        auditionId: String(auditionId),
+        productionId: String(productionId),
+        ...(studentId ? { studentId } : {}),
+      },
+      success_url: `${origin}${returnPath}${separator}payment=success&auditionId=${auditionId}`,
+      cancel_url: `${origin}${returnPath}${separator}payment=cancelled`,
     });
 
     return NextResponse.json({ url: session.url });
   } catch (error: any) {
     console.error('Error creating Stripe checkout session:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error', message: error.message },
+      { error: error?.message || 'Unable to start Stripe checkout.' },
       { status: 500 }
     );
   }

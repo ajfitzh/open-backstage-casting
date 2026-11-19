@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Clock, AlertCircle, CheckCircle2, PenTool, Lock, Ticket, Megaphone } from "lucide-react";
+import { Clock, AlertCircle, CheckCircle2, PenTool, Lock, Ticket, Megaphone, CreditCard, Loader2 } from "lucide-react";
 import AcceptRoleModal from "./AcceptRoleModal";
 import EditAuditionForm from "./EditAuditionForm"; // 🟢 NEW IMPORT
 import { saveStudentBio, saveCongratsAd, saveTicketsSold } from "@/app/actions/auditions"; 
@@ -26,8 +26,39 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
   const [editTickets, setEditTickets] = useState(student.ticketsSold || 0);
   const [isSavingTickets, setIsSavingTickets] = useState(false);
 
+  // Payment State
+  const [isStartingCheckout, setIsStartingCheckout] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
   const isCast = student.status === "Cast";
   const hasSignedLegal = student.signatures?.includes("S") && student.signatures?.includes("P");
+  const isFeePaid = Boolean(student.paidFees || student.productionFeeStatus === "Paid");
+  const productionFeeAmount = Number(show?.productionFee ?? 0);
+
+  const handlePayProductionFee = async () => {
+     setIsStartingCheckout(true);
+     setPaymentError(null);
+     try {
+       const res = await fetch("/api/checkout", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           tenant,
+           auditionId: student.id,
+           productionId: show.id,
+           returnPath: "/",
+         }),
+       });
+       const data = await res.json().catch(() => ({}));
+       if (!res.ok || !data.url) {
+         throw new Error(data.error || "Could not start Stripe checkout.");
+       }
+       window.location.href = data.url;
+     } catch (err: any) {
+       setPaymentError(err?.message || "Payment error. Please try again.");
+       setIsStartingCheckout(false);
+     }
+  };
   
   const wordCount = bioText.trim().split(/\s+/).filter((w: string) => w.length > 0).length;
 
@@ -136,6 +167,45 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
                <h4 className="font-black text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-2">
                   <PenTool size={12} /> Production Action Items
                </h4>
+
+               {/* Task 0: Production Fee */}
+               <div className="bg-zinc-900 border border-white/5 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                     <CreditCard size={16} className={isFeePaid ? "text-emerald-500" : "text-amber-400"} />
+                     <div>
+                        <p className="font-black text-white text-sm">Production Fee</p>
+                        <p className="text-xs text-zinc-500 font-medium">
+                           {isFeePaid
+                              ? "Paid in full — thank you!"
+                              : productionFeeAmount > 0
+                                 ? `Balance due: $${productionFeeAmount.toFixed(2)}`
+                                 : "Pay cast participation fee online via Stripe."}
+                        </p>
+                        {paymentError && (
+                           <p className="text-xs text-red-400 font-bold mt-1">{paymentError}</p>
+                        )}
+                     </div>
+                  </div>
+                  {isFeePaid ? (
+                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-widest shrink-0">
+                        <CheckCircle2 size={12} /> Paid
+                     </span>
+                  ) : (
+                     <button
+                        type="button"
+                        disabled={isStartingCheckout}
+                        onClick={handlePayProductionFee}
+                        className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-colors disabled:opacity-50 shrink-0"
+                     >
+                        {isStartingCheckout ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                        {isStartingCheckout
+                           ? "Redirecting..."
+                           : productionFeeAmount > 0
+                              ? `Pay $${productionFeeAmount.toFixed(2)}`
+                              : "Pay Fee"}
+                     </button>
+                  )}
+               </div>
 
                {/* Task 1: Tickets Sold */}
                <div className="bg-zinc-900 border border-white/5 rounded-xl overflow-hidden p-4">

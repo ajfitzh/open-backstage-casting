@@ -6,10 +6,15 @@ import {
   User, Shield, Monitor, Lock,
   LogOut, Mail, CheckCircle2, Users,
   CreditCard, ChevronRight, Phone, MapPin,
-  Save, Loader2, Upload, Search, UserCog, X, ChevronUp
+  Save, Loader2, Upload, Search, UserCog, X, ChevronUp, Rocket
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
 import { updateMyProfile, updateUserRoles, setProductionStatus } from '@/app/actions/admin';
+import ShowLaunchPanel, {
+  type AuditionSlotSummary,
+  type ShowTeamMemberSummary,
+  type SimpleOption,
+} from './ShowLaunchPanel';
 import { signOut } from "next-auth/react";
 import {
   hasPermission,
@@ -54,6 +59,11 @@ interface SettingsProps {
   initialUser: UserProfile;
   realProductionRole: string | null;
   directoryPeople?: DirectoryPerson[];
+  seasons?: SimpleOption[];
+  masterShows?: { id: number; title: string }[];
+  staffPositions?: SimpleOption[];
+  initialSlots?: AuditionSlotSummary[];
+  initialTeam?: ShowTeamMemberSummary[];
 }
 
 export default function SettingsClient({
@@ -63,6 +73,11 @@ export default function SettingsClient({
   initialUser,
   realProductionRole,
   directoryPeople = [],
+  seasons = [],
+  masterShows = [],
+  staffPositions = [],
+  initialSlots = [],
+  initialTeam = [],
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   const [godModeOpen, setGodModeOpen] = useState(false);
@@ -120,7 +135,7 @@ export default function SettingsClient({
   let safeTab = activeTab;
   if (activeTab === 'billing' && !canSeeBilling) safeTab = 'profile';
   if ((activeTab === 'permissions' || activeTab === 'context') && !canSeeSystem) safeTab = 'profile';
-  if (activeTab === 'team' && !canManageTeam) safeTab = 'profile';
+  if ((activeTab === 'team' || activeTab === 'launch') && !canManageTeam) safeTab = 'profile';
 
   const filteredPeople = useMemo(() => {
     const q = peopleSearch.trim().toLowerCase();
@@ -257,7 +272,10 @@ export default function SettingsClient({
             <TabButton id="context" label="Workspace & Shows" icon={<Monitor size={18} />} active={safeTab} onClick={setActiveTab} />
             <TabButton id="permissions" label="My Clearance" icon={<Shield size={18} />} active={safeTab} onClick={setActiveTab} />
             {canManageTeam && (
-              <TabButton id="team" label="Team & Roles" icon={<UserCog size={18} />} active={safeTab} onClick={setActiveTab} />
+              <>
+                <TabButton id="launch" label="Show Launch" icon={<Rocket size={18} />} active={safeTab} onClick={setActiveTab} />
+                <TabButton id="team" label="Team & Roles" icon={<UserCog size={18} />} active={safeTab} onClick={setActiveTab} />
+              </>
             )}
           </div>
         )}
@@ -545,6 +563,21 @@ export default function SettingsClient({
               />
             </div>
           </div>
+        )}
+
+        {safeTab === 'launch' && canManageTeam && (
+          <ShowLaunchPanel
+            tenant={tenant}
+            activeShowId={activeShow?.id || activeId}
+            activeShowTitle={activeShow?.title || 'Active Show'}
+            seasons={seasons}
+            masterShows={masterShows}
+            staffPositions={staffPositions}
+            people={peopleList}
+            initialSlots={initialSlots}
+            initialTeam={initialTeam}
+            onProductionCreated={(created) => setShowList((prev) => [created, ...prev])}
+          />
         )}
 
         {safeTab === 'team' && canManageTeam && (

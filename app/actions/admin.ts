@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { fetchBaserow, getDB, getUserProfile } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
-import { requireAdminAccess, requireAuthenticatedUser } from "@/app/lib/auth-guard";
+import { requireAdminAccess, requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
 import { ASSIGNABLE_GLOBAL_ROLES } from "@/app/lib/permissions";
 
 const ALLOWED_ROLE_SET = new Set([
@@ -171,5 +171,262 @@ export async function setProductionStatus(
   } catch (error) {
     console.error("setProductionStatus error:", error);
     return { success: false, error: "Unexpected error updating production status." };
+  }
+}
+
+export async function createProduction(
+  tenant: string,
+  data: {
+    title: string;
+    status?: string;
+    location?: string;
+    productionFee?: number;
+    seasonId?: number | null;
+    masterShowId?: number | null;
+  }
+) {
+  const authResult = await requireAdminAccess();
+  if (!authResult.ok) return { success: false, error: authResult.error };
+
+  const title = (data.title || "").trim();
+  if (!title) {
+    return { success: false, error: "Production title is required." };
+  }
+
+  const status = data.status && ALLOWED_PRODUCTION_STATUSES.has(data.status) ? data.status : "Upcoming";
+  const fee = Number(data.productionFee ?? 0);
+  if (Number.isNaN(fee) || fee < 0) {
+    return { success: false, error: "Production fee must be a valid non-negative number." };
+  }
+
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.PRODUCTIONS.FIELDS;
+
+    const payload: Record<string, unknown> = {
+      [F.TITLE]: title,
+      [F.STATUS]: status,
+      [F.PRODUCTION_FEE]: fee,
+      [F.IS_ACTIVE]: status === "Active",
+    };
+
+    if (data.location?.trim()) {
+      payload[F.LOCATION] = data.location.trim();
+    }
+    if (data.seasonId && Number.isInteger(data.seasonId) && data.seasonId > 0) {
+      payload[F.SEASON_LINKED] = [data.seasonId];
+    }
+    if (data.masterShowId && Number.isInteger(data.masterShowId) && data.masterShowId > 0) {
+      payload[F.MASTER_SHOW_DATABASE] = [data.masterShowId];
+    }
+
+    const res = await fetchBaserow(
+      `/database/rows/table/${tables.PRODUCTIONS}/`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      {},
+      tenant
+    );
+
+    if (!res || res.error || !res.id) {
+      return { success: false, error: "Failed to create production in Baserow." };
+    }
+
+    revalidatePath(`/${tenant}/settings`);
+    revalidatePath(`/${tenant}`);
+    return {
+      success: true,
+      production: {
+        id: res.id,
+        title,
+        status,
+        location: data.location?.trim() || "General",
+        productionFee: fee,
+      },
+    };
+  } catch (error) {
+    console.error("createProduction error:", error);
+    return { success: false, error: "Unexpected error creating production." };
+  }
+}
+
+export async function createAuditionSlot(
+  tenant: string,
+  productionId: number,
+  data: {
+    timeLabel: string;
+    dateTime?: string;
+    capacity: number;
+  }
+) {
+  const guard = await requirePermission(tenant, "manage_casting", productionId);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const timeLabel = (data.timeLabel || "").trim();
+  const capacity = Number(data.capacity);
+
+  if (!Number.isInteger(productionId) || productionId <= 0) {
+    return { success: false, error: "Select a valid production first." };
+  }
+  if (!timeLabel) {
+    return { success: false, error: "Slot label (e.g., Thursday 5:00 PM) is required." };
+  }
+  if (!Number.isInteger(capacity) || capacity <= 0 || capacity > 500) {
+    return { success: false, error: "Capacity must be between 1 and 500." };
+  }
+
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const F = DB.AUDITION_SLOTS.FIELDS;
+    const tableId = tables.AUDITION_SLOTS || DB.AUDITION_SLOTS.ID;
+
+    const payload: Record<string, unknown> = {
+      [F.TIME_LABEL]: timeLabel,
+      [F.PRODUCTION]: [productionId],
+      [F.CAPACITY]: capacity,
+    };
+
+    if (data.dateTime?.trim()) {
+      payload[F.DATE_TIME] = data.dateTime.trim();
+    }
+
+    const res = await fetchBaserow(
+      `/database/rows/table/${tableId}/`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      {},
+      tenant
+    );
+
+    if (!res || res.error || !res.id) {
+      return { success: false, error: "Failed to create audition slot." };
+    }
+
+    revalidatePath(`/${tenant}/settings`);
+    revalidatePath(`/${tenant}/audition-form`);
+    return {
+      success: true,
+      slot: {
+        id: res.id,
+        label: timeLabel,
+        capacity,
+        taken: 0,
+        remaining: capacity,
+        isFull: false,
+      },
+    };
+  } catch (error) {
+    console.error("createAuditionSlot error:", error);
+    return { success: false, error: "Unexpected error creating audition slot." };
+  }
+}
+
+export async function deleteAuditionSlot(tenant: string, slotId: number) {
+  const guard = await requirePermission(tenant, "manage_casting");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  if (!Number.isInteger(slotId) || slotId <= 0) {
+    return { success: false, error: "Invalid slot ID." };
+  }
+
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const tableId = tables.AUDITION_SLOTS || DB.AUDITION_SLOTS.ID;
+
+    await fetchBaserow(
+      `/database/rows/table/${tableId}/${slotId}/`,
+      { method: "DELETE" },
+      {},
+      tenant
+    );
+
+    revalidatePath(`/${tenant}/settings`);
+    revalidatePath(`/${tenant}/audition-form`);
+    return { success: true };
+  } catch (error) {
+    console.error("deleteAuditionSlot error:", error);
+    return { success: false, error: "Unexpected error deleting audition slot." };
+  }
+}
+
+export async function assignShowTeamMember(
+  tenant: string,
+  productionId: number,
+  personId: number,
+  positionId: number
+) {
+  const authResult = await requireAdminAccess();
+  if (!authResult.ok) return { success: false, error: authResult.error };
+
+  if (!productionId || !personId || !positionId) {
+    return { success: false, error: "Production, person, and position are all required." };
+  }
+
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const tableId = tables.SHOW_TEAM || DB.SHOW_TEAM.ID;
+    const F = DB.SHOW_TEAM.FIELDS;
+
+    const res = await fetchBaserow(
+      `/database/rows/table/${tableId}/`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          [F.PRODUCTIONS]: [productionId],
+          [F.PERSON]: [personId],
+          [F.POSITION]: [positionId],
+        }),
+      },
+      {},
+      tenant
+    );
+
+    if (!res || res.error || !res.id) {
+      return { success: false, error: "Failed to assign show team member." };
+    }
+
+    revalidatePath(`/${tenant}/settings`);
+    revalidatePath(`/${tenant}`);
+    return { success: true, assignmentId: res.id };
+  } catch (error) {
+    console.error("assignShowTeamMember error:", error);
+    return { success: false, error: "Unexpected error assigning show team member." };
+  }
+}
+
+export async function removeShowTeamMember(tenant: string, assignmentId: number) {
+  const authResult = await requireAdminAccess();
+  if (!authResult.ok) return { success: false, error: authResult.error };
+
+  if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+    return { success: false, error: "Invalid assignment ID." };
+  }
+
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const tableId = tables.SHOW_TEAM || DB.SHOW_TEAM.ID;
+
+    await fetchBaserow(
+      `/database/rows/table/${tableId}/${assignmentId}/`,
+      { method: "DELETE" },
+      {},
+      tenant
+    );
+
+    revalidatePath(`/${tenant}/settings`);
+    revalidatePath(`/${tenant}`);
+    return { success: true };
+  } catch (error) {
+    console.error("removeShowTeamMember error:", error);
+    return { success: false, error: "Unexpected error removing team member." };
   }
 }

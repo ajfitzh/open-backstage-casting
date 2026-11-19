@@ -6,7 +6,12 @@ import {
   getAllShows, 
   getActiveProduction, 
   getUserProductionRole,
-  getPeople
+  getPeople,
+  getSeasons,
+  getMasterShows,
+  getStaffPositions,
+  getAuditionSlots,
+  getCreativeTeam
 } from "@/app/lib/baserow";
 import { isAdminRole } from "@/app/lib/permissions";
 import SettingsClient from "@/app/components/settings/SettingsClient";
@@ -40,13 +45,26 @@ export default async function SettingsPage({
 
   const effectiveActiveId = activeId || defaultShow?.id || 0;
 
-  const [productionRole, directoryPeople] = await Promise.all([
+  const isAdmin = Boolean(userProfile && isAdminRole(userProfile.role));
+
+  const [
+    productionRole,
+    directoryPeople,
+    seasons,
+    masterShows,
+    staffPositions,
+    auditionSlots,
+    showTeam,
+  ] = await Promise.all([
     userProfile && effectiveActiveId
       ? getUserProductionRole(tenant, Number(userProfile.id), effectiveActiveId)
       : Promise.resolve(null),
-    userProfile && isAdminRole(userProfile.role)
-      ? getPeople(tenant)
-      : Promise.resolve([])
+    isAdmin ? getPeople(tenant) : Promise.resolve([]),
+    isAdmin ? getSeasons(tenant) : Promise.resolve([]),
+    isAdmin ? getMasterShows(tenant) : Promise.resolve([]),
+    isAdmin ? getStaffPositions(tenant) : Promise.resolve([]),
+    isAdmin && effectiveActiveId ? getAuditionSlots(tenant, effectiveActiveId) : Promise.resolve([]),
+    isAdmin && effectiveActiveId ? getCreativeTeam(tenant, effectiveActiveId) : Promise.resolve([]),
   ]);
 
   if (!userProfile) {
@@ -70,6 +88,22 @@ export default async function SettingsPage({
         initialUser={userProfile} 
         realProductionRole={productionRole}
         directoryPeople={directoryPeople}
+        seasons={seasons.map((s: any) => ({ id: s.id, name: s.name }))}
+        masterShows={masterShows}
+        staffPositions={staffPositions}
+        initialSlots={auditionSlots.map((s: any) => ({
+          id: s.id,
+          label: s.label || `${s.day || ''} ${s.time || ''}`.trim() || 'Slot',
+          capacity: s.capacity ?? 0,
+          taken: s.taken ?? 0,
+          remaining: s.remaining ?? 0,
+          isFull: Boolean(s.isFull),
+        }))}
+        initialTeam={showTeam.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          role: t.role,
+        }))}
       />
     </div>
   );

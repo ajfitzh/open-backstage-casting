@@ -418,6 +418,7 @@ export async function getAllShows(tenant: string) {
       isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === 'Active',
       location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"),
       venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
+      productionFee: Number(row[DB.PRODUCTIONS.FIELDS.PRODUCTION_FEE] ?? 0) || 0,
       workflowOverrides: row[DB.PRODUCTIONS.FIELDS.WORKFLOW_OVERRIDES] || [],
       Performances: row['field_6177'] || row['Performances'] || null
     };
@@ -1256,11 +1257,21 @@ export async function getExistingAuditions(tenant: string, email: string, produc
 
       return {
         id: a.id,
+        studentId: safeId(a[F.PERFORMER]),
         name: extractName(a[F.PERFORMER], "Student"),
+        status: safeGet(a[F.STATUS], "Pending"),
+        role: extractName(a[F.CAST_ROLE], ""),
+        signatures: safeGet(a[F.SIGNATURES], ""),
+        bio: safeGet(a[F.PROGRAM_BIO], ""),
+        congratsAd: safeGet(a[F.CONGRATS_AD_TEXT], ""),
+        paidFees: Boolean(a[F.PAID_FEES]),
+        productionFeeStatus: safeGet(a[F.PRODUCTION_FEE_STATUS], ""),
         time: safeGet(a[F.AUDITION_SLOTS], "Pending Time"),
+        timeSlot: safeGet(a[F.AUDITION_SLOTS], "Pending Time"),
         song: safeGet(a[F.SONG], "No Song Selected"),
         adminNotes: safeGet(a[F.ADMIN_NOTES], ""),
-        isCheckedIn: a[F.CHECKED_IN] || false,
+        checkedIn: Boolean(a[F.CHECKED_IN]),
+        isCheckedIn: Boolean(a[F.CHECKED_IN]),
         
         // 🟢 FIX: Wrap everything in safeGet so React gets raw text instead of {id, value} objects!
         rawAuditionData: {
@@ -1283,6 +1294,51 @@ export async function getExistingAuditions(tenant: string, email: string, produc
     });
   } catch (error) {
     console.error("Failed to fetch existing auditions:", error);
+    return [];
+  }
+}
+
+export async function getMasterShows(tenant: string) {
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const tableId = tables.MASTER_SHOW_DB || DB.MASTER_SHOW_DB.ID;
+    const F = DB.MASTER_SHOW_DB.FIELDS;
+
+    const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, { size: "200" }, tenant);
+    if (!Array.isArray(rows)) return [];
+
+    return rows
+      .map((row: any) => ({
+        id: row.id,
+        title: safeGet(row[F.SHOW_TITLE] || row[F.COMPLETE_TITLE], "Untitled Show"),
+      }))
+      .sort((a: any, b: any) => a.title.localeCompare(b.title));
+  } catch (error) {
+    console.error("Failed to fetch master shows:", error);
+    return [];
+  }
+}
+
+export async function getStaffPositions(tenant: string) {
+  try {
+    const DB = getDB(tenant);
+    const tables = await getTenantTableConfig(tenant);
+    const tableId = tables.ROLES_POSITIONS || DB.STAFF_POSITIONS.ID;
+    const F = DB.STAFF_POSITIONS.FIELDS;
+
+    const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, { size: "200" }, tenant);
+    if (!Array.isArray(rows)) return [];
+
+    return rows
+      .map((row: any) => ({
+        id: row.id,
+        name: safeGet(row[F.ROLE_NAME], "Position"),
+        department: safeGet(row[F.DEPARTMENT], "General"),
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  } catch (error) {
+    console.error("Failed to fetch staff positions:", error);
     return [];
   }
 }
