@@ -11,6 +11,18 @@ import {
   getPeoplePg,
   getUserProfilePg,
 } from "@/app/lib/db/core-repo";
+import {
+  getActiveProductionPg,
+  getAllShowsPg,
+  getAuditionProductionPg,
+  getCreativeTeamPg,
+  getMasterShowsPg,
+  getSeasonsPg,
+  getShowByIdPg,
+  getStaffPositionsPg,
+  getUserProductionRolePg,
+  getVenuesPg,
+} from "@/app/lib/db/productions-repo";
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
@@ -229,6 +241,15 @@ export async function getClassRoster(tenant: string, classId: string) {
 }
 
 export async function getVenues(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgVenues = await getVenuesPg(tenant);
+      if (pgVenues !== null) return pgVenues;
+    } catch (error) {
+      console.error("[Postgres] getVenues failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
@@ -327,6 +348,14 @@ function mapShow(row: any, tenant: string) {
 }
 
 export async function getAuditionProduction(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      return await getAuditionProductionPg(tenant);
+    } catch (error) {
+      console.error("[Postgres] getAuditionProduction failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
@@ -345,6 +374,15 @@ export async function getAuditionProduction(tenant: string) {
 }
 
 export async function getActiveProduction(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgActive = await getActiveProductionPg(tenant);
+      if (pgActive) return pgActive;
+    } catch (error) {
+      console.error("[Postgres] getActiveProduction failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PRODUCTIONS.FIELDS;
@@ -370,6 +408,15 @@ export async function getActiveProduction(tenant: string) {
 }
 
 export async function getSeasons(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgSeasons = await getSeasonsPg(tenant);
+      if (pgSeasons !== null) return pgSeasons;
+    } catch (error) {
+      console.error("[Postgres] getSeasons failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
@@ -392,6 +439,15 @@ export async function getSeasons(tenant: string) {
 }
 
 export async function getShowById(tenant: string, id: string | number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgShow = await getShowByIdPg(tenant, id);
+      if (pgShow) return pgShow;
+    } catch (error) {
+      console.error("[Postgres] getShowById failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${id}/`, {}, {}, tenant);
@@ -400,6 +456,15 @@ export async function getShowById(tenant: string, id: string | number) {
 }
 
 export async function getAllShows(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgShows = await getAllShowsPg(tenant);
+      if (pgShows !== null) return pgShows;
+    } catch (error) {
+      console.error("[Postgres] getAllShows failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(
@@ -855,6 +920,15 @@ export async function getAssignments(tenant: string, productionId?: number) {
 }
 
 export async function getCreativeTeam(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgTeam = await getCreativeTeamPg(tenant, productionId);
+      if (pgTeam !== null) return pgTeam;
+    } catch (error) {
+      console.error("[Postgres] getCreativeTeam failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.SHOW_TEAM.FIELDS;
@@ -1233,6 +1307,15 @@ export async function getUserProfile(tenant: string, email: string) {
 }
 
 export async function getUserProductionRole(tenant: string, userId: number, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgRole = await getUserProductionRolePg(tenant, userId, productionId);
+      if (pgRole !== null) return pgRole;
+    } catch (error) {
+      console.error("[Postgres] getUserProductionRole failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const params = {
@@ -1387,6 +1470,15 @@ export async function getExistingAuditions(tenant: string, email: string, produc
 }
 
 export async function getMasterShows(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgShows = await getMasterShowsPg(tenant);
+      if (pgShows !== null) return pgShows;
+    } catch (error) {
+      console.error("[Postgres] getMasterShows failed, falling back to Baserow:", error);
+    }
+  }
+
   try {
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
@@ -1409,6 +1501,15 @@ export async function getMasterShows(tenant: string) {
 }
 
 export async function getStaffPositions(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgPositions = await getStaffPositionsPg(tenant);
+      if (pgPositions !== null) return pgPositions;
+    } catch (error) {
+      console.error("[Postgres] getStaffPositions failed, falling back to Baserow:", error);
+    }
+  }
+
   try {
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);

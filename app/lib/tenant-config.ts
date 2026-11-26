@@ -42,6 +42,30 @@ export async function getTenantTableConfig(tenantSlug: string) {
   const data = await res.json();
 
   if (!data.results || data.results.length === 0) {
+    // Support PostgreSQL-native organizations created via self-serve onboarding
+    // without requiring a legacy Baserow Master Registry row.
+    if (process.env.DATABASE_URL?.trim() && process.env.DATA_BACKEND?.trim().toLowerCase() !== "baserow") {
+      try {
+        const [{ getDb, schema }, { eq }] = await Promise.all([
+          import("../../db/index.ts"),
+          import("drizzle-orm"),
+        ]);
+        const db = getDb();
+        const [org] = await db
+          .select({ name: schema.organizations.name })
+          .from(schema.organizations)
+          .where(eq(schema.organizations.slug, tenantSlug.toLowerCase()))
+          .limit(1);
+        if (org) {
+          return {
+            ...SYSTEM_DUMMY_CONFIG,
+            TENANT_NAME: org.name,
+          };
+        }
+      } catch (err) {
+        console.error(`[Tenant Config] Postgres fallback lookup failed for ${tenantSlug}:`, err);
+      }
+    }
     throw new Error(`[Tenant Config Error] Tenant "${tenantSlug}" not found in Master Registry.`);
   }
 

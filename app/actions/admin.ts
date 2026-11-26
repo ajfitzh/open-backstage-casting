@@ -5,6 +5,17 @@ import { fetchBaserow, getDB, getUserProfile, invalidatePeopleCache } from "@/ap
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { requireAdminAccess, requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
 import { ASSIGNABLE_GLOBAL_ROLES } from "@/app/lib/permissions";
+import { isPostgresEnabled } from "@/db";
+import {
+  assignShowTeamMemberPg,
+  createAuditionSlotPg,
+  createProductionPg,
+  deleteAuditionSlotPg,
+  removeShowTeamMemberPg,
+  setProductionStatusPg,
+  updatePersonProfilePg,
+  updatePersonRolesPg,
+} from "@/app/lib/db/productions-repo";
 
 const ALLOWED_ROLE_SET = new Set([
   ...ASSIGNABLE_GLOBAL_ROLES,
@@ -30,6 +41,14 @@ export async function updateMyProfile(
   if (!authResult.ok) return { success: false, error: authResult.error };
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await updatePersonProfilePg(tenant, authResult.user.email, data);
+      if (!pgRes.success) return pgRes;
+      invalidatePeopleCache(tenant);
+      revalidatePath(`/${tenant}/settings`);
+      return { success: true };
+    }
+
     const profile = await getUserProfile(tenant, authResult.user.email);
     if (!profile?.id) {
       return { success: false, error: "Could not locate your profile record." };
@@ -103,6 +122,14 @@ export async function updateUserRoles(tenant: string, personId: number, roles: s
   );
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await updatePersonRolesPg(tenant, personId, sanitizedRoles);
+      if (!pgRes.success) return pgRes;
+      invalidatePeopleCache(tenant);
+      revalidatePath(`/${tenant}/settings`);
+      return { success: true, roles: sanitizedRoles };
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 
@@ -148,6 +175,14 @@ export async function setProductionStatus(
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await setProductionStatusPg(tenant, productionId, status);
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}`);
+      return { success: true };
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 
@@ -195,13 +230,29 @@ export async function createProduction(
     return { success: false, error: "Production title is required." };
   }
 
-  const status = data.status && ALLOWED_PRODUCTION_STATUSES.has(data.status) ? data.status : "Upcoming";
+  const status =
+    data.status && ALLOWED_PRODUCTION_STATUSES.has(data.status) ? data.status : "Upcoming";
   const fee = Number(data.productionFee ?? 0);
   if (Number.isNaN(fee) || fee < 0) {
     return { success: false, error: "Production fee must be a valid non-negative number." };
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await createProductionPg(tenant, {
+        title,
+        status,
+        location: data.location,
+        productionFee: fee,
+        seasonId: data.seasonId,
+        masterShowId: data.masterShowId,
+      });
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}`);
+      return pgRes;
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PRODUCTIONS.FIELDS;
@@ -281,6 +332,18 @@ export async function createAuditionSlot(
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await createAuditionSlotPg(tenant, productionId, {
+        timeLabel,
+        dateTime: data.dateTime,
+        capacity,
+      });
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}/audition-form`);
+      return pgRes;
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITION_SLOTS.FIELDS;
@@ -338,6 +401,14 @@ export async function deleteAuditionSlot(tenant: string, slotId: number) {
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await deleteAuditionSlotPg(tenant, slotId);
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}/audition-form`);
+      return { success: true };
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const tableId = tables.AUDITION_SLOTS || DB.AUDITION_SLOTS.ID;
@@ -372,6 +443,14 @@ export async function assignShowTeamMember(
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await assignShowTeamMemberPg(tenant, productionId, personId, positionId);
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}`);
+      return pgRes;
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const tableId = tables.SHOW_TEAM || DB.SHOW_TEAM.ID;
@@ -413,6 +492,14 @@ export async function removeShowTeamMember(tenant: string, assignmentId: number)
   }
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await removeShowTeamMemberPg(tenant, assignmentId);
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}`);
+      return { success: true };
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const tableId = tables.SHOW_TEAM || DB.SHOW_TEAM.ID;

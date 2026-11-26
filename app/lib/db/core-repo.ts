@@ -289,3 +289,91 @@ export async function recordOnboardingRequestPg(input: {
     .returning();
   return created;
 }
+
+const DEFAULT_STARTER_POSITIONS = [
+  { roleName: "Director", department: "Creative" },
+  { roleName: "Music Director", department: "Creative" },
+  { roleName: "Choreographer", department: "Creative" },
+  { roleName: "Stage Manager", department: "Production" },
+  { roleName: "Production Coordinator", department: "Admin" },
+];
+
+export async function provisionOrganizationPg(input: {
+  organizationName: string;
+  slug: string;
+  organizationType?: string;
+  creatorEmail: string;
+  creatorName: string;
+  notes?: string;
+}) {
+  const db = getDb();
+  const cleanSlug = input.slug.trim().toLowerCase();
+  const cleanEmail = input.creatorEmail.trim().toLowerCase();
+  const cleanName = input.creatorName.trim() || cleanEmail;
+
+  const existing = await getOrganizationBySlugPg(cleanSlug);
+  if (existing) {
+    return {
+      success: false as const,
+      error: `The subdomain "${cleanSlug}.open-backstage.org" is already taken. Try a different subdomain.`,
+    };
+  }
+
+  const [org] = await db
+    .insert(schema.organizations)
+    .values({
+      slug: cleanSlug,
+      name: input.organizationName.trim(),
+      organizationType: input.organizationType || "Theater",
+      plan: "starter",
+      isHidden: false,
+      settings: { contactEmail: cleanEmail },
+    })
+    .returning();
+
+  const nameParts = cleanName.split(/\s+/);
+  const firstName = nameParts[0] || "Admin";
+  const lastName = nameParts.slice(1).join(" ");
+
+  const currentYear = new Date().getFullYear();
+
+  await Promise.all([
+    db.insert(schema.people).values({
+      organizationId: org.id,
+      firstName,
+      lastName,
+      fullName: cleanName,
+      email: cleanEmail,
+      roles: ["Admin"],
+    }),
+    db.insert(schema.staffPositions).values(
+      DEFAULT_STARTER_POSITIONS.map((p) => ({
+        organizationId: org.id,
+        roleName: p.roleName,
+        department: p.department,
+      }))
+    ),
+    db.insert(schema.seasons).values({
+      organizationId: org.id,
+      name: `${currentYear}–${currentYear + 1} Season`,
+      startDate: `${currentYear}-09-01`,
+      endDate: `${currentYear + 1}-06-30`,
+      status: "Active",
+    }),
+    db.insert(schema.organizationOnboardingRequests).values({
+      organizationName: org.name,
+      requestedSlug: org.slug,
+      organizationType: org.organizationType || "Theater",
+      contactName: cleanName,
+      contactEmail: cleanEmail,
+      notes: input.notes || null,
+      status: "provisioned",
+      createdOrganizationId: org.id,
+    }),
+  ]);
+
+  return {
+    success: true as const,
+    organization: org,
+  };
+}

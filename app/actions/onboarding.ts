@@ -1,8 +1,13 @@
 "use server";
 
+import { headers } from "next/headers";
 import { Resend } from "resend";
+import { auth } from "@/auth";
 import { isPostgresEnabled } from "@/db";
-import { recordOnboardingRequestPg } from "@/app/lib/db/core-repo";
+import { provisionOrganizationPg, recordOnboardingRequestPg } from "@/app/lib/db/core-repo";
+import { normalizeAndValidateOrgSlug } from "@/app/lib/db/role-helpers";
+import { buildTenantUrl } from "@/app/lib/tenant-utils";
+import { createHandoffToken } from "@/app/lib/workspace-handoff";
 
 export interface OrgRequestPayload {
   organizationName: string;
@@ -85,5 +90,77 @@ export async function submitOrganizationRequest(payload: OrgRequestPayload) {
     success: true,
     suggestedSlug,
     message: `Request received for ${organizationName} (${suggestedSlug}.open-backstage.org). We'll follow up at ${contactEmail}.`,
+  };
+}
+
+export async function createInstantOrganization(payload: {
+  organizationName: string;
+  desiredSlug?: string;
+  organizationType?: string;
+  notes?: string;
+}) {
+  const session = await auth();
+  const creatorEmail = session?.user?.email?.trim().toLowerCase();
+  const creatorName = session?.user?.name?.trim() || creatorEmail || "Admin";
+
+  if (!creatorEmail) {
+    return {
+      success: false as const,
+      error: "Please sign in first to instantly create a live workspace.",
+    };
+  }
+
+  if (!isPostgresEnabled()) {
+    return {
+      success: false as const,
+      error: "Instant workspace provisioning requires PostgreSQL to be enabled.",
+    };
+  }
+
+  const organizationName = (payload.organizationName || "").trim();
+  if (organizationName.length < 2) {
+    return {
+      success: false as const,
+      error: "Please enter your school or theater name.",
+    };
+  }
+
+  const slugResult = normalizeAndValidateOrgSlug(payload.desiredSlug, organizationName);
+  if (!slugResult.valid) {
+    return { success: false as const, error: slugResult.error };
+  }
+
+  const provisioned = await provisionOrganizationPg({
+    organizationName,
+    slug: slugResult.slug,
+    organizationType: payload.organizationType || "Theater",
+    creatorEmail,
+    creatorName,
+    notes: payload.notes,
+  });
+
+  if (!provisioned.success) {
+    return { success: false as const, error: provisioned.error };
+  }
+
+  const headerStore = await headers();
+  const host = headerStore.get("host") || "localhost:3001";
+  const token = createHandoffToken({
+    email: creatorEmail,
+    name: creatorName,
+    tenant: provisioned.organization.slug,
+  });
+
+  const launchUrl = buildTenantUrl(
+    provisioned.organization.slug,
+    host,
+    `/api/auth/handoff?token=${encodeURIComponent(token)}`
+  );
+
+  return {
+    success: true as const,
+    slug: provisioned.organization.slug,
+    name: provisioned.organization.name,
+    launchUrl,
   };
 }

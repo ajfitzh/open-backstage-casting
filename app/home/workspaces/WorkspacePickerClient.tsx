@@ -14,7 +14,10 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { submitOrganizationRequest } from "@/app/actions/onboarding";
+import {
+  createInstantOrganization,
+  submitOrganizationRequest,
+} from "@/app/actions/onboarding";
 import { createWorkspaceLaunchUrl } from "@/app/actions/workspace-handoff";
 import { toast } from "@/app/components/ToastProvider";
 
@@ -83,6 +86,25 @@ export default function WorkspacePickerClient({
     e.preventDefault();
     setSubmitting(true);
     setRequestSuccess(null);
+
+    if (isSignedIn) {
+      const created = await createInstantOrganization({
+        organizationName: orgName,
+        desiredSlug,
+        organizationType: orgType,
+        notes,
+      });
+
+      if (created.success) {
+        toast.success(`Created ${created.name}! Launching workspace...`);
+        window.location.assign(created.launchUrl);
+        return;
+      }
+
+      setSubmitting(false);
+      toast.error(created.error || "Could not create organization.");
+      return;
+    }
 
     const res = await submitOrganizationRequest({
       organizationName: orgName,
@@ -229,7 +251,9 @@ export default function WorkspacePickerClient({
                 Add new organization
               </span>
               <p className="text-xs text-zinc-500">
-                Involved with a different school, theater, or CYT chapter? Request a workspace.
+                {isSignedIn
+                  ? "Launch a brand-new workspace for another school, theater, or CYT chapter instantly."
+                  : "Involved with a different school, theater, or CYT chapter? Request a workspace."}
               </p>
             </div>
             <span className="w-11 h-11 rounded-xl border border-dashed border-zinc-700 group-hover:border-emerald-400/60 group-hover:bg-emerald-500/15 text-zinc-400 group-hover:text-emerald-300 flex items-center justify-center transition-colors shrink-0">
@@ -351,7 +375,7 @@ export default function WorkspacePickerClient({
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-colors disabled:opacity-50"
               >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                Request Workspace Setup
+                {isSignedIn ? "Create & Launch Workspace" : "Request Workspace Setup"}
               </button>
             </div>
           </form>

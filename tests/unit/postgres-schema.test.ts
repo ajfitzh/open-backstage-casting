@@ -6,6 +6,7 @@ import { isPostgresEnabled } from "../../db/index.ts";
 import {
   derivePrimaryAppRole,
   deriveWorkspaceDisplayRole,
+  normalizeAndValidateOrgSlug,
 } from "../../app/lib/db/role-helpers.ts";
 
 describe("PostgreSQL multi-tenant Drizzle schema", () => {
@@ -104,5 +105,20 @@ describe("PostgreSQL multi-tenant Drizzle schema", () => {
     assert.equal(deriveWorkspaceDisplayRole(["Parent/Guardian", "Admin"]), "Admin");
     assert.equal(deriveWorkspaceDisplayRole(["Executive Director"]), "Executive Director");
     assert.equal(deriveWorkspaceDisplayRole([]), "Member");
+  });
+
+  it("validates and normalizes organization subdomains safely", () => {
+    assert.deepEqual(
+      normalizeAndValidateOrgSlug(undefined, "Riverside High Drama Club"),
+      { valid: true, slug: "riverside-high-drama-club" }
+    );
+    assert.deepEqual(
+      normalizeAndValidateOrgSlug("  CYT_Austin! ", "Ignored"),
+      { valid: true, slug: "cyt-austin" }
+    );
+    const reserved = normalizeAndValidateOrgSlug("admin", "Admin Theater");
+    assert.equal(reserved.valid, false);
+    const tooShort = normalizeAndValidateOrgSlug("ab", "AB");
+    assert.equal(tooShort.valid, false);
   });
 });
