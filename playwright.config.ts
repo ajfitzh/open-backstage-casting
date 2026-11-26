@@ -36,7 +36,7 @@ use: {
   projects: [
     {
       name: 'smoke',
-      testMatch: /ui-smoke\.spec\.ts/,
+      testMatch: /ui-.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         ...(process.env.CI ? {} : { channel: 'chrome' as const }),
@@ -53,7 +53,7 @@ use: {
     },
     {
       name: 'chromium',
-      testIgnore: ['**/unit/**', '**/ui-smoke.spec.ts'],
+      testIgnore: ['**/unit/**', '**/ui-*.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         ...(process.env.CI ? {} : { channel: 'chrome' as const }),

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { fetchBaserow, getDB, getUserProfile } from "@/app/lib/baserow";
+import { fetchBaserow, getDB, getUserProfile, invalidatePeopleCache } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { requireAdminAccess, requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
 import { ASSIGNABLE_GLOBAL_ROLES } from "@/app/lib/permissions";
@@ -81,6 +81,7 @@ export async function updateMyProfile(
       return { success: false, error: "Failed to save profile changes." };
     }
 
+    invalidatePeopleCache(tenant);
     revalidatePath(`/${tenant}/settings`);
     return { success: true };
   } catch (error) {
@@ -121,6 +122,7 @@ export async function updateUserRoles(tenant: string, personId: number, roles: s
       return { success: false, error: "Failed to update user roles in Baserow." };
     }
 
+    invalidatePeopleCache(tenant);
     revalidatePath(`/${tenant}/settings`);
     return { success: true, roles: sanitizedRoles };
   } catch (error) {

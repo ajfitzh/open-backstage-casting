@@ -429,33 +429,72 @@ export async function getAllShows(tenant: string) {
 // 👯 CASTING & PEOPLE (READ & WRITE)
 // ==============================================================================
 
+const PEOPLE_CACHE_TTL_MS = 60_000;
+const peopleCache = new Map<string, { expiresAt: number; data: any[] }>();
+
+export function invalidatePeopleCache(tenant?: string) {
+  if (tenant) peopleCache.delete(tenant);
+  else peopleCache.clear();
+}
+
 export async function getPeople(tenant: string) {
+  const cached = peopleCache.get(tenant);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;
-  
-  let allRows: any[] = [];
-  let page = 1;
-  let hasMore = true;
+  const token = (tenant === "e2e" || tenant === "sandbox")
+    ? process.env.SANDBOX_BASEROW_TOKEN
+    : (process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN);
 
-  while (hasMore) {
-    const data = await fetchBaserow(
-      `/database/rows/table/${tables.PEOPLE}/`, 
-      {}, 
-      { size: "200", page: page.toString() },
-      tenant
+  let allRows: any[] = [];
+  try {
+    const firstRes = await fetch(
+      `${BASE_URL}/api/database/rows/table/${tables.PEOPLE}/?size=200&page=1`,
+      {
+        headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
+        cache: "no-store",
+      }
     );
 
-    if (!Array.isArray(data) || data.length === 0) {
-      hasMore = false;
-    } else {
-      allRows = [...allRows, ...data];
-      if (data.length < 200) hasMore = false;
-      else page++;
+    if (firstRes.ok) {
+      const firstJson = await firstRes.json();
+      const firstBatch = Array.isArray(firstJson?.results) ? firstJson.results : [];
+      allRows = [...firstBatch];
+
+      const totalCount = Number(firstJson?.count || firstBatch.length);
+      const totalPages = Math.min(Math.ceil(totalCount / 200), 25);
+
+      // Fetch remaining pages in parallel batches of 5 instead of sequentially
+      for (let startPage = 2; startPage <= totalPages; startPage += 5) {
+        const pageNumbers: number[] = [];
+        for (let p = startPage; p < startPage + 5 && p <= totalPages; p++) {
+          pageNumbers.push(p);
+        }
+        const batches = await Promise.all(
+          pageNumbers.map((p) =>
+            fetchBaserow(
+              `/database/rows/table/${tables.PEOPLE}/`,
+              {},
+              { size: "200", page: p.toString() },
+              tenant
+            )
+          )
+        );
+        for (const batch of batches) {
+          if (Array.isArray(batch)) allRows.push(...batch);
+        }
+      }
     }
+  } catch (error) {
+    console.error("Failed to fetch people:", error);
+    return [];
   }
 
-  return allRows.map((row: any) => ({
+  const mapped = allRows.map((row: any) => ({
     id: row.id,
     name: row[F.FULL_NAME] || `${row[F.FIRST_NAME] || ""} ${row[F.LAST_NAME] || ""}`.trim(),
     headshot: typeof row[F.HEADSHOT] === "string" ? row[F.HEADSHOT] : (row[F.HEADSHOT]?.[0]?.url || null),
@@ -465,6 +504,9 @@ export async function getPeople(tenant: string) {
       ? row[F.STATUS].map((s: any) => s?.value).filter(Boolean)
       : (typeof row[F.STATUS] === "string" && row[F.STATUS] ? [row[F.STATUS]] : [])
   }));
+
+  peopleCache.set(tenant, { expiresAt: Date.now() + PEOPLE_CACHE_TTL_MS, data: mapped });
+  return mapped;
 }
 
 export async function getRoles(tenant: string) {

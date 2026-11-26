@@ -28,10 +28,12 @@ export default async function StaffPage({ params }: { params: { tenant: string }
      if (activeProd) productionTitle = activeProd.title;
   }
 
-  // 3. Now fetch data using the GUARANTEED valid productionId and tenant!
-  const assignments = await getAssignments(tenant, productionId); // ✅ Now filters properly
-  const people = await getPeople(tenant);
-  const compliance = await getComplianceData(tenant, productionId);
+  // 3. Fetch assignments, people, and compliance in parallel for speed
+  const [assignments, people, compliance] = await Promise.all([
+    getAssignments(tenant, productionId),
+    getPeople(tenant),
+    getComplianceData(tenant, productionId),
+  ]);
 
   return (
     <main className="h-screen bg-zinc-950 overflow-hidden">
