@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTenantFromHost, formatTenantDisplayName } from '../../app/lib/tenant-utils.ts';
+import {
+  extractTenantFromHost,
+  formatTenantDisplayName,
+  buildTenantUrl,
+} from '../../app/lib/tenant-utils.ts';
 
 describe('extractTenantFromHost', () => {
   it('extracts subdomain tenant in development on localhost', () => {
@@ -33,5 +37,26 @@ describe('formatTenantDisplayName', () => {
     assert.equal(formatTenantDisplayName('sandbox'), 'Open Backstage');
     assert.equal(formatTenantDisplayName('e2e'), 'Open Backstage E2E');
     assert.equal(formatTenantDisplayName('west-side-theater'), 'West Side Theater');
+  });
+});
+
+describe('buildTenantUrl', () => {
+  it('builds localhost subdomain URLs preserving dev port', () => {
+    assert.equal(buildTenantUrl('cytfred', 'localhost:3001', 'http', '/'), 'http://cytfred.localhost:3001/');
+    assert.equal(
+      buildTenantUrl('cytfred', 'localhost:3001', 'http', '/audition-form'),
+      'http://cytfred.localhost:3001/audition-form'
+    );
+  });
+
+  it('builds production subdomain URLs from main or www host', () => {
+    assert.equal(
+      buildTenantUrl('cytfred', 'open-backstage.org', 'https', '/'),
+      'https://cytfred.open-backstage.org/'
+    );
+    assert.equal(
+      buildTenantUrl('cythouston', 'www.open-backstage.org', 'https', '/login'),
+      'https://cythouston.open-backstage.org/login'
+    );
   });
 });

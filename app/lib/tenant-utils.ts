@@ -54,3 +54,28 @@ export function formatTenantDisplayName(slug: string, registryName?: string | nu
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 }
+
+export function buildTenantUrl(
+  slug: string,
+  currentHost: string,
+  protocol: string = 'https',
+  path: string = '/'
+): string {
+  const cleanSlug = slug.trim().toLowerCase();
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const [rawHostname, port] = (currentHost || '').split(':');
+  const hostname = (rawHostname || '').trim().toLowerCase();
+
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || !hostname) {
+    const portSuffix = port ? `:${port}` : ':3001';
+    return `http://${cleanSlug}.localhost${portSuffix}${cleanPath}`;
+  }
+
+  const baseHost = hostname.startsWith('www.')
+    ? hostname.slice(4)
+    : hostname.endsWith('.open-backstage.org')
+      ? 'open-backstage.org'
+      : hostname;
+  const portSuffix = port ? `:${port}` : '';
+  return `${protocol}://${cleanSlug}.${baseHost}${portSuffix}${cleanPath}`;
+}

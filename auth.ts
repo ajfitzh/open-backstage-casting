@@ -117,7 +117,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const tenant = await getTenantContext(); 
-        if (!tenant) return false; 
+        // On the main platform domain (open-backstage.org), allow Google sign-in
+        // so /workspaces can look up all organizations matching the user's email.
+        if (!tenant) return true; 
 
         const email = user.email || "";
         const baserowUser = await findUserByEmail(tenant, email);

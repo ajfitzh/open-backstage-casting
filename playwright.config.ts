@@ -35,17 +35,33 @@ use: {
 
   projects: [
     {
+      name: 'smoke',
+      testMatch: /ui-smoke\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.CI ? {} : { channel: 'chrome' as const }),
+        baseURL: 'http://localhost:3001',
+      },
+    },
+    {
       name: 'setup',
-      testMatch: /auth\.setup\.ts/, 
+      testMatch: /auth\.setup\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.CI ? {} : { channel: 'chrome' as const }),
+      },
     },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-      dependencies: ['setup'], // 🟢 UNCOMMENTED! This forces setup to finish FIRST.
+      testIgnore: ['**/unit/**', '**/ui-smoke.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.CI ? {} : { channel: 'chrome' as const }),
+      },
+      dependencies: ['setup'],
     },
-  ]
-,
-webServer: {
+  ],
+  webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,

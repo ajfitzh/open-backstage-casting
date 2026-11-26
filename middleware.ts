@@ -21,8 +21,12 @@ export default auth((req) => {
   }
 
   // ==========================================
-  // 2. TOP-LEVEL ROUTES (Sandbox)
+  // 2. TOP-LEVEL ROUTES (Sandbox, Legal)
   // ==========================================
+  if (pathname.startsWith("/privacy") || pathname.startsWith("/terms")) {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/sandbox")) {
     if (pathname !== "/sandbox/login") {
       const sandboxAuth = req.cookies.get("sandbox_access")?.value;

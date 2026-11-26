@@ -20,9 +20,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           </Link>
 
           <nav className="flex items-center gap-6 text-sm font-bold">
-            <Link href="/login" className="text-zinc-400 hover:text-white transition-colors uppercase tracking-widest text-xs">Staff Login</Link>
-            <Link href="#contact" className="bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-full transition-all uppercase tracking-widest text-xs shadow-xl">
-                Get Hosted
+            <Link href="/workspaces?choose=1" className="text-zinc-400 hover:text-white transition-colors uppercase tracking-widest text-xs">Organizations</Link>
+            <Link href="/login" className="text-zinc-400 hover:text-white transition-colors uppercase tracking-widest text-xs">Sign In</Link>
+            <Link href="/workspaces?choose=1" className="bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-full transition-all uppercase tracking-widest text-xs shadow-xl">
+                Add Your Org
             </Link>
           </nav>
 
