@@ -8,6 +8,7 @@ import { authConfig } from "@/auth.config"
 
 // Use the updated standalone functions from our refactored baserow.ts
 import { findUserByEmail, createGoogleUser } from "@/app/lib/baserow"
+import { verifyHandoffToken } from "@/app/lib/workspace-handoff"
 
 // --- TENANT HELPER ---
 // Dynamically extracts the tenant so auth knows which database to query
@@ -47,9 +48,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Casting Portal",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        handoffToken: { label: "Handoff Token", type: "text" }
       },
       async authorize(credentials) {
+        // 🟢 ONE-CLICK WORKSPACE HANDOFF (Signed short-lived token from open-backstage.org/workspaces)
+        if (typeof credentials?.handoffToken === "string" && credentials.handoffToken) {
+          const tenant = await getTenantContext();
+          if (!tenant) return null;
+
+          const payload = verifyHandoffToken(credentials.handoffToken, tenant);
+          if (!payload) return null;
+
+          const existingUser = await findUserByEmail(tenant, payload.email);
+          if (existingUser) return existingUser;
+
+          return {
+            id: `handoff-${payload.email}`,
+            name: payload.name || payload.email,
+            email: payload.email,
+            role: "Guest",
+          };
+        }
+
         // 🟢 Require both email and password
         if (!credentials?.email || !credentials?.password) return null;
 

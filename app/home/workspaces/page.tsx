@@ -1,5 +1,4 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { findWorkspacesForEmail } from "@/app/lib/tenant-directory";
 import { buildTenantUrl } from "@/app/lib/tenant-utils";
@@ -15,19 +14,16 @@ export default async function WorkspacesPage({
   const session = await auth();
   const headerList = await headers();
   const host = headerList.get("host") || "localhost:3001";
-  const protocol = headerList.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
+  const protocol =
+    headerList.get("x-forwarded-proto") ||
+    (process.env.NODE_ENV === "production" ? "https" : "http");
 
   const sessionEmail = session?.user?.email || null;
-  const lookupEmail = sessionEmail || (typeof searchParams?.email === "string" ? searchParams.email.trim() : null);
-  const forcePicker = searchParams?.choose === "1";
+  const lookupEmail =
+    sessionEmail ||
+    (typeof searchParams?.email === "string" ? searchParams.email.trim() : null);
 
   const { matched, otherTenants } = await findWorkspacesForEmail(lookupEmail || "");
-
-  // Smart auto-redirect: signed-in user with exactly 1 org goes straight to their subdomain
-  if (sessionEmail && matched.length === 1 && !forcePicker) {
-    const targetUrl = buildTenantUrl(matched[0].slug, host, protocol, "/");
-    redirect(targetUrl);
-  }
 
   const matchedWorkspaces: PickerWorkspace[] = matched.map((m) => ({
     slug: m.slug,

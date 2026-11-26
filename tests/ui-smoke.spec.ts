@@ -20,7 +20,8 @@ test.describe('End-to-End UI Smoke Suite', () => {
     await expect(page.getByRole('heading', { name: /Choose Your Workspace/i })).toBeVisible();
     await expect(page.getByText('new-director@example.org', { exact: true })).toBeVisible();
 
-    // Submit the "Add Your School or Theater" onboarding request form
+    // Open the dotted "+ Add new organization" card and submit an onboarding request
+    await page.getByRole('button', { name: /Add new organization/i }).click();
     await page.getByPlaceholder(/Riverside High Drama Club/i).fill('Playwright Performing Arts');
     await page.getByPlaceholder(/riverside-drama/i).fill('playwright-arts');
     await page.getByPlaceholder(/Your full name/i).fill('Test Director');
