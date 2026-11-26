@@ -5,6 +5,8 @@ import { fetchBaserow, getDB } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { requirePermission } from "@/app/lib/auth-guard";
 import { revalidatePath } from "next/cache";
+import { isPostgresEnabled } from "@/db";
+import { generateCastingRowsPg } from "@/app/lib/db/casting-repo";
 
 export async function generateCastingRows(tenant: string, productionId: number) {
   const guard = await requirePermission(tenant, "manage_casting", productionId);
@@ -13,6 +15,13 @@ export async function generateCastingRows(tenant: string, productionId: number) 
   console.log(`Generating casting rows for Production ${productionId} on tenant ${tenant}...`);
 
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await generateCastingRowsPg(tenant, productionId);
+      if (pgRes.success) {
+        revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');
+      }
+      return pgRes;
+    }
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 

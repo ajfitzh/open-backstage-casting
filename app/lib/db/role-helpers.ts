@@ -84,3 +84,32 @@ export function normalizeAndValidateOrgSlug(
   }
   return { valid: true, slug: raw };
 }
+
+export function pickUniqueAuditionNumber(existingNumbers: Set<number>): number {
+  const primaryAvailable: number[] = [];
+  for (let i = 1; i <= 50; i++) {
+    if (!existingNumbers.has(i)) primaryAvailable.push(i);
+  }
+  if (primaryAvailable.length > 0) {
+    return primaryAvailable[Math.floor(Math.random() * primaryAvailable.length)];
+  }
+  for (let i = 51; i <= 500; i++) {
+    if (!existingNumbers.has(i)) return i;
+  }
+  return existingNumbers.size + 1;
+}
+
+export function formatHeightFromInches(totalInches: number | null): string {
+  if (!totalInches || totalInches <= 0) return "";
+  const ft = Math.floor(totalInches / 12);
+  const inch = totalInches % 12;
+  return `${ft}'${inch}"`;
+}
+
+export function computeAgeFromDob(dob: string | null): number {
+  if (!dob) return 0;
+  const parsed = new Date(dob);
+  if (Number.isNaN(parsed.getTime())) return 0;
+  const diffMs = Date.now() - parsed.getTime();
+  return Math.max(0, Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000)));
+}

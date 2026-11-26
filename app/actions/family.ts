@@ -4,6 +4,12 @@
 import { getDB, fetchBaserow } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { requireAuthenticatedUser } from "@/app/lib/auth-guard";
+import { isPostgresEnabled } from "@/db";
+import {
+  getFamilyMembersPg,
+  updateAuditionDetailsPg,
+  updateStudentMasterProfilePg,
+} from "@/app/lib/db/casting-repo";
 
 // Fetch the existing audition record for editing
 export async function getStudentAuditionForEdit(tenant: string, studentId: number, productionId: number) {
@@ -29,6 +35,10 @@ export async function getStudentAuditionForEdit(tenant: string, studentId: numbe
 export async function updateAuditionDetails(tenant: string, auditionId: number, updateData: any) {
   const guard = await requireAuthenticatedUser();
   if (!guard.ok) return { success: false, error: guard.error };
+
+  if (isPostgresEnabled()) {
+    return await updateAuditionDetailsPg(tenant, auditionId, updateData);
+  }
 
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
@@ -98,6 +108,11 @@ export async function updateAuditionDetails(tenant: string, auditionId: number, 
 // Fetch all people tied to the parent's email
 export async function getFamilyMembers(tenant: string, email: string) {
   try {
+    if (isPostgresEnabled()) {
+      const pgMembers = await getFamilyMembersPg(tenant, email);
+      if (pgMembers !== null) return pgMembers;
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PEOPLE.FIELDS;
@@ -133,6 +148,10 @@ export async function getFamilyMembers(tenant: string, email: string) {
 // Save updates for a specific student's master profile
 export async function updateStudentMasterProfile(tenant: string, personId: number, data: any) {
   try {
+    if (isPostgresEnabled()) {
+      return await updateStudentMasterProfilePg(tenant, personId, data);
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.PEOPLE.FIELDS;

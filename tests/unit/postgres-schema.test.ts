@@ -4,9 +4,12 @@ import { getTableName, getTableColumns } from "drizzle-orm";
 import * as schema from "../../db/schema/index.ts";
 import { isPostgresEnabled } from "../../db/index.ts";
 import {
+  computeAgeFromDob,
   derivePrimaryAppRole,
   deriveWorkspaceDisplayRole,
+  formatHeightFromInches,
   normalizeAndValidateOrgSlug,
+  pickUniqueAuditionNumber,
 } from "../../app/lib/db/role-helpers.ts";
 
 describe("PostgreSQL multi-tenant Drizzle schema", () => {
@@ -120,5 +123,19 @@ describe("PostgreSQL multi-tenant Drizzle schema", () => {
     assert.equal(reserved.valid, false);
     const tooShort = normalizeAndValidateOrgSlug("ab", "AB");
     assert.equal(tooShort.valid, false);
+  });
+
+  it("assigns unique audition numbers and formats heights and ages cleanly", () => {
+    const used = new Set<number>();
+    for (let i = 1; i <= 49; i++) used.add(i);
+    assert.equal(pickUniqueAuditionNumber(used), 50);
+
+    used.add(50);
+    assert.equal(pickUniqueAuditionNumber(used), 51);
+
+    assert.equal(formatHeightFromInches(65), `5'5"`);
+    assert.equal(formatHeightFromInches(null), "");
+    assert.ok(computeAgeFromDob("2010-01-01") >= 15);
+    assert.equal(computeAgeFromDob(null), 0);
   });
 });

@@ -4,6 +4,16 @@
 import { Resend } from 'resend';
 import { getShowById, fetchBaserow, getDB } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
+import { isPostgresEnabled } from "@/db";
+import {
+  acceptRoleAndSignPg,
+  cancelAuditionPg,
+  saveAuditionScorePg,
+  saveCongratsAdPg,
+  saveStudentBioPg,
+  saveTicketsSoldPg,
+  submitRealAuditionPg,
+} from "@/app/lib/db/casting-repo";
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -15,6 +25,8 @@ function getResend() {
 
 // 1. Save the Program Bio (AUDITIONS table)
 export async function saveStudentBio(tenant: string, auditionId: number, bio: string) {
+    if (isPostgresEnabled()) return await saveStudentBioPg(tenant, auditionId, bio);
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
@@ -27,6 +39,8 @@ export async function saveStudentBio(tenant: string, auditionId: number, bio: st
 
 // 2. Save the Congrats Ad (AUDITIONS table)
 export async function saveCongratsAd(tenant: string, auditionId: number, adText: string) {
+    if (isPostgresEnabled()) return await saveCongratsAdPg(tenant, auditionId, adText);
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.AUDITIONS.FIELDS;
@@ -39,6 +53,8 @@ export async function saveCongratsAd(tenant: string, auditionId: number, adText:
 
 // 3. Update Tickets Sold (COMMITTEE_PREFS table)
 export async function saveTicketsSold(tenant: string, studentId: number, productionId: number, tickets: number) {
+    if (isPostgresEnabled()) return await saveTicketsSoldPg(tenant, studentId, productionId, tickets);
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_PREFS.FIELDS;
@@ -63,6 +79,49 @@ export async function saveTicketsSold(tenant: string, studentId: number, product
 
 export async function submitRealAudition(tenant: string, productionId: number, formData: any, lookupEmail: string) {
   try {
+    if (isPostgresEnabled()) {
+      const pgRes = await submitRealAuditionPg(tenant, productionId, formData, lookupEmail);
+      if (!pgRes.success) return { success: false, error: pgRes.error };
+
+      let showTitle = "Our Upcoming Production";
+      try {
+        const showObj = await getShowById(tenant, productionId);
+        if (showObj?.title) showTitle = showObj.title;
+      } catch (e) {
+        console.error("Could not fetch show title for email", e);
+      }
+
+      if (process.env.RESEND_API_KEY) {
+        try {
+          await getResend().emails.send({
+            from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
+            to: lookupEmail,
+            subject: `🎭 Audition Confirmed: ${pgRes.firstName} for ${showTitle}!`,
+            html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+              <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">You're on the list! 🌟</h2>
+              <p style="font-size: 16px; color: #374151;">This email confirms that <strong>${pgRes.firstName} ${pgRes.lastName}</strong> is officially registered to audition for <em>${showTitle}</em>.</p>
+              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <ul style="margin: 0; color: #4b5563; font-size: 14px; list-style-type: none; padding-left: 0; line-height: 1.6;">
+                  <li>🔢 <strong>Audition Number:</strong> ${pgRes.auditionNumber}</li>
+                  <li>🕒 <strong>Time:</strong> ${pgRes.slotLabel}</li>
+                  <li>🎵 <strong>Song:</strong> ${formData.songTitle || "None"}</li>
+                </ul>
+              </div>
+              <p style="font-size: 16px; color: #374151;">Break a leg!</p>
+            </div>`
+          });
+        } catch (emailError) {
+          console.error("Audition Confirmation Email failed:", emailError);
+        }
+      }
+
+      return {
+        success: true,
+        auditionId: pgRes.auditionId,
+        auditionNumber: pgRes.auditionNumber,
+      };
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     
@@ -296,6 +355,8 @@ export async function submitRealAudition(tenant: string, productionId: number, f
 
 export async function cancelAudition(tenant: string, auditionId: number) {
   try {
+    if (isPostgresEnabled()) return await cancelAuditionPg(tenant, auditionId);
+
     const tables = await getTenantTableConfig(tenant);
     const response = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
       method: "DELETE"
@@ -317,6 +378,10 @@ export async function saveAuditionScore(
   judgeRole: string
 ) {
   try {
+    if (isPostgresEnabled()) {
+      return await saveAuditionScorePg(tenant, auditionId, scores, judgeRole);
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
 
@@ -362,21 +427,26 @@ export async function acceptRoleAndSign(
   signatures: string 
 ) {
   try {
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
+    if (isPostgresEnabled()) {
+      const pgRes = await acceptRoleAndSignPg(tenant, auditionId, signatures);
+      if (!pgRes.success) return pgRes;
+    } else {
+      const DB = getDB(tenant);
+      const tables = await getTenantTableConfig(tenant);
 
-    const payload = {
-      [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
-    };
+      const payload = {
+        [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
+      };
 
-    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-       method: "PATCH",
-       body: JSON.stringify(payload)
-    }, {}, tenant);
+      const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
+         method: "PATCH",
+         body: JSON.stringify(payload)
+      }, {}, tenant);
 
-    if (!res || res.error) {
-       console.error("Failed to update signatures:", res);
-       return { success: false, error: "Database rejected the signature update." };
+      if (!res || res.error) {
+         console.error("Failed to update signatures:", res);
+         return { success: false, error: "Database rejected the signature update." };
+      }
     }
 
     try {

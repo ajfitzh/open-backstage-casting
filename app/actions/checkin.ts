@@ -3,6 +3,8 @@
 
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 import { requirePermission } from "@/app/lib/auth-guard";
+import { isPostgresEnabled } from "@/db";
+import { saveCheckInPg } from "@/app/lib/db/casting-repo";
 
 export async function saveCheckIn(
   tenant: string, 
@@ -18,6 +20,18 @@ export async function saveCheckIn(
   if (!guard.ok) return { success: false, error: guard.error };
 
   try {
+    if (isPostgresEnabled()) {
+      return await saveCheckInPg(
+        tenant,
+        auditionId,
+        status,
+        lobbyNote,
+        performerId,
+        updatedName,
+        updatedPhone,
+        updatedEmail
+      );
+    }
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     
