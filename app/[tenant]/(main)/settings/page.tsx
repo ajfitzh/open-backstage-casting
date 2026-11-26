@@ -14,6 +14,8 @@ import {
   getCreativeTeam
 } from "@/app/lib/baserow";
 import { isAdminRole } from "@/app/lib/permissions";
+import { isPostgresEnabled } from "@/db";
+import { getOrganizationBillingPg } from "@/app/lib/db/core-repo";
 import SettingsClient from "@/app/components/settings/SettingsClient";
 
 // 🟢 FIX 1: Add `params` to the component signature
@@ -55,6 +57,7 @@ export default async function SettingsPage({
     staffPositions,
     auditionSlots,
     showTeam,
+    orgBilling,
   ] = await Promise.all([
     userProfile && effectiveActiveId
       ? getUserProductionRole(tenant, Number(userProfile.id), effectiveActiveId)
@@ -65,6 +68,7 @@ export default async function SettingsPage({
     isAdmin ? getStaffPositions(tenant) : Promise.resolve([]),
     isAdmin && effectiveActiveId ? getAuditionSlots(tenant, effectiveActiveId) : Promise.resolve([]),
     isAdmin && effectiveActiveId ? getCreativeTeam(tenant, effectiveActiveId) : Promise.resolve([]),
+    isPostgresEnabled() ? getOrganizationBillingPg(tenant).catch(() => null) : Promise.resolve(null),
   ]);
 
   if (!userProfile) {
@@ -104,6 +108,7 @@ export default async function SettingsPage({
           name: t.name,
           role: t.role,
         }))}
+        orgBilling={orgBilling}
       />
     </div>
   );

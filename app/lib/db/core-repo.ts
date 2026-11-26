@@ -505,3 +505,74 @@ export async function registerUserPg(
 
   return { success: true as const };
 }
+
+export interface OrganizationBillingSummary {
+  slug: string;
+  name: string;
+  plan: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  subscriptionStatus: string | null;
+  currentPeriodEnd: string | null;
+}
+
+export async function getOrganizationBillingPg(
+  tenantSlug: string
+): Promise<OrganizationBillingSummary | null> {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return null;
+
+  const settings = (org.settings || {}) as Record<string, any>;
+  return {
+    slug: org.slug,
+    name: formatTenantDisplayName(org.slug, org.name),
+    plan: org.plan || "starter",
+    stripeCustomerId: typeof settings.stripeCustomerId === "string" ? settings.stripeCustomerId : null,
+    stripeSubscriptionId:
+      typeof settings.stripeSubscriptionId === "string" ? settings.stripeSubscriptionId : null,
+    subscriptionStatus:
+      typeof settings.subscriptionStatus === "string" ? settings.subscriptionStatus : null,
+    currentPeriodEnd:
+      typeof settings.currentPeriodEnd === "string" ? settings.currentPeriodEnd : null,
+  };
+}
+
+export async function updateOrganizationBillingPg(
+  tenantSlug: string,
+  patch: {
+    plan?: string;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+    subscriptionStatus?: string | null;
+    currentPeriodEnd?: string | null;
+  }
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const currentSettings = (org.settings || {}) as Record<string, any>;
+  const nextSettings: Record<string, any> = {
+    ...currentSettings,
+    ...(patch.stripeCustomerId !== undefined ? { stripeCustomerId: patch.stripeCustomerId } : {}),
+    ...(patch.stripeSubscriptionId !== undefined
+      ? { stripeSubscriptionId: patch.stripeSubscriptionId }
+      : {}),
+    ...(patch.subscriptionStatus !== undefined
+      ? { subscriptionStatus: patch.subscriptionStatus }
+      : {}),
+    ...(patch.currentPeriodEnd !== undefined ? { currentPeriodEnd: patch.currentPeriodEnd } : {}),
+  };
+
+  const db = getDb();
+  const [updated] = await db
+    .update(schema.organizations)
+    .set({
+      ...(patch.plan !== undefined ? { plan: patch.plan } : {}),
+      settings: nextSettings,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.organizations.id, org.id))
+    .returning();
+
+  return { success: true as const, organization: updated };
+}

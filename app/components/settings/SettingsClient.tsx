@@ -15,6 +15,8 @@ import ShowLaunchPanel, {
   type ShowTeamMemberSummary,
   type SimpleOption,
 } from './ShowLaunchPanel';
+import OrganizationBillingPanel from './OrganizationBillingPanel';
+import type { OrganizationBillingSummary } from '@/app/lib/db/core-repo';
 import { signOut } from "next-auth/react";
 import {
   hasPermission,
@@ -64,6 +66,7 @@ interface SettingsProps {
   staffPositions?: SimpleOption[];
   initialSlots?: AuditionSlotSummary[];
   initialTeam?: ShowTeamMemberSummary[];
+  orgBilling?: OrganizationBillingSummary | null;
 }
 
 export default function SettingsClient({
@@ -78,6 +81,7 @@ export default function SettingsClient({
   staffPositions = [],
   initialSlots = [],
   initialTeam = [],
+  orgBilling = null,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('profile');
   const [godModeOpen, setGodModeOpen] = useState(false);
@@ -224,8 +228,9 @@ export default function SettingsClient({
     setSavingRolesId(null);
 
     if (res.success) {
+      const updatedRoles = 'roles' in res && Array.isArray(res.roles) ? res.roles : draftRoles;
       setPeopleList((prev) =>
-        prev.map((p) => (p.id === personId ? { ...p, roles: res.roles || draftRoles } : p))
+        prev.map((p) => (p.id === personId ? { ...p, roles: updatedRoles } : p))
       );
       setEditingPersonId(null);
       setAdminNotice({ type: 'success', text: 'User roles updated.' });
@@ -713,20 +718,11 @@ export default function SettingsClient({
         )}
 
         {safeTab === 'billing' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div>
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Billing & Donations</h2>
-              <p className="text-zinc-500 text-sm">Production fees and payment processing.</p>
-            </div>
-            <div className="p-10 border border-dashed border-zinc-800 bg-black/20 rounded-2xl flex flex-col items-center justify-center text-center max-w-xl">
-              <CreditCard size={40} className="text-zinc-600 mb-4" />
-              <h3 className="text-zinc-200 font-bold mb-2">Payments Handled via Stripe Checkout</h3>
-              <p className="text-xs text-zinc-500 leading-relaxed">
-                Saved card management is not stored inside Open Backstage. Production fees and donations are processed
-                securely through Stripe during registration and role acceptance.
-              </p>
-            </div>
-          </div>
+          <OrganizationBillingPanel
+            tenant={tenant}
+            isAdmin={isRealAdmin}
+            orgBilling={orgBilling}
+          />
         )}
       </div>
 

@@ -53,4 +53,25 @@ test.describe('API Security & Validation E2E', () => {
     });
     expect(badSig.status()).toBeGreaterThanOrEqual(400);
   });
+
+  test('GET /api/health reports live Neon PostgreSQL connectivity', async ({ request }) => {
+    const res = await request.get('/api/health');
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.backend).toBe('postgres');
+    expect(typeof body.dbLatencyMs).toBe('number');
+  });
+
+  test('POST /api/billing/checkout and /api/billing/portal reject unauthenticated requests with 401', async ({ request }) => {
+    const checkoutRes = await request.post('/api/billing/checkout', {
+      data: { tenant: 'cytfred', planId: 'pro' },
+    });
+    expect(checkoutRes.status()).toBe(401);
+
+    const portalRes = await request.post('/api/billing/portal', {
+      data: { tenant: 'cytfred' },
+    });
+    expect(portalRes.status()).toBe(401);
+  });
 });

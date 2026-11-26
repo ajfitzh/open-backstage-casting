@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import {
   AlertCircle,
+  Camera,
   Check,
   Download,
   ImagePlus,
@@ -25,6 +26,7 @@ import {
   saveActorMeasurements,
 } from "@/app/actions/wardrobe";
 import { evaluateGarmentFit } from "@/app/lib/db/role-helpers";
+import CameraQrScanner from "./CameraQrScanner";
 
 export interface CastMeasurementItem {
   personId: number;
@@ -110,6 +112,7 @@ export default function CostumePullSheet({
   const [scanResult, setScanResult] = useState<GarmentWithQr | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [searchingSku, setSearchingSku] = useState(false);
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
 
   // Add garment form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -292,12 +295,13 @@ export default function CostumePullSheet({
     }
   };
 
-  const handleSkuLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tenant || !scanQuery.trim()) return;
+  const runSkuLookup = async (rawCode: string) => {
+    const clean = rawCode.trim();
+    if (!tenant || !clean) return;
+    setScanQuery(clean);
     setSearchingSku(true);
     setScanError(null);
-    const res = await lookupGarmentBySku(tenant, scanQuery.trim());
+    const res = await lookupGarmentBySku(tenant, clean);
     setSearchingSku(false);
     if (res.success) {
       setScanResult(res.item);
@@ -305,6 +309,16 @@ export default function CostumePullSheet({
       setScanResult(null);
       setScanError(res.error || "Garment not found.");
     }
+  };
+
+  const handleSkuLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await runSkuLookup(scanQuery);
+  };
+
+  const handleCameraDecoded = (decodedText: string) => {
+    setCameraScannerOpen(false);
+    void runSkuLookup(decodedText);
   };
 
   const togglePrintSelection = (id: number) => {
@@ -578,7 +592,21 @@ export default function CostumePullSheet({
                 )}
                 Lookup SKU
               </button>
+              <button
+                type="button"
+                onClick={() => setCameraScannerOpen(true)}
+                className="px-5 py-2.5 bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/40 text-pink-200 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+              >
+                <Camera size={14} /> Scan with Camera
+              </button>
             </form>
+
+            {cameraScannerOpen && (
+              <CameraQrScanner
+                onScan={handleCameraDecoded}
+                onClose={() => setCameraScannerOpen(false)}
+              />
+            )}
 
             {scanError && (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-amber-300">
