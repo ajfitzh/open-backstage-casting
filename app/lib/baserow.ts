@@ -33,6 +33,28 @@ import {
   submitAuditionPg,
   updateCastAssignmentPg,
 } from "@/app/lib/db/casting-repo";
+import {
+  clearSchedulePg,
+  createProductionAssetPg,
+  deleteRowPg,
+  getCastDemographicsPg,
+  getCommitteeDataPg,
+  getComplianceDataPg,
+  getPerformanceAnalyticsPg,
+  getProductionAssetsPg,
+  getProductionConflictsPg,
+  getProductionEventsPg,
+  getSceneAssignmentsPg,
+  getScenesPg,
+  getScheduleSlotsPg,
+  saveScheduleBatchPg,
+} from "@/app/lib/db/operations-repo";
+import {
+  getClassByIdPg,
+  getClassesPg,
+  getClassRosterPg,
+  getVenueLogisticsPg,
+} from "@/app/lib/db/wardrobe-academy-repo";
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
@@ -147,6 +169,15 @@ function formatAgeRange(row: any, tenant: string): string {
 }
 
 export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeof getTenantTableConfig>, rowId: number | string) {
+  if (isPostgresEnabled()) {
+    try {
+      const ok = await deleteRowPg(tenant, String(tableKey), Number(rowId));
+      if (ok) return true;
+    } catch (error) {
+      console.error("[Postgres] deleteRow failed, falling back to Baserow:", error);
+    }
+  }
+
   const tables = await getTenantTableConfig(tenant);
   const tableId = tables[tableKey as keyof typeof tables];
   const url = `/database/rows/table/${tableId}/${rowId}/`;
@@ -159,6 +190,15 @@ export async function deleteRow(tenant: string, tableKey: keyof ReturnType<typeo
 // ==============================================================================
 
 export async function getClasses(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgClasses = await getClassesPg(tenant);
+      if (pgClasses !== null) return pgClasses;
+    } catch (error) {
+      console.error("[Postgres] getClasses failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   let allRows: any[] = [];
@@ -201,6 +241,15 @@ return allRows.map((row: any) => ({
 }
 
 export async function getClassById(tenant: string, classId: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgCls = await getClassByIdPg(tenant, Number(classId));
+      if (pgCls !== null) return pgCls;
+    } catch (error) {
+      console.error("[Postgres] getClassById failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const row = await fetchBaserow(`/database/rows/table/${tables.CLASSES}/${classId}/`, {}, {}, tenant);
@@ -225,6 +274,15 @@ export async function getClassById(tenant: string, classId: string) {
 
 export async function getClassRoster(tenant: string, classId: string) {
   if (!classId) return [];
+  if (isPostgresEnabled()) {
+    try {
+      const pgRoster = await getClassRosterPg(tenant, Number(classId));
+      if (pgRoster !== null) return pgRoster;
+    } catch (error) {
+      console.error("[Postgres] getClassRoster failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
 
@@ -287,6 +345,15 @@ export async function getVenues(tenant: string) {
 }
 
 export async function getVenueLogistics(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgLogistics = await getVenueLogisticsPg(tenant);
+      if (pgLogistics !== null) return pgLogistics;
+    } catch (error) {
+      console.error("[Postgres] getVenueLogistics failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const [venuesData, spacesData, ratesData, classesData] = await Promise.all([
@@ -682,6 +749,15 @@ export async function updateCastAssignment(tenant: string, assignmentId: number,
 // ==============================================================================
 
 export async function getScheduleSlots(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgSlots = await getScheduleSlotsPg(tenant, productionId);
+      if (pgSlots !== null) return pgSlots;
+    } catch (error) {
+      console.error("[Postgres] getScheduleSlots failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.SCHEDULE_SLOTS.FIELDS;
@@ -735,6 +811,15 @@ export async function getScheduleSlots(tenant: string, productionId: number) {
 }
 
 export async function getSceneAssignments(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgRows = await getSceneAssignmentsPg(tenant, productionId);
+      if (pgRows !== null) return pgRows;
+    } catch (error) {
+      console.error("[Postgres] getSceneAssignments failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.SCENE_ASSIGNMENTS.FIELDS; 
@@ -751,6 +836,15 @@ export async function getSceneAssignments(tenant: string, productionId: number) 
 }
 
 export async function saveScheduleBatch(tenant: string, productionId: number, newSlots: any[]) {
+  if (isPostgresEnabled()) {
+    try {
+      const res = await saveScheduleBatchPg(tenant, productionId, newSlots);
+      if (res.success) return true;
+    } catch (error) {
+      console.error("[Postgres] saveScheduleBatch failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const TABLE_ID = tables.SCHEDULE_SLOTS;
@@ -781,6 +875,15 @@ export async function saveScheduleBatch(tenant: string, productionId: number, ne
 }
 
 export async function clearSchedule(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const ok = await clearSchedulePg(tenant, productionId);
+      if (ok) return;
+    } catch (error) {
+      console.error("[Postgres] clearSchedule failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const slots = await getScheduleSlots(tenant, productionId);
@@ -799,6 +902,15 @@ export async function clearSchedule(tenant: string, productionId: number) {
 }
 
 export async function getScenes(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgScenes = await getScenesPg(tenant, productionId);
+      if (pgScenes !== null) return pgScenes;
+    } catch (error) {
+      console.error("[Postgres] getScenes failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
@@ -831,6 +943,15 @@ export async function getScenes(tenant: string, productionId?: number) {
 }
 
 export async function getProductionEvents(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgEvents = await getProductionEventsPg(tenant, productionId);
+      if (pgEvents !== null) return pgEvents;
+    } catch (error) {
+      console.error("[Postgres] getProductionEvents failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.EVENTS.FIELDS;
@@ -857,6 +978,15 @@ export async function getProductionEvents(tenant: string, productionId: number) 
 // ==============================================================================
 
 export async function getProductionAssets(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgAssets = await getProductionAssetsPg(tenant, productionId);
+      if (pgAssets !== null) return pgAssets;
+    } catch (error) {
+      console.error("[Postgres] getProductionAssets failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
@@ -877,6 +1007,14 @@ export async function getProductionAssets(tenant: string, productionId?: number)
 }
 
 export async function createProductionAsset(tenant: string, name: string, url: string, type: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      return await createProductionAssetPg(tenant, name, url, type, productionId);
+    } catch (error) {
+      console.error("[Postgres] createProductionAsset failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const body = {
@@ -896,6 +1034,15 @@ export async function createProductionAsset(tenant: string, name: string, url: s
 // ==============================================================================
 
 export async function getCastDemographics(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgDemo = await getCastDemographicsPg(tenant);
+      if (pgDemo !== null) return pgDemo;
+    } catch (error) {
+      console.error("[Postgres] getCastDemographics failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, { size: "200" }, tenant);
@@ -1005,6 +1152,15 @@ export async function getCreativeTeam(tenant: string, productionId?: number) {
 }
 
 export async function getProductionConflicts(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgConflicts = await getProductionConflictsPg(tenant, productionId);
+      if (pgConflicts !== null) return pgConflicts;
+    } catch (error) {
+      console.error("[Postgres] getProductionConflicts failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.CONFLICTS.FIELDS;
@@ -1028,6 +1184,15 @@ export async function getProductionConflicts(tenant: string, productionId: numbe
 }
 
 export async function getCommitteeData(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgData = await getCommitteeDataPg(tenant, productionId);
+      if (pgData !== null) return pgData;
+    } catch (error) {
+      console.error("[Postgres] getCommitteeData failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const params: any = { size: "200" };
@@ -1062,16 +1227,40 @@ export async function getCommitteeData(tenant: string, productionId?: number) {
 }
 
 export async function getCommitteePreferences(tenant: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgData = await getCommitteeDataPg(tenant);
+      if (pgData !== null) return pgData;
+    } catch (error) {
+      console.error("[Postgres] getCommitteePreferences failed, falling back to Baserow:", error);
+    }
+  }
   const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, {}, tenant);
 }
 
 export async function getConflicts(tenant: string, id?: any) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgConflicts = await getProductionConflictsPg(tenant, id ? Number(id) : undefined);
+      if (pgConflicts !== null) return pgConflicts;
+    } catch (error) {
+      console.error("[Postgres] getConflicts failed, falling back to Baserow:", error);
+    }
+  }
   const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.CONFLICTS}/`, {}, {}, tenant);
 }
 
 export async function getComplianceData(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgData = await getComplianceDataPg(tenant);
+      if (pgData !== null) return pgData;
+    } catch (error) {
+      console.error("[Postgres] getComplianceData failed, falling back to Baserow:", error);
+    }
+  }
   const tables = await getTenantTableConfig(tenant);
   return fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {}, tenant);
 }
@@ -1405,6 +1594,19 @@ export async function getUserProductionRole(tenant: string, userId: number, prod
 // ==============================================================================
 
 export async function getPerformanceAnalytics(tenant: string, productionId?: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgAnalytics = await getPerformanceAnalyticsPg(tenant);
+      if (pgAnalytics !== null) {
+        return productionId
+          ? pgAnalytics.filter((p) => p.productionId === productionId)
+          : pgAnalytics;
+      }
+    } catch (error) {
+      console.error("[Postgres] getPerformanceAnalytics failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const data = await fetchBaserow(`/database/rows/table/${tables.PERFORMANCES}/`, {}, { size: "200" }, tenant);

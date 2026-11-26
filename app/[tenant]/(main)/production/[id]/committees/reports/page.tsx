@@ -11,11 +11,22 @@ import {
   getDB, 
   getTenantTableConfig 
 } from '@/app/lib/baserow';
+import { isPostgresEnabled } from '@/db';
+import { getCommitteeReportsPg } from '@/app/lib/db/operations-repo';
 
 export const dynamic = 'force-dynamic';
 
 // 1. Helper to fetch the new reports
 async function getCommitteeReports(tenant: string, productionId: number) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgReports = await getCommitteeReportsPg(tenant, productionId);
+      if (pgReports !== null) return pgReports;
+    } catch (error) {
+      console.error("[Postgres] getCommitteeReports failed, falling back:", error);
+    }
+  }
+
   try {
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);

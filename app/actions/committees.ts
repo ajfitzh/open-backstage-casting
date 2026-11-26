@@ -4,10 +4,26 @@
 import { revalidatePath } from 'next/cache';
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 import { requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
+import { isPostgresEnabled } from "@/db";
+import {
+  addCommitteeVolunteerPg,
+  deleteCommitteeVolunteerPg,
+  saveCommitteeAssignmentsPg,
+  submitCommitteeReportPg,
+  updateCommitteeVolunteerPg,
+} from "@/app/lib/db/operations-repo";
 
 export async function submitCommitteeReport(tenant: string, data: any) {
   const authGuard = await requireAuthenticatedUser();
   if (!authGuard.ok) return { success: false, error: authGuard.error };
+
+  if (isPostgresEnabled()) {
+    try {
+      return await submitCommitteeReportPg(tenant, data);
+    } catch (error) {
+      console.error("[Postgres] submitCommitteeReport failed, falling back:", error);
+    }
+  }
 
   try {
     const DB = getDB(tenant);
@@ -63,6 +79,18 @@ export async function saveCommitteeAssignments(
         return { success: true }; 
     }
 
+    if (isPostgresEnabled()) {
+      try {
+        const res = await saveCommitteeAssignmentsPg(tenant, phase, assignments, chairs);
+        if (res.success) {
+          revalidatePath('/[tenant]/(main)/(staff)/committees', 'page');
+        }
+        return res;
+      } catch (error) {
+        console.error("[Postgres] saveCommitteeAssignments failed, falling back:", error);
+      }
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const tableId = tables.COMMITTEE_PREFS;
@@ -85,11 +113,19 @@ export async function saveCommitteeAssignments(
     return { success: true };
 }
 
-// --- NEW CRUD ACTIONS ---
-
 export async function addCommitteeVolunteer(tenant: string, data: { name: string, email: string, phone: string }) {
     const guard = await requirePermission(tenant, "manage_committees");
     if (!guard.ok) return { success: false, error: guard.error };
+
+    if (isPostgresEnabled()) {
+      try {
+        const res = await addCommitteeVolunteerPg(tenant, data);
+        revalidatePath('/[tenant]/(main)/(staff)/committees', 'page');
+        return res;
+      } catch (error) {
+        console.error("[Postgres] addCommitteeVolunteer failed, falling back:", error);
+      }
+    }
 
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
@@ -112,6 +148,16 @@ export async function updateCommitteeVolunteer(tenant: string, rowId: number, da
     const guard = await requirePermission(tenant, "manage_committees");
     if (!guard.ok) return { success: false, error: guard.error };
 
+    if (isPostgresEnabled()) {
+      try {
+        const res = await updateCommitteeVolunteerPg(tenant, rowId, data);
+        revalidatePath('/[tenant]/(main)/(staff)/committees', 'page');
+        return res;
+      } catch (error) {
+        console.error("[Postgres] updateCommitteeVolunteer failed, falling back:", error);
+      }
+    }
+
     const DB = getDB(tenant);
     const tables = await getTenantTableConfig(tenant);
     const F = DB.COMMITTEE_PREFS.FIELDS;
@@ -132,6 +178,16 @@ export async function updateCommitteeVolunteer(tenant: string, rowId: number, da
 export async function deleteCommitteeVolunteer(tenant: string, rowId: number) {
     const guard = await requirePermission(tenant, "manage_committees");
     if (!guard.ok) return { success: false, error: guard.error };
+
+    if (isPostgresEnabled()) {
+      try {
+        const res = await deleteCommitteeVolunteerPg(tenant, rowId);
+        revalidatePath('/[tenant]/(main)/(staff)/committees', 'page');
+        return res;
+      } catch (error) {
+        console.error("[Postgres] deleteCommitteeVolunteer failed, falling back:", error);
+      }
+    }
 
     const tables = await getTenantTableConfig(tenant);
     

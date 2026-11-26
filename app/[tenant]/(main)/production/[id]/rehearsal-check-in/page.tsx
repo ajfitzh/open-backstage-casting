@@ -9,10 +9,21 @@ import {
 import { DB } from '@/app/lib/schema';
 import CheckInKioskClient from '@/app/components/production/CheckInKioskClient';
 import { CalendarX } from 'lucide-react';
+import { isPostgresEnabled } from '@/db';
+import { getAttendanceForEventPg } from '@/app/lib/db/operations-repo';
 
 export const dynamic = 'force-dynamic';
 
 async function getTodayAttendance(tenant: string, eventId: number) {
+    if (isPostgresEnabled()) {
+        try {
+            const pgRows = await getAttendanceForEventPg(tenant, eventId);
+            if (pgRows !== null) return pgRows;
+        } catch (error) {
+            console.error("[Postgres] getTodayAttendance failed, falling back:", error);
+        }
+    }
+
     try {
         const tables = await getTenantTableConfig(tenant);
         const F = DB.ATTENDANCE.FIELDS;

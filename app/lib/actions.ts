@@ -8,6 +8,24 @@ import { fetchBaserow, getDB } from "@/app/lib/baserow";
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { resolveTenant } from "@/app/lib/tenant-server";
 import { requirePermission, requireStaffAccess } from "@/app/lib/auth-guard";
+import { isPostgresEnabled } from "@/db";
+import { generateCastingRowsPg } from "@/app/lib/db/casting-repo";
+import {
+  clearCastingDataPg,
+  getSeasonBoardPg,
+  saveCastingGridPg,
+  saveScheduleBatchPg,
+  toggleWorkflowTagPg,
+  updateSceneLoadsPg,
+  updateSceneStatusPg,
+} from "@/app/lib/db/operations-repo";
+import {
+  claimBountyPg,
+  getClassRosterPg,
+  submitProposalPg,
+  updateApplicantStatusPg,
+  updateClassSchedulePg,
+} from "@/app/lib/db/wardrobe-academy-repo";
 
 // --- HELPERS ---
 
@@ -30,7 +48,17 @@ export async function handleLogout() {
 
 export async function getSeasonBoard(seasonId: string, explicitTenant?: string) {
   try {
-    const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+    const tenant = await resolveTenant(explicitTenant);
+    if (isPostgresEnabled()) {
+      try {
+        const pgBoard = await getSeasonBoardPg(tenant, Number(seasonId));
+        if (pgBoard) return pgBoard;
+      } catch (error) {
+        console.error("[Postgres] getSeasonBoard failed, falling back:", error);
+      }
+    }
+
+    const { DB, tables } = await getTenantContext(tenant);
     const seasonsTable = tables.SEASONS || DB.SEASONS.ID;
     const staffInterestTable = tables.STAFF_INTEREST || DB.STAFF_INTEREST.ID;
     const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
@@ -86,7 +114,18 @@ export async function submitProposalAction(data: any, explicitTenant?: string) {
   const guard = await requireStaffAccess();
   if (!guard.ok) return { success: false, error: guard.error };
 
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
+  if (isPostgresEnabled()) {
+    try {
+      const res = await submitProposalPg(tenant, data);
+      if (res.success) revalidatePath(`/${tenant}/education/portal`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] submitProposalAction failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const sessionsTable = tables.SEASONS || DB.SESSIONS.ID;
   const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
   const classesTable = tables.CLASSES || DB.CLASSES.ID;
@@ -147,7 +186,21 @@ export async function claimBountyAction(classId: number, teacherName: string, ex
   const guard = await requireStaffAccess();
   if (!guard.ok) return { success: false, error: guard.error };
 
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
+  if (isPostgresEnabled()) {
+    try {
+      const res = await claimBountyPg(tenant, classId, teacherName);
+      if (res.success) {
+        revalidatePath(`/${tenant}/education/portal`);
+        revalidatePath(`/${tenant}/education/proposals`);
+      }
+      return res;
+    } catch (error) {
+      console.error("[Postgres] claimBountyAction failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
   const classesTable = tables.CLASSES || DB.CLASSES.ID;
   const CF = DB.CLASSES.FIELDS;
@@ -195,10 +248,21 @@ export async function updateApplicantStatus(
   newTag: string,
   explicitTenant?: string
 ) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "edit_compliance");
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await updateApplicantStatusPg(tenant, personId, oldTags, newTag);
+      if (res.success) revalidatePath(`/${tenant}/education/hiring`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] updateApplicantStatus failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
   const hiringTags = ["Faculty Applicant", "Faculty Interviewing", "Active Faculty"];
   const keptTags = oldTags.filter((t) => !hiringTags.includes(t));
@@ -231,7 +295,27 @@ export async function fetchRosterAction(classId: number, explicitTenant?: string
   if (!guard.ok) return [];
 
   try {
-    const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+    const tenant = await resolveTenant(explicitTenant);
+    if (isPostgresEnabled()) {
+      try {
+        const pgRoster = await getClassRosterPg(tenant, classId);
+        if (pgRoster !== null) {
+          return pgRoster
+            .filter((r) => r.status !== "Instructor")
+            .map((r) => ({
+              id: r.id,
+              name: r.name,
+              age: r.age || "?",
+              email: r.email,
+              phone: r.phone,
+            }));
+        }
+      } catch (error) {
+        console.error("[Postgres] fetchRosterAction failed, falling back:", error);
+      }
+    }
+
+    const { DB, tables } = await getTenantContext(tenant);
     const peopleTable = tables.PEOPLE || DB.PEOPLE.ID;
     const PF = DB.PEOPLE.FIELDS;
 
@@ -266,10 +350,24 @@ export async function updateClassSchedule(
   payload: { day: string; time: string; location: string; status: string },
   explicitTenant?: string
 ) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "edit_compliance");
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await updateClassSchedulePg(tenant, classId, payload);
+      if (res.success) {
+        revalidatePath(`/${tenant}/education/planning`);
+        revalidatePath(`/${tenant}/education`);
+      }
+      return res;
+    } catch (error) {
+      console.error("[Postgres] updateClassSchedule failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const classesTable = tables.CLASSES || DB.CLASSES.ID;
   const CF = DB.CLASSES.FIELDS;
 
@@ -299,11 +397,10 @@ export async function updateClassSchedule(
 export async function toggleWorkflowTag(productionId: number, tagKey: string, explicitTenant?: string) {
   if (!productionId) return;
 
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "manage_casting", productionId);
   if (!guard.ok) return;
 
-  const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
   const keyMap: Record<string, string> = {
     auditions: "Auditions",
     callbacks: "Callbacks",
@@ -320,6 +417,20 @@ export async function toggleWorkflowTag(productionId: number, tagKey: string, ex
   };
 
   const targetTag = keyMap[tagKey] || tagKey;
+
+  if (isPostgresEnabled()) {
+    try {
+      await toggleWorkflowTagPg(tenant, productionId, targetTag);
+      revalidatePath(`/${tenant}`);
+      revalidatePath("/");
+      return;
+    } catch (error) {
+      console.error("[Postgres] toggleWorkflowTag failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
+  const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
 
   try {
     const freshRow = await fetchBaserow(
@@ -381,10 +492,21 @@ export async function updateSceneLoads(
   updates: { id: number; load: { music: number; dance: number; block: number } }[],
   explicitTenant?: string
 ) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "manage_casting");
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await updateSceneLoadsPg(tenant, updates);
+      if (res.success) revalidatePath(`/${tenant}/production`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] updateSceneLoads failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const scenesTable = tables.SCENES || DB.SCENES.ID;
   const SF = DB.SCENES.FIELDS;
 
@@ -417,10 +539,21 @@ export async function updateSceneStatus(
   status: string,
   explicitTenant?: string
 ) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "manage_casting");
   if (!guard.ok) return;
 
+  if (isPostgresEnabled()) {
+    try {
+      await updateSceneStatusPg(tenant, sceneId, field, status);
+      revalidatePath(`/${tenant}/production`);
+      return;
+    } catch (error) {
+      console.error("[Postgres] updateSceneStatus failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const scenesTable = tables.SCENES || DB.SCENES.ID;
   const SF = DB.SCENES.FIELDS;
   const fieldMap = {
@@ -447,10 +580,21 @@ export async function updateSceneStatus(
 // ============================================================================
 
 export async function saveScheduleBatch(productionId: number, items: any[], explicitTenant?: string) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "manage_casting", productionId);
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await saveScheduleBatchPg(tenant, productionId, items);
+      if (res.success) revalidatePath(`/${tenant}/production/${productionId}/schedule`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] saveScheduleBatch failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const eventsTable = tables.EVENTS || DB.EVENTS.ID;
   const slotsTable = tables.SCHEDULE_SLOTS || DB.SCHEDULE_SLOTS.ID;
   const EF = DB.EVENTS.FIELDS;
@@ -521,10 +665,21 @@ export async function saveScheduleBatch(productionId: number, items: any[], expl
 // ============================================================================
 
 export async function generateCastingRows(tenant: string, productionId: number) {
-  const { tenant: resolvedTenant, DB, tables } = await getTenantContext(tenant);
+  const resolvedTenant = await resolveTenant(tenant);
   const guard = await requirePermission(resolvedTenant, "manage_casting", productionId);
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await generateCastingRowsPg(resolvedTenant, productionId);
+      if (res.success) revalidatePath(`/${resolvedTenant}/production/${productionId}/casting`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] generateCastingRows failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(resolvedTenant);
   const productionsTable = tables.PRODUCTIONS || DB.PRODUCTIONS.ID;
   const rolesTable = tables.BLUEPRINT_ROLES || DB.BLUEPRINT_ROLES.ID;
   const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
@@ -599,16 +754,33 @@ export async function saveCastingGrid(
   deletedRowIds: number[] = [],
   createdRows: any[] = []
 ) {
-  const { tenant: resolvedTenant, DB, tables } = await getTenantContext(tenant);
+  const resolvedTenant = await resolveTenant(tenant);
   const guard = await requirePermission(resolvedTenant, "manage_casting", productionId);
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await saveCastingGridPg(
+        resolvedTenant,
+        productionId,
+        actorChanges,
+        sceneChanges,
+        deletedRowIds,
+        createdRows
+      );
+      if (res.success) revalidatePath(`/${resolvedTenant}/production/${productionId}/casting`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] saveCastingGrid failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(resolvedTenant);
   const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
   const sceneAssignmentsTable = tables.SCENE_ASSIGNMENTS || DB.SCENE_ASSIGNMENTS.ID;
   const AF = DB.ASSIGNMENTS.FIELDS;
   const SAF = DB.SCENE_ASSIGNMENTS.FIELDS;
 
-  // PHASE 1: DELETIONS
   if (deletedRowIds.length > 0) {
     await Promise.all(
       deletedRowIds.map((id) =>
@@ -622,7 +794,6 @@ export async function saveCastingGrid(
     );
   }
 
-  // PHASE 2: CREATED ROWS
   if (createdRows.length > 0) {
     await Promise.all(
       createdRows.map((row) =>
@@ -643,7 +814,6 @@ export async function saveCastingGrid(
     );
   }
 
-  // PHASE 3: UPDATE ACTORS IN EXISTING ROLES
   for (const change of actorChanges) {
     await fetchBaserow(
       `/database/rows/table/${assignmentsTable}/${change.assignmentId}/`,
@@ -659,7 +829,6 @@ export async function saveCastingGrid(
     );
   }
 
-  // PHASE 4: UPDATE SCENE ASSIGNMENTS
   for (const change of sceneChanges) {
     const { assignmentId, addedSceneIds, removedSceneIds } = change;
 
@@ -730,10 +899,21 @@ export async function saveCastingGrid(
 }
 
 export async function clearCastingData(productionId: number, explicitTenant?: string) {
-  const { tenant, DB, tables } = await getTenantContext(explicitTenant);
+  const tenant = await resolveTenant(explicitTenant);
   const guard = await requirePermission(tenant, "manage_casting", productionId);
   if (!guard.ok) return { success: false, error: guard.error };
 
+  if (isPostgresEnabled()) {
+    try {
+      const res = await clearCastingDataPg(tenant, productionId);
+      if (res.success) revalidatePath(`/${tenant}/production/${productionId}/casting`);
+      return res;
+    } catch (error) {
+      console.error("[Postgres] clearCastingData failed, falling back:", error);
+    }
+  }
+
+  const { DB, tables } = await getTenantContext(tenant);
   const sceneAssignmentsTable = tables.SCENE_ASSIGNMENTS || DB.SCENE_ASSIGNMENTS.ID;
   const assignmentsTable = tables.ASSIGNMENTS || DB.ASSIGNMENTS.ID;
 

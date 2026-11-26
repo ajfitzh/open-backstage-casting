@@ -3,6 +3,11 @@ import { getAuditionees, fetchBaserow, getDB, getTenantTableConfig } from '@/app
 import ComplianceDashboard from '@/app/components/ComplianceDashboard'; 
 import { cancelAudition } from '@/app/actions/auditions';
 import { revalidatePath } from 'next/cache';
+import { isPostgresEnabled } from '@/db';
+import {
+  assignMissingAuditionNumbersPg,
+  changeAuditionTimeSlotPg,
+} from '@/app/lib/db/operations-repo';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +74,12 @@ export default async function RosterPage({
   // 🟢 SERVER ACTION: Change Time Slot
   async function handleChangeTimeSlot(auditionId: string | number, newSlotLabel: string) {
     "use server";
+    if (isPostgresEnabled()) {
+      await changeAuditionTimeSlotPg(tenant, showId, parseInt(auditionId.toString()), newSlotLabel);
+      revalidatePath(`/${tenant}/production/${showId}/roster`);
+      return;
+    }
+
     const tables = await getTenantTableConfig(tenant);
     const DB = getDB(tenant);
 
@@ -102,6 +113,12 @@ export default async function RosterPage({
   // 🟢 SERVER ACTION: Batch Assign Missing Numbers
   async function handleAssignMissingNumbers() {
     "use server";
+    if (isPostgresEnabled()) {
+      await assignMissingAuditionNumbersPg(tenant, showId);
+      revalidatePath(`/${tenant}/production/${showId}/roster`);
+      return;
+    }
+
     const tables = await getTenantTableConfig(tenant);
     const DB = getDB(tenant);
 

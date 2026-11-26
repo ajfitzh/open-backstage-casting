@@ -1,11 +1,22 @@
 // app/[tenant]/(main)/(staff)/reports/playbill/page.tsx
 import { cookies } from 'next/headers';
 import { fetchBaserow, getDB, getTenantTableConfig, getShowById, getActiveProduction } from '@/app/lib/baserow';
+import { isPostgresEnabled } from '@/db';
+import { getPlaybillDataPg } from '@/app/lib/db/operations-repo';
 import PlaybillExporterClient from '@/app/components/reports/PlaybillExporterClient';
 
 export const dynamic = 'force-dynamic';
 
 async function getPlaybillData(tenant: string, showId: number) {
+    if (isPostgresEnabled()) {
+        try {
+            const pgData = await getPlaybillDataPg(tenant, showId);
+            if (pgData !== null) return pgData;
+        } catch (error) {
+            console.error("[Postgres] getPlaybillData failed, falling back:", error);
+        }
+    }
+
     try {
         const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);

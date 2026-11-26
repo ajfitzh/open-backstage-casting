@@ -3,6 +3,8 @@
 
 import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 import { requirePermission } from "@/app/lib/auth-guard";
+import { isPostgresEnabled } from "@/db";
+import { toggleAttendancePg } from "@/app/lib/db/operations-repo";
 
 export async function toggleAttendance(
     tenant: string, 
@@ -14,13 +16,20 @@ export async function toggleAttendance(
     const guard = await requirePermission(tenant, "view_checkin", productionId);
     if (!guard.ok) return { success: false, error: guard.error };
 
+    if (isPostgresEnabled()) {
+        try {
+            return await toggleAttendancePg(tenant, productionId, personId, eventId, action);
+        } catch (error) {
+            console.error("[Postgres] toggleAttendance failed, falling back to Baserow:", error);
+        }
+    }
+
     try {
         const DB = getDB(tenant);
         const tables = await getTenantTableConfig(tenant);
         const F = DB.ATTENDANCE.FIELDS;
         const tableId = tables.ATTENDANCE || DB.ATTENDANCE.ID;
 
-        // 1. Check if an attendance record already exists for this Person + Event
         const params = {
             filter_type: "AND",
             [`filter__${F.PERSON}__link_row_has`]: personId,
@@ -37,11 +46,10 @@ export async function toggleAttendance(
         } else if (action === "OUT") {
             payload = { [F.CHECK_OUT_TIME]: now };
         } else if (action === "ABSENT") {
-            payload = { [F.STATUS]: "Unexcused Absence" }; // Triggers the illness/absence policy warning
+            payload = { [F.STATUS]: "Unexcused Absence" };
         }
 
         if (Array.isArray(existingRows) && existingRows.length > 0) {
-            // Update existing row (e.g., they are now checking out)
             const rowId = existingRows[0].id;
             const res = await fetchBaserow(`/database/rows/table/${tableId}/${rowId}/`, {
                 method: "PATCH",
@@ -49,7 +57,6 @@ export async function toggleAttendance(
             }, {}, tenant);
             return { success: !res.error, data: res };
         } else {
-            // Create a brand new attendance record
             payload[F.PERSON] = [personId];
             payload[F.PRODUCTION] = [productionId];
             payload[F.REHEARSAL_PRODUCTION_EVENTS] = [eventId];

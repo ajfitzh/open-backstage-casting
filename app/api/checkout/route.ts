@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { fetchBaserow, getDB } from '@/app/lib/baserow';
 import { getTenantTableConfig } from '@/app/lib/tenant-config';
+import { isPostgresEnabled } from '@/db';
+import { getCheckoutDetailsPg } from '@/app/lib/db/operations-repo';
 import {
   buildCheckoutLineItems,
   getStripeClient,
@@ -62,34 +64,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
+    let showTitle = 'Production';
+    let productionFeeDollars = 0;
+    let studentName = 'Cast Member';
+    let studentId = '';
 
-    // Always read authoritative fee & student details from Baserow (never trust client amounts)
-    const [productionRow, auditionRow] = await Promise.all([
-      fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${productionId}/`, {}, {}, tenant),
-      fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {}, {}, tenant),
-    ]);
-
-    if (!productionRow || productionRow.error) {
-      return NextResponse.json({ error: 'Production not found.' }, { status: 404 });
+    if (isPostgresEnabled()) {
+      const pgDetails = await getCheckoutDetailsPg(tenant, productionId, auditionId);
+      if (pgDetails) {
+        if (pgDetails.error) {
+          return NextResponse.json({ error: pgDetails.error }, { status: pgDetails.status });
+        }
+        if (pgDetails.paidFees) {
+          return NextResponse.json(
+            { error: 'Production fee has already been paid for this student.' },
+            { status: 409 }
+          );
+        }
+        showTitle = pgDetails.showTitle ?? 'Production';
+        productionFeeDollars = pgDetails.productionFeeDollars ?? 0;
+        studentName = pgDetails.studentName ?? 'Cast Member';
+        studentId = pgDetails.studentId ?? '';
+      }
     }
-    if (!auditionRow || auditionRow.error) {
-      return NextResponse.json({ error: 'Audition record not found.' }, { status: 404 });
-    }
 
-    if (auditionRow[DB.AUDITIONS.FIELDS.PAID_FEES]) {
-      return NextResponse.json(
-        { error: 'Production fee has already been paid for this student.' },
-        { status: 409 }
-      );
-    }
+    if (!isPostgresEnabled()) {
+      const DB = getDB(tenant);
+      const tables = await getTenantTableConfig(tenant);
 
-    const showTitle =
-      productionRow[DB.PRODUCTIONS.FIELDS.TITLE] ||
-      productionRow[DB.PRODUCTIONS.FIELDS.FULL_TITLE] ||
-      'Production';
-    const productionFeeDollars = Number(productionRow[DB.PRODUCTIONS.FIELDS.PRODUCTION_FEE] ?? 0);
+      const [productionRow, auditionRow] = await Promise.all([
+        fetchBaserow(`/database/rows/table/${tables.PRODUCTIONS}/${productionId}/`, {}, {}, tenant),
+        fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {}, {}, tenant),
+      ]);
+
+      if (!productionRow || productionRow.error) {
+        return NextResponse.json({ error: 'Production not found.' }, { status: 404 });
+      }
+      if (!auditionRow || auditionRow.error) {
+        return NextResponse.json({ error: 'Audition record not found.' }, { status: 404 });
+      }
+
+      if (auditionRow[DB.AUDITIONS.FIELDS.PAID_FEES]) {
+        return NextResponse.json(
+          { error: 'Production fee has already been paid for this student.' },
+          { status: 409 }
+        );
+      }
+
+      showTitle =
+        productionRow[DB.PRODUCTIONS.FIELDS.TITLE] ||
+        productionRow[DB.PRODUCTIONS.FIELDS.FULL_TITLE] ||
+        'Production';
+      productionFeeDollars = Number(productionRow[DB.PRODUCTIONS.FIELDS.PRODUCTION_FEE] ?? 0);
+
+      const performerLink = auditionRow[DB.AUDITIONS.FIELDS.PERFORMER]?.[0];
+      studentName =
+        typeof performerLink?.value === 'string'
+          ? performerLink.value
+          : performerLink?.value?.value || 'Cast Member';
+      studentId = performerLink?.id ? String(performerLink.id) : '';
+    }
 
     if (!Number.isFinite(productionFeeDollars) || productionFeeDollars <= 0) {
       return NextResponse.json(
@@ -97,13 +131,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    const performerLink = auditionRow[DB.AUDITIONS.FIELDS.PERFORMER]?.[0];
-    const studentName =
-      typeof performerLink?.value === 'string'
-        ? performerLink.value
-        : performerLink?.value?.value || 'Cast Member';
-    const studentId = performerLink?.id ? String(performerLink.id) : '';
 
     const lineItems = buildCheckoutLineItems({
       showTitle: String(showTitle),

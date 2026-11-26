@@ -377,3 +377,131 @@ export async function provisionOrganizationPg(input: {
     organization: org,
   };
 }
+
+export async function findUserByEmailClientPg(tenantSlug: string, email: string) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return null;
+
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  const db = getDb();
+  const [person] = await db
+    .select()
+    .from(schema.people)
+    .where(
+      and(
+        eq(schema.people.organizationId, org.id),
+        or(eq(schema.people.email, cleanEmail), eq(schema.people.secondaryEmail, cleanEmail))
+      )
+    )
+    .limit(1);
+
+  if (!person) return null;
+  const roles = Array.isArray(person.roles) && person.roles.length > 0 ? person.roles : ["Guest"];
+  const primaryRole = roles.includes("Admin")
+    ? "Admin"
+    : roles.includes("Executive Director")
+      ? "Executive Director"
+      : roles.includes("Education Coordinator")
+        ? "Education Coordinator"
+        : roles[0] || "Guest";
+
+  return {
+    id: String(person.baserowId ?? person.id),
+    name:
+      person.fullName?.trim() ||
+      `${person.firstName || ""} ${person.lastName || ""}`.trim() ||
+      cleanEmail,
+    email: person.email || person.secondaryEmail || cleanEmail,
+    phone: person.phone || null,
+    address: `${person.address || ""}, ${person.city || ""}`.replace(/^, |, $/g, ""),
+    role: primaryRole,
+    tags: roles,
+    image: person.headshotUrl || null,
+    familyId: person.familyId ?? null,
+    appPassword: person.passwordHash || null,
+  };
+}
+
+export async function setAccountPasswordPg(
+  tenantSlug: string,
+  email: string,
+  hashedPassword: string,
+  upgradeToUser = false
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) return { success: false as const, error: "Account not found." };
+
+  const db = getDb();
+  const [person] = await db
+    .select()
+    .from(schema.people)
+    .where(
+      and(
+        eq(schema.people.organizationId, org.id),
+        or(eq(schema.people.email, cleanEmail), eq(schema.people.secondaryEmail, cleanEmail))
+      )
+    )
+    .limit(1);
+
+  if (!person) return { success: false as const, error: "Account not found." };
+
+  const currentRoles = Array.isArray(person.roles) ? person.roles : [];
+  const nextRoles = upgradeToUser
+    ? Array.from(new Set([...currentRoles.filter((r) => r !== "Guest"), "User"]))
+    : currentRoles;
+
+  await db
+    .update(schema.people)
+    .set({
+      passwordHash: hashedPassword,
+      ...(upgradeToUser ? { roles: nextRoles } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.people.id, person.id));
+
+  return { success: true as const };
+}
+
+export async function registerUserPg(
+  tenantSlug: string,
+  data: { firstName: string; lastName: string; email: string; hashedPassword: string }
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const cleanEmail = (data.email || "").trim().toLowerCase();
+  if (!cleanEmail) return { success: false as const, error: "Email is required." };
+
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: schema.people.id })
+    .from(schema.people)
+    .where(
+      and(
+        eq(schema.people.organizationId, org.id),
+        or(eq(schema.people.email, cleanEmail), eq(schema.people.secondaryEmail, cleanEmail))
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    return { success: false as const, error: "An account with this email already exists." };
+  }
+
+  await db.insert(schema.people).values({
+    organizationId: org.id,
+    firstName: (data.firstName || "").trim() || "Member",
+    lastName: (data.lastName || "").trim(),
+    fullName: `${data.firstName || ""} ${data.lastName || ""}`.trim() || cleanEmail,
+    email: cleanEmail,
+    roles: ["User"],
+    passwordHash: data.hashedPassword,
+  });
+
+  return { success: true as const };
+}

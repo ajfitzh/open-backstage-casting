@@ -113,3 +113,86 @@ export function computeAgeFromDob(dob: string | null): number {
   const diffMs = Date.now() - parsed.getTime();
   return Math.max(0, Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000)));
 }
+
+export function formatAgeRangeHelper(
+  minAge: number | null | undefined,
+  maxAge: number | null | undefined
+): string {
+  const min = Number(minAge || 0);
+  const max = Number(maxAge || 0);
+  if (!min && (!max || max >= 99)) return "All Ages";
+  if (min && (!max || max >= 99)) return `${min}+`;
+  if (!min && max) return `Up to ${max}`;
+  return `${min} - ${max}`;
+}
+
+export function formatDecimalHoursToHHMM(decimal: number): string {
+  const h = Math.floor(decimal);
+  const m = Math.round((decimal % 1) * 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+export function generateGarmentSku(
+  category: string | null | undefined,
+  existingSkus: Iterable<string> = []
+): string {
+  const cleanCat = (category || "COS")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 4) || "COS";
+  const prefix = `OB-${cleanCat}-`;
+  const existing = new Set(Array.from(existingSkus, (s) => s.trim().toUpperCase()));
+  for (let i = 1; i <= 9999; i++) {
+    const candidate = `${prefix}${String(i).padStart(3, "0")}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${prefix}${Date.now().toString().slice(-4)}`;
+}
+
+export function buildGarmentQrPayload(tenantSlug: string, sku: string): string {
+  const cleanTenant = (tenantSlug || "org").trim().toLowerCase();
+  const cleanSku = (sku || "").trim().toUpperCase();
+  return `openbackstage://${cleanTenant}/garment/${encodeURIComponent(cleanSku)}`;
+}
+
+export interface GarmentFitMeasurements {
+  chest?: number | null;
+  waist?: number | null;
+  hips?: number | null;
+  inseam?: number | null;
+}
+
+export function evaluateGarmentFit(
+  garment: GarmentFitMeasurements,
+  actor: GarmentFitMeasurements
+): {
+  status: "Great Fit" | "Alterable" | "Too Small" | "Unmeasured";
+  deltaSummary: string;
+} {
+  const checks: { label: string; diff: number }[] = [];
+  if (garment.chest && actor.chest) checks.push({ label: "Chest", diff: garment.chest - actor.chest });
+  if (garment.waist && actor.waist) checks.push({ label: "Waist", diff: garment.waist - actor.waist });
+  if (garment.hips && actor.hips) checks.push({ label: "Hips", diff: garment.hips - actor.hips });
+  if (garment.inseam && actor.inseam) checks.push({ label: "Inseam", diff: garment.inseam - actor.inseam });
+
+  if (checks.length === 0) {
+    return { status: "Unmeasured", deltaSummary: "Add measurements to check fit" };
+  }
+
+  const tooSmall = checks.some((c) => c.diff < -1);
+  if (tooSmall) {
+    const tight = checks.filter((c) => c.diff < -1).map((c) => `${c.label} ${c.diff > 0 ? "+" : ""}${c.diff.toFixed(1)}"`);
+    return { status: "Too Small", deltaSummary: tight.join(", ") };
+  }
+
+  const needsAlteration = checks.some((c) => c.diff > 3 || c.diff < 0);
+  if (needsAlteration) {
+    const notes = checks.map((c) => `${c.label} ${c.diff >= 0 ? "+" : ""}${c.diff.toFixed(1)}"`);
+    return { status: "Alterable", deltaSummary: notes.join(", ") };
+  }
+
+  return {
+    status: "Great Fit",
+    deltaSummary: checks.map((c) => `${c.label} ${c.diff >= 0 ? "+" : ""}${c.diff.toFixed(1)}"`).join(", "),
+  };
+}
