@@ -4,10 +4,17 @@ import { notFound } from "next/navigation";
 import { DB as PROD_DB } from "@/app/lib/schema"; 
 import { E2E_DB } from "@/app/lib/schema-e2e"; 
 import { getTenantTableConfig } from "@/app/lib/tenant-config";
+import { isPostgresEnabled } from "@/db";
+import {
+  createGoogleUserPg,
+  findUserByEmailPg,
+  getPeoplePg,
+  getUserProfilePg,
+} from "@/app/lib/db/core-repo";
 
 // --- CONFIGURATION ---
 const BASE_URL = (process.env.NEXT_PUBLIC_BASEROW_URL || "https://api.baserow.io").replace(/\/$/, "");
-const API_TOKEN = process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_TOKEN || process.env.BASEROW_API_KEY;
+const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN || process.env.BASEROW_API_KEY;
 
 const HEADERS = {
   "Authorization": `Token ${API_TOKEN}`,
@@ -35,7 +42,7 @@ export async function fetchBaserow(
   try {
     const token = (tenant === "e2e" || tenant === "sandbox")
       ? process.env.SANDBOX_BASEROW_TOKEN
-      : process.env.NEXT_PUBLIC_BASEROW_TOKEN;
+      : (process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASEROW_TOKEN);
 
     const params = new URLSearchParams(queryParams);
     let path = endpoint;
@@ -441,6 +448,18 @@ export async function getPeople(tenant: string) {
   const cached = peopleCache.get(tenant);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
+  }
+
+  if (isPostgresEnabled()) {
+    try {
+      const pgPeople = await getPeoplePg(tenant);
+      if (pgPeople.length > 0) {
+        peopleCache.set(tenant, { expiresAt: Date.now() + PEOPLE_CACHE_TTL_MS, data: pgPeople });
+        return pgPeople;
+      }
+    } catch (error) {
+      console.error("[Postgres] getPeople failed, falling back to Baserow:", error);
+    }
   }
 
   const DB = getDB(tenant);
@@ -1099,6 +1118,15 @@ export async function updateAuditionSlot(tenant: string, rowId: number, data: an
 // ==============================================================================
 
 export async function findUserByEmail(tenant: string, email: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgUser = await findUserByEmailPg(tenant, email);
+      if (pgUser) return pgUser;
+    } catch (error) {
+      console.error("[Postgres] findUserByEmail failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const params = {
@@ -1145,6 +1173,15 @@ export async function verifyUserCredentials(tenant: string, email: string, passw
 }
 
 export async function getUserProfile(tenant: string, email: string) {
+  if (isPostgresEnabled()) {
+    try {
+      const pgProfile = await getUserProfilePg(tenant, email);
+      if (pgProfile) return pgProfile;
+    } catch (error) {
+      console.error("[Postgres] getUserProfile failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const userRows = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, {
@@ -1235,6 +1272,15 @@ return data.map((row: any) => {
 }
 
 export async function createGoogleUser(tenant: string, googleUser: any) {
+  if (isPostgresEnabled()) {
+    try {
+      const created = await createGoogleUserPg(tenant, googleUser);
+      if (created) return created;
+    } catch (error) {
+      console.error("[Postgres] createGoogleUser failed, falling back to Baserow:", error);
+    }
+  }
+
   const DB = getDB(tenant);
   const tables = await getTenantTableConfig(tenant);
   const F = DB.PEOPLE.FIELDS;

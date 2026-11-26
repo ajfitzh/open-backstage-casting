@@ -1,6 +1,8 @@
 "use server";
 
 import { Resend } from "resend";
+import { isPostgresEnabled } from "@/db";
+import { recordOnboardingRequestPg } from "@/app/lib/db/core-repo";
 
 export interface OrgRequestPayload {
   organizationName: string;
@@ -38,6 +40,21 @@ export async function submitOrganizationRequest(payload: OrgRequestPayload) {
     organizationType: payload.organizationType,
     notes: payload.notes || "",
   });
+
+  if (isPostgresEnabled()) {
+    try {
+      await recordOnboardingRequestPg({
+        organizationName,
+        requestedSlug: suggestedSlug,
+        organizationType: payload.organizationType || "Theater",
+        contactName,
+        contactEmail,
+        notes: payload.notes,
+      });
+    } catch (err) {
+      console.error("[Onboarding Request] Failed to save to Postgres:", err);
+    }
+  }
 
   if (process.env.RESEND_API_KEY) {
     try {

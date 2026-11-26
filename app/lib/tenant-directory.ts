@@ -1,6 +1,11 @@
 // app/lib/tenant-directory.ts
 import { getDB } from '@/app/lib/baserow';
 import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
+import { isPostgresEnabled } from '@/db';
+import {
+  findWorkspacesForEmailPg,
+  listOrganizationsPg,
+} from '@/app/lib/db/core-repo';
 
 export interface RegisteredTenant {
   slug: string;
@@ -22,6 +27,15 @@ const API_TOKEN = process.env.BASEROW_API_TOKEN || process.env.NEXT_PUBLIC_BASER
 const HIDDEN_SLUGS = new Set(['e2e', 'sandbox', 'test', 'marketing', 'home', 'www']);
 
 export async function listRegisteredTenants(): Promise<RegisteredTenant[]> {
+  if (isPostgresEnabled()) {
+    try {
+      const pgOrgs = await listOrganizationsPg();
+      if (pgOrgs.length > 0) return pgOrgs;
+    } catch (error) {
+      console.error('[tenant-directory] Postgres org listing failed, falling back to Baserow:', error);
+    }
+  }
+
   if (!MASTER_REGISTRY_TABLE_ID || !API_TOKEN) return [];
 
   try {
@@ -57,6 +71,17 @@ export async function findWorkspacesForEmail(email: string): Promise<{
   matched: WorkspaceMatch[];
   otherTenants: RegisteredTenant[];
 }> {
+  if (isPostgresEnabled()) {
+    try {
+      const pgResult = await findWorkspacesForEmailPg(email);
+      if (pgResult.matched.length > 0 || pgResult.otherTenants.length > 0) {
+        return pgResult;
+      }
+    } catch (error) {
+      console.error('[tenant-directory] Postgres workspace lookup failed, falling back to Baserow:', error);
+    }
+  }
+
   const tenants = await listRegisteredTenants();
   const cleanEmail = (email || '').trim().toLowerCase();
 
