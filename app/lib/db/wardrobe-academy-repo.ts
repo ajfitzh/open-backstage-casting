@@ -899,3 +899,219 @@ export async function deleteGarmentPg(tenantSlug: string, externalId: number) {
   await db.delete(schema.garmentInventory).where(eq(schema.garmentInventory.id, existing.id));
   return { success: true as const };
 }
+
+// ==============================================================================
+// 🎛️ TECH EQUIPMENT INVENTORY (SOUND, LIGHTING, STAGE, VIDEO + QR TAGS)
+// ==============================================================================
+
+export interface TechEquipmentRecord {
+  id: number;
+  department: string;
+  sku: string;
+  qrCodeValue: string;
+  name: string;
+  modelName: string;
+  manufacturer: string;
+  category: string;
+  serialNumber: string;
+  status: string;
+  location: string;
+  photoUrl: string | null;
+  manualUrl: string | null;
+  specs: Record<string, unknown>;
+  notes: string;
+  lastStatusUpdate: string | null;
+}
+
+function mapEquipmentRow(
+  tenantSlug: string,
+  row: typeof schema.techEquipment.$inferSelect
+): TechEquipmentRecord {
+  return {
+    id: row.id,
+    department: row.department || "Sound",
+    sku: row.sku,
+    qrCodeValue:
+      row.qrCodeValue || `openbackstage://${tenantSlug}/equipment/${encodeURIComponent(row.sku)}`,
+    name: row.name,
+    modelName: row.modelName || "",
+    manufacturer: row.manufacturer || "",
+    category: row.category || "",
+    serialNumber: row.serialNumber || "",
+    status: row.status || "Available",
+    location: row.location || "",
+    photoUrl: row.photoUrl || null,
+    manualUrl: row.manualUrl || null,
+    specs: (row.specs || {}) as Record<string, unknown>,
+    notes: row.notes || "",
+    lastStatusUpdate: row.lastStatusUpdate || null,
+  };
+}
+
+export async function listEquipmentPg(tenantSlug: string): Promise<TechEquipmentRecord[]> {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(schema.techEquipment)
+    .where(eq(schema.techEquipment.organizationId, org.id))
+    .orderBy(asc(schema.techEquipment.department), asc(schema.techEquipment.sku));
+
+  return rows.map((r) => mapEquipmentRow(org.slug, r));
+}
+
+export async function getEquipmentBySkuPg(
+  tenantSlug: string,
+  skuOrQr: string
+): Promise<TechEquipmentRecord | null> {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return null;
+
+  const raw = (skuOrQr || "").trim();
+  if (!raw) return null;
+
+  const extractedSku = raw.includes("/equipment/")
+    ? decodeURIComponent(raw.split("/equipment/").pop() || "").trim()
+    : raw;
+
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(schema.techEquipment)
+    .where(
+      and(
+        eq(schema.techEquipment.organizationId, org.id),
+        or(
+          ilike(schema.techEquipment.sku, extractedSku),
+          ilike(schema.techEquipment.qrCodeValue, raw)
+        )
+      )
+    )
+    .limit(1);
+
+  return row ? mapEquipmentRow(org.slug, row) : null;
+}
+
+export interface CreateEquipmentInput {
+  department: string;
+  sku?: string;
+  name: string;
+  modelName?: string;
+  manufacturer?: string;
+  category?: string;
+  serialNumber?: string;
+  status?: string;
+  location?: string;
+  photoUrl?: string | null;
+  notes?: string;
+}
+
+export async function createEquipmentPg(tenantSlug: string, input: CreateEquipmentInput) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const db = getDb();
+  const existingRows = await db
+    .select({ sku: schema.techEquipment.sku })
+    .from(schema.techEquipment)
+    .where(eq(schema.techEquipment.organizationId, org.id));
+
+  const dept = (input.department || "Sound").trim();
+  const prefix =
+    dept.toLowerCase().startsWith("light")
+      ? "LGT"
+      : dept.toLowerCase().startsWith("sound")
+        ? "SND"
+        : dept.toLowerCase().startsWith("vid")
+          ? "VID"
+          : "STG";
+
+  const existingSet = new Set(existingRows.map((r) => r.sku.toUpperCase()));
+  let sku = (input.sku || "").trim().toUpperCase();
+  if (!sku) {
+    for (let i = 1; i <= 9999; i++) {
+      const candidate = `${prefix}-${String(i).padStart(3, "0")}`;
+      if (!existingSet.has(candidate)) {
+        sku = candidate;
+        break;
+      }
+    }
+  }
+  if (existingSet.has(sku)) {
+    return { success: false as const, error: `SKU "${sku}" already exists.` };
+  }
+
+  const qrCodeValue = `openbackstage://${org.slug}/equipment/${encodeURIComponent(sku)}`;
+  const today = new Date().toISOString().split("T")[0];
+
+  const [inserted] = await db
+    .insert(schema.techEquipment)
+    .values({
+      organizationId: org.id,
+      department: dept,
+      sku,
+      qrCodeValue,
+      name: input.name.trim(),
+      modelName: input.modelName?.trim() || null,
+      manufacturer: input.manufacturer?.trim() || null,
+      category: input.category?.trim() || dept,
+      serialNumber: input.serialNumber?.trim() || null,
+      status: input.status?.trim() || "Available",
+      location: input.location?.trim() || "Storage Closet",
+      photoUrl: input.photoUrl || null,
+      notes: input.notes?.trim() || null,
+      lastStatusUpdate: today,
+    })
+    .returning();
+
+  return { success: true as const, item: mapEquipmentRow(org.slug, inserted) };
+}
+
+export async function updateEquipmentStatusPg(
+  tenantSlug: string,
+  equipmentId: number,
+  status: string,
+  location?: string
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const db = getDb();
+  const today = new Date().toISOString().split("T")[0];
+  const [updated] = await db
+    .update(schema.techEquipment)
+    .set({
+      status,
+      ...(location !== undefined ? { location: location.trim() } : {}),
+      lastStatusUpdate: today,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.techEquipment.organizationId, org.id),
+        eq(schema.techEquipment.id, equipmentId)
+      )
+    )
+    .returning();
+
+  if (!updated) return { success: false as const, error: "Equipment item not found." };
+  return { success: true as const, item: mapEquipmentRow(org.slug, updated) };
+}
+
+export async function deleteEquipmentPg(tenantSlug: string, equipmentId: number) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const db = getDb();
+  await db
+    .delete(schema.techEquipment)
+    .where(
+      and(
+        eq(schema.techEquipment.organizationId, org.id),
+        eq(schema.techEquipment.id, equipmentId)
+      )
+    );
+  return { success: true as const };
+}

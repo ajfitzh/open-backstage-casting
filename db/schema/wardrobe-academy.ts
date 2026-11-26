@@ -6,6 +6,7 @@ import {
   boolean,
   real,
   timestamp,
+  jsonb,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -126,5 +127,41 @@ export const classEnrollments = pgTable(
       table.studentId
     ),
     index("class_enrollments_org_student_idx").on(table.organizationId, table.studentId),
+  ]
+);
+
+export const techEquipment = pgTable(
+  "tech_equipment",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    baserowKey: text("baserow_key"),
+    department: text("department").notNull().default("Sound"),
+    sku: text("sku").notNull(),
+    qrCodeValue: text("qr_code_value"),
+    name: text("name").notNull(),
+    modelName: text("model_name"),
+    manufacturer: text("manufacturer"),
+    category: text("category"),
+    serialNumber: text("serial_number"),
+    status: text("status").notNull().default("Available"),
+    location: text("location"),
+    photoUrl: text("photo_url"),
+    manualUrl: text("manual_url"),
+    specs: jsonb("specs").$type<Record<string, unknown>>().default({}),
+    notes: text("notes"),
+    lastStatusUpdate: text("last_status_update"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tech_equipment_org_baserow_key_uidx").on(
+      table.organizationId,
+      table.baserowKey
+    ),
+    uniqueIndex("tech_equipment_org_sku_uidx").on(table.organizationId, table.sku),
+    index("tech_equipment_org_dept_idx").on(table.organizationId, table.department),
   ]
 );
