@@ -640,3 +640,100 @@ export async function removeShowTeamMemberPg(tenantSlug: string, assignmentId: n
 
   return { success: true as const };
 }
+
+export async function updateProductionImagePg(
+  tenantSlug: string,
+  productionId: number,
+  imageUrl: string | null
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const prod = await resolveProductionRow(org.id, productionId);
+  if (!prod) return { success: false as const, error: "Production not found." };
+
+  const db = getDb();
+  await db
+    .update(schema.productions)
+    .set({
+      showImageUrl: imageUrl?.trim() || null,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.productions.id, prod.id));
+
+  return { success: true as const, imageUrl: imageUrl?.trim() || null };
+}
+
+const LEADERSHIP_PRIORITY = [
+  "Executive Director",
+  "Business Manager",
+  "Production Coordinator",
+  "Education Coordinator",
+  "Admin",
+];
+
+export interface OrgLeaderSummary {
+  id: number;
+  name: string;
+  role: string;
+  initials: string;
+  image: string | null;
+}
+
+export async function getOrgLeadershipPg(
+  tenantSlug: string,
+  limit = 4
+): Promise<OrgLeaderSummary[]> {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: schema.people.id,
+      baserowId: schema.people.baserowId,
+      firstName: schema.people.firstName,
+      lastName: schema.people.lastName,
+      fullName: schema.people.fullName,
+      roles: schema.people.roles,
+      headshotUrl: schema.people.headshotUrl,
+    })
+    .from(schema.people)
+    .where(eq(schema.people.organizationId, org.id));
+
+  const ranked: { rank: number; leader: OrgLeaderSummary }[] = [];
+
+  for (const person of rows) {
+    const roles = Array.isArray(person.roles) ? person.roles : [];
+    const matchIndex = LEADERSHIP_PRIORITY.findIndex((r) => roles.includes(r));
+    if (matchIndex === -1) continue;
+
+    const name =
+      person.fullName?.trim() ||
+      `${person.firstName || ""} ${person.lastName || ""}`.trim();
+    if (!name) continue;
+
+    const initials = name
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+    ranked.push({
+      rank: matchIndex,
+      leader: {
+        id: extId(person),
+        name,
+        role: LEADERSHIP_PRIORITY[matchIndex],
+        initials,
+        image: person.headshotUrl || null,
+      },
+    });
+  }
+
+  return ranked
+    .sort((a, b) => a.rank - b.rank || a.leader.name.localeCompare(b.leader.name))
+    .slice(0, limit)
+    .map((entry) => entry.leader);
+}

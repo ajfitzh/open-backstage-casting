@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { auth } from "@/auth";
 import { 
-  Users, Calendar, BarChart3, Ticket, 
-  ChevronRight, Sparkles, Cat, 
+  Users, Calendar, BarChart3, 
+  ChevronRight, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog, Mic, AlertCircle, CheckCircle2, Clock
+  UserCog, Mic, Scissors, LayoutGrid
 } from 'lucide-react';
 import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard';
 import ChairLogbook from '@/app/components/committees/ChairLogbook';
@@ -23,6 +23,8 @@ import {
   getUserProfile,
   getUserProductionRole
 } from '@/app/lib/baserow';
+import { isPostgresEnabled } from '@/db';
+import { getOrgLeadershipPg } from '@/app/lib/db/productions-repo';
 import { getTenantTableConfig } from '@/app/lib/tenant-config';
 import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
 import { isStaffRole } from '@/app/lib/permissions';
@@ -137,11 +139,30 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
               {/* UPCOMING SHOW BANNER FOR PARENTS */}
               {upcomingShow && (
                  <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl">
-                    <div className="relative z-10">
-                       <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Upcoming Auditions
-                       </h3>
-                       <h2 className="text-2xl md:text-3xl font-black text-white italic tracking-tighter">{upcomingShow.title}</h2>
+                    {upcomingShow.image && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={upcomingShow.image}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 w-full h-full object-cover opacity-15 pointer-events-none"
+                      />
+                    )}
+                    <div className="relative z-10 flex items-center gap-4">
+                       {upcomingShow.image && (
+                         /* eslint-disable-next-line @next/next/no-img-element */
+                         <img
+                           src={upcomingShow.image}
+                           alt={upcomingShow.title}
+                           className="w-16 h-16 rounded-2xl object-cover border border-white/15 shadow-lg shrink-0"
+                         />
+                       )}
+                       <div>
+                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Upcoming Auditions
+                         </h3>
+                         <h2 className="text-2xl md:text-3xl font-black text-white italic tracking-tighter">{upcomingShow.title}</h2>
+                       </div>
                     </div>
                     <Link 
                         href="/audition-form"
@@ -169,7 +190,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
     events,
     allSeasons,
     allShows,
-    committeeData 
+    committeeData,
+    orgLeaders
   ] = await Promise.all([
       getAssignments(tenant, show.id),
       getCreativeTeam(tenant, show.id),
@@ -179,7 +201,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       getProductionEvents(tenant, show.id).catch(()=>[]),
       getSeasons(tenant),
       getAllShows(tenant),
-      getCommitteeData(tenant, show.id).catch(()=>[])
+      getCommitteeData(tenant, show.id).catch(()=>[]),
+      isPostgresEnabled() ? getOrgLeadershipPg(tenant, 4).catch(() => []) : Promise.resolve([])
   ]);
   
   const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
@@ -220,10 +243,24 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       
       {/* 1. HERO */}
       <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
-         <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
-            {theme.icon}
-        </div>
-        <div className="relative z-10 max-w-5xl">
+         {show?.image ? (
+           <>
+             {/* eslint-disable-next-line @next/next/no-img-element */}
+             <img
+               src={show.image}
+               alt=""
+               aria-hidden="true"
+               className="absolute inset-0 w-full h-full object-cover opacity-20 scale-105 blur-[2px] pointer-events-none"
+             />
+             <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/90 via-zinc-950/75 to-zinc-950/40 pointer-events-none" />
+           </>
+         ) : (
+           <div className={`absolute -top-12 -right-12 p-8 opacity-10 rotate-12 transition-all duration-1000 ${theme.color}`}>
+              {theme.icon}
+           </div>
+         )}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8 max-w-6xl">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 mb-4">
                 <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors duration-1000 ${theme.accent}`}>Active Production</span>
                 <span className="w-1 h-1 rounded-full bg-white/20"></span>
@@ -232,7 +269,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
             <h1 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter text-white mb-8 drop-shadow-2xl max-w-3xl leading-[0.9]">{show?.title}</h1>
             <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8">
                 
-                <div className="flex gap-2 shrink-0">
+                <div className="flex flex-wrap gap-2 shrink-0">
                     <Link 
                         href={`/production/${show.id}/cast`}
                         className="group flex items-center gap-2.5 px-4 py-2 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
@@ -257,18 +294,48 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
                 <div className="hidden xl:block w-px h-8 bg-white/10"></div>
                 {creativeTeam && <CreativeTeam team={creativeTeam as any} />}
             </div>
+          </div>
+          {show?.image && (
+            <div className="hidden sm:block shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={show.image}
+                alt={show.title}
+                className="w-36 h-48 md:w-44 md:h-56 rounded-2xl object-cover border border-white/15 shadow-2xl"
+              />
+            </div>
+          )}
         </div>
       </div>
       
       {upcomingShow && (
         <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 rounded-[2rem] p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl animate-in slide-in-from-bottom-4">
-           <div className="absolute -right-10 -top-10 opacity-10 text-blue-400 rotate-12 transition-transform group-hover:rotate-45 duration-700 pointer-events-none">
-              <Mic size={180} />
-           </div>
+           {upcomingShow.image ? (
+             /* eslint-disable-next-line @next/next/no-img-element */
+             <img
+               src={upcomingShow.image}
+               alt=""
+               aria-hidden="true"
+               className="absolute inset-0 w-full h-full object-cover opacity-15 pointer-events-none"
+             />
+           ) : (
+             <div className="absolute -right-10 -top-10 opacity-10 text-blue-400 rotate-12 transition-transform group-hover:rotate-45 duration-700 pointer-events-none">
+                <Mic size={180} />
+             </div>
+           )}
            <div className="relative z-10 flex items-center gap-5">
-              <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)] shrink-0">
-                 <Mic size={28} className="text-white animate-pulse" />
-              </div>
+              {upcomingShow.image ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={upcomingShow.image}
+                  alt={upcomingShow.title}
+                  className="w-16 h-16 rounded-2xl object-cover border border-white/15 shadow-xl shrink-0"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)] shrink-0">
+                   <Mic size={28} className="text-white animate-pulse" />
+                </div>
+              )}
               <div>
                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span> Upcoming Auditions
@@ -294,22 +361,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Daily Workspace</h3>
-             {/* 🟢 ActionCards are now routing securely using the URL schema */}
              <ActionCard href={`/production/${show.id}/schedule`} title="Rehearsal Schedule" desc="View and create calls, times, and conflicts" icon={<Calendar className="text-blue-400"/>} color="bg-blue-400"/>
              <ActionCard href={`/production/${show.id}/casting`} title="Casting & Auditions" desc="Manage auditions, callbacks and cast grid" icon={<Users className="text-indigo-400"/>} color="bg-indigo-400"/>
         </div>
         <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500" /> Logistics &amp; Wardrobe</h3>
             <ActionCard href={`/production/${show.id}/roster`} title="Master Roster" desc="Contact info, compliance and status tracker" icon={<Users className="text-emerald-400"/>} color="bg-emerald-400"/>
-            <ActionCard href={`/reports`} title="Director Reports" desc="Revenue, Cast breakdown, show health metrics" icon={<BarChart3 className="text-amber-400"/>} color="bg-amber-400"/>
+            <ActionCard href={`/production/${show.id}/costumes`} title="Wardrobe & QR Inventory" desc="Measurements, garment stock, QR labels & scanner" icon={<Scissors className="text-pink-400"/>} color="bg-pink-400"/>
         </div>
         <div className="space-y-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> Academy & Season</h3>
+             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-4 flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-amber-500" /> Academy &amp; Season</h3>
              <ActionCard href="/education" title="Class Manager" desc="Weekly attendance status and enrollment" icon={<GraduationCap className="text-pink-400"/>} color="bg-pink-400"/>
-             <div className="p-6 rounded-3xl border border-dashed border-zinc-800/50 flex flex-col items-center justify-center text-center group transition-all hover:bg-zinc-900/30">
-                <Sparkles size={24} className="text-zinc-800 group-hover:text-purple-500/50 transition-all duration-500 mb-2"/>
-                <span className="text-[10px] font-black uppercase text-zinc-700 tracking-tighter">Season Planning</span>
-            </div>
+             <ActionCard href="/season" title="Season Planner" desc="Plan multi-show seasons, staffing & reports" icon={<LayoutGrid className="text-purple-400"/>} color="bg-purple-400"/>
         </div>
       </div>
 
@@ -319,12 +382,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
           allClasses={allClasses} 
           allShows={allShows} 
           activeShowStats={{ castCount: displayCount }}
+          orgLeaders={orgLeaders}
       />
 
       <div className="pt-6 border-t border-white/5 flex flex-col items-center gap-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-800">Open Backstage Casting</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-700">Open Backstage</div>
           <div className="flex gap-2">
-            <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">Build 1.5.0</div>
+            <div className="px-3 py-1 bg-zinc-900 border border-white/5 rounded-full text-[9px] text-zinc-500 font-black uppercase tracking-widest">{tenantDisplayName}</div>
             <div className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] text-blue-500 font-black uppercase tracking-widest">{userRole}</div>
           </div>
       </div>

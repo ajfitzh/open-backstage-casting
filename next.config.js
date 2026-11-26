@@ -20,13 +20,12 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
-      // 🟢 ADDED DIGITALOCEAN SPACES
       {
         protocol: 'https',
-        hostname: 'cyt-fredericksburg.nyc3.digitaloceanspaces.com',
+        hostname: '**.digitaloceanspaces.com',
         port: '',
         pathname: '/**',
-      }
+      },
     ],
   },
 };

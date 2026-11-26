@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  Plus, Trash2, CalendarClock, Theater, Users, Loader2, CheckCircle2
+  Plus, Trash2, CalendarClock, Theater, Users, Loader2, CheckCircle2, ImagePlus, X
 } from 'lucide-react';
 import {
   createProduction,
@@ -10,6 +10,7 @@ import {
   deleteAuditionSlot,
   assignShowTeamMember,
   removeShowTeamMember,
+  updateProductionImage,
 } from '@/app/actions/admin';
 import type { DirectoryPerson } from './SettingsClient';
 
@@ -38,19 +39,22 @@ interface ShowLaunchPanelProps {
   tenant: string;
   activeShowId: number;
   activeShowTitle: string;
+  activeShowImage?: string | null;
   seasons: SimpleOption[];
   masterShows: { id: number; title: string }[];
   staffPositions: SimpleOption[];
   people: DirectoryPerson[];
   initialSlots: AuditionSlotSummary[];
   initialTeam: ShowTeamMemberSummary[];
-  onProductionCreated: (show: { id: number; title: string; status: string; location: string; productionFee: number }) => void;
+  onProductionCreated: (show: { id: number; title: string; status: string; location: string; productionFee: number; image?: string | null }) => void;
+  onShowImageUpdated?: (productionId: number, imageUrl: string | null) => void;
 }
 
 export default function ShowLaunchPanel({
   tenant,
   activeShowId,
   activeShowTitle,
+  activeShowImage = null,
   seasons,
   masterShows,
   staffPositions,
@@ -58,8 +62,62 @@ export default function ShowLaunchPanel({
   initialSlots,
   initialTeam,
   onProductionCreated,
+  onShowImageUpdated,
 }: ShowLaunchPanelProps) {
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [posterUrl, setPosterUrl] = useState<string | null>(activeShowImage);
+  const [uploadingPoster, setUploadingPoster] = useState(false);
+
+  const handlePosterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeShowId) return;
+    setUploadingPoster(true);
+    setNotice(null);
+    try {
+      const signRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, fileType: file.type }),
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok || !signData.uploadUrl) {
+        throw new Error(signData.error || 'Could not sign upload URL.');
+      }
+
+      const putRes = await fetch(signData.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type, 'x-amz-acl': 'public-read' },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error('Failed to upload show poster to DigitalOcean Spaces.');
+
+      const saveRes = await updateProductionImage(tenant, activeShowId, signData.publicUrl);
+      if (!saveRes.success) throw new Error(saveRes.error || 'Failed to save show poster.');
+
+      setPosterUrl(signData.publicUrl);
+      onShowImageUpdated?.(activeShowId, signData.publicUrl);
+      setNotice({ type: 'success', text: `Updated show artwork for "${activeShowTitle}".` });
+    } catch (err: any) {
+      setNotice({ type: 'error', text: err?.message || 'Poster upload failed.' });
+    } finally {
+      setUploadingPoster(false);
+    }
+  };
+
+  const handleRemovePoster = async () => {
+    if (!activeShowId) return;
+    setUploadingPoster(true);
+    setNotice(null);
+    const saveRes = await updateProductionImage(tenant, activeShowId, null);
+    setUploadingPoster(false);
+    if (saveRes.success) {
+      setPosterUrl(null);
+      onShowImageUpdated?.(activeShowId, null);
+      setNotice({ type: 'success', text: `Removed show artwork for "${activeShowTitle}".` });
+    } else {
+      setNotice({ type: 'error', text: saveRes.error || 'Could not remove show artwork.' });
+    }
+  };
 
   // 1. Create Production state
   const [prodTitle, setProdTitle] = useState('');
@@ -213,6 +271,52 @@ export default function ShowLaunchPanel({
           {notice.text}
         </div>
       )}
+
+      {/* 0. SHOW POSTER / ARTWORK */}
+      <div className="p-6 rounded-2xl bg-black/25 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-2xl bg-zinc-950 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
+            {posterUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={posterUrl} alt={activeShowTitle} className="w-full h-full object-cover" />
+            ) : (
+              <Theater size={26} className="text-zinc-700" />
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+              Show Artwork — {activeShowTitle}
+            </p>
+            <p className="text-xs text-zinc-400 mt-1 max-w-md">
+              Displayed across the Staff Dashboard hero, Season Lineup, Family Hub, and public Audition Form.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-black uppercase tracking-wider transition-colors">
+            {uploadingPoster ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+            {posterUrl ? 'Replace Poster' : 'Upload Poster'}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePosterUpload}
+              disabled={uploadingPoster || !activeShowId}
+              className="hidden"
+            />
+          </label>
+          {posterUrl && (
+            <button
+              type="button"
+              disabled={uploadingPoster}
+              onClick={handleRemovePoster}
+              className="p-2.5 rounded-xl bg-zinc-900 hover:bg-red-500/20 text-zinc-400 hover:text-red-300 border border-white/10 transition-colors"
+              title="Remove poster"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 1. CREATE NEW PRODUCTION */}
       <form onSubmit={handleCreateProduction} className="p-6 rounded-2xl bg-black/25 border border-white/10 space-y-4">

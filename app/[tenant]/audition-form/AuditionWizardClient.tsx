@@ -22,13 +22,14 @@ interface Props {
   tenant: string;
   productionId: number;
   productionTitle: string;
+  productionImage?: string | null;
   slots: AuditionSlot[];
   initialEmail?: string; 
   isGuest?: boolean;
   initialExistingAuditions?: ExistingAudition[];
 }
 
-export default function AuditionWizardClient({ tenant, productionId, productionTitle, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
+export default function AuditionWizardClient({ tenant, productionId, productionTitle, productionImage = null, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
 
   const [view, setView] = useState<"login" | "hub" | "wizard">(initialEmail ? "hub" : "login");
@@ -344,8 +345,30 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
           <button onClick={() => setView(initialEmail ? "hub" : "login")} className="text-[10px] sm:text-sm font-bold text-zinc-500 hover:text-blue-600 flex items-center gap-1">
             <ChevronLeft size={16} /> Exit
           </button>
-          <span className="inline-block bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">CYT+ {productionTitle}</span>
+          <span className="inline-flex items-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-3 py-1 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-tighter italic">
+            {productionImage && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={productionImage} alt="" className="w-4 h-4 rounded-full object-cover" />
+            )}
+            {productionTitle}
+          </span>
         </div>
+
+        {productionImage && (view === "login" || view === "hub") && (
+          <div className="max-w-xl mx-auto overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-lg max-h-48 relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={productionImage}
+              alt={productionTitle}
+              className="w-full h-48 object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent flex items-end p-5">
+              <p className="text-white font-black uppercase italic tracking-tight text-xl drop-shadow">
+                {productionTitle} Auditions
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* --- LOGIN VIEW --- */}
         {view === "login" && (

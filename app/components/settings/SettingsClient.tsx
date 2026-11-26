@@ -575,6 +575,7 @@ export default function SettingsClient({
             tenant={tenant}
             activeShowId={activeShow?.id || activeId}
             activeShowTitle={activeShow?.title || 'Active Show'}
+            activeShowImage={activeShow?.image || null}
             seasons={seasons}
             masterShows={masterShows}
             staffPositions={staffPositions}
@@ -582,6 +583,11 @@ export default function SettingsClient({
             initialSlots={initialSlots}
             initialTeam={initialTeam}
             onProductionCreated={(created) => setShowList((prev) => [created, ...prev])}
+            onShowImageUpdated={(prodId, imageUrl) =>
+              setShowList((prev) =>
+                prev.map((s) => (s.id === prodId ? { ...s, image: imageUrl } : s))
+              )
+            }
           />
         )}
 

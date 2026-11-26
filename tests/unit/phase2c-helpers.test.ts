@@ -6,6 +6,7 @@ import {
   formatAgeRangeHelper,
   formatDecimalHoursToHHMM,
   generateGarmentSku,
+  matchShowImageKeyToProduction,
 } from "../../app/lib/db/role-helpers.ts";
 
 test("generateGarmentSku creates sequential clean SKUs by category", () => {
@@ -60,4 +61,31 @@ test("formatDecimalHoursToHHMM formats schedule start times cleanly", () => {
   assert.equal(formatDecimalHoursToHHMM(17.5), "17:30");
   assert.equal(formatDecimalHoursToHHMM(9), "09:00");
   assert.equal(formatDecimalHoursToHHMM(18.25), "18:15");
+});
+
+test("matchShowImageKeyToProduction matches show poster filenames accurately", () => {
+  const prods = [
+    { id: 1, title: "Into The Woods" },
+    { id: 2, title: "Beauty and Beast (2012)" },
+    { id: 3, title: "Wizard of Oz (2013)" },
+    { id: 4, title: "Annie (2007)" },
+  ];
+
+  assert.equal(
+    matchShowImageKeyToProduction("shows/into-the-woods-poster.jpg", prods)?.id,
+    1
+  );
+  assert.equal(
+    matchShowImageKeyToProduction("Beauty_and_the_Beast_2012.png", prods)?.id,
+    2
+  );
+  assert.equal(
+    matchShowImageKeyToProduction("Wizard-of-Oz-2013.webp", prods)?.id,
+    3
+  );
+  // Reject mismatched year
+  assert.equal(
+    matchShowImageKeyToProduction("Annie-2025.jpg", prods),
+    null
+  );
 });

@@ -565,6 +565,7 @@ export async function getAllShows(tenant: string) {
       type: typeValue,
       status: rawStatus,
       isActive: safeGet(row[DB.PRODUCTIONS.FIELDS.IS_ACTIVE]) === true || rawStatus === 'Active',
+      image: row[DB.PRODUCTIONS.FIELDS.SHOW_IMAGE]?.[0]?.url || null,
       location: safeGet(row[DB.PRODUCTIONS.FIELDS.LOCATION], "General"),
       venue: safeGet(row[DB.PRODUCTIONS.FIELDS.VENUE], "TBD"),
       productionFee: Number(row[DB.PRODUCTIONS.FIELDS.PRODUCTION_FEE] ?? 0) || 0,

@@ -84,11 +84,21 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
   };
 
   return (
-    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl relative">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className="text-2xl font-black text-white tracking-tighter">{student.name}</h3>
-          <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{show.title}</p>
+    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+      <div className="flex justify-between items-start gap-4 mb-4">
+        <div className="flex items-center gap-4 min-w-0">
+          {show?.image && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={show.image}
+              alt={show.title || "Show poster"}
+              className="w-14 h-14 rounded-2xl object-cover border border-white/10 shadow-lg shrink-0"
+            />
+          )}
+          <div className="min-w-0">
+            <h3 className="text-2xl font-black text-white tracking-tighter truncate">{student.name}</h3>
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest truncate">{show.title}</p>
+          </div>
         </div>
       </div>
 

@@ -196,3 +196,53 @@ export function evaluateGarmentFit(
     deltaSummary: checks.map((c) => `${c.label} ${c.diff >= 0 ? "+" : ""}${c.diff.toFixed(1)}"`).join(", "),
   };
 }
+
+function normalizeTitleTokens(raw: string): string[] {
+  const stopWords = new Set(["the", "a", "an", "and", "of", "in", "on", "to", "jr", "kids", "cyt", "show", "poster", "logo", "art"]);
+  return raw
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((tok) => tok.length > 0 && !stopWords.has(tok));
+}
+
+export function matchShowImageKeyToProduction<T extends { id: number; title: string }>(
+  objectKey: string,
+  productions: T[]
+): T | null {
+  const filename = (objectKey.split("/").pop() || objectKey).trim();
+  const fileTokens = normalizeTitleTokens(filename);
+  if (fileTokens.length === 0) return null;
+
+  const fileYear = filename.match(/\b(19|20)\d{2}\b/)?.[0] || null;
+  const fileTokenSet = new Set(fileTokens);
+
+  let best: { prod: T; score: number } | null = null;
+
+  for (const prod of productions) {
+    const titleTokens = normalizeTitleTokens(prod.title);
+    if (titleTokens.length === 0) continue;
+
+    const prodYear = prod.title.match(/\b(19|20)\d{2}\b/)?.[0] || null;
+    if (fileYear && prodYear && fileYear !== prodYear) continue;
+
+    const nonYearTitleTokens = titleTokens.filter((t) => !/^(19|20)\d{2}$/.test(t));
+    if (nonYearTitleTokens.length === 0) continue;
+
+    const matchedCount = nonYearTitleTokens.filter((t) => fileTokenSet.has(t)).length;
+    const coverage = matchedCount / nonYearTitleTokens.length;
+    if (coverage < 0.75) continue;
+
+    let score = coverage * 100 + matchedCount * 10;
+    if (fileYear && prodYear && fileYear === prodYear) score += 40;
+    if (matchedCount === nonYearTitleTokens.length) score += 20;
+
+    if (!best || score > best.score) {
+      best = { prod, score };
+    }
+  }
+
+  return best?.prod ?? null;
+}

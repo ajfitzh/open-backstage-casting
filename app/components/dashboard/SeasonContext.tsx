@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { 
-  Crown, Users, Megaphone, GraduationCap, 
+  GraduationCap, 
   LayoutGrid, ChevronDown, Heart, TrendingUp, 
   Home, Sparkles, Calendar, Theater, Music, ArrowRight
 } from 'lucide-react';
+import type { OrgLeaderSummary } from '@/app/lib/db/productions-repo';
 
-const SEASON_STAFF = [
-  { name: "Aimee Mestler", role: "Executive Director", initials: "AM", color: "bg-indigo-600", icon: <Crown size={12}/> },
-  { name: "Krista McKinley", role: "Business Manager", initials: "KM", color: "bg-emerald-600", icon: <Users size={12}/> },
-  { name: "Jenny Adler", role: "Production Coord", initials: "JA", color: "bg-pink-600", icon: <Megaphone size={12}/> },
-  { name: "Elizabeth Davis", role: "Education Coord", initials: "ED", color: "bg-blue-600", icon: <GraduationCap size={12}/> },
+const LEADER_BADGE_COLORS = [
+  "bg-indigo-600",
+  "bg-emerald-600",
+  "bg-pink-600",
+  "bg-blue-600",
 ];
 
 const LINEUP_FILTERS = ["All", "Fall", "Winter", "Spring", "Summer"];
@@ -43,8 +45,16 @@ export default function SeasonContext({
   seasons = [],     
   allClasses = [], 
   allShows = [], 
-  activeShowStats 
-}: any) {
+  activeShowStats,
+  orgLeaders = []
+}: {
+  activeSeasonName?: string;
+  seasons?: any[];
+  allClasses?: any[];
+  allShows?: any[];
+  activeShowStats?: { castCount?: number };
+  orgLeaders?: OrgLeaderSummary[];
+}) {
   
   // 1. SORT SEASONS
   const sortedSeasons = useMemo(() => {
@@ -191,20 +201,31 @@ export default function SeasonContext({
                 </h3>
             </div>
             
-            {/* RIGHT SIDE: Staff Strip */}
-            <div className="flex flex-wrap gap-3">
-                {SEASON_STAFF.map((staff, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/10 transition-colors cursor-default">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md ${staff.color}`}>
-                            {staff.initials}
-                        </div>
-                        <div className="flex flex-col leading-none">
-                            <span className="text-[10px] font-bold text-zinc-300">{staff.name.split(' ')[0]}</span>
-                            <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-wider">{staff.role.split(' ')[0]}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            {/* RIGHT SIDE: Dynamic Organization Leadership Strip */}
+            {orgLeaders.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                  {orgLeaders.map((staff, i) => (
+                      <div key={staff.id} className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/10 transition-colors cursor-default">
+                          {staff.image ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={staff.image}
+                              alt={staff.name}
+                              className="w-8 h-8 rounded-full object-cover shadow-md"
+                            />
+                          ) : (
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md ${LEADER_BADGE_COLORS[i % LEADER_BADGE_COLORS.length]}`}>
+                                {staff.initials}
+                            </div>
+                          )}
+                          <div className="flex flex-col leading-none">
+                              <span className="text-[10px] font-bold text-zinc-300">{staff.name.split(' ')[0]}</span>
+                              <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-wider">{staff.role.split(' ')[0]}</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+            )}
         </div>
 
         {/* METRICS GRID */}
@@ -251,19 +272,32 @@ export default function SeasonContext({
                 
                 {/* 1. PRODUCTIONS */}
                 {visibleLineup.shows.map((show: any) => (
-                    <div key={show.id} className="flex items-center gap-4 bg-zinc-950/50 border border-white/5 p-4 rounded-2xl hover:bg-zinc-950 hover:border-white/10 transition-all group/card">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${show.type?.includes('Lite') ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                            {show.type?.includes('Lite') ? <Music size={20}/> : <Theater size={20}/>}
-                        </div>
+                    <Link
+                        key={show.id}
+                        href={`/production/${show.id}/cast`}
+                        className="flex items-center gap-4 bg-zinc-950/50 border border-white/5 p-4 rounded-2xl hover:bg-zinc-950 hover:border-white/15 transition-all group/card"
+                    >
+                        {show.image ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                                src={show.image}
+                                alt={show.title}
+                                className="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0 shadow"
+                            />
+                        ) : (
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${show.type?.includes('Lite') ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                {show.type?.includes('Lite') ? <Music size={20}/> : <Theater size={20}/>}
+                            </div>
+                        )}
                         <div className="flex-1 min-w-0">
-                            <h5 className="text-sm font-bold text-white truncate">{show.title}</h5>
+                            <h5 className="text-sm font-bold text-white truncate group-hover/card:text-blue-300 transition-colors">{show.title}</h5>
                             <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-wider font-medium">
                                 <span>{show.productionSession || "Production"}</span>
                                 {show.isActive && <span className="text-emerald-500">• Active</span>}
                             </div>
                         </div>
-                        {show.isActive && <ArrowRight size={14} className="text-zinc-700 group-hover/card:text-white transition-colors"/>}
-                    </div>
+                        <ArrowRight size={14} className="text-zinc-700 group-hover/card:text-white group-hover/card:translate-x-0.5 transition-all shrink-0"/>
+                    </Link>
                 ))}
 
                 {/* 2. CLASS SESSIONS */}

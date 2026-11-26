@@ -15,6 +15,7 @@ import {
   setProductionStatusPg,
   updatePersonProfilePg,
   updatePersonRolesPg,
+  updateProductionImagePg,
 } from "@/app/lib/db/productions-repo";
 
 const ALLOWED_ROLE_SET = new Set([
@@ -517,5 +518,42 @@ export async function removeShowTeamMember(tenant: string, assignmentId: number)
   } catch (error) {
     console.error("removeShowTeamMember error:", error);
     return { success: false, error: "Unexpected error removing team member." };
+  }
+}
+
+export async function updateProductionImage(
+  tenant: string,
+  productionId: number,
+  imageUrl: string | null
+) {
+  const authResult = await requireAdminAccess();
+  if (!authResult.ok) return { success: false as const, error: authResult.error };
+
+  if (!Number.isInteger(productionId) || productionId <= 0) {
+    return { success: false as const, error: "Invalid production ID." };
+  }
+
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl.trim())) {
+    return { success: false as const, error: "Image URL must start with http:// or https://." };
+  }
+
+  try {
+    if (isPostgresEnabled()) {
+      const pgRes = await updateProductionImagePg(tenant, productionId, imageUrl);
+      if (!pgRes.success) return pgRes;
+      revalidatePath(`/${tenant}`);
+      revalidatePath(`/${tenant}/settings`);
+      revalidatePath(`/${tenant}/production`);
+      revalidatePath(`/${tenant}/audition-form`);
+      return { success: true as const, imageUrl: pgRes.imageUrl };
+    }
+
+    return {
+      success: false as const,
+      error: "Show artwork updates require PostgreSQL to be enabled.",
+    };
+  } catch (error) {
+    console.error("updateProductionImage error:", error);
+    return { success: false as const, error: "Unexpected error updating show artwork." };
   }
 }
