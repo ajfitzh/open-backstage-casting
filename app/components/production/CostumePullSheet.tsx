@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Camera,
   Check,
+  ClipboardCheck,
   Download,
   ImagePlus,
   Loader2,
@@ -13,19 +14,23 @@ import {
   Plus,
   Printer,
   QrCode,
+  RotateCcw,
   ScanLine,
   Scissors,
   Search,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 import {
+  checkoutGarmentItem,
   createGarmentItem,
   deleteGarmentItem,
   lookupGarmentBySku,
   saveActorMeasurements,
 } from "@/app/actions/wardrobe";
 import { evaluateGarmentFit } from "@/app/lib/db/role-helpers";
+import { computeCheckoutProgress } from "@/app/lib/features-helpers";
 import CameraQrScanner from "./CameraQrScanner";
 
 export interface CastMeasurementItem {
@@ -49,6 +54,12 @@ export interface GarmentWithQr {
   photoUrl: string | null;
   category: string;
   binLocation: string;
+  status?: string;
+  assignedProductionId?: number | null;
+  assignedProductionTitle?: string | null;
+  assignedPersonId?: number | null;
+  assignedPersonName?: string | null;
+  checkedOutAt?: string | null;
   chest: number | null;
   waist: number | null;
   hips: number | null;
@@ -130,8 +141,42 @@ export default function CostumePullSheet({
   const [savingGarment, setSavingGarment] = useState(false);
   const [garmentError, setGarmentError] = useState<string | null>(null);
 
-  // Label print selection
+  // Label print selection & checkout state
   const [selectedForPrint, setSelectedForPrint] = useState<Set<number>>(new Set());
+  const [checkingOutId, setCheckingOutId] = useState<number | null>(null);
+
+  const costumeLoadOutProgress = useMemo(
+    () =>
+      computeCheckoutProgress(
+        garments.map((g) => ({
+          status: g.status || "Available",
+          assignedProductionId: g.assignedProductionId,
+        })),
+        productionId > 0 ? productionId : null
+      ),
+    [garments, productionId]
+  );
+
+  const handleGarmentCheckout = async (
+    garmentId: number,
+    nextStatus: "Checked Out" | "Available",
+    assignedPersonId?: number | null
+  ) => {
+    if (!tenant || !productionId) return;
+    setCheckingOutId(garmentId);
+    const res = await checkoutGarmentItem(tenant, productionId, garmentId, {
+      status: nextStatus,
+      assignedProductionId: productionId,
+      assignedPersonId: nextStatus === "Checked Out" ? (assignedPersonId ?? null) : null,
+    });
+    setCheckingOutId(null);
+    if (res.success) {
+      setGarments((prev) => prev.map((g) => (g.id === garmentId ? res.item : g)));
+      if (scanResult?.id === garmentId) {
+        setScanResult(res.item);
+      }
+    }
+  };
 
   const missingCount = useMemo(
     () => castList.filter((c) => !c.height).length,
@@ -603,10 +648,44 @@ export default function CostumePullSheet({
 
             {cameraScannerOpen && (
               <CameraQrScanner
+                title="Wardrobe QR Scanner"
+                subtitle="Scan any garment QR tag to view measurements, check it out to a cast member, or check it back in."
                 onScan={handleCameraDecoded}
                 onClose={() => setCameraScannerOpen(false)}
               />
             )}
+
+            {/* Show Costume Load-Out & Strike Return Bar */}
+            <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center shrink-0">
+                  <ClipboardCheck size={16} className="text-pink-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-white">
+                    {showTitle} Costume Return Checklist
+                  </p>
+                  <p className="text-[11px] text-zinc-400">
+                    {costumeLoadOutProgress.totalTracked === 0
+                      ? "Assign garments below to a cast member to track show load-out & strike returns."
+                      : `${costumeLoadOutProgress.returned} of ${costumeLoadOutProgress.totalTracked} pulled pieces returned (${costumeLoadOutProgress.checkedOut} out with cast)`}
+                  </p>
+                </div>
+              </div>
+              {costumeLoadOutProgress.totalTracked > 0 && (
+                <div className="flex items-center gap-2.5 min-w-[160px]">
+                  <div className="flex-1 h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/10">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${costumeLoadOutProgress.percentReturned}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono font-black text-emerald-400">
+                    {costumeLoadOutProgress.percentReturned}%
+                  </span>
+                </div>
+              )}
+            </div>
 
             {scanError && (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs font-bold text-amber-300">
@@ -640,6 +719,36 @@ export default function CostumePullSheet({
                   {scanResult.notes && (
                     <p className="text-xs text-zinc-400">{scanResult.notes}</p>
                   )}
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <select
+                      disabled={checkingOutId === scanResult.id}
+                      value={scanResult.assignedPersonId ? String(scanResult.assignedPersonId) : ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          void handleGarmentCheckout(scanResult.id, "Checked Out", Number(val));
+                        }
+                      }}
+                      className="bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                    >
+                      <option value="">Assign to Cast Member...</option>
+                      {castList.map((actor) => (
+                        <option key={actor.personId} value={String(actor.personId)}>
+                          {actor.name} ({actor.role})
+                        </option>
+                      ))}
+                    </select>
+                    {scanResult.status === "Checked Out" && (
+                      <button
+                        type="button"
+                        disabled={checkingOutId === scanResult.id}
+                        onClick={() => handleGarmentCheckout(scanResult.id, "Available")}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase flex items-center gap-1"
+                      >
+                        <RotateCcw size={12} /> Return to Bin
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -956,6 +1065,48 @@ export default function CostumePullSheet({
                           {item.notes}
                         </p>
                       )}
+
+                      {/* Show Check-Out / Cast Assignment Strip */}
+                      <div className="border-t border-white/5 pt-2.5 flex flex-wrap items-center justify-between gap-2">
+                        {item.status === "Checked Out" ? (
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[10px] font-black truncate">
+                              <User size={11} />
+                              {item.assignedPersonName || item.assignedProductionTitle || "Checked Out"}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={checkingOutId === item.id}
+                              onClick={() => handleGarmentCheckout(item.id, "Available")}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase flex items-center gap-1 shrink-0"
+                            >
+                              <RotateCcw size={10} /> Return
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            disabled={checkingOutId === item.id}
+                            value=""
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "show-only") {
+                                void handleGarmentCheckout(item.id, "Checked Out", null);
+                              } else if (val) {
+                                void handleGarmentCheckout(item.id, "Checked Out", Number(val));
+                              }
+                            }}
+                            className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-zinc-300"
+                          >
+                            <option value="">Pull / Assign to Cast for {showTitle}...</option>
+                            <option value="show-only">Check Out to Show Rack (Unassigned)</option>
+                            {castList.map((actor) => (
+                              <option key={actor.personId} value={String(actor.personId)}>
+                                {actor.name} — {actor.role}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
 
                       <div className="flex items-center justify-between pt-1 mt-auto">
                         <label className="inline-flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">

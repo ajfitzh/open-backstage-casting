@@ -11,7 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { organizations, people } from "./core.ts";
-import { sessions, spaces } from "./productions.ts";
+import { productions, sessions, spaces } from "./productions.ts";
 
 export const measurements = pgTable(
   "measurements",
@@ -63,6 +63,14 @@ export const garmentInventory = pgTable(
     hatHead: real("hat_head"),
     shoeSize: real("shoe_size"),
     gloveSize: text("glove_size"),
+    status: text("status").notNull().default("Available"),
+    assignedProductionId: integer("assigned_production_id").references(() => productions.id, {
+      onDelete: "set null",
+    }),
+    assignedPersonId: integer("assigned_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -71,6 +79,7 @@ export const garmentInventory = pgTable(
     uniqueIndex("garment_inventory_org_baserow_uidx").on(table.organizationId, table.baserowId),
     uniqueIndex("garment_inventory_org_sku_uidx").on(table.organizationId, table.sku),
     index("garment_inventory_org_cat_idx").on(table.organizationId, table.category),
+    index("garment_inventory_org_prod_idx").on(table.organizationId, table.assignedProductionId),
   ]
 );
 
@@ -148,6 +157,13 @@ export const techEquipment = pgTable(
     serialNumber: text("serial_number"),
     status: text("status").notNull().default("Available"),
     location: text("location"),
+    assignedProductionId: integer("assigned_production_id").references(() => productions.id, {
+      onDelete: "set null",
+    }),
+    assignedPersonId: integer("assigned_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
     photoUrl: text("photo_url"),
     manualUrl: text("manual_url"),
     specs: jsonb("specs").$type<Record<string, unknown>>().default({}),
@@ -163,5 +179,6 @@ export const techEquipment = pgTable(
     ),
     uniqueIndex("tech_equipment_org_sku_uidx").on(table.organizationId, table.sku),
     index("tech_equipment_org_dept_idx").on(table.organizationId, table.department),
+    index("tech_equipment_org_prod_idx").on(table.organizationId, table.assignedProductionId),
   ]
 );

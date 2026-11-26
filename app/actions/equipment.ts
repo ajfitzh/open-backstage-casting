@@ -8,6 +8,7 @@ import { isPostgresEnabled } from "@/db";
 import {
   createEquipmentPg,
   deleteEquipmentPg,
+  getCheckoutPickerOptionsPg,
   getEquipmentBySkuPg,
   listEquipmentPg,
   updateEquipmentStatusPg,
@@ -51,17 +52,27 @@ export async function updateEquipmentStatus(
   tenant: string,
   equipmentId: number,
   status: string,
-  location?: string
+  location?: string,
+  assignment?: {
+    productionId?: number | null;
+    personId?: number | null;
+    clearAssignment?: boolean;
+  }
 ) {
   const guard = await requirePermission(tenant, "view_cast_list");
   if (!guard.ok) return { success: false as const, error: guard.error };
   if (!isPostgresEnabled()) return { success: false as const, error: "PostgreSQL is required." };
 
-  const res = await updateEquipmentStatusPg(tenant, equipmentId, status, location);
+  const res = await updateEquipmentStatusPg(tenant, equipmentId, status, location, assignment);
   if (!res.success) return res;
 
   revalidatePath(`/${tenant}/inventory`);
   return { success: true as const, item: res.item };
+}
+
+export async function getEquipmentCheckoutOptions(tenant: string) {
+  if (!isPostgresEnabled()) return { productions: [], people: [] };
+  return getCheckoutPickerOptionsPg(tenant);
 }
 
 export async function deleteEquipmentItem(tenant: string, equipmentId: number) {

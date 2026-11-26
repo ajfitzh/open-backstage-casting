@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import {
   Camera,
   CheckCircle2,
+  ClipboardCheck,
   ImagePlus,
   Lightbulb,
   Loader2,
@@ -11,10 +12,12 @@ import {
   Plus,
   Printer,
   QrCode,
+  RotateCcw,
   ScanLine,
   Search,
   Speaker,
   Trash2,
+  User,
   Wrench,
   X,
 } from "lucide-react";
@@ -25,6 +28,7 @@ import {
   updateEquipmentStatus,
 } from "@/app/actions/equipment";
 import CameraQrScanner from "@/app/components/production/CameraQrScanner";
+import { computeCheckoutProgress } from "@/app/lib/features-helpers";
 
 export interface EquipmentWithQr {
   id: number;
@@ -39,9 +43,21 @@ export interface EquipmentWithQr {
   serialNumber: string;
   status: string;
   location: string;
+  assignedProductionId?: number | null;
+  assignedProductionTitle?: string | null;
+  assignedPersonId?: number | null;
+  assignedPersonName?: string | null;
+  checkedOutAt?: string | null;
   photoUrl: string | null;
   notes: string;
   lastStatusUpdate: string | null;
+}
+
+interface PickerOption {
+  id: number;
+  title?: string;
+  name?: string;
+  status?: string;
 }
 
 const DEPARTMENTS = ["All", "Sound", "Lighting", "Stage", "Video"];
@@ -57,19 +73,32 @@ function statusBadgeClasses(status: string) {
 export default function EquipmentInventoryClient({
   tenant,
   initialItems,
+  productions = [],
+  people = [],
 }: {
   tenant: string;
   initialItems: EquipmentWithQr[];
+  productions?: PickerOption[];
+  people?: PickerOption[];
 }) {
   const [items, setItems] = useState<EquipmentWithQr[]>(initialItems);
   const [deptFilter, setDeptFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [showFilterId, setShowFilterId] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedMatch, setScannedMatch] = useState<EquipmentWithQr | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [selectedForPrint, setSelectedForPrint] = useState<Set<number>>(new Set());
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  // Show Load-Out / Checkout modal state
+  const [checkoutTarget, setCheckoutTarget] = useState<EquipmentWithQr | null>(null);
+  const [checkoutProdId, setCheckoutProdId] = useState<string>(() =>
+    productions[0]?.id ? String(productions[0].id) : ""
+  );
+  const [checkoutPersonId, setCheckoutPersonId] = useState<string>("");
+  const [checkoutLocation, setCheckoutLocation] = useState<string>("");
 
   // Add item form
   const [showAdd, setShowAdd] = useState(false);
@@ -90,6 +119,7 @@ export default function EquipmentInventoryClient({
     return items.filter((item) => {
       if (deptFilter !== "All" && item.department !== deptFilter) return false;
       if (statusFilter !== "All" && item.status !== statusFilter) return false;
+      if (showFilterId > 0 && item.assignedProductionId !== showFilterId) return false;
       if (!q) return true;
       return (
         item.sku.toLowerCase().includes(q) ||
@@ -97,10 +127,17 @@ export default function EquipmentInventoryClient({
         item.modelName.toLowerCase().includes(q) ||
         item.manufacturer.toLowerCase().includes(q) ||
         item.location.toLowerCase().includes(q) ||
-        item.serialNumber.toLowerCase().includes(q)
+        item.serialNumber.toLowerCase().includes(q) ||
+        (item.assignedProductionTitle || "").toLowerCase().includes(q) ||
+        (item.assignedPersonName || "").toLowerCase().includes(q)
       );
     });
-  }, [items, deptFilter, statusFilter, searchQuery]);
+  }, [items, deptFilter, statusFilter, showFilterId, searchQuery]);
+
+  const loadOutProgress = useMemo(
+    () => computeCheckoutProgress(items, showFilterId > 0 ? showFilterId : null),
+    [items, showFilterId]
+  );
 
   const printableItems = useMemo(() => {
     if (selectedForPrint.size === 0) return filtered;
@@ -132,18 +169,57 @@ export default function EquipmentInventoryClient({
     }
   };
 
-  const handleStatusChange = async (id: number, nextStatus: string) => {
+  const applyUpdatedEquipment = (updated: Omit<EquipmentWithQr, "qrDataUrl">) => {
+    setItems((prev) =>
+      prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+    );
+    if (scannedMatch?.id === updated.id) {
+      setScannedMatch((prev) => (prev ? { ...prev, ...updated } : null));
+    }
+  };
+
+  const handleStatusChange = async (
+    id: number,
+    nextStatus: string,
+    assignment?: { productionId?: number | null; personId?: number | null; clearAssignment?: boolean },
+    nextLocation?: string
+  ) => {
     setUpdatingId(id);
-    const res = await updateEquipmentStatus(tenant, id, nextStatus);
+    const res = await updateEquipmentStatus(tenant, id, nextStatus, nextLocation, assignment);
     setUpdatingId(null);
     if (res.success) {
-      setItems((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, status: nextStatus, lastStatusUpdate: res.item.lastStatusUpdate } : i))
-      );
-      if (scannedMatch?.id === id) {
-        setScannedMatch((prev) => (prev ? { ...prev, status: nextStatus } : null));
-      }
+      applyUpdatedEquipment(res.item);
     }
+  };
+
+  const openCheckoutModal = (item: EquipmentWithQr) => {
+    setCheckoutTarget(item);
+    setCheckoutProdId(
+      item.assignedProductionId
+        ? String(item.assignedProductionId)
+        : showFilterId > 0
+          ? String(showFilterId)
+          : productions[0]?.id
+            ? String(productions[0].id)
+            : ""
+    );
+    setCheckoutPersonId(item.assignedPersonId ? String(item.assignedPersonId) : "");
+    setCheckoutLocation(item.location || "");
+  };
+
+  const handleConfirmCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkoutTarget) return;
+    await handleStatusChange(
+      checkoutTarget.id,
+      "Checked Out",
+      {
+        productionId: checkoutProdId ? Number(checkoutProdId) : null,
+        personId: checkoutPersonId ? Number(checkoutPersonId) : null,
+      },
+      checkoutLocation || undefined
+    );
+    setCheckoutTarget(null);
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -271,6 +347,56 @@ export default function EquipmentInventoryClient({
           <StatPill label="In Repair" value={stats.repair} accent="text-amber-400" />
         </div>
 
+        {/* Show Load-Out & Strike Return Tracker */}
+        <div className="bg-zinc-900 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0">
+              <ClipboardCheck size={18} className="text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-widest text-white">
+                Show Load-Out &amp; Strike Return Checklist
+              </p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {loadOutProgress.totalTracked === 0
+                  ? "No gear currently assigned to a show. Scan a QR tag or click Check Out on any unit."
+                  : `${loadOutProgress.returned} of ${loadOutProgress.totalTracked} assigned units returned (${loadOutProgress.checkedOut} still checked out)`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+            {loadOutProgress.totalTracked > 0 && (
+              <div className="flex items-center gap-2.5 min-w-[160px]">
+                <div className="flex-1 h-2 bg-zinc-950 rounded-full overflow-hidden border border-white/10">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-300"
+                    style={{ width: `${loadOutProgress.percentReturned}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono font-black text-emerald-400">
+                  {loadOutProgress.percentReturned}%
+                </span>
+              </div>
+            )}
+
+            {productions.length > 0 && (
+              <select
+                value={showFilterId}
+                onChange={(e) => setShowFilterId(Number(e.target.value))}
+                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-zinc-200"
+              >
+                <option value={0}>All Productions</option>
+                {productions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    🎭 {p.title}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
         {/* Filter + Search Bar */}
         <div className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
           <div className="flex flex-wrap gap-1.5">
@@ -357,21 +483,34 @@ export default function EquipmentInventoryClient({
                 {scannedMatch.department} • {scannedMatch.location || "Unassigned"}
                 {scannedMatch.manufacturer ? ` • ${scannedMatch.manufacturer}` : ""}
               </p>
+              {(scannedMatch.assignedProductionTitle || scannedMatch.assignedPersonName) && (
+                <p className="text-xs font-bold text-blue-300">
+                  Assigned: {scannedMatch.assignedProductionTitle || "Show"}
+                  {scannedMatch.assignedPersonName ? ` • ${scannedMatch.assignedPersonName}` : ""}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 pt-1">
-                {["Available", "Checked Out", "In Repair"].map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => handleStatusChange(scannedMatch.id, st)}
-                    className={`px-3 py-1 rounded-lg text-[11px] font-bold border ${
-                      scannedMatch.status === st
-                        ? "bg-white text-black border-white"
-                        : "bg-zinc-900 text-zinc-300 border-white/10 hover:bg-zinc-800"
-                    }`}
-                  >
-                    Mark {st}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => openCheckoutModal(scannedMatch)}
+                  className="px-3.5 py-1.5 rounded-lg text-[11px] font-black uppercase bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  Check Out to Show
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange(scannedMatch.id, "Available")}
+                  className="px-3.5 py-1.5 rounded-lg text-[11px] font-black uppercase bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 flex items-center gap-1"
+                >
+                  <RotateCcw size={12} /> Return to Storage
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange(scannedMatch.id, "In Repair")}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-zinc-900 text-amber-300 border border-amber-500/30 hover:bg-zinc-800"
+                >
+                  Flag Repair
+                </button>
               </div>
             </div>
             <button
@@ -530,10 +669,20 @@ export default function EquipmentInventoryClient({
                       {item.manufacturer ? `${item.manufacturer} • ` : ""}
                       {item.location || "Unassigned"}
                     </p>
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${statusBadgeClasses(item.status)}`}>
                         <CheckCircle2 size={10} /> {item.status}
                       </span>
+                      {item.assignedProductionTitle && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 max-w-[180px] truncate">
+                          🎭 {item.assignedProductionTitle}
+                        </span>
+                      )}
+                      {item.assignedPersonName && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-white/10">
+                          <User size={9} /> {item.assignedPersonName}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -554,18 +703,40 @@ export default function EquipmentInventoryClient({
                     Print tag
                   </label>
 
-                  <select
-                    disabled={updatingId === item.id}
-                    value={item.status}
-                    onChange={(e) => handleStatusChange(item.id, e.target.value)}
-                    className="bg-zinc-950 border border-white/10 rounded-lg px-2 py-1 text-[11px] font-bold text-zinc-200"
-                  >
-                    {STATUSES.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-1.5">
+                    {item.status === "Checked Out" ? (
+                      <button
+                        type="button"
+                        disabled={updatingId === item.id}
+                        onClick={() => handleStatusChange(item.id, "Available")}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase flex items-center gap-1"
+                      >
+                        <RotateCcw size={11} /> Return
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={updatingId === item.id}
+                        onClick={() => openCheckoutModal(item)}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[10px] font-black uppercase"
+                      >
+                        Check Out
+                      </button>
+                    )}
+
+                    <select
+                      disabled={updatingId === item.id}
+                      value={item.status}
+                      onChange={(e) => handleStatusChange(item.id, e.target.value)}
+                      className="bg-zinc-950 border border-white/10 rounded-lg px-2 py-1 text-[11px] font-bold text-zinc-200"
+                    >
+                      {STATUSES.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             );
@@ -574,12 +745,109 @@ export default function EquipmentInventoryClient({
 
         {scannerOpen && (
           <CameraQrScanner
+            title="Tech Gear QR Scanner"
+            subtitle="Scan any Sound or Lighting QR tag to check it out to a show or return it after strike."
             onScan={(decoded) => {
               setScannerOpen(false);
               void runLookup(decoded);
             }}
             onClose={() => setScannerOpen(false)}
           />
+        )}
+
+        {/* Show Load-Out / Check-Out Assignment Modal */}
+        {checkoutTarget && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setCheckoutTarget(null)}
+          >
+            <form
+              onSubmit={handleConfirmCheckout}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-zinc-950 border border-white/15 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="px-6 py-4 bg-zinc-900 border-b border-white/10 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-mono font-black text-blue-400">{checkoutTarget.sku}</p>
+                  <h3 className="text-sm font-black text-white">Check Out: {checkoutTarget.name}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutTarget(null)}
+                  className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">
+                    Assign to Production
+                  </label>
+                  <select
+                    value={checkoutProdId}
+                    onChange={(e) => setCheckoutProdId(e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                  >
+                    <option value="">No specific show</option>
+                    {productions.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">
+                    Assigned Cast / Crew Member
+                  </label>
+                  <select
+                    value={checkoutPersonId}
+                    onChange={(e) => setCheckoutPersonId(e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                  >
+                    <option value="">Unassigned / Booth Crew</option>
+                    {people.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">
+                    Venue / Placement Note
+                  </label>
+                  <input
+                    type="text"
+                    value={checkoutLocation}
+                    onChange={(e) => setCheckoutLocation(e.target.value)}
+                    placeholder="e.g. FOH Sound Booth, Stage Right Wing..."
+                    className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="px-6 py-4 bg-zinc-900/60 border-t border-white/10 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest"
+                >
+                  Confirm Check-Out
+                </button>
+              </div>
+            </form>
+          </div>
         )}
       </div>
 

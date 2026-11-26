@@ -10,7 +10,7 @@ import {
   TrendingUp, Calendar as CalendarIcon, 
   FileText, Wand2, AlertTriangle, 
   Target, X, Save, Loader2,
-  ArrowRight, Settings
+  ArrowRight, Settings, CalendarPlus, Copy, Check
 } from 'lucide-react';
 
 import AutoSchedulerModal from './AutoSchedulerModal'; 
@@ -39,6 +39,7 @@ const SAT_END = 17;
 const TOTAL_WEEKS = 10; 
 
 export default function SchedulerClient({ 
+    tenant = "",
     activeId,
     events = [], 
     slots = [], 
@@ -54,6 +55,20 @@ export default function SchedulerClient({
   const [schedule, setSchedule] = useState<ScheduledItem[]>([]); 
   const [isSaving, setIsSaving] = useState(false); 
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+  const [copiedIcs, setCopiedIcs] = useState(false);
+
+  const icsRelativeUrl = `/api/calendar?tenant=${encodeURIComponent(tenant)}&productionId=${activeId}`;
+
+  const handleCopyIcsLink = async () => {
+    try {
+      const fullUrl = `${window.location.origin}${icsRelativeUrl}`;
+      await navigator.clipboard.writeText(fullUrl);
+      setCopiedIcs(true);
+      setTimeout(() => setCopiedIcs(false), 2200);
+    } catch {
+      window.open(icsRelativeUrl, "_blank");
+    }
+  };
 
   const weekStats = useMemo(() => {
     if (!events || events.length === 0) {
@@ -163,21 +178,21 @@ export default function SchedulerClient({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-white overflow-hidden font-sans">
-        <header className="h-16 border-b border-white/10 bg-zinc-900 flex items-center justify-between px-6 shrink-0 z-30">
-            <div className="flex items-center gap-6">
-                <div>
+    <div className="flex flex-col h-full min-h-[calc(100dvh-4rem)] bg-zinc-950 text-white overflow-hidden font-sans">
+        <header className="min-h-16 py-2.5 border-b border-white/10 bg-zinc-900 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 shrink-0 z-30">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6 min-w-0">
+                <div className="min-w-0">
                     <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Production Schedule</div>
-                    <h1 className="text-lg font-bold text-white">{productionTitle}</h1>
+                    <h1 className="text-base sm:text-lg font-bold text-white truncate max-w-[200px] sm:max-w-xs">{productionTitle}</h1>
                 </div>
-                <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
-                    <button onClick={() => setActiveTab('calendar')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'calendar' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
+                <div className="flex bg-black/40 p-1 rounded-lg border border-white/5 overflow-x-auto max-w-full">
+                    <button onClick={() => setActiveTab('calendar')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-1.5 shrink-0 ${activeTab === 'calendar' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <CalendarIcon size={14}/> Calendar
                     </button>
-                    <button onClick={() => setActiveTab('progress')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
+                    <button onClick={() => setActiveTab('progress')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-1.5 shrink-0 ${activeTab === 'progress' ? 'bg-blue-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <TrendingUp size={14}/> Burn-Up
                     </button>
-                     <button onClick={() => setActiveTab('callboard')} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-2 ${activeTab === 'callboard' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
+                     <button onClick={() => setActiveTab('callboard')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all flex items-center gap-1.5 shrink-0 ${activeTab === 'callboard' ? 'bg-emerald-600 text-white shadow' : 'text-zinc-500 hover:text-white'}`}>
                         <FileText size={14}/> Callboard
                     </button>
                 </div>
@@ -198,9 +213,32 @@ export default function SchedulerClient({
                         {weekStats.label}
                     </div>
                 </div>
-                 <button onClick={() => setIsAutoSchedulerOpen(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all">
-                    <Wand2 size={14} /> Auto
-                 </button>
+                 <div className="flex items-center gap-1.5">
+                    {tenant && (
+                      <>
+                        <a
+                          href={icsRelativeUrl}
+                          download
+                          className="hidden sm:flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 px-3 py-2 rounded-lg text-xs font-bold transition-all"
+                          title="Download show schedule (.ics)"
+                        >
+                          <CalendarPlus size={14} className="text-blue-400" /> .ICS
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleCopyIcsLink}
+                          className="hidden lg:flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 px-3 py-2 rounded-lg text-xs font-bold transition-all"
+                          title="Copy subscribeable calendar URL for Apple/Google Calendar"
+                        >
+                          {copiedIcs ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-zinc-400" />}
+                          {copiedIcs ? "Copied" : "Feed URL"}
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => setIsAutoSchedulerOpen(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all">
+                       <Wand2 size={14} /> Auto
+                    </button>
+                 </div>
             </div>
         </header>
 
@@ -221,7 +259,16 @@ export default function SchedulerClient({
                 currentWeek={weekStats.current} 
                 totalWeeks={weekStats.total}   
             />}
-            {activeTab === 'callboard' && <CallboardView schedule={callboardSchedule} productionTitle={productionTitle} />}
+            {activeTab === 'callboard' && (
+                <CallboardView
+                    tenant={tenant}
+                    productionId={activeId}
+                    events={events}
+                    people={roster}
+                    schedule={callboardSchedule}
+                    productionTitle={productionTitle}
+                />
+            )}
         </div>
         <AutoSchedulerModal isOpen={isAutoSchedulerOpen} onClose={() => setIsAutoSchedulerOpen(false)} scenes={sceneData} people={roster} onCommit={(newItems: any[]) => { setSchedule(prev => [...prev, ...newItems]); }} />
     </div>

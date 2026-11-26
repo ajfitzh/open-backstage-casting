@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/app/lib/auth-guard";
 import { isPostgresEnabled } from "@/db";
 import {
+  checkoutGarmentPg,
   createGarmentPg,
   deleteGarmentPg,
   getGarmentBySkuPg,
@@ -105,6 +106,32 @@ export async function deleteGarmentItem(
 
   revalidatePath(`/${tenant}/production/${productionId}/costumes`);
   return { success: true as const };
+}
+
+export async function checkoutGarmentItem(
+  tenant: string,
+  productionId: number,
+  garmentId: number,
+  input: {
+    status: string;
+    assignedProductionId?: number | null;
+    assignedPersonId?: number | null;
+  }
+) {
+  const guard = await requirePermission(tenant, "view_checkin", productionId);
+  if (!guard.ok) return { success: false as const, error: guard.error };
+  if (!isPostgresEnabled()) return { success: false as const, error: "PostgreSQL is required." };
+
+  const res = await checkoutGarmentPg(tenant, garmentId, {
+    status: input.status,
+    productionId: input.assignedProductionId,
+    personId: input.assignedPersonId,
+  });
+  if (!res.success) return res;
+
+  const qrDataUrl = await generateQrDataUrl(res.item.qrCodeValue);
+  revalidatePath(`/${tenant}/production/${productionId}/costumes`);
+  return { success: true as const, item: { ...res.item, qrDataUrl } };
 }
 
 export async function lookupGarmentBySku(tenant: string, skuOrQr: string) {

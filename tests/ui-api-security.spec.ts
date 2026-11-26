@@ -74,4 +74,18 @@ test.describe('API Security & Validation E2E', () => {
     });
     expect(portalRes.status()).toBe(401);
   });
+
+  test('GET /api/calendar validates params and returns RFC 5545 .ics calendar feed', async ({ request }) => {
+    const missingRes = await request.get('/api/calendar');
+    expect(missingRes.status()).toBe(400);
+
+    const validRes = await request.get('/api/calendar?tenant=cytfred&productionId=115');
+    expect([200, 404]).toContain(validRes.status());
+    if (validRes.status() === 200) {
+      expect(validRes.headers()['content-type']).toContain('text/calendar');
+      const ics = await validRes.text();
+      expect(ics).toContain('BEGIN:VCALENDAR');
+      expect(ics).toContain('END:VCALENDAR');
+    }
+  });
 });

@@ -49,7 +49,7 @@ export default async function MainLayout({
   
   return (
     <TenantProvider tenant={currentTenant}>
-      <div className="flex h-screen bg-zinc-950 text-white overflow-hidden font-sans">
+      <div className="flex h-[100dvh] bg-zinc-950 text-white overflow-hidden font-sans">
         <SimulationProvider realGlobalRole={globalRole} realProductionRole={productionRole}>
             <SidebarShell>
               <StaffSidebar 

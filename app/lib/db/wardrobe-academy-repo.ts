@@ -680,6 +680,12 @@ export interface GarmentItemRecord {
   photoUrl: string | null;
   category: string;
   binLocation: string;
+  status: string;
+  assignedProductionId: number | null;
+  assignedProductionTitle: string | null;
+  assignedPersonId: number | null;
+  assignedPersonName: string | null;
+  checkedOutAt: string | null;
   chest: number | null;
   waist: number | null;
   hips: number | null;
@@ -692,7 +698,16 @@ export interface GarmentItemRecord {
   notes: string;
 }
 
-function mapGarmentRow(tenantSlug: string, row: typeof schema.garmentInventory.$inferSelect): GarmentItemRecord {
+function mapGarmentRow(
+  tenantSlug: string,
+  row: typeof schema.garmentInventory.$inferSelect,
+  lookups?: {
+    prodMap?: Map<number, { extId: number; title: string }>;
+    personMap?: Map<number, { extId: number; name: string }>;
+  }
+): GarmentItemRecord {
+  const prod = row.assignedProductionId ? lookups?.prodMap?.get(row.assignedProductionId) : null;
+  const person = row.assignedPersonId ? lookups?.personMap?.get(row.assignedPersonId) : null;
   return {
     id: extId(row),
     sku: row.sku,
@@ -700,6 +715,12 @@ function mapGarmentRow(tenantSlug: string, row: typeof schema.garmentInventory.$
     photoUrl: row.photoUrl || null,
     category: row.category || "Costume",
     binLocation: row.binLocation || "",
+    status: row.status || "Available",
+    assignedProductionId: prod?.extId ?? row.assignedProductionId ?? null,
+    assignedProductionTitle: prod?.title ?? null,
+    assignedPersonId: person?.extId ?? row.assignedPersonId ?? null,
+    assignedPersonName: person?.name ?? null,
+    checkedOutAt: row.checkedOutAt ? row.checkedOutAt.toISOString() : null,
     chest: row.chest ?? null,
     waist: row.waist ?? null,
     hips: row.hips ?? null,
@@ -713,6 +734,63 @@ function mapGarmentRow(tenantSlug: string, row: typeof schema.garmentInventory.$
   };
 }
 
+async function buildAssignmentLookups(
+  orgId: number,
+  prodIds: number[],
+  personIds: number[]
+) {
+  const db = getDb();
+  const uniqueProds = Array.from(new Set(prodIds));
+  const uniquePeople = Array.from(new Set(personIds));
+
+  const [prodRows, personRows] = await Promise.all([
+    uniqueProds.length > 0
+      ? db
+          .select({
+            id: schema.productions.id,
+            baserowId: schema.productions.baserowId,
+            title: schema.productions.title,
+          })
+          .from(schema.productions)
+          .where(
+            and(
+              eq(schema.productions.organizationId, orgId),
+              inArray(schema.productions.id, uniqueProds)
+            )
+          )
+      : Promise.resolve([]),
+    uniquePeople.length > 0
+      ? db
+          .select({
+            id: schema.people.id,
+            baserowId: schema.people.baserowId,
+            fullName: schema.people.fullName,
+            firstName: schema.people.firstName,
+            lastName: schema.people.lastName,
+          })
+          .from(schema.people)
+          .where(
+            and(eq(schema.people.organizationId, orgId), inArray(schema.people.id, uniquePeople))
+          )
+      : Promise.resolve([]),
+  ]);
+
+  const prodMap = new Map(
+    prodRows.map((p) => [p.id, { extId: p.baserowId ?? p.id, title: p.title }])
+  );
+  const personMap = new Map(
+    personRows.map((p) => [
+      p.id,
+      {
+        extId: p.baserowId ?? p.id,
+        name:
+          p.fullName || `${p.firstName || ""} ${p.lastName || ""}`.trim() || `Person #${p.id}`,
+      },
+    ])
+  );
+  return { prodMap, personMap };
+}
+
 export async function listGarmentsPg(tenantSlug: string): Promise<GarmentItemRecord[]> {
   const org = await getOrganizationBySlugPg(tenantSlug);
   if (!org) return [];
@@ -724,7 +802,13 @@ export async function listGarmentsPg(tenantSlug: string): Promise<GarmentItemRec
     .where(eq(schema.garmentInventory.organizationId, org.id))
     .orderBy(desc(schema.garmentInventory.updatedAt), desc(schema.garmentInventory.id));
 
-  return rows.map((row) => mapGarmentRow(org.slug, row));
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    rows.map((r) => r.assignedProductionId).filter((id): id is number => id != null),
+    rows.map((r) => r.assignedPersonId).filter((id): id is number => id != null)
+  );
+
+  return rows.map((row) => mapGarmentRow(org.slug, row, lookups));
 }
 
 export async function getGarmentBySkuPg(
@@ -757,7 +841,71 @@ export async function getGarmentBySkuPg(
     )
     .limit(1);
 
-  return row ? mapGarmentRow(org.slug, row) : null;
+  if (!row) return null;
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    row.assignedProductionId ? [row.assignedProductionId] : [],
+    row.assignedPersonId ? [row.assignedPersonId] : []
+  );
+  return mapGarmentRow(org.slug, row, lookups);
+}
+
+export async function checkoutGarmentPg(
+  tenantSlug: string,
+  externalGarmentId: number,
+  input: {
+    status: string;
+    productionId?: number | null;
+    personId?: number | null;
+  }
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(schema.garmentInventory)
+    .where(
+      and(
+        eq(schema.garmentInventory.organizationId, org.id),
+        or(
+          eq(schema.garmentInventory.baserowId, externalGarmentId),
+          eq(schema.garmentInventory.id, externalGarmentId)
+        )
+      )
+    )
+    .limit(1);
+
+  if (!existing) return { success: false as const, error: "Garment not found." };
+
+  const prodRow = input.productionId ? await resolveProductionRow(org.id, input.productionId) : null;
+  const personRow = input.personId ? await resolvePersonRow(org.id, input.personId) : null;
+  const isReturning = input.status === "Available";
+
+  const [updated] = await db
+    .update(schema.garmentInventory)
+    .set({
+      status: input.status,
+      assignedProductionId:
+        input.productionId !== undefined ? (prodRow?.id ?? null) : existing.assignedProductionId,
+      assignedPersonId: isReturning
+        ? null
+        : input.personId !== undefined
+          ? (personRow?.id ?? null)
+          : existing.assignedPersonId,
+      checkedOutAt: input.status === "Checked Out" ? new Date() : isReturning ? null : existing.checkedOutAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.garmentInventory.id, existing.id))
+    .returning();
+
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    updated.assignedProductionId ? [updated.assignedProductionId] : [],
+    updated.assignedPersonId ? [updated.assignedPersonId] : []
+  );
+  return { success: true as const, item: mapGarmentRow(org.slug, updated, lookups) };
 }
 
 export interface UpsertGarmentInput {
@@ -916,6 +1064,11 @@ export interface TechEquipmentRecord {
   serialNumber: string;
   status: string;
   location: string;
+  assignedProductionId: number | null;
+  assignedProductionTitle: string | null;
+  assignedPersonId: number | null;
+  assignedPersonName: string | null;
+  checkedOutAt: string | null;
   photoUrl: string | null;
   manualUrl: string | null;
   specs: Record<string, unknown>;
@@ -925,8 +1078,14 @@ export interface TechEquipmentRecord {
 
 function mapEquipmentRow(
   tenantSlug: string,
-  row: typeof schema.techEquipment.$inferSelect
+  row: typeof schema.techEquipment.$inferSelect,
+  lookups?: {
+    prodMap?: Map<number, { extId: number; title: string }>;
+    personMap?: Map<number, { extId: number; name: string }>;
+  }
 ): TechEquipmentRecord {
+  const prod = row.assignedProductionId ? lookups?.prodMap?.get(row.assignedProductionId) : null;
+  const person = row.assignedPersonId ? lookups?.personMap?.get(row.assignedPersonId) : null;
   return {
     id: row.id,
     department: row.department || "Sound",
@@ -940,6 +1099,11 @@ function mapEquipmentRow(
     serialNumber: row.serialNumber || "",
     status: row.status || "Available",
     location: row.location || "",
+    assignedProductionId: prod?.extId ?? row.assignedProductionId ?? null,
+    assignedProductionTitle: prod?.title ?? null,
+    assignedPersonId: person?.extId ?? row.assignedPersonId ?? null,
+    assignedPersonName: person?.name ?? null,
+    checkedOutAt: row.checkedOutAt ? row.checkedOutAt.toISOString() : null,
     photoUrl: row.photoUrl || null,
     manualUrl: row.manualUrl || null,
     specs: (row.specs || {}) as Record<string, unknown>,
@@ -959,7 +1123,13 @@ export async function listEquipmentPg(tenantSlug: string): Promise<TechEquipment
     .where(eq(schema.techEquipment.organizationId, org.id))
     .orderBy(asc(schema.techEquipment.department), asc(schema.techEquipment.sku));
 
-  return rows.map((r) => mapEquipmentRow(org.slug, r));
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    rows.map((r) => r.assignedProductionId).filter((id): id is number => id != null),
+    rows.map((r) => r.assignedPersonId).filter((id): id is number => id != null)
+  );
+
+  return rows.map((r) => mapEquipmentRow(org.slug, r, lookups));
 }
 
 export async function getEquipmentBySkuPg(
@@ -991,7 +1161,57 @@ export async function getEquipmentBySkuPg(
     )
     .limit(1);
 
-  return row ? mapEquipmentRow(org.slug, row) : null;
+  if (!row) return null;
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    row.assignedProductionId ? [row.assignedProductionId] : [],
+    row.assignedPersonId ? [row.assignedPersonId] : []
+  );
+  return mapEquipmentRow(org.slug, row, lookups);
+}
+
+export async function getCheckoutPickerOptionsPg(tenantSlug: string) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { productions: [], people: [] };
+
+  const db = getDb();
+  const [prodRows, peopleRows] = await Promise.all([
+    db
+      .select({
+        id: schema.productions.id,
+        baserowId: schema.productions.baserowId,
+        title: schema.productions.title,
+        status: schema.productions.status,
+      })
+      .from(schema.productions)
+      .where(eq(schema.productions.organizationId, org.id))
+      .orderBy(desc(schema.productions.id))
+      .limit(50),
+    db
+      .select({
+        id: schema.people.id,
+        baserowId: schema.people.baserowId,
+        fullName: schema.people.fullName,
+        firstName: schema.people.firstName,
+        lastName: schema.people.lastName,
+      })
+      .from(schema.people)
+      .where(eq(schema.people.organizationId, org.id))
+      .orderBy(asc(schema.people.fullName))
+      .limit(400),
+  ]);
+
+  return {
+    productions: prodRows.map((p) => ({
+      id: p.baserowId ?? p.id,
+      title: p.title,
+      status: p.status || "",
+    })),
+    people: peopleRows.map((p) => ({
+      id: p.baserowId ?? p.id,
+      name: p.fullName || `${p.firstName || ""} ${p.lastName || ""}`.trim() || `Person #${p.id}`,
+    })),
+  };
 }
 
 export interface CreateEquipmentInput {
@@ -1073,21 +1293,57 @@ export async function updateEquipmentStatusPg(
   tenantSlug: string,
   equipmentId: number,
   status: string,
-  location?: string
+  location?: string,
+  assignment?: {
+    productionId?: number | null;
+    personId?: number | null;
+    clearAssignment?: boolean;
+  }
 ) {
   const org = await getOrganizationBySlugPg(tenantSlug);
   if (!org) return { success: false as const, error: "Organization not found." };
 
   const db = getDb();
   const today = new Date().toISOString().split("T")[0];
+
+  const prodRow =
+    assignment?.productionId && assignment.productionId > 0
+      ? await resolveProductionRow(org.id, assignment.productionId)
+      : null;
+  const personRow =
+    assignment?.personId && assignment.personId > 0
+      ? await resolvePersonRow(org.id, assignment.personId)
+      : null;
+
+  const setPatch: Record<string, unknown> = {
+    status,
+    ...(location !== undefined ? { location: location.trim() } : {}),
+    lastStatusUpdate: today,
+    updatedAt: new Date(),
+  };
+
+  if (assignment?.clearAssignment) {
+    setPatch.assignedProductionId = null;
+    setPatch.assignedPersonId = null;
+    setPatch.checkedOutAt = null;
+  } else {
+    if (assignment?.productionId !== undefined) {
+      setPatch.assignedProductionId = prodRow?.id ?? null;
+    }
+    if (assignment?.personId !== undefined) {
+      setPatch.assignedPersonId = personRow?.id ?? null;
+    }
+    if (status === "Checked Out") {
+      setPatch.checkedOutAt = new Date();
+    } else if (status === "Available") {
+      setPatch.assignedPersonId = null;
+      setPatch.checkedOutAt = null;
+    }
+  }
+
   const [updated] = await db
     .update(schema.techEquipment)
-    .set({
-      status,
-      ...(location !== undefined ? { location: location.trim() } : {}),
-      lastStatusUpdate: today,
-      updatedAt: new Date(),
-    })
+    .set(setPatch)
     .where(
       and(
         eq(schema.techEquipment.organizationId, org.id),
@@ -1097,7 +1353,13 @@ export async function updateEquipmentStatusPg(
     .returning();
 
   if (!updated) return { success: false as const, error: "Equipment item not found." };
-  return { success: true as const, item: mapEquipmentRow(org.slug, updated) };
+
+  const lookups = await buildAssignmentLookups(
+    org.id,
+    updated.assignedProductionId ? [updated.assignedProductionId] : [],
+    updated.assignedPersonId ? [updated.assignedPersonId] : []
+  );
+  return { success: true as const, item: mapEquipmentRow(org.slug, updated, lookups) };
 }
 
 export async function deleteEquipmentPg(tenantSlug: string, equipmentId: number) {

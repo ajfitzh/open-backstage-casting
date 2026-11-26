@@ -5,15 +5,22 @@ import SchedulerClient from '@/app/components/schedule/SchedulerClient';
 
 export const dynamic = 'force-dynamic'; // 🟢 Ensure Next.js never statically caches this view
 
-export default async function SchedulePage({ params }: { params: { tenant: string } }) {
-  const tenant = params.tenant;
+export default async function SchedulePage({
+  params,
+}: {
+  params: Promise<{ tenant: string; id?: string }> | { tenant: string; id?: string };
+}) {
+  const resolvedParams = await params;
+  const tenant = resolvedParams.tenant;
   const cookieStore = await cookies();
   
   // 🟢 1. Intelligent Active Show Resolution
+  const routeId = resolvedParams.id && resolvedParams.id !== 'active' ? Number(resolvedParams.id) : null;
   const cookieId = cookieStore.get('active_production_id')?.value;
   let show = null;
   
-  if (cookieId) show = await getShowById(tenant, Number(cookieId));
+  if (routeId && Number.isFinite(routeId)) show = await getShowById(tenant, routeId);
+  if (!show && cookieId) show = await getShowById(tenant, Number(cookieId));
   if (!show) show = await getActiveProduction(tenant); // Fallback to current season's show
 
   // 🟢 2. Empty State (No Active Show)
@@ -54,7 +61,9 @@ export default async function SchedulePage({ params }: { params: { tenant: strin
 
   return (
     <SchedulerClient 
+      tenant={tenant}
       activeId={showId}
+      productionTitle={show.title || "Active Production"}
       events={events}
       slots={showSlots}
       conflicts={conflicts}

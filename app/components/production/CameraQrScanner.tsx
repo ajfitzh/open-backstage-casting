@@ -7,9 +7,16 @@ import { Camera, CameraOff, Loader2, RefreshCw, X } from "lucide-react";
 interface CameraQrScannerProps {
   onScan: (decodedText: string) => void;
   onClose: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
-export default function CameraQrScanner({ onScan, onClose }: CameraQrScannerProps) {
+export default function CameraQrScanner({
+  onScan,
+  onClose,
+  title = "Backstage QR Scanner",
+  subtitle = "Point your camera at any Open Backstage QR code to scan instantly.",
+}: CameraQrScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -138,7 +145,7 @@ export default function CameraQrScanner({ onScan, onClose }: CameraQrScannerProp
           <div className="flex items-center gap-2">
             <Camera size={18} className="text-pink-500" />
             <h3 className="text-sm font-black uppercase tracking-widest text-white">
-              Backstage QR Scanner
+              {title}
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -197,8 +204,7 @@ export default function CameraQrScanner({ onScan, onClose }: CameraQrScannerProp
 
         <div className="px-5 py-3.5 bg-zinc-900/60 border-t border-white/5 text-center">
           <p className="text-[11px] font-medium text-zinc-400">
-            Point your camera at any printed Open Backstage garment QR tag to pull up its bin &amp;
-            measurements instantly.
+            {subtitle}
           </p>
         </div>
       </div>

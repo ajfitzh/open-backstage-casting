@@ -4,8 +4,10 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "@/app/components/ToastProvider";
-import { ChevronLeft, Search, Check, Clock, X, AlertTriangle } from "lucide-react";
+import { ChevronLeft, Search, Check, Clock, X, AlertTriangle, Camera } from "lucide-react";
 import { saveCheckIn } from "@/app/actions/checkin";
+import CameraQrScanner from "@/app/components/production/CameraQrScanner";
+import { parseStudentQrPayload } from "@/app/lib/features-helpers";
 
 const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   'Medical Release': { 
@@ -14,7 +16,7 @@ const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   },
   'Code of Conduct': { 
     title: 'Student Code of Conduct', 
-    text: 'CYT expects students to exhibit respectful, safe behavior at all times. Bullying, harassment, or unsafe use of props/set pieces will result in immediate disciplinary action or removal from the production without refund.' 
+    text: 'Students are expected to exhibit respectful, safe behavior at all times. Bullying, harassment, or unsafe use of props/set pieces will result in immediate disciplinary action or removal from the production without refund.' 
   }
 };
 
@@ -28,6 +30,25 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
   const [maximizedImage, setMaximizedImage] = useState<string | null>(null);
   const [sentLinks, setSentLinks] = useState<string[]>([]);
   const [viewingForm, setViewingForm] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleQrScanned = (decoded: string) => {
+    setScannerOpen(false);
+    const parsed = parseStudentQrPayload(decoded);
+    if (!parsed) {
+      toast.error(`Unrecognized QR pass: "${decoded}"`);
+      return;
+    }
+    const match = students.find(
+      (s) => Number(s.performerId) === parsed.studentId || Number(s.id) === parsed.studentId
+    );
+    if (!match) {
+      toast.error(`No auditionee found on this roster for Student ID #${parsed.studentId}.`);
+      return;
+    }
+    toast.success(`Scanned ${match.name}!`);
+    handleOpenModal(match);
+  };
 
   const stats = useMemo(() => {
     const total = students.length;
@@ -107,8 +128,8 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-8 font-sans text-slate-200">
-      <div className="max-w-5xl mx-auto space-y-6 md:space-y-8 flex flex-col max-h-[90vh]">
+    <div className="min-h-full bg-slate-950 p-4 md:p-8 font-sans text-slate-200 pb-20">
+      <div className="max-w-5xl mx-auto space-y-5 md:space-y-7 flex flex-col">
         
         {/* HEADER & STATS */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 shrink-0">
@@ -138,14 +159,32 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
           </div>
         </div>
 
-        {/* SEARCH BAR */}
-        <div className="relative shrink-0">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-          <input 
-            type="text" placeholder="Search by name or song..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 text-white p-5 pl-12 rounded-2xl text-lg font-bold outline-none focus:border-indigo-500 focus:ring-1 ring-indigo-500 transition-colors"
-          />
+        {/* SEARCH BAR + QR SCAN */}
+        <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+            <input 
+              type="text" placeholder="Search by name or song..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 text-white p-4 sm:p-5 pl-12 rounded-2xl text-base sm:text-lg font-bold outline-none focus:border-indigo-500 focus:ring-1 ring-indigo-500 transition-colors"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setScannerOpen(true)}
+            className="px-6 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shrink-0 transition-colors"
+          >
+            <Camera size={18} /> Scan QR Pass
+          </button>
         </div>
+
+        {scannerOpen && (
+          <CameraQrScanner
+            title="Audition QR Check-In"
+            subtitle="Scan a student's digital Family Hub QR pass to open their audition card instantly."
+            onScan={handleQrScanned}
+            onClose={() => setScannerOpen(false)}
+          />
+        )}
 
         {/* CAST GRID */}
         <div className="overflow-y-auto custom-scrollbar flex-1 pr-2">
@@ -245,7 +284,7 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
                   </div>
                   {activeStudent.family?.siblings?.length > 0 && (
                     <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
-                      <span className="text-[9px] text-indigo-400/60 font-black uppercase tracking-widest block mb-1">CYT Siblings</span>
+                      <span className="text-[9px] text-indigo-400/60 font-black uppercase tracking-widest block mb-1">Family Siblings</span>
                       <div className="flex flex-wrap gap-2">
                         {activeStudent.family.siblings.map((sib: string) => (
                           <span key={sib} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20">{sib}</span>

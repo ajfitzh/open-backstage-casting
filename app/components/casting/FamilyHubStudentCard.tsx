@@ -2,14 +2,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { Clock, AlertCircle, CheckCircle2, PenTool, Lock, Ticket, Megaphone, CreditCard, Loader2 } from "lucide-react";
+import { Clock, AlertCircle, CheckCircle2, PenTool, Lock, Ticket, Megaphone, CreditCard, Loader2, QrCode, CalendarPlus } from "lucide-react";
 import AcceptRoleModal from "./AcceptRoleModal";
 import EditAuditionForm from "./EditAuditionForm"; // 🟢 NEW IMPORT
+import StudentQrPassModal from "./StudentQrPassModal";
 import { saveStudentBio, saveCongratsAd, saveTicketsSold } from "@/app/actions/auditions"; 
 
 export default function FamilyHubStudentCard({ student, show, tenant, userEmail }: any) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditingAudition, setIsEditingAudition] = useState(false); // 🟢 NEW STATE
+  const [isQrPassOpen, setIsQrPassOpen] = useState(false);
   
   // Bio State
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -85,7 +87,7 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
 
   return (
     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-      <div className="flex justify-between items-start gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
         <div className="flex items-center gap-4 min-w-0">
           {show?.image && (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -99,6 +101,24 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
             <h3 className="text-2xl font-black text-white tracking-tighter truncate">{student.name}</h3>
             <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest truncate">{show.title}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsQrPassOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 text-[10px] font-black uppercase tracking-widest transition-colors"
+            title="Open Digital Check-In QR Pass"
+          >
+            <QrCode size={13} /> QR Pass
+          </button>
+          <a
+            href={`/api/calendar?tenant=${encodeURIComponent(tenant)}&productionId=${show.id}&studentId=${encodeURIComponent(String(student.studentId || student.id))}`}
+            download
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-zinc-200 text-[10px] font-black uppercase tracking-widest transition-colors"
+            title="Download Rehearsal Calendar (.ics)"
+          >
+            <CalendarPlus size={13} className="text-emerald-400" /> .ICS
+          </a>
         </div>
       </div>
 
@@ -360,6 +380,18 @@ export default function FamilyHubStudentCard({ student, show, tenant, userEmail 
             </div>
          </div>
       )}
+
+      {/* 🟢 DIGITAL STUDENT CHECK-IN QR PASS MODAL */}
+      <StudentQrPassModal
+        isOpen={isQrPassOpen}
+        onClose={() => setIsQrPassOpen(false)}
+        tenant={tenant}
+        studentId={student.studentId || student.id}
+        studentName={student.name}
+        roleName={isCast ? student.role || "Cast Member" : "Auditionee"}
+        showId={show.id}
+        showTitle={show.title}
+      />
 
       {/* 🟢 NEW EDIT MODAL OVERLAY */}
       {isEditingAudition && (
