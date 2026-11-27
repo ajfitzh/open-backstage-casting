@@ -130,7 +130,7 @@ const getSceneAct = (scene: any) => {
                                         `}
                                         title={isSelected ? "Cast (Click to Uncast)" : "Candidate (Click to Cast)"}
                                     >
-                                        <img src={actor.headshot || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover shrink-0" alt="" />
+                                        <img src={actor.headshot || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"} className="w-4 h-4 rounded-full object-cover object-top shrink-0" alt="" />
                                         {/* 🚨 FIX: actor.name instead of actor.Performer */}
                                         <span className="text-[9px] font-bold truncate max-w-[60px] md:max-w-full">{actor.name}</span>
                                         <button 

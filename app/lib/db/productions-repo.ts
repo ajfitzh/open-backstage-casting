@@ -4,6 +4,7 @@
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getOrganizationBySlugPg } from "./core-repo";
+import { pickNextUpcomingShow } from "@/app/lib/show-switcher-helpers";
 
 function extId(row: { id: number; baserowId: number | null }): number {
   return row.baserowId ?? row.id;
@@ -120,6 +121,8 @@ function mapPgShow(row: {
     productionFee: Number(row.prod.productionFee ?? 0) || 0,
     workflowOverrides: row.prod.workflowOverrides || [],
     Performances: row.prod.legacyPerformancesJson || null,
+    openingNight: row.prod.openingNight || null,
+    closingNight: row.prod.closingNight || null,
   };
 }
 
@@ -181,16 +184,17 @@ export async function getActiveProductionPg(tenantSlug: string) {
   const shows = await getAllShowsPg(tenantSlug);
   if (!shows || shows.length === 0) return null;
 
-  const current = shows.find(
-    (s) => s.status === "Upcoming" || s.status === "Active" || s.isActive
-  );
-  return current ?? shows[0];
+  const active = shows.find((s) => s.status === "Active" || s.isActive);
+  if (active) return active;
+
+  const nextUpcoming = pickNextUpcomingShow(shows);
+  return nextUpcoming ?? shows[0];
 }
 
 export async function getAuditionProductionPg(tenantSlug: string) {
   const shows = await getAllShowsPg(tenantSlug);
   if (!shows || shows.length === 0) return null;
-  return shows.find((s) => s.status === "Upcoming") ?? null;
+  return pickNextUpcomingShow(shows);
 }
 
 export async function getSeasonsPg(tenantSlug: string) {

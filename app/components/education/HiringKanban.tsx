@@ -90,7 +90,7 @@ export default function HiringKanban({ applicants }: { applicants: any[] }) {
                             <div className="flex items-start justify-between mb-3">
                                 <div className="flex items-center gap-3">
                                     {person.headshot ? (
-                                        <img src={person.headshot} className="w-10 h-10 rounded-full object-cover bg-zinc-800"/>
+                                        <img src={person.headshot} className="w-10 h-10 rounded-full object-cover object-top bg-zinc-800"/>
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
                                             {person.name.substring(0,2)}

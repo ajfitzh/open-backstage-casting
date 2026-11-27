@@ -242,12 +242,14 @@ export default function PublicBoxOfficeClient({
                 >
                   <div className="flex items-center gap-4">
                     {show.image && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={show.image}
-                        alt={show.title}
-                        className="w-16 h-16 rounded-2xl object-cover border border-white/10 shrink-0"
-                      />
+                      <div className="w-24 h-16 rounded-2xl bg-black/50 border border-white/10 p-1.5 shrink-0 flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={show.image}
+                          alt={show.title}
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      </div>
                     )}
                     <div className="min-w-0">
                       <h2 className="text-xl sm:text-2xl font-black text-white truncate">

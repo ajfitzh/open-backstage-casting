@@ -299,12 +299,14 @@ export default function SeasonContext({
                         className="flex items-center gap-4 bg-zinc-950/50 border border-white/5 p-4 rounded-2xl hover:bg-zinc-950 hover:border-white/15 transition-all group/card"
                     >
                         {show.image ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                                src={show.image}
-                                alt={show.title}
-                                className="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0 shadow"
-                            />
+                            <div className="w-16 h-11 rounded-xl bg-black/50 border border-white/10 p-1 shrink-0 shadow flex items-center justify-center">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={show.image}
+                                    alt={show.title}
+                                    className="w-full h-full object-contain rounded-lg"
+                                />
+                            </div>
                         ) : (
                             <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${show.type?.includes('Lite') ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
                                 {show.type?.includes('Lite') ? <Music size={20}/> : <Theater size={20}/>}

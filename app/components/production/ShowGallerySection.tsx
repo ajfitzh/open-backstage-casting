@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Image as ImageIcon,
@@ -206,26 +207,35 @@ export default function ShowGallerySection({
           No playbill scans or photos uploaded for {showTitle} yet.
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {items.map((item) => (
             <button
               type="button"
               key={`${item.id}-${item.url}`}
               onClick={() => setLightboxItem(item)}
-              className="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-950 border border-white/10 hover:border-blue-400/50 transition-all text-left shadow-lg cursor-pointer"
+              className="group relative aspect-[4/3] rounded-2xl overflow-hidden bg-zinc-950 border border-white/10 hover:border-blue-400/50 transition-all text-left shadow-lg cursor-pointer"
             >
+              {/* Subtle ambient backdrop so both wide banners and vertical playbills look framed */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={item.url}
+                alt=""
+                aria-hidden="true"
+                loading="lazy"
+                className="absolute inset-0 w-full h-full object-cover opacity-25 blur-md scale-110 pointer-events-none"
+              />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.url}
                 alt={item.name}
                 loading="lazy"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="relative z-10 w-full h-full object-contain p-2.5 pb-12 group-hover:scale-[1.03] transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-90 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute inset-x-0 bottom-0 h-20 z-10 bg-gradient-to-t from-black/95 via-black/70 to-transparent pointer-events-none" />
+              <div className="absolute top-2.5 right-2.5 z-20 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                 <ZoomIn size={14} />
               </div>
-              <div className="absolute inset-x-0 bottom-0 p-3">
+              <div className="absolute inset-x-0 bottom-0 z-20 p-3">
                 <span className="inline-block px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-400/30 text-[9px] font-black uppercase tracking-wider text-blue-300 mb-1">
                   {item.type}
                 </span>
@@ -237,7 +247,7 @@ export default function ShowGallerySection({
       )}
 
       {/* LIGHTBOX MODAL */}
-      {lightboxItem && (
+      {lightboxItem && typeof document !== "undefined" && createPortal(
         <div
           className="fixed inset-0 z-[240] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={() => setLightboxItem(null)}
@@ -295,7 +305,8 @@ export default function ShowGallerySection({
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

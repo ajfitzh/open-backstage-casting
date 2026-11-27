@@ -58,7 +58,7 @@ export default function FamilyProfileClient({ tenant, initialFamily, userEmail }
              <div className="p-6 sm:p-8 border-b border-zinc-800 bg-zinc-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                    {person.headshot ? (
-                      <img src={person.headshot} alt={person.firstName} className="w-16 h-16 rounded-full object-cover border-2 border-zinc-700" />
+                      <img src={person.headshot} alt={person.firstName} className="w-16 h-16 rounded-full object-cover object-top border-2 border-zinc-700" />
                    ) : (
                       <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700">
                          <User size={24} className="text-zinc-500" />

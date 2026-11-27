@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { User, X, Crown, Mic2, Music, ClipboardList, Megaphone, Lightbulb, Hammer, Users } from 'lucide-react';
 import PersonProfileModal, { type PersonCardPreview } from '@/app/components/PersonProfileModal';
 
@@ -93,7 +94,7 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
                       <img
                         src={member.headshot}
                         alt={member.name}
-                        className="w-8 h-8 rounded-full object-cover shadow-lg shrink-0"
+                        className="w-8 h-8 rounded-full object-cover object-top shadow-lg shrink-0"
                       />
                     ) : (
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-lg shrink-0 ${member.color}`}>
@@ -122,8 +123,8 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
       </div>
 
       {/* --- FULL STAFF ROSTER MODAL --- */}
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 md:p-8">
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[220] flex items-end md:items-center justify-center p-4 md:p-8">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
             
             <div className="relative bg-zinc-900 w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 duration-300 max-h-[80vh] flex flex-col">
@@ -150,7 +151,7 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
                               <img
                                 src={member.headshot}
                                 alt={member.name}
-                                className="w-10 h-10 rounded-full object-cover shadow-inner shrink-0"
+                                className="w-10 h-10 rounded-full object-cover object-top shadow-inner shrink-0"
                               />
                             ) : (
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shadow-inner shrink-0 ${member.color}`}>
@@ -168,7 +169,8 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
                     ))}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* --- PERSON PROFILE MODAL --- */}

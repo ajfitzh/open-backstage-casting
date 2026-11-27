@@ -70,7 +70,7 @@ export function Step1ActorInfo({ formData, updateForm, errors }: Props) {
               {isCameraOpen ? (
                   <><video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" /><canvas ref={canvasRef} className="hidden" /></>
               ) : formData.headshotUrl ? (
-                <img src={formData.headshotUrl} alt="Headshot" className="w-full h-full object-cover" />
+                <img src={formData.headshotUrl} alt="Headshot" className="w-full h-full object-cover object-top" />
               ) : (
                   <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4"><ImageIcon size={48} className="opacity-20" /><p className="text-[9px] font-black uppercase tracking-widest">Headshot Required</p></div>
               )}

@@ -188,15 +188,25 @@ export default function PublicArchiveClient({ data }: { data: PublicArchiveData 
                       onClick={() => openShowDetail(show)}
                       className="group bg-zinc-900/70 border border-white/10 rounded-2xl overflow-hidden hover:border-blue-500/40 hover:bg-zinc-900 transition-all text-left flex items-stretch shadow-lg cursor-pointer"
                     >
-                      <div className="w-24 sm:w-28 shrink-0 bg-zinc-950 relative overflow-hidden border-r border-white/5 flex items-center justify-center">
+                      <div className="w-28 sm:w-32 shrink-0 bg-zinc-950 relative overflow-hidden border-r border-white/5 flex items-center justify-center">
                         {show.image ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={show.image}
-                            alt={show.title}
-                            loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={show.image}
+                              alt=""
+                              aria-hidden="true"
+                              loading="lazy"
+                              className="absolute inset-0 w-full h-full object-cover opacity-25 blur-md scale-110 pointer-events-none"
+                            />
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={show.image}
+                              alt={show.title}
+                              loading="lazy"
+                              className="relative z-10 w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </>
                         ) : (
                           <Theater size={28} className="text-zinc-700" />
                         )}

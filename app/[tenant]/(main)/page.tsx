@@ -24,6 +24,7 @@ import {
   getUserProductionRole
 } from '@/app/lib/baserow';
 import { getSelectedProduction } from '@/app/lib/production-context';
+import { pickNextUpcomingShow } from '@/app/lib/show-switcher-helpers';
 import { switchProduction } from '@/app/actions';
 import { isPostgresEnabled } from '@/db';
 import { getOrgLeadershipPg } from '@/app/lib/db/productions-repo';
@@ -71,9 +72,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
   // 👨‍👩‍👧‍👦 THE FAMILY HUB (Parents & Students)
   // ==========================================
   if (!isStaff) {
-      // 1. Get all shows to find the Upcoming one
+      // 1. Get all shows to find the next chronological Upcoming one
       const allShows = await getAllShows(tenant);
-      const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
+      const upcomingShow = pickNextUpcomingShow(allShows);
 
       // 2. Fetch auditions for the ACTIVE show and attach the show context
       let myAuditions = (await getExistingAuditions(tenant, userEmail, show.id)).map((a: any) => ({ ...a, _show: show }));
@@ -164,12 +165,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
                     )}
                     <div className="relative z-10 flex items-center gap-4">
                        {upcomingShow.image && (
-                         /* eslint-disable-next-line @next/next/no-img-element */
-                         <img
-                           src={upcomingShow.image}
-                           alt={upcomingShow.title}
-                           className="w-16 h-16 rounded-2xl object-cover border border-white/15 shadow-lg shrink-0"
-                         />
+                         <div className="h-14 w-28 sm:w-32 rounded-2xl bg-black/50 border border-white/15 p-1.5 shadow-lg shrink-0 flex items-center justify-center">
+                           {/* eslint-disable-next-line @next/next/no-img-element */}
+                           <img
+                             src={upcomingShow.image}
+                             alt={upcomingShow.title}
+                             className="w-full h-full object-contain rounded-lg"
+                           />
+                         </div>
                        )}
                        <div>
                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1 flex items-center gap-2">
@@ -230,7 +233,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       type: String(a.type || "Photo"),
     }));
   
-  const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
+  const upcomingShow = pickNextUpcomingShow(allShows);
 
   // SMART PHASE DETECTION
   const uniqueCast = new Set(assignments.filter((a: any) => a.personId).map((a: any) => a.personId));
@@ -351,12 +354,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
             </div>
           </div>
           {show?.image && (
-            <div className="hidden sm:block shrink-0">
+            <div className="hidden sm:flex shrink-0 items-center justify-center max-w-[240px] md:max-w-[300px] max-h-44 rounded-2xl bg-black/45 border border-white/15 p-2 shadow-2xl">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={show.image}
                 alt={show.title}
-                className="w-28 h-36 md:w-36 md:h-48 rounded-2xl object-cover border border-white/15 shadow-2xl"
+                className="max-h-40 w-auto max-w-full object-contain rounded-xl"
               />
             </div>
           )}
@@ -382,12 +385,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
            )}
            <div className="relative z-10 flex items-center gap-3.5 min-w-0">
               {upcomingShow.image ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={upcomingShow.image}
-                  alt={upcomingShow.title}
-                  className="w-11 h-11 rounded-xl object-cover border border-white/15 shadow shrink-0"
-                />
+                <div className="h-11 w-24 sm:w-28 rounded-xl bg-black/50 border border-white/15 p-1 shadow shrink-0 flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={upcomingShow.image}
+                    alt={upcomingShow.title}
+                    className="w-full h-full object-contain rounded-lg"
+                  />
+                </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
                    <Mic size={18} className="text-white" />

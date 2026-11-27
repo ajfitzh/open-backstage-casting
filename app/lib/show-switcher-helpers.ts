@@ -9,6 +9,8 @@ export interface SwitcherShow {
   location?: string;
   productionSession?: string;
   image?: string | null;
+  openingNight?: string | null;
+  closingNight?: string | null;
 }
 
 export type ShowBucket = "active" | "upcoming" | "archive";
@@ -91,6 +93,34 @@ export function sortShowsBySession<T extends SwitcherShow>(shows: T[]): T[] {
     if (rankDiff !== 0) return rankDiff;
     return (a.title || "").localeCompare(b.title || "");
   });
+}
+
+/**
+ * Picks the chronologically NEXT upcoming production (earliest openingNight,
+ * falling back to season session order Fall -> Winter -> Spring -> Summer,
+ * then lowest production ID).
+ */
+export function pickNextUpcomingShow<T extends SwitcherShow>(shows: T[]): T | null {
+  const upcoming = shows.filter((s) => s.status === "Upcoming");
+  if (upcoming.length === 0) return null;
+
+  const parseDate = (d?: string | null): number => {
+    if (!d) return Number.POSITIVE_INFINITY;
+    const t = Date.parse(d);
+    return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+  };
+
+  return [...upcoming].sort((a, b) => {
+    const dateA = parseDate(a.openingNight);
+    const dateB = parseDate(b.openingNight);
+    if (dateA !== dateB) return dateA - dateB;
+
+    const sessionDiff =
+      getSessionSortRank(a.productionSession) - getSessionSortRank(b.productionSession);
+    if (sessionDiff !== 0) return sessionDiff;
+
+    return Number(a.id) - Number(b.id);
+  })[0];
 }
 
 /**

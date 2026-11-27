@@ -29,7 +29,7 @@ export default function CastingInspector({ actor, allScenes = [], stats = { assi
           <div className="flex items-start gap-4">
              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0 bg-zinc-800">
                {actor.headshot ? (
-                   <img src={actor.headshot} className="w-full h-full object-cover" alt={actor.name} />
+                   <img src={actor.headshot} className="w-full h-full object-cover object-top" alt={actor.name} />
                ) : (
                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-bold text-xl">{actor.name.charAt(0)}</div>
                )}

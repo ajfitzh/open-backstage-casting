@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -108,7 +109,7 @@ export default function PersonProfileModal({
     }
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-[230] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
       onClick={onClose}
@@ -390,4 +391,7 @@ export default function PersonProfileModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(modalContent, document.body);
 }

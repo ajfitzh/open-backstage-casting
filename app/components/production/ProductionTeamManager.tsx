@@ -488,7 +488,7 @@ export default function ProductionTeamManager({
                   >
                     {member.headshot ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={member.headshot} alt={member.name} className="w-full h-full object-cover" />
+                      <img src={member.headshot} alt={member.name} className="w-full h-full object-cover object-top" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-sm font-black text-zinc-500 tracking-wider">
                         {getInitials(member.name)}
