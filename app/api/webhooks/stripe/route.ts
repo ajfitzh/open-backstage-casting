@@ -13,6 +13,8 @@ import { updateOrganizationBillingPg } from '@/app/lib/db/core-repo';
 import { fulfillTicketOrderPg } from '@/app/lib/db/tickets-repo';
 import { parseTicketOrderMetadata } from '@/app/lib/ticketing-helpers';
 import { sendTicketConfirmationEmail } from '@/app/lib/ticket-email';
+import { parseClassEnrollmentMetadata } from '@/app/lib/phase3-helpers';
+import { enrollStudentInClassPg } from '@/app/lib/db/phase3-repo';
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -152,6 +154,30 @@ export async function POST(req: NextRequest) {
           orderId: ticketMeta.orderId,
           ticketCount: fulfilled.tickets.length,
         },
+      });
+    }
+
+    // 2B-2. Academy Class Tuition Enrollment Checkout
+    const classMeta = parseClassEnrollmentMetadata(session.metadata);
+    if (classMeta) {
+      if (event.type === 'checkout.session.completed' && session.payment_status !== 'paid') {
+        return NextResponse.json({ received: true, skipped: 'class_payment_pending' });
+      }
+      if (isPostgresEnabled()) {
+        const res = await enrollStudentInClassPg(classMeta.tenant, {
+          classId: classMeta.classId,
+          studentId: classMeta.studentId,
+          status: 'enrolled',
+          paidCents: classMeta.paidCents,
+          stripeSessionId: session.id,
+        });
+        if (!res.success) {
+          return NextResponse.json({ error: res.error }, { status: 500 });
+        }
+      }
+      return NextResponse.json({
+        received: true,
+        enrolledClass: { tenant: classMeta.tenant, classId: classMeta.classId, studentId: classMeta.studentId },
       });
     }
 

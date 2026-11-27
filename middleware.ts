@@ -71,6 +71,7 @@ export default auth((req) => {
     const isPublicTenantRoute =
       pathname.startsWith("/audition-form") ||
       pathname.startsWith("/tickets") ||
+      pathname.startsWith("/classes") ||
       pathname.startsWith("/signup") ||
       pathname.startsWith("/forgot-password") ||
       pathname.startsWith("/reset-password");

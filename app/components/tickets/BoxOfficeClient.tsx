@@ -28,6 +28,7 @@ import {
 } from "@/app/actions/phase2-ops";
 import { toast } from "@/app/components/ToastProvider";
 import BoxOfficeOpsPanel from "./BoxOfficeOpsPanel";
+import SeatingMapBuilder from "./SeatingMapBuilder";
 import CameraQrScanner from "@/app/components/production/CameraQrScanner";
 import type { PerformanceSummary } from "@/app/lib/db/tickets-repo";
 
@@ -571,6 +572,9 @@ export default function BoxOfficeClient({
         }))}
         onOrderCreated={() => window.location.reload()}
       />
+
+      {/* INTERACTIVE VENUE RESERVED SEATING MAP BUILDER */}
+      <SeatingMapBuilder tenant={tenant} />
 
       {scannerOpen && (
         <CameraQrScanner

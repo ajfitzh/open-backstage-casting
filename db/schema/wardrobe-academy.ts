@@ -103,6 +103,9 @@ export const classes = pgTable(
     type: text("type"),
     isCoreCurriculum: boolean("is_core_curriculum").default(false),
     status: text("status").default("Active"),
+    tuitionCents: integer("tuition_cents").default(0).notNull(),
+    capacity: integer("capacity").default(20),
+    waitlistEnabled: boolean("waitlist_enabled").default(true).notNull(),
     description: text("description"),
     objectives: text("objectives"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -127,6 +130,9 @@ export const classEnrollments = pgTable(
     studentId: integer("student_id")
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
+    status: text("status").default("enrolled").notNull(),
+    paidCents: integer("paid_cents").default(0).notNull(),
+    stripeSessionId: text("stripe_session_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

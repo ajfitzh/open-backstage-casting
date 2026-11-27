@@ -4,6 +4,7 @@ import { isPostgresEnabled } from '@/db';
 import { getCastWithMeasurementsPg } from '@/app/lib/db/wardrobe-academy-repo';
 import { getGarmentInventoryWithQr } from '@/app/actions/wardrobe';
 import CostumePullSheet from '@/app/components/production/CostumePullSheet';
+import CostumePlotPanel from '@/app/components/production/CostumePlotPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,13 @@ export default async function CostumesPage({
         showTitle={String(production.title || 'Production')}
         castWithMeasurements={castWithMeasurements}
         initialGarments={inventoryRes.items || []}
+      />
+      <CostumePlotPanel
+        tenant={tenant}
+        productionId={showId}
+        showTitle={String(production.title || 'Production')}
+        castWithMeasurements={castWithMeasurements}
+        garments={inventoryRes.items || []}
       />
     </main>
   );
