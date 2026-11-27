@@ -73,7 +73,7 @@ export async function getClassesPg(tenantSlug: string) {
   if (!org) return null;
 
   const db = getDb();
-  const [classRows, sessionRows, peopleRows, spaceRows, enrollmentRows] = await Promise.all([
+  const [classRows, sessionRows, peopleRows, spaceRows, venueRows, enrollmentRows] = await Promise.all([
     db
       .select()
       .from(schema.classes)
@@ -90,6 +90,7 @@ export async function getClassesPg(tenantSlug: string) {
       .from(schema.people)
       .where(eq(schema.people.organizationId, org.id)),
     db.select().from(schema.spaces).where(eq(schema.spaces.organizationId, org.id)),
+    db.select().from(schema.venues).where(eq(schema.venues.organizationId, org.id)),
     db
       .select({ classId: schema.classEnrollments.classId })
       .from(schema.classEnrollments)
@@ -103,7 +104,18 @@ export async function getClassesPg(tenantSlug: string) {
       p.fullName || `${p.firstName || ""} ${p.lastName || ""}`.trim() || "TBA",
     ])
   );
-  const spaceMap = new Map(spaceRows.map((s) => [s.id, { ext: extId(s), name: s.roomName }]));
+  const venueMap = new Map(venueRows.map((v) => [v.id, v.name]));
+  const spaceMap = new Map(
+    spaceRows.map((s) => [
+      s.id,
+      {
+        ext: extId(s),
+        name: s.roomName,
+        venueName: s.venueId ? venueMap.get(s.venueId) || null : null,
+        capacity: s.capacity ?? null,
+      },
+    ])
+  );
   const enrollmentCounts = new Map<number, number>();
   for (const e of enrollmentRows) {
     enrollmentCounts.set(e.classId, (enrollmentCounts.get(e.classId) || 0) + 1);
@@ -113,6 +125,11 @@ export async function getClassesPg(tenantSlug: string) {
     const space = row.spaceId ? spaceMap.get(row.spaceId) : null;
     const minAge = row.minAge ?? 0;
     const maxAge = row.maxAge ?? 99;
+    const displaySpaceName = space
+      ? space.venueName && space.name.toLowerCase() !== "unknown"
+        ? `${space.venueName} - ${space.name}`
+        : space.venueName || space.name
+      : "Unknown Room";
 
     return {
       id: extId(row),
@@ -121,7 +138,8 @@ export async function getClassesPg(tenantSlug: string) {
       teacher: (row.teacherId && personMap.get(row.teacherId)) || "TBA",
       location: row.location || "Main Campus",
       spaceId: space?.ext ?? null,
-      spaceName: space?.name || "Unknown Room",
+      spaceName: displaySpaceName,
+      roomCapacity: space?.capacity ?? null,
       day: row.day || "TBD",
       time: row.timeSlot || "TBD",
       type: row.type || "General",

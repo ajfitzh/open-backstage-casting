@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import { saveVenueRentalRate } from '@/app/actions/reporting';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, ScatterChart, Scatter, Legend, LineChart, Line, Cell,
@@ -122,9 +123,15 @@ const extractYear = (show: any, perfData: any[] = []) => {
 };
 
 export default function AnalyticsDashboard({ 
-  showData, venues, ticketPrice, performanceData
+  tenant = "",
+  showData, venues, ticketPrice, performanceData,
+  initialRentEstimates = {},
+  venueIdByName = {},
 }: { 
-  performanceData: any[], showData: any[], venues: any[], ticketPrice: number 
+  tenant?: string;
+  performanceData: any[], showData: any[], venues: any[], ticketPrice: number;
+  initialRentEstimates?: Record<string, number>;
+  venueIdByName?: Record<string, number>;
 }) {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'seasons'>('overview');
@@ -133,16 +140,26 @@ export default function AnalyticsDashboard({
   const [chartMode, setChartMode] = useState<'fill' | 'sales' | 'profit'>('sales');
   
   const [era, setEra] = useState<'Post-COVID' | 'All Time'>('Post-COVID');
-  const [rentEstimates, setRentEstimates] = useState<Record<string, number>>({
+  const [rentEstimates, setRentEstimates] = useState<Record<string, number>>(() => ({
       "Fredericksburg Academy": 2500,
       "Spotsylvania High School": 3000,
       "King George High School": 1500,
-      "Kingdom Baptist Church": 500
-  });
+      "Kingdom Baptist Church": 500,
+      ...initialRentEstimates,
+  }));
+  const rentTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const handleRentChange = (venueName: string, val: string) => {
-      const num = parseInt(val.replace(/[^0-9]/g, '')) || 0;
+      const num = parseInt(val.replace(/[^0-9]/g, ''), 10) || 0;
       setRentEstimates(prev => ({ ...prev, [venueName]: num }));
+
+      const venueId = venueIdByName[venueName];
+      if (tenant && venueId) {
+        if (rentTimersRef.current[venueName]) clearTimeout(rentTimersRef.current[venueName]);
+        rentTimersRef.current[venueName] = setTimeout(() => {
+          void saveVenueRentalRate(tenant, venueId, num);
+        }, 600);
+      }
   };
 
   const activeEraShows = useMemo(() => {
@@ -213,7 +230,8 @@ export default function AnalyticsDashboard({
         const rent = rentEstimates[vKey] || 0;
         
         const sales = show.totalSold || 0;
-        const profit = (sales * ticketPrice) - rent;
+        const grossRevenue = typeof show.revenue === "number" ? show.revenue : sales * ticketPrice;
+        const profit = grossRevenue - rent;
         
         return {
             name: getBaserowString(show.name || show['Full Title'] || show.Title),

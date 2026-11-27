@@ -1,4 +1,8 @@
+// app/[tenant]/(main)/analytics/page.tsx
 import { BaserowClient } from "@/app/lib/BaserowClient";
+import { isPostgresEnabled } from "@/db";
+import { getAnalyticsEnrichmentPg } from "@/app/lib/db/reporting-repo";
+import { computeShowTicketStats } from "@/app/lib/reporting-helpers";
 import AnalyticsDashboard from "./analytics-client";
 
 export const dynamic = "force-dynamic";
@@ -9,36 +13,39 @@ function parseLegacySales(jsonString: string) {
     const cleanString = jsonString.replace(/""/g, '"');
     const data = JSON.parse(cleanString);
     if (!Array.isArray(data)) return { sold: 0, capacity: 0, count: 0 };
-    let sold = 0; let capacity = 0;
+    let sold = 0;
+    let capacity = 0;
     data.forEach((perf: any) => {
       sold += Number(perf.sold) || 0;
       capacity += Number(perf.total) || 0;
     });
     return { sold, capacity, count: data.length };
-  } catch (e) {
+  } catch {
     return { sold: 0, capacity: 0, count: 0 };
   }
 }
 
-// 🟢 1. Add params to the page signature
-export default async function AnalyticsPage({ params }: { params: { tenant: string } }) {
-  // 🟢 2. Extract the tenant
-  const tenant = params.tenant;
+export default async function AnalyticsPage({
+  params,
+}: {
+  params: Promise<{ tenant: string }> | { tenant: string };
+}) {
+  const { tenant } = await params;
 
-  // 🟢 3. Pass the tenant string to ALL BaserowClient fetchers
-  const [rawData, allShows, allVenuesRaw, allSeasons] = await Promise.all([
+  const [rawData, allShows, allVenuesRaw, allSeasons, enrichment] = await Promise.all([
     BaserowClient.getPerformances(tenant),
     BaserowClient.getAllProductions(tenant),
     BaserowClient.getAllVenues(tenant),
-    BaserowClient.getAllSeasons(tenant)
+    BaserowClient.getAllSeasons(tenant),
+    isPostgresEnabled() ? getAnalyticsEnrichmentPg(tenant).catch(() => null) : Promise.resolve(null),
   ]);
 
   const allVenues = allVenuesRaw.map((v: any) => ({
     ...v,
     id: v.id,
-    name: v['Venue Name'] || "Unknown Venue",
-    capacity: Number(v['Seating Capacity']) || 0,
-    marketingName: v['Public Name (Marketing)'] || null
+    name: v["Venue Name"] || "Unknown Venue",
+    capacity: Number(v["Seating Capacity"]) || 0,
+    marketingName: v["Public Name (Marketing)"] || null,
   }));
 
   const venueCapMap = new Map<string, number>();
@@ -49,79 +56,110 @@ export default async function AnalyticsPage({ params }: { params: { tenant: stri
 
   const seasonDateMap = new Map<string, number>();
   allSeasons.forEach((s: any) => {
-    if (s['Session Name'] && s['Start Date']) seasonDateMap.set(s['Session Name'], new Date(s['Start Date']).getTime());
+    if (s["Session Name"] && s["Start Date"]) {
+      seasonDateMap.set(s["Session Name"], new Date(s["Start Date"]).getTime());
+    }
   });
 
-  const showsMap = new Map();
+  // Group relational performances by show ID (or show name fallback)
+  const relPerfsByShowId = new Map<
+    number,
+    { ticketsSold: number; capacity: number; ticketPrice?: number | null }[]
+  >();
+  const showsByName = new Map<string, number>();
+
+  const showsMap = new Map<number, any>();
   allShows.forEach((meta: any) => {
-    const showName = meta['Title'] || `Show ${meta.id}`;
-    const typeValue = meta['Type']?.value || "";
+    const showName = meta["Title"] || `Show ${meta.id}`;
+    showsByName.set(showName, meta.id);
+
+    const typeValue = meta["Type"]?.value || "";
     let type = "Other";
     if (typeValue === "Lite" || showName.toLowerCase().includes("lite")) type = "CYT Lite";
     else if (typeValue === "Main Stage") type = "Mainstage";
 
-    const legacyJson = meta['Performances'] || meta['field_6177']; 
+    const legacyJson = meta["Performances"] || meta["field_6177"];
     const legacyStats = parseLegacySales(legacyJson);
 
     let venueName = "TBD";
-    if (Array.isArray(meta['Venue']) && meta['Venue'].length > 0) venueName = meta['Venue'][0].value;
-    else if (typeof meta['Venue'] === 'string') venueName = meta['Venue'];
+    if (Array.isArray(meta["Venue"]) && meta["Venue"].length > 0) venueName = meta["Venue"][0].value;
+    else if (typeof meta["Venue"] === "string") venueName = meta["Venue"];
 
     showsMap.set(meta.id, {
       id: meta.id,
       name: showName,
-      season: meta['Session']?.value || "Other",
-      type: type,
+      season: meta["Session"]?.value || "Other",
+      type,
       venue: venueName,
-      totalSold: Number(legacyStats.sold) || 0, 
-      totalCapacity: Number(legacyStats.capacity) || 0,
-      performances: Number(legacyStats.count) || 0,
-      source: legacyStats.count > 0 ? "Legacy JSON" : "Inventory"
+      legacyStats,
     });
   });
 
   rawData.forEach((row: any) => {
-    const prodId = row['Production']?.[0]?.id;
-    let show = showsMap.get(prodId);
-    
-    if (!show && row['Performance']) {
-      const rawName = row['Performance'].split(" - ")[0];
-      for (const s of showsMap.values()) {
-        if (s.name === rawName) { show = s; break; }
-      }
+    let prodId = row["Production"]?.[0]?.id as number | undefined;
+    if (!prodId && row["Performance"]) {
+      const rawName = String(row["Performance"]).split(" - ")[0];
+      prodId = showsByName.get(rawName);
     }
+    if (!prodId || !showsMap.has(prodId)) return;
 
-    if (show) {
-      const realVenueCap = venueCapMap.get(show.venue) || 0;
-      const rowCap = Number(row['Total Inventory']) || 0;
-      const performanceCap = realVenueCap ? Math.max(realVenueCap, rowCap) : rowCap;
-      
-      show.totalSold += Number(row['Tickets Sold']) || 0;
-      show.totalCapacity += Number(performanceCap) || 0;
-      show.performances += 1;
-      show.source = show.source === "Legacy JSON" ? "Hybrid" : "Modern Linked";
-    }
+    const show = showsMap.get(prodId);
+    const realVenueCap = venueCapMap.get(show.venue) || 0;
+    const rowCap = Number(row["Total Inventory"]) || 0;
+    const performanceCap = realVenueCap ? Math.max(realVenueCap, rowCap) : rowCap;
+
+    const list = relPerfsByShowId.get(prodId) || [];
+    list.push({
+      ticketsSold: Number(row["Tickets Sold"]) || 0,
+      capacity: performanceCap,
+      ticketPrice: enrichment?.perfPriceById.get(Number(row.id)) ?? null,
+    });
+    relPerfsByShowId.set(prodId, list);
   });
 
-  const showData = Array.from(showsMap.values()).map((show: any) => ({
-    ...show,
-    avgFill: show.totalCapacity > 0 ? Math.round((show.totalSold / show.totalCapacity) * 100) : 0,
-    revenue: show.totalSold * 15
-  })).sort((a: any, b: any) => {
-    const dateA = seasonDateMap.get(a.season) || 0;
-    const dateB = seasonDateMap.get(b.season) || 0;
-    if (dateA !== dateB) return dateA - dateB;
-    return b.totalSold - a.totalSold;
-  });
+  const showData = Array.from(showsMap.values())
+    .map((show: any) => {
+      const stats = computeShowTicketStats({
+        legacySold: show.legacyStats.sold,
+        legacyCapacity: show.legacyStats.capacity,
+        legacyCount: show.legacyStats.count,
+        relationalPerformances: relPerfsByShowId.get(show.id) || [],
+        productionTicketPrice: enrichment?.priceByExtProd.get(show.id) ?? null,
+        fallbackTicketPrice: 15,
+        actualStripeRevenueCents: enrichment?.stripeCentsByExtProd.get(show.id) ?? 0,
+      });
+
+      return {
+        id: show.id,
+        name: show.name,
+        season: show.season,
+        type: show.type,
+        venue: show.venue,
+        totalSold: stats.totalSold,
+        totalCapacity: stats.totalCapacity,
+        performances: stats.performances,
+        avgFill: stats.avgFill,
+        revenue: stats.revenue,
+        source: stats.source,
+      };
+    })
+    .sort((a: any, b: any) => {
+      const dateA = seasonDateMap.get(a.season) || 0;
+      const dateB = seasonDateMap.get(b.season) || 0;
+      if (dateA !== dateB) return dateA - dateB;
+      return b.totalSold - a.totalSold;
+    });
 
   return (
-    <main className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
-      {/* 📉 The Client Component now handles everything, including the top ribbon! */}
-      <AnalyticsDashboard 
-        performanceData={rawData} 
-        showData={showData} 
+    <main className="h-full min-h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
+      <AnalyticsDashboard
+        tenant={tenant}
+        performanceData={rawData}
+        showData={showData}
         venues={allVenues}
-        ticketPrice={15} 
+        ticketPrice={15}
+        initialRentEstimates={enrichment?.savedRentByVenueName || {}}
+        venueIdByName={enrichment?.venueIdByName || {}}
       />
     </main>
   );
