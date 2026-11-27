@@ -72,6 +72,7 @@ export default auth((req) => {
       pathname.startsWith("/audition-form") ||
       pathname.startsWith("/tickets") ||
       pathname.startsWith("/classes") ||
+      pathname.startsWith("/archive") ||
       pathname.startsWith("/signup") ||
       pathname.startsWith("/forgot-password") ||
       pathname.startsWith("/reset-password");
