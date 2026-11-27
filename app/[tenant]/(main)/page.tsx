@@ -27,13 +27,15 @@ import { getSelectedProduction } from '@/app/lib/production-context';
 import { switchProduction } from '@/app/actions';
 import { isPostgresEnabled } from '@/db';
 import { getOrgLeadershipPg } from '@/app/lib/db/productions-repo';
+import { getProductionAssetsPg } from '@/app/lib/db/operations-repo';
 import { getTenantTableConfig } from '@/app/lib/tenant-config';
 import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
 import { isStaffRole } from '@/app/lib/permissions';
 
 import CreativeTeam from '@/app/components/dashboard/CreativeTeam';
 import SeasonContext from '@/app/components/dashboard/SeasonContext';
-import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress'; 
+import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress';
+import ShowGallerySection from '@/app/components/production/ShowGallerySection';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,7 +205,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
     allSeasons,
     allShows,
     committeeData,
-    orgLeaders
+    orgLeaders,
+    showAssets
   ] = await Promise.all([
       getAssignments(tenant, show.id),
       getCreativeTeam(tenant, show.id),
@@ -214,8 +217,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
       getSeasons(tenant),
       getAllShows(tenant),
       getCommitteeData(tenant, show.id).catch(()=>[]),
-      isPostgresEnabled() ? getOrgLeadershipPg(tenant, 4).catch(() => []) : Promise.resolve([])
+      isPostgresEnabled() ? getOrgLeadershipPg(tenant, 4).catch(() => []) : Promise.resolve([]),
+      isPostgresEnabled() ? getProductionAssetsPg(tenant, show.id).catch(() => []) : Promise.resolve([])
   ]);
+
+  const galleryItems = (showAssets || [])
+    .filter((a: any) => a.link && /^https?:\/\//i.test(a.link))
+    .map((a: any) => ({
+      id: Number(a.id),
+      name: String(a.name || "Photo"),
+      url: String(a.link),
+      type: String(a.type || "Photo"),
+    }));
   
   const upcomingShow = allShows.find((s: any) => s.status === "Upcoming");
 
@@ -417,6 +430,16 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
              <ActionCard href="/season" title="Season Planner" desc="Plan multi-show seasons, staffing & reports" icon={<LayoutGrid className="text-purple-400"/>} color="bg-purple-400"/>
         </div>
       </div>
+
+      <ShowGallerySection
+          key={show.id}
+          tenant={tenant}
+          productionId={show.id}
+          showTitle={show.title}
+          coverImageUrl={show.image}
+          initialItems={galleryItems}
+          canUpload={isStaff}
+      />
 
       <SeasonContext 
           activeSeasonName={show?.season} 
