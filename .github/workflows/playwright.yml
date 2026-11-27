@@ -11,7 +11,7 @@ jobs:
     env:
       AUTH_SECRET: ${{ secrets.AUTH_SECRET || 'ci-playwright-fallback-secret-do-not-use-in-prod' }}
       NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || secrets.AUTH_SECRET || 'ci-playwright-fallback-secret-do-not-use-in-prod' }}
-      NEXTAUTH_URL: http://localhost:3001
+      AUTH_TRUST_HOST: "true"
       SANDBOX_PASSWORD: ${{ secrets.SANDBOX_PASSWORD || 'ci-sandbox-password' }}
       DO_SPACES_BUCKET: ${{ secrets.DO_SPACES_BUCKET || 'ci-test-bucket' }}
       DO_SPACES_ENDPOINT: ${{ secrets.DO_SPACES_ENDPOINT || 'nyc3.digitaloceanspaces.com' }}
