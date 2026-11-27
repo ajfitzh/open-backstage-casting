@@ -1,18 +1,24 @@
 "use client";
 
 import { useState } from 'react';
-import { User, X, Crown, Mic2, Music, GraduationCap, ClipboardList, Megaphone, Lightbulb, Hammer, Users } from 'lucide-react';
+import { User, X, Crown, Mic2, Music, ClipboardList, Megaphone, Lightbulb, Hammer, Users } from 'lucide-react';
+import PersonProfileModal, { type PersonCardPreview } from '@/app/components/PersonProfileModal';
 
 interface TeamMember {
   id: number;
+  personId?: number | null;
   name: string;
   role: string;
+  email?: string;
+  phone?: string;
+  headshot?: string | null;
   initials: string;
   color: string;
 }
 
 export default function CreativeTeam({ team }: { team: TeamMember[] }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<PersonCardPreview | null>(null);
 
   // Fallback for empty state (prevents UI collapse)
   if (!team || team.length === 0) {
@@ -55,6 +61,19 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
       return <User size={14}/>;
   };
 
+  const openPersonModal = (member: TeamMember) => {
+    setSelectedPerson({
+      personId: member.personId ?? null,
+      name: member.name,
+      role: member.role,
+      email: member.email,
+      phone: member.phone,
+      headshot: member.headshot ?? null,
+      initials: member.initials,
+      color: member.color,
+    });
+  };
+
   return (
     <>
       {/* --- DASHBOARD PREVIEW ROW --- */}
@@ -62,20 +81,36 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
         <div className="flex flex-wrap items-center gap-3">
             
             {coreTeam.map((member) => (
-                <div key={member.id} className="flex items-center gap-2 bg-black/30 p-1.5 pr-3 rounded-full border border-white/5 backdrop-blur-md shadow-sm hover:bg-black/50 transition-colors">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-lg ${member.color}`}>
-                        {member.initials}
-                    </div>
+                <button
+                    type="button"
+                    key={member.id}
+                    onClick={() => openPersonModal(member)}
+                    title={`View ${member.name}'s profile`}
+                    className="flex items-center gap-2 bg-black/30 p-1.5 pr-3 rounded-full border border-white/10 backdrop-blur-md shadow-sm hover:bg-black/60 hover:border-white/25 hover:scale-[1.02] transition-all cursor-pointer text-left group"
+                >
+                    {member.headshot ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={member.headshot}
+                        alt={member.name}
+                        className="w-8 h-8 rounded-full object-cover shadow-lg shrink-0"
+                      />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-lg shrink-0 ${member.color}`}>
+                          {member.initials}
+                      </div>
+                    )}
                     <div className="flex flex-col leading-none">
-                        <span className="text-[10px] font-bold text-white whitespace-nowrap">{member.name.split(' ')[0]}</span>
-                        <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider truncate max-w-[90px]">{member.role}</span>
+                        <span className="text-[10px] font-bold text-white group-hover:text-blue-300 transition-colors whitespace-nowrap">{member.name.split(' ')[0]}</span>
+                        <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider truncate max-w-[95px]">{member.role}</span>
                     </div>
-                </div>
+                </button>
             ))}
             
             {/* "More" Button */}
             {remainingCount > 0 && (
                 <button 
+                    type="button"
                     onClick={() => setIsOpen(true)}
                     className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg shrink-0"
                     title="View Full Staff"
@@ -86,7 +121,7 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
         </div>
       </div>
 
-      {/* --- MOBILE MODAL --- */}
+      {/* --- FULL STAFF ROSTER MODAL --- */}
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 md:p-8">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
@@ -95,31 +130,53 @@ export default function CreativeTeam({ team }: { team: TeamMember[] }) {
                 <div className="p-6 border-b border-white/10 bg-zinc-950 flex justify-between items-center shrink-0">
                     <div>
                         <h2 className="text-xl font-black uppercase italic tracking-tighter text-white">Creative Team</h2>
-                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Full Staff Roster</p>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Click any member for full profile</p>
                     </div>
-                    <button onClick={() => setIsOpen(false)} className="p-2 bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
+                    <button type="button" onClick={() => setIsOpen(false)} className="p-2 bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
                         <X size={18} />
                     </button>
                 </div>
 
                 <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto custom-scrollbar">
                     {sortedTeam.map((member) => (
-                        <div key={member.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/30 border border-white/5">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shadow-inner shrink-0 ${member.color}`}>
-                                {member.initials}
-                            </div>
+                        <button
+                            type="button"
+                            key={member.id}
+                            onClick={() => openPersonModal(member)}
+                            className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/30 border border-white/5 hover:bg-zinc-800/70 hover:border-white/15 transition-all text-left group cursor-pointer"
+                        >
+                            {member.headshot ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={member.headshot}
+                                alt={member.name}
+                                className="w-10 h-10 rounded-full object-cover shadow-inner shrink-0"
+                              />
+                            ) : (
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black text-white shadow-inner shrink-0 ${member.color}`}>
+                                  {member.initials}
+                              </div>
+                            )}
                             <div className="min-w-0">
-                                <h3 className="text-sm font-bold text-white truncate">{member.name}</h3>
+                                <h3 className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors truncate">{member.name}</h3>
                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-400 uppercase tracking-wider mt-0.5">
                                     {getIcon(member.role)} 
                                     <span className="truncate">{member.role}</span>
                                 </div>
                             </div>
-                        </div>
+                        </button>
                     ))}
                 </div>
             </div>
         </div>
+      )}
+
+      {/* --- PERSON PROFILE MODAL --- */}
+      {selectedPerson && (
+        <PersonProfileModal
+          person={selectedPerson}
+          onClose={() => setSelectedPerson(null)}
+        />
       )}
     </>
   );

@@ -320,9 +320,16 @@ export async function getCreativeTeamPg(tenantSlug: string, productionId?: numbe
   const rows = await db
     .select({
       team: schema.showTeam,
+      personId: schema.people.id,
+      personBaserowId: schema.people.baserowId,
       personName: schema.people.fullName,
       firstName: schema.people.firstName,
       lastName: schema.people.lastName,
+      email: schema.people.email,
+      phone: schema.people.phone,
+      headshotUrl: schema.people.headshotUrl,
+      positionId: schema.staffPositions.id,
+      positionBaserowId: schema.staffPositions.baserowId,
       positionName: schema.staffPositions.roleName,
     })
     .from(schema.showTeam)
@@ -346,8 +353,13 @@ export async function getCreativeTeamPg(tenantSlug: string, productionId?: numbe
       const role = row.positionName || "Volunteer";
       return {
         id: extId(row.team),
+        personId: row.personId ? (row.personBaserowId ?? row.personId) : null,
+        positionId: row.positionId ? (row.positionBaserowId ?? row.positionId) : null,
         name,
         role,
+        email: row.email || "",
+        phone: row.phone || "",
+        headshot: row.headshotUrl || null,
         initials: name
           .split(/\s+/)
           .map((n) => n[0])

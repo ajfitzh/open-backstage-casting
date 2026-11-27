@@ -23,6 +23,9 @@ import {
   createStaffPosition,
   updateShowTeamMember,
 } from "@/app/actions/admin-crud";
+import PersonProfileModal, {
+  type PersonCardPreview,
+} from "@/app/components/PersonProfileModal";
 
 export interface TeamMemberItem {
   id: number;
@@ -87,6 +90,7 @@ export default function ProductionTeamManager({
 
   // Swap / Edit modal state
   const [editingMember, setEditingMember] = useState<TeamMemberItem | null>(null);
+  const [viewingPerson, setViewingPerson] = useState<PersonCardPreview | null>(null);
   const [swapPersonId, setSwapPersonId] = useState("");
   const [swapPositionId, setSwapPositionId] = useState("");
 
@@ -467,7 +471,21 @@ export default function ProductionTeamManager({
                 className="flex flex-col justify-between gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-xl hover:bg-zinc-900 hover:border-white/10 transition-all"
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setViewingPerson({
+                        personId: member.personId ?? null,
+                        name: member.name,
+                        role: member.roleName,
+                        headshot: member.headshot,
+                        email: member.email,
+                        phone: member.phone,
+                      })
+                    }
+                    className="w-14 h-14 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-white/5 hover:border-emerald-400/50 transition-colors cursor-pointer"
+                    title={`View ${member.name}'s profile`}
+                  >
                     {member.headshot ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={member.headshot} alt={member.name} className="w-full h-full object-cover" />
@@ -476,10 +494,28 @@ export default function ProductionTeamManager({
                         {getInitials(member.name)}
                       </div>
                     )}
-                  </div>
+                  </button>
 
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-white truncate">{member.name}</h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewingPerson({
+                          personId: member.personId ?? null,
+                          name: member.name,
+                          role: member.roleName,
+                          headshot: member.headshot,
+                          email: member.email,
+                          phone: member.phone,
+                        })
+                      }
+                      className="text-left max-w-full group/name cursor-pointer"
+                      title={`View ${member.name}'s profile`}
+                    >
+                      <h3 className="font-bold text-white group-hover/name:text-blue-300 group-hover/name:underline underline-offset-2 truncate transition-colors">
+                        {member.name}
+                      </h3>
+                    </button>
                     <p className="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2 truncate">
                       {member.roleName}
                     </p>
@@ -531,6 +567,15 @@ export default function ProductionTeamManager({
           </div>
         )}
       </div>
+
+      {/* PERSON PROFILE MODAL */}
+      {viewingPerson && (
+        <PersonProfileModal
+          tenant={tenant}
+          person={viewingPerson}
+          onClose={() => setViewingPerson(null)}
+        />
+      )}
 
       {/* SWAP / EDIT MODAL */}
       {editingMember && (

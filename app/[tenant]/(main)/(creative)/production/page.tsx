@@ -1,17 +1,15 @@
-import { getActiveProduction, getScenes, getCastDemographics } from '@/app/lib/baserow';
+import { getScenes, getCastDemographics } from '@/app/lib/baserow';
+import { getSelectedProduction } from '@/app/lib/production-context';
 import DashboardClient from '@/app/components/dashboard/DashboardClient';
 import WorkflowProgress from '@/app/components/dashboard/WorkflowProgress';
 import { getAuditionees, getAssignments, getProductionEvents } from '@/app/lib/baserow';
 
 export const dynamic = 'force-dynamic';
 
-// 🟢 1. Add params to the page signature
-export default async function ProductionHubPage({ params }: { params: { tenant: string } }) {
-  // 🟢 2. Extract the tenant
-  const tenant = params.tenant;
-  
-  // 🟢 3. Pass the tenant string to the initial fetcher
-  const production = await getActiveProduction(tenant);
+export default async function ProductionHubPage({ params }: { params: Promise<{ tenant: string }> | { tenant: string } }) {
+  const { tenant } = await params;
+
+  const { show: production } = await getSelectedProduction(tenant);
   
   if (!production) return <div className="p-10 text-zinc-500">No Active Production</div>;
 

@@ -4,9 +4,9 @@ import React from 'react';
 import { auth } from "@/auth";
 import { 
   getUserProfile, 
-  getUserProductionRole, 
-  getActiveProduction 
+  getUserProductionRole,
 } from "@/app/lib/baserow";
+import { getSelectedProduction } from "@/app/lib/production-context";
 import { SimulationProvider } from '@/app/context/SimulationContext';
 import { TenantProvider } from '@/app/components/TenantProvider';
 import GlobalHeader from '@/app/components/globalappheader/globalappheader';
@@ -31,9 +31,9 @@ export default async function MainLayout({
   // 1. Resolve User Identity
   const userProfile = email ? await getUserProfile(currentTenant, email) : null; 
 
-  // 🟢 2. NO MORE COOKIES! Strictly DB-driven active show fallback
-  const activeProduction = await getActiveProduction(currentTenant);
-  const activeId = activeProduction?.id;
+  // Resolve selected production from active_production_id cookie, falling back to active show
+  const { show: selectedProduction } = await getSelectedProduction(currentTenant);
+  const activeId = selectedProduction?.id;
   
   // 3. Resolve Production-Specific Role
   let productionRole = null;

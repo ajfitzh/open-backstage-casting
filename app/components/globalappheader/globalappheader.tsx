@@ -20,8 +20,10 @@ export default async function GlobalHeader({ tenant }: { tenant: string }) {
 
   return (
     <GlobalHeaderClient
+      tenant={tenant}
       shows={shows}
       activeId={activeId}
+      defaultActiveShowId={activeProduction?.id || 0}
       user={session?.user}
     />
   );

@@ -34,20 +34,27 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
   );
 
   useEffect(() => {
-    // If the URL has an ID, save it to state and localStorage
+    // URL param takes priority, then server-selected activeProductionId (from cookie), then localStorage
     if (params?.id) {
-      const currentId = parseInt(params.id as string);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLastKnownId(currentId);
-      localStorage.setItem('openBackstage_lastActiveId', currentId.toString());
+      const currentId = parseInt(params.id as string, 10);
+      if (!Number.isNaN(currentId)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLastKnownId(currentId);
+        localStorage.setItem('openBackstage_lastActiveId', currentId.toString());
+      }
+    } else if (activeProductionId) {
+      const propId = Number(activeProductionId);
+      if (!Number.isNaN(propId) && propId > 0) {
+        setLastKnownId(propId);
+        localStorage.setItem('openBackstage_lastActiveId', propId.toString());
+      }
     } else {
-      // If we are on a global route, try to retrieve the last known ID
       const stored = localStorage.getItem('openBackstage_lastActiveId');
       if (stored && !lastKnownId) {
-        setLastKnownId(parseInt(stored));
+        setLastKnownId(parseInt(stored, 10));
       }
     }
-  }, [params?.id]);
+  }, [params?.id, activeProductionId]);
 
   const canSee = (entity: any) => {
       if (!entity.permission && !entity.group) return true;

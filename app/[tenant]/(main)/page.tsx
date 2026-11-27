@@ -10,7 +10,6 @@ import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard'
 import FamilyConflictModal from '@/app/components/casting/FamilyConflictModal';
 import ChairLogbook from '@/app/components/committees/ChairLogbook';
 import { 
-  getActiveProduction, 
   getAssignments, 
   getCreativeTeam, 
   getClasses,
@@ -24,6 +23,8 @@ import {
   getUserProfile,
   getUserProductionRole
 } from '@/app/lib/baserow';
+import { getSelectedProduction } from '@/app/lib/production-context';
+import { switchProduction } from '@/app/actions';
 import { isPostgresEnabled } from '@/db';
 import { getOrgLeadershipPg } from '@/app/lib/db/productions-repo';
 import { getTenantTableConfig } from '@/app/lib/tenant-config';
@@ -47,8 +48,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
   const userRole = (session?.user as any)?.role || "Guest";
   const userEmail = session?.user?.email || "";
 
-  // 🟢 2. No more cookies! The root dashboard defaults to the active production
-  const show = await getActiveProduction(tenant);
+  // Respect the active_production_id cookie (historical/upcoming switcher), falling back to the active show
+  const { show, defaultActiveShow, isViewingHistorical } = await getSelectedProduction(tenant);
 
   if (!show) {
       return <div className="p-20 text-center text-zinc-500 font-bold uppercase tracking-widest">No Active Show Found</div>;
@@ -252,6 +253,34 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
   return (
     <div className="min-h-screen bg-zinc-950 p-6 pb-20 overflow-y-auto custom-scrollbar space-y-8">
       
+      {/* HISTORICAL PRODUCTION BANNER */}
+      {isViewingHistorical && (
+        <div className="bg-blue-950/50 border border-blue-500/30 rounded-2xl px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30 text-[10px] font-black uppercase tracking-widest text-blue-300 shrink-0">
+              Historical Archive
+            </span>
+            <p className="text-xs text-zinc-300 truncate">
+              Viewing <span className="font-bold text-white">{show.title}</span>
+              {show.season ? ` (${show.season})` : ''}. All dashboard cards and sidebar links reflect this production.
+            </p>
+          </div>
+          {defaultActiveShow && defaultActiveShow.id !== show.id && (
+            <form action={switchProduction} className="shrink-0">
+              <input type="hidden" name="productionId" value={defaultActiveShow.id} />
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="redirectPath" value={`/${tenant}`} />
+              <button
+                type="submit"
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-wider transition-colors"
+              >
+                Return to {defaultActiveShow.title}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
       {/* 1. HERO */}
       <div className={`relative overflow-hidden bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 md:p-12 shadow-2xl transition-all duration-1000 bg-gradient-to-br ${theme.bg}`}>
          {show?.image ? (
@@ -273,7 +302,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8 max-w-6xl">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 mb-4">
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors duration-1000 ${theme.accent}`}>Active Production</span>
+                <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors duration-1000 ${isViewingHistorical ? 'text-blue-400' : theme.accent}`}>
+                  {isViewingHistorical ? 'Historical Production' : show?.status === 'Upcoming' ? 'Upcoming Production' : 'Active Production'}
+                </span>
                 <span className="w-1 h-1 rounded-full bg-white/20"></span>
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{show?.season}</span>
             </div>

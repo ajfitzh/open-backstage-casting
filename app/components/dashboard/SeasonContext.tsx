@@ -8,6 +8,7 @@ import {
   Home, Sparkles, Calendar, Theater, Music, ArrowRight
 } from 'lucide-react';
 import type { OrgLeaderSummary } from '@/app/lib/db/productions-repo';
+import PersonProfileModal, { type PersonCardPreview } from '@/app/components/PersonProfileModal';
 
 const LEADER_BADGE_COLORS = [
   "bg-indigo-600",
@@ -67,6 +68,7 @@ export default function SeasonContext({
   const [prevActiveSeasonName, setPrevActiveSeasonName] = useState(activeSeasonName);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lineupFilter, setLineupFilter] = useState("All"); 
+  const [selectedLeader, setSelectedLeader] = useState<PersonCardPreview | null>(null);
 
   if (activeSeasonName !== prevActiveSeasonName) {
     setPrevActiveSeasonName(activeSeasonName);
@@ -206,7 +208,22 @@ export default function SeasonContext({
             {orgLeaders.length > 0 && (
               <div className="flex flex-wrap gap-3">
                   {orgLeaders.map((staff, i) => (
-                      <div key={staff.id} className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/10 transition-colors cursor-default">
+                      <button
+                          type="button"
+                          key={staff.id}
+                          onClick={() =>
+                            setSelectedLeader({
+                              personId: staff.id,
+                              name: staff.name,
+                              role: staff.role,
+                              headshot: staff.image,
+                              initials: staff.initials,
+                              color: LEADER_BADGE_COLORS[i % LEADER_BADGE_COLORS.length],
+                            })
+                          }
+                          title={`View ${staff.name}'s profile`}
+                          className="flex items-center gap-3 bg-zinc-950 border border-white/5 rounded-full p-1.5 pr-4 shadow-sm hover:border-white/20 hover:bg-zinc-900 transition-all cursor-pointer text-left group/leader"
+                      >
                           {staff.image ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
@@ -220,10 +237,10 @@ export default function SeasonContext({
                             </div>
                           )}
                           <div className="flex flex-col leading-none">
-                              <span className="text-[10px] font-bold text-zinc-300">{staff.name.split(' ')[0]}</span>
-                              <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-wider">{staff.role.split(' ')[0]}</span>
+                              <span className="text-[10px] font-bold text-zinc-300 group-hover/leader:text-white transition-colors">{staff.name.split(' ')[0]}</span>
+                              <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">{staff.role.split(' ')[0]}</span>
                           </div>
-                      </div>
+                      </button>
                   ))}
               </div>
             )}
@@ -324,6 +341,13 @@ export default function SeasonContext({
                 )}
             </div>
         </div>
+
+        {selectedLeader && (
+          <PersonProfileModal
+            person={selectedLeader}
+            onClose={() => setSelectedLeader(null)}
+          />
+        )}
     </div>
   );
 }
