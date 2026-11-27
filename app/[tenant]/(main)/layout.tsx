@@ -63,7 +63,7 @@ export default async function MainLayout({
               <div className="shrink-0 z-30">
                 <GlobalHeader tenant={currentTenant} />
               </div>
-              <main className="flex-1 overflow-y-auto relative custom-scrollbar bg-zinc-950">
+              <main className="flex-1 overflow-y-auto relative custom-scrollbar bg-zinc-950 safe-bottom">
                 {children}
               </main>
               {modal}

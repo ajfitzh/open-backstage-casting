@@ -17,11 +17,18 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:import": "tsx scripts/import-baserow.ts",
-    "db:sync-show-images": "tsx scripts/sync-show-images.ts"
+    "db:sync-show-images": "tsx scripts/sync-show-images.ts",
+    "cap:sync": "npx cap sync ios",
+    "cap:ios": "npx cap open ios"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
+    "@capacitor-mlkit/barcode-scanning": "^8.2.2",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.3",
+    "@capacitor/status-bar": "^8.0.4",
     "@hello-pangea/dnd": "^17.0.0",
     "@neondatabase/serverless": "^1.2.1",
     "@stripe/stripe-js": "^9.5.0",
@@ -46,6 +53,7 @@
   },
   "devDependencies": {
     "@babel/plugin-transform-private-methods": "^7.28.6",
+    "@capacitor/cli": "^8.6.3",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

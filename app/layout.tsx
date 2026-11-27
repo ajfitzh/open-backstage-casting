@@ -1,7 +1,8 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ToastProvider } from '@/app/components/ToastProvider';
+import CapacitorBootstrap from '@/app/components/CapacitorBootstrap';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -16,6 +17,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const dynamic = 'force-dynamic';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#09090b',
+};
 
 export const metadata: Metadata = {
   title: 'Open Backstage',
@@ -32,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className="bg-zinc-950 text-zinc-100 min-h-screen antialiased font-sans"
         suppressHydrationWarning={true}
       >
+        <CapacitorBootstrap />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

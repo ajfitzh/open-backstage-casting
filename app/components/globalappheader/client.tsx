@@ -206,7 +206,7 @@ export default function GlobalHeaderClient({
 
   return (
     <>
-      <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
+      <header className="safe-header bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 shrink-0 relative z-50">
         {/* LEFT: NAV & CONTEXT */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -562,7 +562,7 @@ export default function GlobalHeaderClient({
             ref={navRef}
             className="relative w-72 max-w-[85vw] bg-zinc-900 h-full border-r border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-300"
           >
-            <div className="h-16 px-5 border-b border-white/5 flex items-center justify-between shrink-0">
+            <div className="safe-header px-5 border-b border-white/5 flex items-center justify-between shrink-0">
               <span className="text-sm font-black tracking-tighter text-blue-500">
                 OPEN<span className="text-white">BACKSTAGE</span>
               </span>
@@ -644,7 +644,7 @@ export default function GlobalHeaderClient({
               })}
             </div>
 
-            <div className="p-4 border-t border-white/5 bg-zinc-950/50">
+            <div className="p-4 safe-bottom border-t border-white/5 bg-zinc-950/50">
               <button
                 onClick={() => handleLogout()}
                 className="flex items-center gap-3 w-full p-2 text-zinc-500 hover:text-red-400 transition-colors"
