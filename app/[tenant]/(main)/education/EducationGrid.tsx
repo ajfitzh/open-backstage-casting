@@ -4,7 +4,8 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Users, MapPin, Clock, Filter, ChevronDown, Calendar, Search, X, 
-  LayoutGrid, Building2, BarChart3, Church, School, DollarSign, UserSquare2, Plus, Loader2
+  LayoutGrid, Building2, BarChart3, Church, School, DollarSign, Plus, Loader2,
+  Anchor, Crown, Sun, Waves, Compass, Trees, Mountain, GraduationCap, Navigation, Landmark, Sparkles
 } from "lucide-react";
 import ClassManagerModal, { type AcademyAdminOptions } from "@/app/components/education/ClassManagerModal";
 import { createAcademyClass } from "@/app/actions/admin-crud";
@@ -50,13 +51,72 @@ function getVenueName(spaceName: string) {
     return spaceName.split(' - ')[0].trim();
 }
 
-function getVenueTheme(venueName: string) {
-    const name = venueName.toLowerCase();
-    if (name.includes('river club')) return { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', icon: <Church size={14}/> };
-    if (name.includes('hope')) return { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', icon: <School size={14}/> };
-    if (name.includes('highway')) return { color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', icon: <Building2 size={14}/> };
-    if (name.includes('life')) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: <Users size={14}/> };
-    return { color: 'text-zinc-400', bg: 'bg-zinc-800', border: 'border-white/5', icon: <MapPin size={14}/> };
+interface VenueTheme {
+  color: string;
+  bg: string;
+  border: string;
+  accentFrom: string;
+  barBg: string;
+  icon: React.ReactNode;
+}
+
+const FALLBACK_VENUE_THEMES: Omit<VenueTheme, "icon">[] = [
+  { color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/25", accentFrom: "from-sky-500", barBg: "bg-sky-500" },
+  { color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/25", accentFrom: "from-violet-500", barBg: "bg-violet-500" },
+  { color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/25", accentFrom: "from-rose-500", barBg: "bg-rose-500" },
+  { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/25", accentFrom: "from-emerald-500", barBg: "bg-emerald-500" },
+  { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/25", accentFrom: "from-amber-500", barBg: "bg-amber-500" },
+  { color: "text-teal-400", bg: "bg-teal-500/10", border: "border-teal-500/25", accentFrom: "from-teal-500", barBg: "bg-teal-500" },
+];
+
+function getVenueTheme(venueName: string): VenueTheme {
+  const name = (venueName || "").toLowerCase();
+  if (name.includes("river club")) {
+    return { color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/25", accentFrom: "from-sky-500", barBg: "bg-sky-500", icon: <Anchor size={14} /> };
+  }
+  if (name.includes("kingdom")) {
+    return { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/25", accentFrom: "from-purple-500", barBg: "bg-purple-500", icon: <Crown size={14} /> };
+  }
+  if (name.includes("hope")) {
+    return { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/25", accentFrom: "from-amber-500", barBg: "bg-amber-500", icon: <Sun size={14} /> };
+  }
+  if (name.includes("river of life") || name.includes("life")) {
+    return { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/25", accentFrom: "from-emerald-500", barBg: "bg-emerald-500", icon: <Waves size={14} /> };
+  }
+  if (name.includes("highway")) {
+    return { color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/25", accentFrom: "from-rose-500", barBg: "bg-rose-500", icon: <Compass size={14} /> };
+  }
+  if (name.includes("south stafford")) {
+    return { color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/25", accentFrom: "from-indigo-500", barBg: "bg-indigo-500", icon: <Landmark size={14} /> };
+  }
+  if (name.includes("hartwood")) {
+    return { color: "text-lime-400", bg: "bg-lime-500/10", border: "border-lime-500/25", accentFrom: "from-lime-500", barBg: "bg-lime-500", icon: <Trees size={14} /> };
+  }
+  if (name.includes("rockhill") || name.includes("rock hill")) {
+    return { color: "text-teal-400", bg: "bg-teal-500/10", border: "border-teal-500/25", accentFrom: "from-teal-500", barBg: "bg-teal-500", icon: <Mountain size={14} /> };
+  }
+  if (name.includes("cyt@school") || name.includes("school")) {
+    return { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/25", accentFrom: "from-yellow-500", barBg: "bg-yellow-500", icon: <GraduationCap size={14} /> };
+  }
+  if (name.includes("northern virginia") || name.includes("nova")) {
+    return { color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/25", accentFrom: "from-cyan-500", barBg: "bg-cyan-500", icon: <Navigation size={14} /> };
+  }
+  if (name.includes("stafford")) {
+    return { color: "text-fuchsia-400", bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/25", accentFrom: "from-fuchsia-500", barBg: "bg-fuchsia-500", icon: <Building2 size={14} /> };
+  }
+  if (name.includes("fredericksburg")) {
+    return { color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/25", accentFrom: "from-blue-500", barBg: "bg-blue-500", icon: <Church size={14} /> };
+  }
+  if (!name || name === "main campus" || name === "tbd location") {
+    return { color: "text-zinc-400", bg: "bg-zinc-800", border: "border-white/5", accentFrom: "from-zinc-500", barBg: "bg-zinc-500", icon: <MapPin size={14} /> };
+  }
+
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  const palette = FALLBACK_VENUE_THEMES[hash % FALLBACK_VENUE_THEMES.length];
+  return { ...palette, icon: <Sparkles size={14} /> };
 }
 
 const AGE_BUCKETS = [
@@ -376,7 +436,7 @@ export default function EducationGrid({
                                         <span className="text-xs font-mono text-zinc-400">{data.students} students</span>
                                     </div>
                                     <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-white/5">
-                                        <div className={`h-full rounded-full ${theme.bg.replace('/10', '')}`} style={{ width: `${(data.students / metrics.totalStudents) * 100}%` }} />
+                                        <div className={`h-full rounded-full ${theme.barBg}`} style={{ width: `${metrics.totalStudents > 0 ? (data.students / metrics.totalStudents) * 100 : 0}%` }} />
                                     </div>
                                 </div>
                              )
@@ -559,11 +619,12 @@ export default function EducationGrid({
 }
 
 function ClassCard({ cls, onClick }: { cls: EducationClass, onClick: () => void }) {
-    const theme = getVenueTheme(cls.location as any); // Type assertion because venue is a computed property
+    const theme = getVenueTheme(cls.location || "");
+    const hasTime = Boolean(cls.time && cls.time !== "TBD");
     return (
-        <div onClick={onClick} className="group cursor-pointer bg-zinc-900/40 border border-white/5 hover:border-white/10 hover:bg-zinc-900/60 rounded-2xl p-5 transition-all flex flex-col h-full relative overflow-hidden shadow-sm hover:shadow-2xl">
-            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br rounded-bl-full -mr-8 -mt-8 pointer-events-none opacity-10 ${theme.bg.replace('bg-', 'from-').replace('/10', '')} to-transparent`} />
-            <div className="mb-4">
+        <div onClick={onClick} className="group cursor-pointer bg-zinc-900/40 border border-white/5 hover:border-white/15 hover:bg-zinc-900/60 rounded-2xl p-5 transition-all flex flex-col h-full relative overflow-hidden shadow-sm hover:shadow-2xl">
+            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br rounded-bl-full -mr-8 -mt-8 pointer-events-none opacity-15 ${theme.accentFrom} to-transparent`} />
+            <div className="mb-3">
                 <div className="flex items-start justify-between gap-4">
                     <h3 className="font-bold text-zinc-100 leading-tight group-hover:text-emerald-400 transition-colors">
                         {cls.name}
@@ -582,14 +643,24 @@ function ClassCard({ cls, onClick }: { cls: EducationClass, onClick: () => void 
                 <p className="text-xs text-zinc-500 font-medium mt-1 flex items-center gap-1">
                     <School size={10}/> {cls.teacher}
                 </p>
-            </div>
-            <div className="mt-auto space-y-2 pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs text-zinc-400">
-                        <Calendar size={14} className="text-zinc-600"/>
-                        <span className="font-bold text-zinc-300">{cls.day}</span>
+                {cls.location && (
+                    <div className="mt-2.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${theme.bg} ${theme.border} ${theme.color}`}>
+                            {theme.icon}
+                            <span className="truncate max-w-[220px]">{cls.location}</span>
+                        </span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                )}
+            </div>
+            <div className="mt-auto space-y-2 pt-3 border-t border-white/5">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-400 min-w-0">
+                        <Calendar size={14} className="text-zinc-600 shrink-0"/>
+                        <span className="font-bold text-zinc-300 truncate">
+                            {cls.day}{hasTime ? ` • ${cls.time}` : ""}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
                         <Users size={14} className="text-zinc-600"/>
                         <span>{cls.students} Enrolled</span>
                     </div>
