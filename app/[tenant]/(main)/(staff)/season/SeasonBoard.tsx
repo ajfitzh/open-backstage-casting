@@ -2,7 +2,9 @@
 
 import React, { useState } from "react";
 import { DragDropContext, Droppable, Draggable, DroppableProvided, DraggableProvided, DroppableStateSnapshot } from "@hello-pangea/dnd";
-import { UserCircle, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { UserCircle, AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useTenant } from "@/app/components/TenantProvider";
+import { setSeasonSlotAssignment } from "@/app/actions/admin-crud";
 
 // --- TYPES ---
 export type StaffCard = {
@@ -101,47 +103,52 @@ export default function SeasonBoard({
     }));
   };
 
+  const tenant = useTenant();
   const [talentPool, setTalentPool] = useState<StaffCard[]>(initialTalent);
   const [columns, setColumns] = useState<ProductionColumn[]>(generateColumns());
+  const [savingNotice, setSavingNotice] = useState<string | null>(null);
 
-  const onDragEnd = (result: any) => {
+  const onDragEnd = async (result: any) => {
     const { source, destination, draggableId } = result;
 
     if (!destination) return;
+    if (source.droppableId === destination.droppableId) return;
 
     // A. Identify the User being dragged
-    // Note: We cast ID to string to match Draggable ID
     let draggedUser = talentPool.find(u => u.id.toString() === draggableId);
-    let fromSlot = false;
 
-    // If not in pool, check if they are currently in a slot
     if (!draggedUser) {
         columns.forEach(col => {
             col.slots.forEach(slot => {
                 if (slot.filledBy && slot.filledBy.id.toString() === draggableId) {
                     draggedUser = slot.filledBy;
-                    fromSlot = true;
                 }
             });
         });
     }
 
-    if (!draggedUser) return; // Should not happen
+    if (!draggedUser) return;
 
     // B. Create copies of state
     const newPool = [...talentPool];
-    const newColumns = [...columns];
+    const newColumns = columns.map(col => ({
+      ...col,
+      slots: col.slots.map(s => ({ ...s })),
+    }));
+
+    let sourceSlotMeta: { productionId: number; role: string } | null = null;
+    let destSlotMeta: { productionId: number; role: string } | null = null;
 
     // C. Remove from Source
     if (source.droppableId === "talent-pool") {
         const index = newPool.findIndex(u => u.id === draggedUser!.id);
         if (index > -1) newPool.splice(index, 1);
     } else {
-        // Remove from the old slot
         newColumns.forEach(col => {
             col.slots.forEach(slot => {
                 if (slot.id === source.droppableId) {
                     slot.filledBy = null;
+                    sourceSlotMeta = { productionId: Number(col.id), role: slot.role };
                 }
             });
         });
@@ -151,25 +158,41 @@ export default function SeasonBoard({
     if (destination.droppableId === "talent-pool") {
         newPool.splice(destination.index, 0, draggedUser);
     } else {
-        // Add to the new slot
-        // WARNING: If slot is full, this simplistic logic overwrites. 
-        // In a real app, you'd swap or bounce back.
         newColumns.forEach(col => {
             col.slots.forEach(slot => {
                 if (slot.id === destination.droppableId) {
-                    // If someone is already there, dump them back to pool (Swap logic)
                     if (slot.filledBy) {
                         newPool.push(slot.filledBy);
                     }
                     slot.filledBy = draggedUser!;
+                    destSlotMeta = { productionId: Number(col.id), role: slot.role };
                 }
             });
         });
     }
 
-    // E. Update State
+    // E. Optimistic Update
     setTalentPool(newPool);
     setColumns(newColumns);
+
+    // F. Persist to Postgres show_team
+    if (tenant) {
+      setSavingNotice("Saving...");
+      try {
+        if (sourceSlotMeta) {
+          const src = sourceSlotMeta as { productionId: number; role: string };
+          await setSeasonSlotAssignment(tenant, src.productionId, src.role, null);
+        }
+        if (destSlotMeta) {
+          const dst = destSlotMeta as { productionId: number; role: string };
+          await setSeasonSlotAssignment(tenant, dst.productionId, dst.role, draggedUser.id);
+        }
+        setSavingNotice("Saved");
+        setTimeout(() => setSavingNotice(null), 1800);
+      } catch {
+        setSavingNotice("Save failed");
+      }
+    }
   };
 
   return (
@@ -206,9 +229,17 @@ export default function SeasonBoard({
 
         {/* RIGHT: THE TALENT POOL */}
         <div className="w-80 bg-white border-l border-slate-200 p-4 flex flex-col shadow-2xl z-10">
-          <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-            <UserCircle className="w-5 h-5 text-blue-600" />
-            Talent Pool ({talentPool.length})
+          <h3 className="font-bold text-slate-700 mb-4 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <UserCircle className="w-5 h-5 text-blue-600" />
+              Talent Pool ({talentPool.length})
+            </span>
+            {savingNotice && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-50 text-blue-600">
+                {savingNotice === "Saving..." && <Loader2 className="w-3 h-3 animate-spin" />}
+                {savingNotice}
+              </span>
+            )}
           </h3>
           
           <Droppable droppableId="talent-pool">

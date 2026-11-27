@@ -16,6 +16,9 @@ import {
 import AutoSchedulerModal from './AutoSchedulerModal'; 
 import CallboardView from './CallboardView'; 
 import { saveScheduleBatch } from '@/app/lib/actions'; 
+import { createShowEvent, deleteShowEvent } from '@/app/actions/admin-crud';
+import { VALID_EVENT_TYPES } from '@/app/lib/admin-crud-helpers';
+import { Trash2 } from 'lucide-react';
 
 type TrackType = "Acting" | "Music" | "Dance";
 type SceneStatus = "New" | "Worked" | "Polished";
@@ -56,6 +59,46 @@ export default function SchedulerClient({
   const [isSaving, setIsSaving] = useState(false); 
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [copiedIcs, setCopiedIcs] = useState(false);
+
+  // Rehearsal Events Manager modal state
+  const [localEvents, setLocalEvents] = useState<any[]>(events || []);
+  const [isEventsModalOpen, setIsEventsModalOpen] = useState(false);
+  const [newEventDate, setNewEventDate] = useState("");
+  const [newEventStart, setNewEventStart] = useState("18:00");
+  const [newEventEnd, setNewEventEnd] = useState("21:00");
+  const [newEventType, setNewEventType] = useState("Rehearsal");
+  const [newEventNotes, setNewEventNotes] = useState("");
+  const [eventBusy, setEventBusy] = useState(false);
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenant || !activeId || !newEventDate) return;
+    setEventBusy(true);
+    const res = await createShowEvent(tenant, activeId, {
+      eventDate: newEventDate,
+      startTime: newEventStart,
+      endTime: newEventEnd,
+      eventType: newEventType,
+      notes: newEventNotes,
+    });
+    setEventBusy(false);
+    if (res.success && "event" in res && res.event) {
+      setLocalEvents((prev) => [...prev, res.event]);
+      setNewEventDate("");
+      setNewEventNotes("");
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: number) => {
+    if (!tenant || !activeId) return;
+    if (!confirm("Delete this rehearsal event?")) return;
+    setEventBusy(true);
+    const res = await deleteShowEvent(tenant, activeId, eventId);
+    setEventBusy(false);
+    if (res.success) {
+      setLocalEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+    }
+  };
 
   const icsRelativeUrl = `/api/calendar?tenant=${encodeURIComponent(tenant)}&productionId=${activeId}`;
 
@@ -235,6 +278,13 @@ export default function SchedulerClient({
                         </button>
                       </>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setIsEventsModalOpen(true)}
+                      className="flex items-center gap-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      <Plus size={14} /> Events ({localEvents.length})
+                    </button>
                     <button onClick={() => setIsAutoSchedulerOpen(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all">
                        <Wand2 size={14} /> Auto
                     </button>
@@ -271,6 +321,123 @@ export default function SchedulerClient({
             )}
         </div>
         <AutoSchedulerModal isOpen={isAutoSchedulerOpen} onClose={() => setIsAutoSchedulerOpen(false)} scenes={sceneData} people={roster} onCommit={(newItems: any[]) => { setSchedule(prev => [...prev, ...newItems]); }} />
+
+        {isEventsModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setIsEventsModalOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-5 border-b border-white/10 flex items-center justify-between bg-zinc-950">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-white">
+                    Manage Rehearsal &amp; Show Events
+                  </h3>
+                  <p className="text-xs text-zinc-500">{productionTitle}</p>
+                </div>
+                <button type="button" onClick={() => setIsEventsModalOpen(false)} className="text-zinc-500 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateEvent} className="p-5 border-b border-white/10 bg-zinc-900/60 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={newEventDate}
+                      onChange={(e) => setNewEventDate(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Type</label>
+                    <select
+                      value={newEventType}
+                      onChange={(e) => setNewEventType(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                    >
+                      {VALID_EVENT_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Start</label>
+                    <input
+                      type="time"
+                      value={newEventStart}
+                      onChange={(e) => setNewEventStart(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">End</label>
+                    <input
+                      type="time"
+                      value={newEventEnd}
+                      onChange={(e) => setNewEventEnd(e.target.value)}
+                      className="w-full px-2.5 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    placeholder="Notes (e.g., Full cast Act 1 run-through)..."
+                    value={newEventNotes}
+                    onChange={(e) => setNewEventNotes(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={eventBusy}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-black uppercase text-white disabled:opacity-50"
+                  >
+                    {eventBusy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    Add Event
+                  </button>
+                </div>
+              </form>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-2 custom-scrollbar">
+                {localEvents.length === 0 ? (
+                  <p className="text-center text-xs text-zinc-500 py-8">No rehearsal events scheduled yet.</p>
+                ) : (
+                  [...localEvents]
+                    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+                    .map((ev: any) => (
+                      <div
+                        key={ev.id}
+                        className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-zinc-950/80 border border-white/5"
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-white">
+                            {ev.date || "TBD"} • <span className="text-blue-400">{ev.type || "Rehearsal"}</span>
+                            {ev.startTime ? ` (${ev.startTime}${ev.endTime ? `–${ev.endTime}` : ""})` : ""}
+                          </div>
+                          {ev.notes && <div className="text-[11px] text-zinc-400 mt-0.5">{ev.notes}</div>}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={eventBusy}
+                          onClick={() => handleDeleteEvent(Number(ev.id))}
+                          className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                          title="Delete event"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

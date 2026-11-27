@@ -51,7 +51,11 @@ export default async function AnalysisPage({
         </div>
       </header>
       
-      <SceneAnalysisClient scenes={(scenes || []).sort((a, b) => a.order - b.order)} />
+      <SceneAnalysisClient
+        tenant={tenant}
+        productionId={showId}
+        scenes={(scenes || []).sort((a, b) => a.order - b.order)}
+      />
     </main>
   );
 }

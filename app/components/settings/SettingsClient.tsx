@@ -6,10 +6,16 @@ import {
   User, Shield, Monitor, Lock,
   LogOut, Mail, CheckCircle2, Users,
   CreditCard, ChevronRight, Phone, MapPin,
-  Save, Loader2, Upload, Search, UserCog, X, ChevronUp, Rocket
+  Save, Loader2, Upload, Search, UserCog, X, ChevronUp, Rocket, Plus, Trash2, Edit2
 } from 'lucide-react';
 import { switchProduction } from '@/app/actions';
 import { updateMyProfile, updateUserRoles, setProductionStatus } from '@/app/actions/admin';
+import {
+  createPersonAdmin,
+  deletePersonAdmin,
+  updatePersonAdmin,
+  updateProductionDetails,
+} from '@/app/actions/admin-crud';
 import ShowLaunchPanel, {
   type AuditionSlotSummary,
   type ShowTeamMemberSummary,
@@ -98,17 +104,26 @@ export default function SettingsClient({
   const [profileNotice, setProfileNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  // Admin: Team & Roles state
+  // Admin: Team & Roles + People Directory CRUD state
   const [peopleList, setPeopleList] = useState<DirectoryPerson[]>(directoryPeople);
   const [peopleSearch, setPeopleSearch] = useState('');
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null);
   const [draftRoles, setDraftRoles] = useState<string[]>([]);
+  const [draftPersonName, setDraftPersonName] = useState('');
+  const [draftPersonEmail, setDraftPersonEmail] = useState('');
+  const [draftPersonPhone, setDraftPersonPhone] = useState('');
   const [savingRolesId, setSavingRolesId] = useState<number | null>(null);
+  const [deletingPersonId, setDeletingPersonId] = useState<number | null>(null);
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [newPersonForm, setNewPersonForm] = useState({ fullName: '', email: '', phone: '', roles: ['Staff'] as string[] });
+  const [creatingPerson, setCreatingPerson] = useState(false);
   const [adminNotice, setAdminNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Admin: Show statuses
+  // Admin: Show statuses & Production editing
   const [showList, setShowList] = useState<any[]>(shows);
   const [updatingShowId, setUpdatingShowId] = useState<number | null>(null);
+  const [editingShowId, setEditingShowId] = useState<number | null>(null);
+  const [showDraft, setShowDraft] = useState({ title: '', location: '', productionFee: '0', status: 'Active' });
 
   const {
     role: effectiveGlobalRole,
@@ -211,6 +226,9 @@ export default function SettingsClient({
   const startEditingRoles = (person: DirectoryPerson) => {
     setEditingPersonId(person.id);
     setDraftRoles(person.roles);
+    setDraftPersonName(person.name || '');
+    setDraftPersonEmail(person.email || '');
+    setDraftPersonPhone(person.phone || '');
     setAdminNotice(null);
   };
 
@@ -224,18 +242,115 @@ export default function SettingsClient({
     setSavingRolesId(personId);
     setAdminNotice(null);
 
-    const res = await updateUserRoles(tenant, personId, draftRoles);
+    const [detailsRes, rolesRes] = await Promise.all([
+      updatePersonAdmin(tenant, personId, {
+        fullName: draftPersonName,
+        email: draftPersonEmail,
+        phone: draftPersonPhone,
+        roles: draftRoles,
+      }),
+      updateUserRoles(tenant, personId, draftRoles),
+    ]);
     setSavingRolesId(null);
 
-    if (res.success) {
-      const updatedRoles = 'roles' in res && Array.isArray(res.roles) ? res.roles : draftRoles;
+    if (detailsRes.success || rolesRes.success) {
+      const updatedRoles =
+        'roles' in rolesRes && Array.isArray(rolesRes.roles) ? rolesRes.roles : draftRoles;
       setPeopleList((prev) =>
-        prev.map((p) => (p.id === personId ? { ...p, roles: updatedRoles } : p))
+        prev.map((p) =>
+          p.id === personId
+            ? {
+                ...p,
+                name: draftPersonName.trim() || p.name,
+                email: draftPersonEmail.trim(),
+                phone: draftPersonPhone.trim(),
+                roles: updatedRoles,
+              }
+            : p
+        )
       );
       setEditingPersonId(null);
-      setAdminNotice({ type: 'success', text: 'User roles updated.' });
+      setAdminNotice({ type: 'success', text: 'Person details and roles saved.' });
     } else {
-      setAdminNotice({ type: 'error', text: res.error || 'Failed to update roles.' });
+      setAdminNotice({ type: 'error', text: detailsRes.error || rolesRes.error || 'Failed to update person.' });
+    }
+  };
+
+  const handleCreatePerson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPersonForm.fullName.trim()) return;
+    setCreatingPerson(true);
+    setAdminNotice(null);
+    const res = await createPersonAdmin(tenant, {
+      fullName: newPersonForm.fullName,
+      email: newPersonForm.email,
+      phone: newPersonForm.phone,
+      roles: newPersonForm.roles,
+    });
+    setCreatingPerson(false);
+    if (res.success && 'person' in res && res.person) {
+      setPeopleList((prev) => [res.person!, ...prev]);
+      setNewPersonForm({ fullName: '', email: '', phone: '', roles: ['Staff'] });
+      setShowAddPerson(false);
+      setAdminNotice({ type: 'success', text: `Added "${res.person.name}" to workspace directory.` });
+    } else {
+      setAdminNotice({ type: 'error', text: res.error || 'Could not create person.' });
+    }
+  };
+
+  const handleDeletePerson = async (person: DirectoryPerson) => {
+    if (!confirm(`Delete "${person.name}" from this workspace? This cannot be undone.`)) return;
+    setDeletingPersonId(person.id);
+    setAdminNotice(null);
+    const res = await deletePersonAdmin(tenant, person.id);
+    setDeletingPersonId(null);
+    if (res.success) {
+      setPeopleList((prev) => prev.filter((p) => p.id !== person.id));
+      if (editingPersonId === person.id) setEditingPersonId(null);
+      setAdminNotice({ type: 'success', text: `Deleted "${person.name}".` });
+    } else {
+      setAdminNotice({ type: 'error', text: res.error || 'Could not delete person.' });
+    }
+  };
+
+  const startEditingShow = (show: any) => {
+    setEditingShowId(show.id);
+    setShowDraft({
+      title: show.title || '',
+      location: show.location || '',
+      productionFee: String(show.productionFee ?? 0),
+      status: show.status || 'Active',
+    });
+  };
+
+  const handleSaveShowDetails = async (showId: number) => {
+    setUpdatingShowId(showId);
+    setAdminNotice(null);
+    const res = await updateProductionDetails(tenant, showId, {
+      title: showDraft.title,
+      location: showDraft.location,
+      productionFee: Number(showDraft.productionFee || 0),
+      status: showDraft.status,
+    });
+    setUpdatingShowId(null);
+    if (res.success) {
+      setShowList((prev) =>
+        prev.map((s) =>
+          s.id === showId
+            ? {
+                ...s,
+                title: showDraft.title.trim() || s.title,
+                location: showDraft.location.trim(),
+                productionFee: Number(showDraft.productionFee || 0),
+                status: showDraft.status,
+              }
+            : s
+        )
+      );
+      setEditingShowId(null);
+      setAdminNotice({ type: 'success', text: `Updated "${showDraft.title}".` });
+    } else {
+      setAdminNotice({ type: 'error', text: res.error || 'Could not update production details.' });
     }
   };
 
@@ -457,15 +572,18 @@ export default function SettingsClient({
             )}
 
             <div className="grid grid-cols-1 gap-3">
-              {showList.map((show) => (
+              {showList.map((show) => {
+                const isEditingShow = editingShowId === show.id;
+                return (
                 <div
                   key={show.id}
-                  className={`w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border transition-all ${
+                  className={`w-full flex flex-col gap-4 p-4 rounded-xl border transition-all ${
                     activeId === show.id
                       ? 'bg-emerald-900/10 border-emerald-500/50'
                       : 'bg-black/20 border-white/5 hover:border-white/10'
                   }`}
                 >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <form action={switchProduction} className="flex-1">
                     <input type="hidden" name="productionId" value={show.id} />
                     <input type="hidden" name="redirectPath" value="/settings" />
@@ -484,33 +602,88 @@ export default function SettingsClient({
                         <div className="text-xs font-medium text-zinc-500">
                           {show.location || show.season || 'Production'}
                           {show.status ? ` • ${show.status}` : ''}
+                          {typeof show.productionFee === 'number' && show.productionFee > 0 ? ` • $${show.productionFee} fee` : ''}
                         </div>
                       </div>
                     </button>
                   </form>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {activeId === show.id && (
-                      <div className="flex items-center gap-1.5 text-emerald-500 text-xs font-bold uppercase tracking-widest">
+                      <div className="flex items-center gap-1.5 text-emerald-500 text-xs font-bold uppercase tracking-widest mr-1">
                         <CheckCircle2 size={16} /> Selected
                       </div>
                     )}
                     {canManageTeam && (
-                      <select
-                        aria-label={`Status for ${show.title}`}
-                        disabled={updatingShowId === show.id}
-                        value={show.status || 'Active'}
-                        onChange={(e) => handleProductionStatusChange(show.id, e.target.value)}
-                        className="bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-200 focus:border-blue-500 outline-none disabled:opacity-50"
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Upcoming">Upcoming</option>
-                        <option value="Archived">Archived</option>
-                      </select>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => (isEditingShow ? setEditingShowId(null) : startEditingShow(show))}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200"
+                        >
+                          <Edit2 size={12} /> {isEditingShow ? 'Close' : 'Edit'}
+                        </button>
+                        <select
+                          aria-label={`Status for ${show.title}`}
+                          disabled={updatingShowId === show.id}
+                          value={show.status || 'Active'}
+                          onChange={(e) => handleProductionStatusChange(show.id, e.target.value)}
+                          className="bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-200 focus:border-blue-500 outline-none disabled:opacity-50"
+                        >
+                          <option value="Active">Active</option>
+                          <option value="Upcoming">Upcoming</option>
+                          <option value="Archived">Archived</option>
+                        </select>
+                      </>
                     )}
                   </div>
+                  </div>
+
+                  {isEditingShow && (
+                    <div className="pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Show Title</label>
+                        <input
+                          value={showDraft.title}
+                          onChange={(e) => setShowDraft({ ...showDraft, title: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Location / Venue</label>
+                        <input
+                          value={showDraft.location}
+                          onChange={(e) => setShowDraft({ ...showDraft, location: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Production Fee ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={showDraft.productionFee}
+                          onChange={(e) => setShowDraft({ ...showDraft, productionFee: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                        />
+                      </div>
+                      <div className="sm:col-span-4 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={updatingShowId === show.id}
+                          onClick={() => handleSaveShowDetails(show.id)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold uppercase text-white disabled:opacity-50"
+                        >
+                          {updatingShowId === show.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          Save Show Details
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -595,15 +768,98 @@ export default function SettingsClient({
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">Team & Roles</h2>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">People &amp; Roles</h2>
                 <p className="text-zinc-500 text-sm">
-                  Search people in this workspace and manage their global RBAC roles directly.
+                  Add, edit, remove people in this workspace and manage their global RBAC roles directly.
                 </p>
               </div>
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                {peopleList.length} People
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                  {peopleList.length} People
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddPerson((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider transition-colors"
+                >
+                  <Plus size={14} /> Add Person
+                </button>
+              </div>
             </div>
+
+            {showAddPerson && (
+              <form
+                onSubmit={handleCreatePerson}
+                className="p-5 rounded-2xl bg-black/30 border border-blue-500/30 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-blue-400">
+                    Add New Person to Workspace
+                  </h3>
+                  <button type="button" onClick={() => setShowAddPerson(false)} className="text-zinc-500 hover:text-white">
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    required
+                    placeholder="Full Name *"
+                    value={newPersonForm.fullName}
+                    onChange={(e) => setNewPersonForm({ ...newPersonForm, fullName: e.target.value })}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-950 border border-white/10 text-sm text-white outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email (optional)"
+                    value={newPersonForm.email}
+                    onChange={(e) => setNewPersonForm({ ...newPersonForm, email: e.target.value })}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-950 border border-white/10 text-sm text-white outline-none focus:border-blue-500"
+                  />
+                  <input
+                    placeholder="Phone (optional)"
+                    value={newPersonForm.phone}
+                    onChange={(e) => setNewPersonForm({ ...newPersonForm, phone: e.target.value })}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-950 border border-white/10 text-sm text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[...ASSIGNABLE_GLOBAL_ROLES, 'Student', 'Teacher'].map((roleName) => {
+                    const selected = newPersonForm.roles.includes(roleName);
+                    return (
+                      <button
+                        key={roleName}
+                        type="button"
+                        onClick={() =>
+                          setNewPersonForm((prev) => ({
+                            ...prev,
+                            roles: prev.roles.includes(roleName)
+                              ? prev.roles.filter((r) => r !== roleName)
+                              : [...prev.roles, roleName],
+                          }))
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                          selected
+                            ? 'bg-blue-600 border-blue-500 text-white'
+                            : 'bg-zinc-900 border-white/10 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {roleName}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={creatingPerson}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {creatingPerson ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    Create Person
+                  </button>
+                </div>
+              </form>
+            )}
 
             {adminNotice && (
               <div
@@ -679,6 +935,33 @@ export default function SettingsClient({
 
                       {isEditing && (
                         <div className="pt-3 border-t border-white/5 space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Full Name</label>
+                              <input
+                                value={draftPersonName}
+                                onChange={(e) => setDraftPersonName(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Email</label>
+                              <input
+                                type="email"
+                                value={draftPersonEmail}
+                                onChange={(e) => setDraftPersonEmail(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Phone</label>
+                              <input
+                                value={draftPersonPhone}
+                                onChange={(e) => setDraftPersonPhone(e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-white/10 text-xs text-white"
+                              />
+                            </div>
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {ASSIGNABLE_GLOBAL_ROLES.map((roleName) => {
                               const selected = draftRoles.includes(roleName);
@@ -698,7 +981,16 @@ export default function SettingsClient({
                               );
                             })}
                           </div>
-                          <div className="flex justify-end">
+                          <div className="flex items-center justify-between pt-1">
+                            <button
+                              type="button"
+                              disabled={deletingPersonId === person.id}
+                              onClick={() => handleDeletePerson(person)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold transition-colors disabled:opacity-50"
+                            >
+                              {deletingPersonId === person.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                              Delete Person
+                            </button>
                             <button
                               type="button"
                               disabled={savingRolesId === person.id}
@@ -710,7 +1002,7 @@ export default function SettingsClient({
                               ) : (
                                 <Save size={14} />
                               )}
-                              Save Roles
+                              Save Person
                             </button>
                           </div>
                         </div>

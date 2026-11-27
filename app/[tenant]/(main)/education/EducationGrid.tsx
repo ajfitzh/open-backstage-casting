@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Users, MapPin, Clock, Filter, ChevronDown, Calendar, Search, X, 
-  LayoutGrid, Building2, BarChart3, Church, School, DollarSign, UserSquare2
+  LayoutGrid, Building2, BarChart3, Church, School, DollarSign, UserSquare2, Plus, Loader2
 } from "lucide-react";
-import ClassManagerModal from "@/app/components/education/ClassManagerModal";
+import ClassManagerModal, { type AcademyAdminOptions } from "@/app/components/education/ClassManagerModal";
+import { createAcademyClass } from "@/app/actions/admin-crud";
 
 // --- TYPES ---
 // This matches the exact shape guaranteed by our Zod schema
@@ -64,10 +66,59 @@ const AGE_BUCKETS = [
   { label: "Adult (18+)", min: 18, max: 100 },
 ];
 
-export default function EducationGrid({ classes = [] }: { classes: EducationClass[] }) {
+export default function EducationGrid({
+  tenant = "",
+  classes = [],
+  adminOptions,
+}: {
+  tenant?: string;
+  classes: EducationClass[];
+  adminOptions?: AcademyAdminOptions;
+}) {
+  const router = useRouter();
   const [selectedClass, setSelectedClass] = useState<EducationClass | null>(null);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'campus' | 'metrics'>('grid');
+
+  // Create Class modal state
+  const [showNewClassModal, setShowNewClassModal] = useState(false);
+  const [creatingClass, setCreatingClass] = useState(false);
+  const [newClassForm, setNewClassForm] = useState({
+    className: "",
+    sessionId: adminOptions?.sessions[0]?.id ? String(adminOptions.sessions[0].id) : "",
+    sessionName: "",
+    teacherId: "",
+    spaceId: "",
+    day: "Monday",
+    timeSlot: "4:30 PM - 5:30 PM",
+    minAge: "8",
+    maxAge: "14",
+    type: "Acting",
+  });
+
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenant || !newClassForm.className.trim()) return;
+    setCreatingClass(true);
+    const res = await createAcademyClass(tenant, {
+      className: newClassForm.className,
+      sessionId: newClassForm.sessionId ? Number(newClassForm.sessionId) : null,
+      sessionName: !newClassForm.sessionId ? newClassForm.sessionName : undefined,
+      teacherId: newClassForm.teacherId ? Number(newClassForm.teacherId) : null,
+      spaceId: newClassForm.spaceId ? Number(newClassForm.spaceId) : null,
+      day: newClassForm.day,
+      timeSlot: newClassForm.timeSlot,
+      minAge: parseInt(newClassForm.minAge, 10) || 8,
+      maxAge: parseInt(newClassForm.maxAge, 10) || 18,
+      type: newClassForm.type,
+    });
+    setCreatingClass(false);
+    if (res.success) {
+      setShowNewClassModal(false);
+      setNewClassForm((prev) => ({ ...prev, className: "" }));
+      router.refresh();
+    }
+  };
   
   // 1. EXTRACT & SORT SESSIONS
   const sessions = useMemo(() => {
@@ -187,6 +238,15 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
                         <input type="text" placeholder="Search..." className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-all focus:bg-zinc-900" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                         {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"><X size={14} /></button>}
                     </div>
+                )}
+                {tenant && (
+                    <button
+                        type="button"
+                        onClick={() => setShowNewClassModal(true)}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest transition-colors shrink-0 shadow-lg shadow-blue-600/20"
+                    >
+                        <Plus size={16} /> New Class
+                    </button>
                 )}
             </div>
         </div>
@@ -342,7 +402,158 @@ export default function EducationGrid({ classes = [] }: { classes: EducationClas
         </div>
       )}
 
-      {selectedClass && <ClassManagerModal cls={selectedClass} onClose={() => setSelectedClass(null)} />}
+      {selectedClass && (
+        <ClassManagerModal
+          tenant={tenant}
+          cls={selectedClass}
+          adminOptions={adminOptions}
+          onClose={() => setSelectedClass(null)}
+        />
+      )}
+
+      {showNewClassModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowNewClassModal(false)}
+        >
+          <form
+            onSubmit={handleCreateClass}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black uppercase tracking-widest text-white">Create New Academy Class</h3>
+              <button type="button" onClick={() => setShowNewClassModal(false)} className="text-zinc-500 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Class Name *</label>
+              <input
+                required
+                placeholder="e.g., Musical Theater Tap II"
+                value={newClassForm.className}
+                onChange={(e) => setNewClassForm({ ...newClassForm, className: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-sm text-white"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Session</label>
+                <select
+                  value={newClassForm.sessionId}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, sessionId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                >
+                  <option value="">+ Create New Session...</option>
+                  {(adminOptions?.sessions || []).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              {!newClassForm.sessionId && (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">New Session Name</label>
+                  <input
+                    placeholder="e.g., Spring 2027"
+                    value={newClassForm.sessionName}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, sessionName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Teacher</label>
+                <select
+                  value={newClassForm.teacherId}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, teacherId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                >
+                  <option value="">TBD</option>
+                  {(adminOptions?.teachers || []).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Room / Space</label>
+                <select
+                  value={newClassForm.spaceId}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, spaceId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                >
+                  <option value="">Unassigned</option>
+                  {(adminOptions?.spaces || []).map((sp) => (
+                    <option key={sp.id} value={sp.id}>{sp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Day</label>
+                <select
+                  value={newClassForm.day}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, day: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                >
+                  {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "TBD"].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Time Slot</label>
+                <input
+                  value={newClassForm.timeSlot}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, timeSlot: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Min / Max Age</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={newClassForm.minAge}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, minAge: e.target.value })}
+                    className="w-1/2 px-2.5 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                  />
+                  <input
+                    type="number"
+                    value={newClassForm.maxAge}
+                    onChange={(e) => setNewClassForm({ ...newClassForm, maxAge: e.target.value })}
+                    className="w-1/2 px-2.5 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">Category</label>
+                <input
+                  value={newClassForm.type}
+                  onChange={(e) => setNewClassForm({ ...newClassForm, type: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs text-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowNewClassModal(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 text-xs font-bold text-zinc-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingClass}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-black uppercase text-white disabled:opacity-50"
+              >
+                {creatingClass ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                Create Class
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }

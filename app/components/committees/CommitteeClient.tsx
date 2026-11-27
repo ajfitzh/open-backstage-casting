@@ -12,8 +12,8 @@ import {
   saveCommitteeAssignments, 
   updateCommitteeVolunteer, 
   deleteCommitteeVolunteer,
-  addCommitteeVolunteer 
 } from '@/app/actions/committees';
+import { addCommitteeVolunteerLinked } from '@/app/actions/admin-crud';
 import { useTenant } from '@/app/components/TenantProvider'; 
 
 // --- TYPES ---
@@ -63,11 +63,13 @@ const DEFAULT_RULES: Record<string, { type: 'fixed' | 'ratio', val: number, min?
 export default function CommitteeDashboard({ 
     volunteers = [], 
     students = [],   
-    activeId 
+    activeId,
+    directoryPeople = [],
 }: { 
     volunteers?: Volunteer[], 
     students?: any[], 
-    activeId: number 
+    activeId: number,
+    directoryPeople?: { id: number; name: string; email: string; phone: string }[],
 }) {
   
   const tenant = useTenant(); 
@@ -100,7 +102,7 @@ export default function CommitteeDashboard({
   // Edit & Add Modal State
   const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", existingPersonId: "" });
 
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
@@ -157,12 +159,12 @@ export default function CommitteeDashboard({
   const handleOpenEdit = (p: Volunteer | null) => {
       if (p) {
           setSelectedVolunteer(p);
-          setEditForm({ name: p.name || "", email: p.email || "", phone: p.phone || "" });
+          setEditForm({ name: p.name || "", email: p.email || "", phone: p.phone || "", existingPersonId: "" });
           setIsEditing(false);
       } else {
           // Open "Add New" mode
           setSelectedVolunteer({ id: -1 } as Volunteer);
-          setEditForm({ name: "", email: "", phone: "" });
+          setEditForm({ name: "", email: "", phone: "", existingPersonId: "" });
           setIsEditing(true);
       }
   };
@@ -173,18 +175,23 @@ export default function CommitteeDashboard({
       
       startTransition(async () => {
           if (isNew) {
-              await addCommitteeVolunteer(tenant, editForm);
-              // Optimistic UI insert
-              setLocalVolunteers([...localVolunteers, { 
-                  ...selectedVolunteer, 
-                  id: Date.now(), 
-                  ...editForm 
-              }]);
+              const res = await addCommitteeVolunteerLinked(tenant, activeId, {
+                  existingPersonId: editForm.existingPersonId ? Number(editForm.existingPersonId) : undefined,
+                  name: editForm.name,
+                  email: editForm.email,
+                  phone: editForm.phone,
+              });
+              if (res.success && "volunteer" in res && res.volunteer) {
+                  setLocalVolunteers([...localVolunteers, res.volunteer as Volunteer]);
+              }
           } else {
-              await updateCommitteeVolunteer(tenant, selectedVolunteer.id, editForm);
-              // Optimistic UI update
+              await updateCommitteeVolunteer(tenant, selectedVolunteer.id, {
+                  name: editForm.name,
+                  email: editForm.email,
+                  phone: editForm.phone,
+              });
               setLocalVolunteers(localVolunteers.map(v => 
-                  v.id === selectedVolunteer.id ? { ...v, ...editForm } : v
+                  v.id === selectedVolunteer.id ? { ...v, name: editForm.name, email: editForm.email, phone: editForm.phone } : v
               ));
           }
           setSelectedVolunteer(null);
@@ -635,6 +642,32 @@ export default function CommitteeDashboard({
                     <div className="p-6 space-y-5 bg-zinc-950/50">
                         {isEditing ? (
                             <div className="space-y-4">
+                                {selectedVolunteer.id === -1 && directoryPeople.length > 0 && (
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">Pick Existing Person (Optional)</label>
+                                        <select
+                                            value={editForm.existingPersonId}
+                                            onChange={e => {
+                                                const pid = e.target.value;
+                                                const match = directoryPeople.find(dp => String(dp.id) === pid);
+                                                setEditForm({
+                                                    existingPersonId: pid,
+                                                    name: match ? match.name : editForm.name,
+                                                    email: match ? match.email : editForm.email,
+                                                    phone: match ? match.phone : editForm.phone,
+                                                });
+                                            }}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                                        >
+                                            <option value="">-- Or type a new volunteer below --</option>
+                                            {directoryPeople.map(dp => (
+                                                <option key={dp.id} value={dp.id}>
+                                                    {dp.name} {dp.email ? `(${dp.email})` : ""}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">Parent Name</label>
                                     <input 
