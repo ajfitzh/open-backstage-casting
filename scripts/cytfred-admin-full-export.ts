@@ -443,12 +443,47 @@ async function main() {
     );
     console.log(`  ✓ Pulled ${users.length} individual user record(s).`);
 
+    // -------------------------------------------------------------------------
+    // 6. Pull ALL Events (includes CYT Lite productions & special events)
+    // -------------------------------------------------------------------------
+    console.log(`\n[7/7] Pulling Events / CYT Lite productions (/admin/search_events)...`);
+    await page.goto(`${BASE_URL}/admin/search_events`, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+    await page.evaluate(() => {
+      const sel = document.querySelector("select[name*='length']") as HTMLSelectElement | null;
+      if (sel) {
+        const pick =
+          Array.from(sel.options).find((o) => o.value === "-1" || o.value === "100") ||
+          sel.options[sel.options.length - 1];
+        if (pick) {
+          sel.value = pick.value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    });
+    await page.waitForTimeout(1000);
+    const events = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll("table tbody tr"))
+        .map((tr) => {
+          const cells = Array.from(tr.querySelectorAll("td")).map((td) =>
+            (td.textContent || "").replace(/\s+/g, " ").trim()
+          );
+          const links = Array.from(tr.querySelectorAll("a[href]")).map((a) => ({
+            text: (a.textContent || "").replace(/\s+/g, " ").trim(),
+            href: (a as HTMLAnchorElement).href,
+          }));
+          return { cells, links };
+        })
+        .filter((r) => r.cells.some(Boolean));
+    });
+    console.log(`  ✓ Pulled ${events.length} event record(s).`);
+
     const fullExport = {
       exportedAt: new Date().toISOString(),
       baseUrl: BASE_URL,
       sessions,
       locations,
       shows: detailedShows,
+      events,
       classes: classesList,
       users,
     };

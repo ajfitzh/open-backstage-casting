@@ -196,8 +196,130 @@ async function scrapePublicShows(page: import("@playwright/test").Page): Promise
   return results;
 }
 
+function parseEventDateTime(rawLine: string): Date | null {
+  // Matches e.g. "Fri, Nov 27 2026 7:00pm - 8:00pm" or "Sat, Nov 28 2026 11:00am - 12:00pm"
+  const m = rawLine.match(
+    /([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s+(20\d{2})\s+@?\s*(\d{1,2}):(\d{2})\s*(am|pm)/i
+  );
+  if (!m) return null;
+  const monthIdx = MONTH_MAP[m[1].toLowerCase()];
+  if (monthIdx === undefined) return null;
+  const day = parseInt(m[2], 10);
+  const year = parseInt(m[3], 10);
+  let hour = parseInt(m[4], 10);
+  const minute = parseInt(m[5], 10);
+  const ampm = m[6].toLowerCase();
+  if (ampm === "pm" && hour !== 12) hour += 12;
+  if (ampm === "am" && hour === 12) hour = 0;
+  return new Date(Date.UTC(year, monthIdx, day, hour + 5, minute, 0));
+}
+
+async function scrapePublicEvents(page: import("@playwright/test").Page): Promise<ScrapedShowDetail[]> {
+  console.log(`\n[2/3] Visiting ${BASE_URL}/events/ (CYT Lite & Special Productions)...`);
+  await page.goto(`${BASE_URL}/events/`, { waitUntil: "domcontentloaded", timeout: 30000 });
+
+  // Some MyCYT sites redirect /events/ directly to the active event page; others list multiple /events/<slug>/<id> links.
+  const eventLinks = await page.evaluate(() => {
+    const anchors = Array.from(document.querySelectorAll("a[href*='/events/']"));
+    const unique = new Set<string>();
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      if (/\/events\/[^/]+\/\d+/.test(href)) unique.add(href);
+    }
+    return Array.from(unique);
+  });
+
+  const targetUrls = eventLinks.length > 0 ? eventLinks : [page.url()];
+  const results: ScrapedShowDetail[] = [];
+
+  for (const url of targetUrls) {
+    if (page.url() !== url) {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    }
+
+    const detail = await page.evaluate(() => {
+      const rawTitle =
+        document.querySelector("h1")?.textContent?.trim() ||
+        document.title.split("|")[0]?.trim() ||
+        "";
+      const bodyText = document.body.innerText || "";
+      const isCytLiteOrShow =
+        /cyt\s*lite|production|musical|\bkids\b|\bjr\.?\b|performances?/i.test(
+          `${rawTitle}\n${bodyText.slice(0, 1200)}`
+        );
+      if (!rawTitle || !isCytLiteOrShow) return null;
+
+      // Clean title: e.g. "Charlie Brown Christmas - A CYT Lite Production" -> "Charlie Brown Christmas"
+      const cleanTitle = rawTitle
+        .replace(/\s*[-–—]\s*A?\s*CYT\s*Lite\s*Production.*$/i, "")
+        .replace(/\s*\(CYT\s*Lite\).*$/i, "")
+        .trim();
+
+      // Find banner image
+      const imgs = Array.from(document.querySelectorAll("img"))
+        .map((img) => img.getAttribute("src") || "")
+        .filter((src) => src.includes("/images/events/") || src.includes("/images/shows/"));
+      let imageUrl: string | null = imgs[0] || null;
+      if (imageUrl && imageUrl.includes("src=https://")) {
+        const match = imageUrl.match(/src=(https:\/\/[^&]+)/);
+        if (match) imageUrl = decodeURIComponent(match[1]);
+      }
+
+      // Venue: "Presented at Kingdom Baptist Church"
+      const venueMatch = bodyText.match(/Presented at\s+([^\n]+)/i);
+      const venue = venueMatch ? venueMatch[1].trim() : null;
+
+      // Ticket price: first "$XX.XX" in Options section
+      const priceMatch = bodyText.match(/\$(\d+(?:\.\d{2})?)/);
+      const priceText = priceMatch ? `$${priceMatch[1]}` : "$10.00";
+
+      const soldOut = /SOLD\s*OUT\s*-\s*All\s*performances/i.test(bodyText);
+
+      // Extract performance date/time lines: "Fri, Nov 27 2026 7:00pm - 8:00pm"
+      const lines = bodyText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const perfLines: string[] = [];
+      for (const line of lines) {
+        if (/[A-Za-z]{3},?\s+[A-Za-z]{3}\s+\d{1,2},?\s+20\d{2}\s+\d{1,2}:\d{2}\s*(?:am|pm)/i.test(line)) {
+          perfLines.push(line);
+        }
+      }
+
+      return {
+        cleanTitle,
+        imageUrl,
+        venue,
+        priceText,
+        soldOut,
+        perfLines: Array.from(new Set(perfLines)),
+      };
+    });
+
+    if (!detail) continue;
+    results.push({
+      url,
+      title: detail.cleanTitle,
+      imageUrl: detail.imageUrl,
+      performances: detail.perfLines.map((label) => ({
+        label,
+        startsAt: parseEventDateTime(label),
+      })),
+      standardPriceCents: parsePriceCents(detail.priceText),
+      characters: [],
+      venue: detail.venue,
+      isCytLite: true,
+      soldOut: detail.soldOut,
+    } as ScrapedShowDetail & { venue?: string | null; isCytLite?: boolean; soldOut?: boolean });
+  }
+
+  console.log(`  Found ${results.length} CYT Lite / Event production(s).`);
+  return results;
+}
+
 async function scrapePublicClasses(page: import("@playwright/test").Page): Promise<ScrapedClassRow[]> {
-  console.log(`\n[2/2] Visiting ${BASE_URL}/classes/ ...`);
+  console.log(`\n[3/3] Visiting ${BASE_URL}/classes/ ...`);
   await page.goto(`${BASE_URL}/classes/`, { waitUntil: "domcontentloaded", timeout: 30000 });
 
   const rows = await page.evaluate(() => {
@@ -324,12 +446,16 @@ async function main() {
     }
 
     const shows = await scrapePublicShows(page);
+    const eventShows = await scrapePublicEvents(page);
+    const allShows = [...shows, ...eventShows];
     const classes = await scrapePublicClasses(page);
 
-    console.log(`\nScraped ${shows.length} show detail page(s) and ${classes.length} class listing(s).`);
+    console.log(
+      `\nScraped ${shows.length} mainstage show(s), ${eventShows.length} CYT Lite event show(s), and ${classes.length} class listing(s).`
+    );
 
     if (DRY_RUN) {
-      console.log("[dry-run] Shows:", JSON.stringify(shows, null, 2));
+      console.log("[dry-run] Shows:", JSON.stringify(allShows, null, 2));
       console.log("[dry-run] Sample classes:", JSON.stringify(classes.slice(0, 5), null, 2));
       return;
     }
@@ -362,10 +488,12 @@ async function main() {
       .limit(1);
 
     // 1. Upsert show artwork, dates, ticket prices, performances, and blueprint character roles
-    for (const s of shows) {
+    for (const s of allShows as Array<
+      ScrapedShowDetail & { venue?: string | null; isCytLite?: boolean; soldOut?: boolean }
+    >) {
       const cleanTitle = s.title.split("—")[0].trim();
 
-      // Prefer exact match in active 2026-2027 season, then newest production with exact/prefix title
+      // Prefer exact match in active 2026-2027 season, then newest production with exact/contains title
       const candidates = await db
         .select()
         .from(schema.productions)
@@ -377,13 +505,31 @@ async function main() {
         )
         .orderBy(desc(schema.productions.id));
 
-      const prod =
+      let prod =
         candidates.find(
           (c) => activeSeason && c.seasonId === activeSeason.id && c.title.toLowerCase() === cleanTitle.toLowerCase()
         ) ||
         candidates.find((c) => activeSeason && c.seasonId === activeSeason.id) ||
         candidates.find((c) => c.title.toLowerCase() === cleanTitle.toLowerCase()) ||
         candidates[0];
+
+      if (!prod && s.isCytLite) {
+        const [created] = await db
+          .insert(schema.productions)
+          .values({
+            organizationId: org.id,
+            seasonId: activeSeason?.id ?? null,
+            title: cleanTitle,
+            type: "CYT Lite",
+            status: "Upcoming",
+            location: s.venue || null,
+            showImageUrl: s.imageUrl || null,
+            ticketPriceStandard: Number((s.standardPriceCents / 100).toFixed(2)),
+          })
+          .returning();
+        prod = created;
+        console.log(`  [created CYT Lite] "${prod.title}" (#${prod.id})`);
+      }
 
       if (!prod) {
         console.log(`  [skip show] No matching production row for "${s.title}"`);
