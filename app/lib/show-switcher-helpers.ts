@@ -73,6 +73,27 @@ export function resolveShowSwitchPath(
 }
 
 /**
+ * Orders shows within a theater season chronologically: Fall -> Winter -> Spring -> Summer.
+ */
+export function getSessionSortRank(sessionLabel?: string | null): number {
+  const s = (sessionLabel || "").trim().toLowerCase();
+  if (s.includes("fall")) return 0;
+  if (s.includes("winter")) return 1;
+  if (s.includes("spring")) return 2;
+  if (s.includes("summer")) return 3;
+  return 4;
+}
+
+export function sortShowsBySession<T extends SwitcherShow>(shows: T[]): T[] {
+  return [...shows].sort((a, b) => {
+    const rankDiff =
+      getSessionSortRank(a.productionSession) - getSessionSortRank(b.productionSession);
+    if (rankDiff !== 0) return rankDiff;
+    return (a.title || "").localeCompare(b.title || "");
+  });
+}
+
+/**
  * Case-insensitive filter across show title, season, location, status, and session label.
  */
 export function filterShowsByQuery<T extends SwitcherShow>(shows: T[], query: string): T[] {

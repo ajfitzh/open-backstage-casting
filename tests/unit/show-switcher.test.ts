@@ -4,6 +4,7 @@ import {
   classifyShowBucket,
   filterShowsByQuery,
   resolveShowSwitchPath,
+  sortShowsBySession,
   type SwitcherShow,
 } from "../../app/lib/show-switcher-helpers.ts";
 
@@ -49,5 +50,25 @@ describe("show-switcher-helpers", () => {
     assert.deepEqual(filterShowsByQuery(shows, "fredericksburg").map((s) => s.id), [2]);
     assert.deepEqual(filterShowsByQuery(shows, "upcoming").map((s) => s.id), [3]);
     assert.equal(filterShowsByQuery(shows, "   ").length, 3);
+  });
+
+  it("sortShowsBySession orders Fall -> Winter -> Spring -> Summer chronologically", () => {
+    const shows: SwitcherShow[] = [
+      { id: 1, title: "Into the Woods", productionSession: "Summer" },
+      { id: 2, title: "Wizard of Oz", productionSession: "Fall" },
+      { id: 3, title: "Little Mermaid", productionSession: "Spring" },
+      { id: 4, title: "High School Musical", productionSession: "Winter" },
+      { id: 5, title: "Lion King Kids", productionSession: "Winter" },
+    ];
+    assert.deepEqual(
+      sortShowsBySession(shows).map((s) => `${s.productionSession}:${s.title}`),
+      [
+        "Fall:Wizard of Oz",
+        "Winter:High School Musical",
+        "Winter:Lion King Kids",
+        "Spring:Little Mermaid",
+        "Summer:Into the Woods",
+      ]
+    );
   });
 });

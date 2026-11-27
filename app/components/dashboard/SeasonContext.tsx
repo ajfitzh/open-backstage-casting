@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { OrgLeaderSummary } from '@/app/lib/db/productions-repo';
 import PersonProfileModal, { type PersonCardPreview } from '@/app/components/PersonProfileModal';
+import { sortShowsBySession } from '@/app/lib/show-switcher-helpers';
 
 const LEADER_BADGE_COLORS = [
   "bg-indigo-600",
@@ -78,7 +79,9 @@ export default function SeasonContext({
   // 2. FILTER DATA FOR SELECTED SEASON
   const seasonData = useMemo(() => {
       const classes = allClasses.filter((c: any) => isItemInSeason(c.session, selectedSeasonName));
-      const shows = allShows.filter((s: any) => isItemInSeason(s.season, selectedSeasonName) || s.season === selectedSeasonName);
+      const shows = sortShowsBySession(
+        allShows.filter((s: any) => isItemInSeason(s.season, selectedSeasonName) || s.season === selectedSeasonName)
+      );
       
       const classSessions: Record<string, number> = {};
       classes.forEach((c: any) => {

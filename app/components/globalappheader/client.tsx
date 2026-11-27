@@ -11,6 +11,7 @@ import { NAV_CONFIG } from '@/app/lib/nav-config';
 import {
   classifyShowBucket,
   filterShowsByQuery,
+  sortShowsBySession,
   type SwitcherShow,
 } from '@/app/lib/show-switcher-helpers';
 import {
@@ -153,6 +154,12 @@ export default function GlobalHeaderClient({
     const seasons = Array.from(allSeasons).sort((a, b) =>
       b.localeCompare(a, undefined, { numeric: true })
     );
+
+    for (const season of seasons) {
+      if (active[season]) active[season] = sortShowsBySession(active[season]);
+      if (upcoming[season]) upcoming[season] = sortShowsBySession(upcoming[season]);
+      if (archive[season]) archive[season] = sortShowsBySession(archive[season]);
+    }
 
     return { active, upcoming, archive, seasons, currentCount, archiveCount };
   }, [shows]);
@@ -741,9 +748,17 @@ function ContextButton({
         >
           {prod.title}
         </div>
-        <div className="text-[10px] font-semibold text-zinc-500 truncate">
-          {showSeason && prod.season ? `${prod.season} • ` : ''}
-          {prod.location || 'General'} • {prod.status || 'Archived'}
+        <div className="text-[10px] font-semibold text-zinc-500 truncate flex items-center gap-1.5">
+          {prod.productionSession && (
+            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">
+              {prod.productionSession}
+            </span>
+          )}
+          {prod.productionSession && <span>•</span>}
+          <span className="truncate">
+            {showSeason && prod.season ? `${prod.season} • ` : ''}
+            {prod.location || 'General'} • {prod.status || 'Archived'}
+          </span>
         </div>
       </div>
       {isLoading ? (
