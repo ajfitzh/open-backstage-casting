@@ -735,14 +735,17 @@ async function main() {
 
   const existingClasses = await db
     .select({
+      id: schema.classes.id,
       className: schema.classes.className,
       sessionId: schema.classes.sessionId,
+      location: schema.classes.location,
+      teacherId: schema.classes.teacherId,
       timeSlot: schema.classes.timeSlot,
     })
     .from(schema.classes)
     .where(eq(schema.classes.organizationId, org.id));
-  const classKeySet = new Set(
-    existingClasses.map((c) => `${c.sessionId || 0}|${norm(c.className)}`)
+  const classByKey = new Map(
+    existingClasses.map((c) => [`${c.sessionId || 0}|${norm(c.className)}`, c])
   );
 
   const batchClasses: (typeof schema.classes.$inferInsert)[] = [];
@@ -793,20 +796,46 @@ async function main() {
 
     const sesId = ses?.id ?? 0;
     const key = `${sesId}|${norm(className)}`;
-    if (classKeySet.has(key)) continue;
-    classKeySet.add(key);
+    const resolvedLocation = cls.locationName || cls.chapter || "Fredericksburg";
+    const teacher = cls.teacherEmail ? personByEmail.get(cls.teacherEmail.trim().toLowerCase()) : undefined;
+
+    const existingClass = classByKey.get(key);
+    if (existingClass) {
+      const updates: Record<string, any> = {};
+      if (
+        cls.locationName &&
+        (!existingClass.location || existingClass.location === "Fredericksburg" || existingClass.location === "Stafford")
+      ) {
+        updates.location = cls.locationName;
+      }
+      if (!existingClass.teacherId && teacher?.id) {
+        updates.teacherId = teacher.id;
+      }
+      if (Object.keys(updates).length > 0 && !DRY_RUN) {
+        await db.update(schema.classes).set(updates).where(eq(schema.classes.id, existingClass.id));
+      }
+      continue;
+    }
 
     const ageMatch = (cls.ages || "").match(/(\d+)\s*-\s*(\d+)/);
     const capMatch = (cls.enrollment || "").match(/\/\s*(\d+)/);
     const timeMatch = (cls.timeSlot || "").match(/(\d{1,2}:\d{2}\s*[AP]M\s*-\s*\d{1,2}:\d{2}\s*[AP]M)/i);
-    const teacher = cls.teacherEmail ? personByEmail.get(cls.teacherEmail.trim().toLowerCase()) : undefined;
+
+    classByKey.set(key, {
+      id: -1,
+      className,
+      sessionId: ses?.id ?? null,
+      location: resolvedLocation,
+      teacherId: teacher?.id ?? null,
+      timeSlot: timeMatch ? timeMatch[1] : cls.timeSlot || null,
+    });
 
     batchClasses.push({
       organizationId: org.id,
       sessionId: ses?.id ?? null,
       teacherId: teacher?.id ?? null,
       className,
-      location: cls.chapter || "Fredericksburg",
+      location: resolvedLocation,
       timeSlot: timeMatch ? timeMatch[1] : cls.timeSlot || null,
       minAge: ageMatch ? parseInt(ageMatch[1], 10) : null,
       maxAge: ageMatch ? parseInt(ageMatch[2], 10) : null,

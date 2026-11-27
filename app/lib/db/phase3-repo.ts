@@ -65,6 +65,7 @@ export async function listPublicClassesPg(tenantSlug: string) {
         id: c.id,
         className: c.className,
         teacherName: c.teacherId ? teacherMap.get(c.teacherId) || "Faculty TBA" : "Faculty TBA",
+        location: c.location || space?.roomName || "Location TBA",
         roomName: space?.roomName || c.location || "Studio TBA",
         day: c.day || "Schedule TBA",
         timeSlot: c.timeSlot || "",

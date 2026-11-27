@@ -1,7 +1,7 @@
 // app/components/education/PublicClassesClient.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -11,6 +11,7 @@ import {
   CreditCard,
   Loader2,
   MapPin,
+  Search,
   User,
   Users,
   X,
@@ -20,6 +21,7 @@ export interface PublicClassItem {
   id: number;
   className: string;
   teacherName: string;
+  location?: string;
   roomName: string;
   day: string;
   timeSlot: string;
@@ -50,7 +52,60 @@ export default function PublicClassesClient({
   wasCanceled?: boolean;
 }) {
   const [selected, setSelected] = useState<PublicClassItem | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [selectedDay, setSelectedDay] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"location" | "day" | "name">("location");
   const [studentName, setStudentName] = useState("");
+
+  const locations = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of classes) {
+      const loc = (c.location || c.roomName || "Location TBA").trim();
+      counts.set(loc, (counts.get(loc) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [classes]);
+
+  const days = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of classes) {
+      if (c.day && c.day !== "Schedule TBA") set.add(c.day);
+    }
+    return Array.from(set).sort();
+  }, [classes]);
+
+  const filteredClasses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return classes
+      .filter((c) => {
+        const loc = (c.location || c.roomName || "Location TBA").trim();
+        if (selectedLocation !== "all" && loc !== selectedLocation) return false;
+        if (selectedDay !== "all" && c.day !== selectedDay) return false;
+        if (
+          q &&
+          !c.className.toLowerCase().includes(q) &&
+          !c.teacherName.toLowerCase().includes(q) &&
+          !loc.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "location") {
+          const la = (a.location || a.roomName || "").localeCompare(b.location || b.roomName || "");
+          return la !== 0 ? la : a.className.localeCompare(b.className);
+        }
+        if (sortBy === "day") {
+          const da = (a.day || "").localeCompare(b.day || "");
+          return da !== 0 ? da : a.className.localeCompare(b.className);
+        }
+        return a.className.localeCompare(b.className);
+      });
+  }, [classes, selectedLocation, selectedDay, searchQuery, sortBy]);
   const [studentEmail, setStudentEmail] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -141,6 +196,85 @@ export default function PublicClassesClient({
           </div>
         )}
 
+        {classes.length > 0 && (
+          <section className="space-y-4 bg-zinc-900/70 border border-white/10 rounded-3xl p-5">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search classes, teachers, or church locations..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {days.length > 1 && (
+                  <select
+                    value={selectedDay}
+                    onChange={(e) => setSelectedDay(e.target.value)}
+                    aria-label="Filter by day"
+                    className="px-3 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold text-zinc-200"
+                  >
+                    <option value="all">All Days</option>
+                    {days.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "location" | "day" | "name")}
+                  aria-label="Sort classes"
+                  className="px-3 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold text-zinc-200"
+                >
+                  <option value="location">Sort: By Church / Location</option>
+                  <option value="day">Sort: By Day</option>
+                  <option value="name">Sort: By Class Name</option>
+                </select>
+              </div>
+            </div>
+
+            {locations.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[11px] font-black uppercase tracking-wider text-zinc-500 mr-1 flex items-center gap-1">
+                  <MapPin size={12} /> Location:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLocation("all")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    selectedLocation === "all"
+                      ? "bg-blue-600 text-white"
+                      : "bg-zinc-950 text-zinc-300 border border-white/10 hover:border-white/25"
+                  }`}
+                >
+                  All Locations ({classes.length})
+                </button>
+                {locations.map((loc) => (
+                  <button
+                    key={loc.name}
+                    type="button"
+                    onClick={() => setSelectedLocation(loc.name)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                      selectedLocation === loc.name
+                        ? "bg-blue-600 text-white"
+                        : "bg-zinc-950 text-zinc-300 border border-white/10 hover:border-white/25"
+                    }`}
+                  >
+                    {loc.name} ({loc.count})
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {classes.length === 0 ? (
           <div className="bg-zinc-900 border border-white/10 rounded-3xl p-12 text-center space-y-3">
             <BookOpen size={44} className="mx-auto text-zinc-600" />
@@ -149,9 +283,24 @@ export default function PublicClassesClient({
               Check back soon for the next academy session from {orgName}.
             </p>
           </div>
+        ) : filteredClasses.length === 0 ? (
+          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-10 text-center space-y-3">
+            <p className="text-sm text-zinc-400">No classes match your current location or search filters.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedLocation("all");
+                setSelectedDay("all");
+                setSearchQuery("");
+              }}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white"
+            >
+              Reset Filters
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {classes.map((cls) => {
+            {filteredClasses.map((cls) => {
               const priceLabel =
                 cls.tuitionCents > 0 ? `$${(cls.tuitionCents / 100).toFixed(2)}` : "Free";
               const ageLabel =

@@ -389,6 +389,30 @@ async function main() {
       "/_ajax_load/class_listing_admin?session=0&area=0&location=0&timeSlot=0&minAge=0&maxAge=0&day=0&gender=0&teacher=0"
     );
     await parseClassesHtml(classHtml0, "");
+
+    // Tag each class with its exact church/building location by querying per class_location ID
+    for (const loc of locations.filter((l) => l.kind === "class_location")) {
+      const cleanLocName = loc.name.replace(/\s*Chapters:.*$/i, "").trim();
+      const locHtml = await browserFetchText(
+        page,
+        `/_ajax_load/class_listing_admin?session=0&area=0&location=${loc.mycytId}&timeSlot=0&minAge=0&maxAge=0&day=0&gender=0&teacher=0`
+      );
+      if (!locHtml.includes("classListing")) continue;
+      const locRows = await parseHtmlInBrowser<{ mycytId: number }[]>(
+        page,
+        locHtml,
+        `return Array.from(root.querySelectorAll("tr.classListing")).map(tr => {
+          const m = (tr.id || "").match(/(\\d+)/);
+          return { mycytId: m ? Number(m[1]) : 0 };
+        }).filter(x => x.mycytId > 0);`
+      );
+      for (const lr of locRows) {
+        const existing = classMap.get(lr.mycytId);
+        if (existing) {
+          existing.locationName = cleanLocName;
+        }
+      }
+    }
     if (classMap.size < 20 && sessions.length > 0) {
       // Pull most recent 12 sessions
       for (const ses of sessions.slice(0, 12)) {
