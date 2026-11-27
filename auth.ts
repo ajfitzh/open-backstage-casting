@@ -52,22 +52,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         handoffToken: { label: "Handoff Token", type: "text" }
       },
       async authorize(credentials) {
-        // 🟢 ONE-CLICK WORKSPACE HANDOFF (Signed short-lived token from open-backstage.org/workspaces)
+        // 🟢 ONE-CLICK WORKSPACE & NATIVE IOS HANDOFF (Signed short-lived token)
         if (typeof credentials?.handoffToken === "string" && credentials.handoffToken) {
           const tenant = await getTenantContext();
-          if (!tenant) return null;
+          const expectedScope = tenant || "__main__";
 
-          const payload = verifyHandoffToken(credentials.handoffToken, tenant);
+          const payload = verifyHandoffToken(credentials.handoffToken, expectedScope);
           if (!payload) return null;
 
-          const existingUser = await findUserByEmail(tenant, payload.email);
-          if (existingUser) return existingUser;
+          if (tenant) {
+            const existingUser = await findUserByEmail(tenant, payload.email);
+            if (existingUser) return existingUser;
+          }
 
           return {
             id: `handoff-${payload.email}`,
             name: payload.name || payload.email,
             email: payload.email,
-            role: "Guest",
+            role: tenant ? "Guest" : "User",
           };
         }
 

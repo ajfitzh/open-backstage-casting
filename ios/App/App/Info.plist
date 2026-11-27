@@ -62,6 +62,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>org.openbackstage.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>openbackstage</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Open Backstage uses your camera to scan QR passes for check-ins, track wardrobe/tech inventory, and record audition videos.</string>
 	<key>NSMicrophoneUsageDescription</key>

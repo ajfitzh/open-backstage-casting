@@ -16,12 +16,13 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") || "";
   const host = req.headers.get("host") || "";
   const tenant = extractTenantFromHost(host);
+  const expectedScope = tenant || "__main__";
 
-  if (!tenant || !token) {
+  if (!token) {
     return NextResponse.redirect(`${origin}/login?error=HandoffMissing`);
   }
 
-  const verified = verifyHandoffToken(token, tenant);
+  const verified = verifyHandoffToken(token, expectedScope);
   if (!verified) {
     return NextResponse.redirect(`${origin}/login?error=HandoffExpired`);
   }
@@ -32,7 +33,10 @@ export async function GET(req: NextRequest) {
       redirect: false,
     });
 
-    return NextResponse.redirect(`${origin}/`);
+    // Main-domain handoff (from native iOS Google Sign-In) routes to /workspaces;
+    // tenant subdomain handoff routes directly to the workspace dashboard.
+    const destination = tenant ? `${origin}/` : `${origin}/workspaces`;
+    return NextResponse.redirect(destination);
   } catch (error) {
     console.error("[api/auth/handoff] Sign-in handoff failed:", error);
     return NextResponse.redirect(`${origin}/login?error=HandoffFailed`);

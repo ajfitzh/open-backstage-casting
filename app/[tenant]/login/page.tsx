@@ -6,7 +6,10 @@ import { useRouter, useParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Lock, Loader2, AlertCircle, Chrome } from 'lucide-react';
 import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
-import { useIsNativeCapacitor } from '@/app/lib/capacitor-native';
+import {
+  startNativeGoogleSignIn,
+  useIsNativeCapacitor,
+} from '@/app/lib/capacitor-native';
 
 export default function LoginPage() {
   const params = useParams();
@@ -34,12 +37,15 @@ export default function LoginPage() {
 
   const orgName = formatTenantDisplayName(tenant);
 
-  // 1. Handle Google Login
+  // 1. Handle Google Login (uses in-app SFSafariViewController + deep-link handoff on iOS)
   const handleGoogleLogin = () => {
-      setIsLoading(true);
-      // "google" must match the provider ID in route.ts
-      // 🟢 FIX: Send them to the root of the current subdomain
-      signIn("google", { callbackUrl: `/` });
+    setIsLoading(true);
+    setError('');
+    if (isNativeApp) {
+      void startNativeGoogleSignIn(tenant, () => setIsLoading(false));
+      return;
+    }
+    signIn("google", { callbackUrl: `/` });
   };
 
   // 2. Handle Password Login
@@ -51,7 +57,7 @@ export default function LoginPage() {
     const result = await signIn('credentials', {
       email,
       password,
-      redirect: false, // 🚨 FIX: Must be false to get the 'result' object back!
+      redirect: false,
     });
 
     if (result?.error) {
@@ -59,7 +65,6 @@ export default function LoginPage() {
       setIsLoading(false);
     } else {
       router.refresh(); 
-      // 🟢 FIX: Send them to the root of the current subdomain
       router.push(`/`); 
     }
   };
@@ -74,7 +79,6 @@ export default function LoginPage() {
         
         <div className="space-y-1 mb-8">
             <h1 className="text-3xl font-black uppercase italic text-white tracking-tight">Portal Login</h1>
-            {/* Elegant Organization Name display */}
             <p className="text-blue-400 font-bold tracking-widest uppercase text-xs">
                 {orgName}
             </p>
@@ -88,28 +92,21 @@ export default function LoginPage() {
         )}
 
         <div className="space-y-4">
-            {/* --- GOOGLE SSO BUTTON (hidden in native WebView where Google blocks embedded OAuth) --- */}
-            {!isNativeApp && (
-              <>
-                <button 
-                    onClick={handleGoogleLogin}
-                    type="button"
-                    disabled={isLoading}
-                    className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 active:scale-95 shadow-md"
-                >
-                    <Chrome size={20} className="text-blue-600" />
-                    Sign in with Google
-                </button>
+            <button 
+                onClick={handleGoogleLogin}
+                type="button"
+                disabled={isLoading}
+                className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 active:scale-95 shadow-md disabled:opacity-50"
+            >
+                {isLoading ? <Loader2 size={20} className="animate-spin text-blue-600" /> : <Chrome size={20} className="text-blue-600" />}
+                Sign in with Google
+            </button>
 
-                {/* Divider */}
-                <div className="relative py-2">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-3 text-zinc-500 font-bold tracking-widest">Or</span></div>
-                </div>
-              </>
-            )}
+            <div className="relative py-2">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-3 text-zinc-500 font-bold tracking-widest">Or</span></div>
+            </div>
 
-            {/* Email/Password Form */}
             <form onSubmit={handleCredentialsLogin} className="space-y-3">
                 <input 
                     type="email"
@@ -148,10 +145,8 @@ export default function LoginPage() {
                 </button>
             </form>
 
-            {/* The Sign Up Link! */}
             <div className="mt-8 text-center border-t border-zinc-800 pt-6">
                 <p className="text-zinc-500 text-sm mb-2">Don&apos;t have an account yet?</p>
-                {/* 🟢 FIX: Clean relative path so it correctly resolves to e2e.localhost:3001/signup */}
                 <a 
                     href="/signup" 
                     className="text-blue-500 hover:text-blue-400 font-bold text-sm transition-colors"

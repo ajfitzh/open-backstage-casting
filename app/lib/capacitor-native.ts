@@ -51,6 +51,92 @@ export async function triggerHaptic(
 }
 
 /**
+ * Opens Google OAuth inside Apple's in-app SFSafariViewController so Google allows
+ * OAuth (unlike embedded WKWebView) and shares iOS Safari's saved Google session.
+ * When OAuth completes, /api/auth/mobile-complete bounces back via `openbackstage://auth/callback`.
+ */
+export async function startNativeGoogleSignIn(
+  tenant?: string,
+  onSheetClosed?: () => void
+): Promise<void> {
+  if (!isNativeCapacitor()) return;
+  const { Browser } = await import("@capacitor/browser");
+
+  const origin = window.location.origin;
+  const url = tenant
+    ? `${origin}/api/auth/mobile-google?tenant=${encodeURIComponent(tenant)}`
+    : `${origin}/api/auth/mobile-google`;
+
+  let listenerHandle: { remove: () => Promise<void> } | null = null;
+  if (onSheetClosed) {
+    listenerHandle = await Browser.addListener("browserFinished", () => {
+      onSheetClosed();
+      void listenerHandle?.remove();
+    });
+  }
+
+  await Browser.open({
+    url,
+    presentationStyle: "popover",
+    toolbarColor: "#09090b",
+  });
+}
+
+/**
+ * Listens for `openbackstage://auth/callback?...` deep links returning from
+ * SFSafariViewController, dismisses the sheet, and completes the NextAuth session
+ * inside the app's WKWebView via /api/auth/handoff.
+ */
+export async function registerNativeDeepLinkAuthListener(): Promise<() => void> {
+  if (!isNativeCapacitor()) return () => {};
+
+  const { App } = await import("@capacitor/app");
+  const { Browser } = await import("@capacitor/browser");
+
+  const handle = await App.addListener("appUrlOpen", async ({ url }) => {
+    if (!url || !url.startsWith("openbackstage://auth/callback")) return;
+
+    try {
+      await Browser.close();
+    } catch {
+      // Sheet may already be dismissed
+    }
+
+    try {
+      const parsed = new URL(url);
+      const token = parsed.searchParams.get("token");
+      const tenant = parsed.searchParams.get("tenant");
+      const error = parsed.searchParams.get("error");
+
+      if (error || !token) {
+        window.location.href = `/login?error=${encodeURIComponent(error || "GoogleAuthFailed")}`;
+        return;
+      }
+
+      const currentHost = window.location.host;
+      let targetOrigin = window.location.origin;
+
+      if (tenant && !currentHost.startsWith(`${tenant}.`)) {
+        if (currentHost.includes("open-backstage.org")) {
+          targetOrigin = `https://${tenant}.open-backstage.org`;
+        } else if (currentHost.includes("localhost")) {
+          const port = window.location.port ? `:${window.location.port}` : "";
+          targetOrigin = `${window.location.protocol}//${tenant}.localhost${port}`;
+        }
+      }
+
+      window.location.href = `${targetOrigin}/api/auth/handoff?token=${encodeURIComponent(token)}`;
+    } catch (err) {
+      console.error("[Capacitor] Deep-link auth callback error:", err);
+    }
+  });
+
+  return () => {
+    void handle.remove();
+  };
+}
+
+/**
  * Launches the native iOS/Android barcode/QR scanner when running inside the
  * Capacitor shell. Returns the scanned raw value, or null if cancelled / unavailable.
  */
