@@ -18,11 +18,13 @@ import {
   Move,
   ListChecks,
   AlertCircle,
+  CalendarPlus,
 } from "lucide-react";
 import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ChoreoWorkspace from "@/app/components/ChoreoWorkspace";
 import ScoringSidebar, { type BallotDraft } from "./ScoringSidebar";
 import VideoRecorderModal from "./VideoRecorderModal";
+import AuditionSlotBuilderModal from "./AuditionSlotBuilderModal";
 import {
   fetchAuditionDeckData,
   saveAuditionVideoAction,
@@ -137,6 +139,7 @@ export default function AuditionsClient({
 
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [inspectingActorId, setInspectingActorId] = useState<number | null>(null);
+  const [showSlotBuilder, setShowSlotBuilder] = useState(false);
   const [recordingTarget, setRecordingTarget] = useState<{
     auditionId: number;
     name: string;
@@ -488,6 +491,14 @@ export default function AuditionsClient({
                 }`}
               >
                 <Move size={14} /> Dance Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSlotBuilder(true)}
+                className="px-3.5 min-h-[40px] rounded-xl text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 transition-colors"
+                title="Bulk-generate standardized audition time slots"
+              >
+                <CalendarPlus size={14} /> + Slots
               </button>
               <Link
                 href={`/production/${productionId}/callbacks`}
@@ -896,6 +907,16 @@ export default function AuditionsClient({
             handleVideoSaved(recordingTarget.auditionId, recordingTarget.kind, publicUrl)
           }
           onClose={() => setRecordingTarget(null)}
+        />
+      )}
+
+      {/* STANDARDIZED SLOT GENERATOR MODAL */}
+      {showSlotBuilder && (
+        <AuditionSlotBuilderModal
+          tenant={tenant}
+          productionId={productionId}
+          onCreated={refreshDeck}
+          onClose={() => setShowSlotBuilder(false)}
         />
       )}
     </>

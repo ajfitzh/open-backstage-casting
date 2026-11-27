@@ -16,6 +16,7 @@ import {
   updatePersonAdmin,
   updateProductionDetails,
 } from '@/app/actions/admin-crud';
+import { sendAdminInviteAction } from '@/app/actions/password-reset';
 import ShowLaunchPanel, {
   type AuditionSlotSummary,
   type ShowTeamMemberSummary,
@@ -922,6 +923,32 @@ export default function SettingsClient({
                                 {r}
                               </span>
                             ))
+                          )}
+                          {person.email && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setAdminNotice(null);
+                                const res = await sendAdminInviteAction(tenant, person.id, 'invite');
+                                if (!res.success) {
+                                  setAdminNotice({ type: 'error', text: res.error || 'Could not create invite.' });
+                                  return;
+                                }
+                                if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                  navigator.clipboard.writeText(res.inviteUrl).catch(() => {});
+                                }
+                                setAdminNotice({
+                                  type: 'success',
+                                  text: res.emailSent
+                                    ? `Invite link emailed to ${res.email} (and copied to clipboard).`
+                                    : `Invite link generated for ${res.email} and copied to clipboard.`,
+                                });
+                              }}
+                              className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 transition-colors"
+                              title="Send password setup / invite link"
+                            >
+                              Invite
+                            </button>
                           )}
                           <button
                             type="button"

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/app/lib/auth-guard";
 import { getUserProductionRole } from "@/app/lib/baserow";
 import {
+  bulkCreateAuditionSlotsPg,
   getAuditionDeckDataPg,
   saveAuditionVideoPg,
   saveGroupDanceVideoPg,
@@ -124,6 +125,22 @@ export async function toggleCallbackSelectionAction(
     revalidatePath(`/${tenant}/production/${productionId}/auditions`);
     revalidatePath(`/${tenant}/production/${productionId}/callbacks`);
     revalidatePath(`/${tenant}/production/${productionId}/roster`);
+  }
+  return res;
+}
+
+export async function bulkCreateAuditionSlotsAction(
+  tenant: string,
+  productionId: number,
+  slots: Array<{ timeLabel: string; dateTime: string; capacity: number }>
+) {
+  const guard = await requirePermission(tenant, "view_auditions", productionId);
+  if (!guard.ok) return { success: false as const, error: guard.error };
+
+  const res = await bulkCreateAuditionSlotsPg(tenant, productionId, slots);
+  if (res.success) {
+    revalidatePath(`/${tenant}/production/${productionId}/auditions`);
+    revalidatePath(`/${tenant}/audition-form`);
   }
   return res;
 }

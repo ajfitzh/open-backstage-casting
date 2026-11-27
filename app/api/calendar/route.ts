@@ -5,6 +5,7 @@ import { and, asc, eq, or } from "drizzle-orm";
 import { getDb, isPostgresEnabled, schema } from "@/db";
 import { getOrganizationBySlugPg } from "@/app/lib/db/core-repo";
 import { buildIcsCalendar, type IcsEventInput } from "@/app/lib/features-helpers";
+import { verifyCalendarToken } from "@/app/lib/phase1-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   const tenant = (searchParams.get("tenant") || "").trim().toLowerCase();
   const productionIdRaw = searchParams.get("productionId");
   const studentIdRaw = searchParams.get("studentId");
+  const token = searchParams.get("token");
 
   if (!tenant) {
     return NextResponse.json({ error: "Missing tenant parameter." }, { status: 400 });
@@ -21,6 +23,18 @@ export async function GET(req: NextRequest) {
   const productionId = productionIdRaw ? parseInt(productionIdRaw, 10) : NaN;
   if (!Number.isFinite(productionId) || productionId <= 0) {
     return NextResponse.json({ error: "Valid productionId parameter is required." }, { status: 400 });
+  }
+
+  const parsedStudentId = studentIdRaw ? parseInt(studentIdRaw, 10) : null;
+  if (token) {
+    const valid = verifyCalendarToken(token, {
+      tenant,
+      productionId,
+      studentId: Number.isFinite(parsedStudentId) ? parsedStudentId : null,
+    });
+    if (!valid) {
+      return NextResponse.json({ error: "Invalid calendar feed signature." }, { status: 403 });
+    }
   }
 
   if (!isPostgresEnabled()) {

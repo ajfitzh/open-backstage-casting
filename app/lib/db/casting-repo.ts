@@ -472,6 +472,8 @@ export async function getExistingAuditionsPg(
     if (!byAudId.has(row.aud.id)) byAudId.set(row.aud.id, row);
   }
 
+  const isCastPublished = Boolean(prod.castPublishedAt);
+
   return Array.from(byAudId.values()).map(({ aud, person, slot, castRoleName }) => {
     const totalInches = person.heightInches ?? 0;
     const ft = totalInches > 0 ? Math.floor(totalInches / 12).toString() : "";
@@ -484,7 +486,8 @@ export async function getExistingAuditionsPg(
       studentId: extId(person),
       name: studentName,
       status: aud.status || "Pending",
-      role: castRoleName || "",
+      role: isCastPublished ? (castRoleName || "") : "",
+      castPublished: isCastPublished,
       signatures: aud.signaturesText || "",
       bio: aud.programBio || "",
       congratsAd: aud.congratsAdText || "",
@@ -685,6 +688,7 @@ export async function submitRealAuditionPg(
       parentHelpAgreement: Boolean(formData.parentCommitteeAgreement),
       signaturesText: `${formData.studentSignature ? "Yes" : "No"} (S), ${formData.parentSignature ? "Yes" : "No"} (P)`,
       backingTrackUrl: formData.practiceAudio || formData.musicFileUrl || "",
+      auditionVideoUrl: formData.auditionVideoUrl || formData.selfTapeUrl || null,
       grade: formData.grade || null,
       willingToAlterAppearance: Boolean(formData.willingToAlterAppearance),
       fearOfHeights: Boolean(formData.fearOfHeights),

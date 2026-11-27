@@ -701,3 +701,33 @@ export async function updateAuditionSlotLegacyPg(
     .returning();
   return updated;
 }
+
+export async function bulkCreateAuditionSlotsPg(
+  tenantSlug: string,
+  productionId: number,
+  slots: Array<{ timeLabel: string; dateTime: string; capacity: number }>
+) {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return { success: false as const, error: "Organization not found." };
+
+  const prod = await resolveProduction(org.id, productionId);
+  if (!prod) return { success: false as const, error: "Production not found." };
+
+  if (!slots.length) return { success: false as const, error: "No slots provided." };
+
+  const db = getDb();
+  const inserted = await db
+    .insert(schema.auditionSlots)
+    .values(
+      slots.map((s) => ({
+        organizationId: org.id,
+        productionId: prod.id,
+        timeLabel: s.timeLabel,
+        dateTime: s.dateTime,
+        capacity: Math.max(1, Math.min(200, Math.floor(s.capacity || 12))),
+      }))
+    )
+    .returning();
+
+  return { success: true as const, createdCount: inserted.length };
+}

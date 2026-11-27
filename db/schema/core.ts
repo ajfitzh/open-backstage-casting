@@ -159,3 +159,26 @@ export const organizationOnboardingRequests = pgTable(
     index("org_onboarding_email_idx").on(table.contactEmail),
   ]
 );
+
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    personId: integer("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    purpose: text("purpose").notNull().default("reset"), // "reset" | "invite"
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("password_reset_tokens_org_email_idx").on(table.organizationId, table.email),
+    index("password_reset_tokens_person_idx").on(table.personId),
+  ]
+);

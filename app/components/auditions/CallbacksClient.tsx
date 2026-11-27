@@ -23,6 +23,7 @@ import ActorProfileModal from "@/app/components/ActorProfileModal";
 import ScoringSidebar, { type BallotDraft } from "./ScoringSidebar";
 import VideoRecorderModal from "./VideoRecorderModal";
 import InlineVideoPlayer from "./InlineVideoPlayer";
+import CastPublishBar from "@/app/components/casting/CastPublishBar";
 import { type JudgeRole, ROLE_THEMES } from "./AuditionsClient";
 import {
   fetchAuditionDeckData,
@@ -401,6 +402,7 @@ export default function CallbacksClient({
               >
                 <UserPlus size={13} /> Add to Callbacks
               </button>
+              <CastPublishBar tenant={tenant} productionId={productionId} mode="callbacks" />
               {compareIds.length >= 2 && (
                 <button
                   type="button"

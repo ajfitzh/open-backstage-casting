@@ -200,6 +200,7 @@ export const productions = pgTable(
     showImageUrl: text("show_image_url"),
     legacyPerformancesJson: text("legacy_performances_json"),
     castListHtml: text("cast_list_html"),
+    castPublishedAt: timestamp("cast_published_at", { withTimezone: true }),
     allowResellers: boolean("allow_resellers").default(false),
     historicalCastSize: integer("historical_cast_size"),
     workflowOverrides: text("workflow_overrides").array().notNull().default([]),

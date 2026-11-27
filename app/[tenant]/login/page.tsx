@@ -104,16 +104,24 @@ export default function LoginPage() {
                 <input 
                     type="password" 
                     placeholder="Password" 
-                    className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600"
+                    className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white focus:border-blue-500 transition-all placeholder:text-zinc-500"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
                     required
                 />
+                <div className="flex justify-end">
+                    <a
+                      href="/forgot-password"
+                      className="text-xs font-semibold text-zinc-400 hover:text-blue-400 py-1 transition-colors"
+                    >
+                      Forgot password?
+                    </a>
+                </div>
                 <button 
                     type="submit" 
                     disabled={isLoading || !email || !password}
-                    className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 shadow-lg mt-2"
+                    className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider active:scale-95 shadow-lg mt-1"
                 >
                     {isLoading ? <Loader2 className="animate-spin" size={20} /> : "Enter Dashboard"}
                 </button>

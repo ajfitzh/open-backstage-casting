@@ -15,6 +15,7 @@ import CallbackActorModal from './CallbackActorModal';
 import AutoCastButton from './AutoCastButton';
 import CastingPrintView from './CastingPrintView';
 import ChemistryWorkspace from './ChemistryWorkspace';
+import CastPublishBar from './CastPublishBar';
 
 // ============================================================================
 // 1. TYPES & CONFIG
@@ -516,6 +517,7 @@ export default function CastingClient({ tenant, assignments = [], blueprintRoles
                 <AutoCastButton rows={rows} roster={roster} blueprintRoles={blueprintRoles} allScenes={allScenes} releasedIds={releasedIds} onUpdateRows={setRows} />
                 <button onClick={handleDraftAutoFill} className="px-3 min-h-[38px] text-xs font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-all">Reset</button>
                 <button onClick={handleSave} disabled={isSaving} className="px-3 min-h-[38px] text-xs font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-all disabled:opacity-50">{isSaving ? "Saving..." : "Save Changes"}</button>
+                <CastPublishBar tenant={tenant} productionId={activeId} mode="casting" />
               </div>
             </div>
 
