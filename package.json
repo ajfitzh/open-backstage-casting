@@ -18,6 +18,7 @@
     "db:studio": "drizzle-kit studio",
     "db:import": "tsx scripts/import-baserow.ts",
     "db:sync-show-images": "tsx scripts/sync-show-images.ts",
+    "sync:cytfred": "tsx scripts/sync-cytfred-legacy.ts",
     "cap:sync": "npx cap sync ios",
     "cap:ios": "npx cap open ios"
   },
