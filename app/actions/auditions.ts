@@ -2,9 +2,7 @@
 "use server";
 
 import { Resend } from 'resend';
-import { getShowById, fetchBaserow, getDB } from "@/app/lib/baserow";
-import { getTenantTableConfig } from "@/app/lib/tenant-config";
-import { isPostgresEnabled } from "@/db";
+import { getShowById } from "@/app/lib/baserow";
 import {
   acceptRoleAndSignPg,
   cancelAuditionPg,
@@ -23,81 +21,51 @@ function getResend() {
   return new Resend(apiKey);
 }
 
-// 1. Save the Program Bio (AUDITIONS table)
+// 1. Save the Program Bio
 export async function saveStudentBio(tenant: string, auditionId: number, bio: string) {
-    if (isPostgresEnabled()) return await saveStudentBioPg(tenant, auditionId, bio);
-
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    const F = DB.AUDITIONS.FIELDS;
-    
-    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-        method: "PATCH",
-        body: JSON.stringify({ [F.PROGRAM_BIO]: bio })
-    }, {}, tenant);
+  return await saveStudentBioPg(tenant, auditionId, bio);
 }
 
-// 2. Save the Congrats Ad (AUDITIONS table)
+// 2. Save the Congrats Ad
 export async function saveCongratsAd(tenant: string, auditionId: number, adText: string) {
-    if (isPostgresEnabled()) return await saveCongratsAdPg(tenant, auditionId, adText);
-
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    const F = DB.AUDITIONS.FIELDS;
-    
-    return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-        method: "PATCH",
-        body: JSON.stringify({ [F.CONGRATS_AD_TEXT]: adText })
-    }, {}, tenant);
+  return await saveCongratsAdPg(tenant, auditionId, adText);
 }
 
-// 3. Update Tickets Sold (COMMITTEE_PREFS table)
-export async function saveTicketsSold(tenant: string, studentId: number, productionId: number, tickets: number) {
-    if (isPostgresEnabled()) return await saveTicketsSoldPg(tenant, studentId, productionId, tickets);
-
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    const F = DB.COMMITTEE_PREFS.FIELDS;
-
-    const params = {
-        filter_type: "AND",
-        [`filter__${F.STUDENT_ID}__link_row_has`]: studentId,
-        [`filter__${F.PRODUCTION}__link_row_has`]: productionId
-    };
-    
-    const rows = await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {}, params, tenant);
-    
-    if (Array.isArray(rows) && rows.length > 0) {
-        const rowId = rows[0].id;
-        return await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/${rowId}/`, {
-            method: "PATCH",
-            body: JSON.stringify({ [F.TICKETS_SOLD]: tickets })
-        }, {}, tenant);
-    }
-    return { error: "Committee Pref row not found" };
+// 3. Update Tickets Sold
+export async function saveTicketsSold(
+  tenant: string,
+  studentId: number,
+  productionId: number,
+  tickets: number
+) {
+  return await saveTicketsSoldPg(tenant, studentId, productionId, tickets);
 }
 
-export async function submitRealAudition(tenant: string, productionId: number, formData: any, lookupEmail: string) {
+export async function submitRealAudition(
+  tenant: string,
+  productionId: number,
+  formData: any,
+  lookupEmail: string
+) {
   try {
-    if (isPostgresEnabled()) {
-      const pgRes = await submitRealAuditionPg(tenant, productionId, formData, lookupEmail);
-      if (!pgRes.success) return { success: false, error: pgRes.error };
+    const pgRes = await submitRealAuditionPg(tenant, productionId, formData, lookupEmail);
+    if (!pgRes.success) return { success: false, error: pgRes.error };
 
-      let showTitle = "Our Upcoming Production";
+    let showTitle = "Our Upcoming Production";
+    try {
+      const showObj = await getShowById(tenant, productionId);
+      if (showObj?.title) showTitle = showObj.title;
+    } catch (e) {
+      console.error("Could not fetch show title for email", e);
+    }
+
+    if (process.env.RESEND_API_KEY) {
       try {
-        const showObj = await getShowById(tenant, productionId);
-        if (showObj?.title) showTitle = showObj.title;
-      } catch (e) {
-        console.error("Could not fetch show title for email", e);
-      }
-
-      if (process.env.RESEND_API_KEY) {
-        try {
-          await getResend().emails.send({
-            from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
-            to: lookupEmail,
-            subject: `🎭 Audition Confirmed: ${pgRes.firstName} for ${showTitle}!`,
-            html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+        await getResend().emails.send({
+          from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
+          to: lookupEmail,
+          subject: `🎭 Audition Confirmed: ${pgRes.firstName} for ${showTitle}!`,
+          html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
               <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">You're on the list! 🌟</h2>
               <p style="font-size: 16px; color: #374151;">This email confirms that <strong>${pgRes.firstName} ${pgRes.lastName}</strong> is officially registered to audition for <em>${showTitle}</em>.</p>
               <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -108,245 +76,18 @@ export async function submitRealAudition(tenant: string, productionId: number, f
                 </ul>
               </div>
               <p style="font-size: 16px; color: #374151;">Break a leg!</p>
-            </div>`
-          });
-        } catch (emailError) {
-          console.error("Audition Confirmation Email failed:", emailError);
-        }
+            </div>`,
+        });
+      } catch (emailError) {
+        console.error("Audition Confirmation Email failed:", emailError);
       }
-
-      return {
-        success: true,
-        auditionId: pgRes.auditionId,
-        auditionNumber: pgRes.auditionNumber,
-      };
     }
 
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    
-    // 1. RESOLVE STUDENT IDENTITY
-    const nameParts = formData.fullName.trim().split(' ');
-    const firstName = nameParts[0];
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : "";
-
-    const studentSearchParams = {
-      filter_type: "AND",
-      [`filter__${DB.PEOPLE.FIELDS.FIRST_NAME}__equal`]: firstName,
-      [`filter__${DB.PEOPLE.FIELDS.LAST_NAME}__equal`]: lastName,
-      [`filter__${DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL}__equal`]: lookupEmail,
+    return {
+      success: true,
+      auditionId: pgRes.auditionId,
+      auditionNumber: pgRes.auditionNumber,
     };
-    
-    const existingStudents = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {}, studentSearchParams, tenant);
-    
-    let personId;
-    const heightInches = (parseInt(formData.heightFt) || 0) * 12 + (parseInt(formData.heightIn) || 0);
-
-    if (existingStudents && existingStudents.length > 0) {
-      personId = existingStudents[0].id;
-      const updatePayload: any = {
-        [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
-        [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
-      };
-      
-      if (formData.headshotUrl) updatePayload[DB.PEOPLE.FIELDS.HEADSHOT] = formData.headshotUrl;
-
-      await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${personId}/`, {
-        method: "PATCH",
-        body: JSON.stringify(updatePayload)
-      }, {}, tenant);
-    } else {
-      const newPersonPayload: any = {
-        [DB.PEOPLE.FIELDS.FIRST_NAME]: firstName,
-        [DB.PEOPLE.FIELDS.LAST_NAME]: lastName,
-        [DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL]: lookupEmail,
-        [DB.PEOPLE.FIELDS.DATE_OF_BIRTH]: formData.dob || null,
-        [DB.PEOPLE.FIELDS.HEIGHT_TOTAL_INCHES]: heightInches,
-        [DB.PEOPLE.FIELDS.STATUS]: ["Guest"], 
-      };
-      
-      if (formData.headshotUrl) newPersonPayload[DB.PEOPLE.FIELDS.HEADSHOT] = formData.headshotUrl;
-
-      const newPerson = await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/`, {
-        method: "POST",
-        body: JSON.stringify(newPersonPayload)
-      }, {}, tenant);
-      
-      if (!newPerson || Array.isArray(newPerson) || !newPerson.id) {
-        console.error("Failed to create student record:", newPerson);
-        return { success: false, error: "Failed to create student record." };
-      }
-      personId = newPerson.id;
-    }
-
-    let slotLabel = "your scheduled time";
-    if (formData.auditionSlotId) {
-      const slotData = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/${formData.auditionSlotId}/`, {}, {}, tenant);
-      if (slotData && !slotData.error && !Array.isArray(slotData)) {
-        slotLabel = slotData[DB.AUDITION_SLOTS.FIELDS.TIME_LABEL] || slotLabel;
-      }
-    }
-
-    // ==========================================
-    // 🎲 GENERATE UNIQUE RANDOM AUDITION NUMBER
-    // ==========================================
-    const existingAuditionsParams = {
-        filter_type: "AND",
-        [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: productionId
-    };
-    const existingRows = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {}, existingAuditionsParams, tenant);
-    
-    let existingNumbers = new Set<number>();
-    const rowList = Array.isArray(existingRows) ? existingRows : (existingRows?.results || []);
-    
-    rowList.forEach((row: any) => {
-        const num = parseInt(row[DB.AUDITIONS.FIELDS.AUDITION_NUMBER]);
-        if (!isNaN(num)) existingNumbers.add(num);
-    });
-    
-    let availableNumbers = [];
-    // Try to find a number between 1 and 50
-    for (let i = 1; i <= 50; i++) {
-        if (!existingNumbers.has(i)) availableNumbers.push(i);
-    }
-    
-    let assignedNumber = 0;
-    if (availableNumbers.length > 0) {
-        const randomIndex = Math.floor(Math.random() * availableNumbers.length);
-        assignedNumber = availableNumbers[randomIndex];
-    } else {
-        // Fallback: If 50 kids already signed up, pick a random number between 51 and 200
-        let fallbackFound = false;
-        while (!fallbackFound) {
-            assignedNumber = Math.floor(Math.random() * 150) + 51;
-            if (!existingNumbers.has(assignedNumber)) fallbackFound = true;
-        }
-    }
-
-    const conflictString = Object.entries(formData.conflicts || {})
-       .filter(([key, val]: any) => val.level !== "available")
-       .map(([key, val]: any) => `${key}: ${val.level} (${val.notes || "No notes"})`)
-       .join("\n");
-
-    const extraDataString = `Grade: ${formData.grade || 'N/A'}\nRoles: ${formData.preferredRoles || 'N/A'}\nStage Romance: ${formData.acceptRomance ? 'Yes' : 'No'}\nCallbacks: ${formData.callbackStatus || 'No Answer'}\nChair Interest: ${formData.chairInterest || 'No'}`;
-
-    const auditionPayload: any = {
-      [DB.AUDITIONS.FIELDS.PERFORMER]: [parseInt(personId)],
-      [DB.AUDITIONS.FIELDS.PRODUCTION]: [productionId],
-      [DB.AUDITIONS.FIELDS.DATE]: new Date().toISOString().split('T')[0], 
-      [DB.AUDITIONS.FIELDS.SONG]: formData.songTitle || "None",
-      [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: formData.auditionSlotId ? [parseInt(formData.auditionSlotId)] : [], 
-      
-      [DB.AUDITIONS.FIELDS.HAIR_COLOR]: formData.hairColor || "",
-      [DB.AUDITIONS.FIELDS.ACCEPT_ANY_ROLE]: formData.acceptAnyRole || false,
-      [DB.AUDITIONS.FIELDS.OFF_BOOK_AGREEMENT]: formData.offBookAgreement || false,
-      [DB.AUDITIONS.FIELDS.PARENT_HELP_AGREEMENT]: formData.parentCommitteeAgreement || false,
-      [DB.AUDITIONS.FIELDS.SIGNATURES]: `${formData.studentSignature ? 'Yes' : 'No'} (S), ${formData.parentSignature ? 'Yes' : 'No'} (P)`,
-      [DB.AUDITIONS.FIELDS.BACKING_TRACK]: formData.practiceAudio || formData.musicFileUrl || "",
-      [DB.AUDITIONS.FIELDS.GRADE]: formData.grade || null,
-
-      [DB.AUDITIONS.FIELDS.WILLING_TO_ALTER_APPEARANCE]: formData.willingToAlterAppearance || false,
-      [DB.AUDITIONS.FIELDS.FEAR_OF_HEIGHTS]: formData.fearOfHeights || false,
-      [DB.AUDITIONS.FIELDS.OTHER_TALENTS]: formData.otherTalents || "",
-      [DB.AUDITIONS.FIELDS.ADMIN_NOTES]: `Conflicts:\n${conflictString || "None"}\n\nExtra Info:\n${extraDataString}`,
-
-      [DB.AUDITIONS.FIELDS.VOICE_TYPE]: formData.voiceType || "Unsure",
-      [DB.AUDITIONS.FIELDS.VOCAL_RANGE]: formData.vocalRange || "",     
-      
-      // 🎲 ASSIGN THE RANDOM NUMBER
-      [DB.AUDITIONS.FIELDS.AUDITION_NUMBER]: assignedNumber!.toString(),
-    };
-
-    if (DB.AUDITIONS.FIELDS.PREFERRED_ROLES) auditionPayload[DB.AUDITIONS.FIELDS.PREFERRED_ROLES] = formData.preferredRoles || "";
-    if (DB.AUDITIONS.FIELDS.STAGE_ROMANCE) auditionPayload[DB.AUDITIONS.FIELDS.STAGE_ROMANCE] = formData.acceptRomance || false;
-    if (DB.AUDITIONS.FIELDS.CALLBACK_STATUS) auditionPayload[DB.AUDITIONS.FIELDS.CALLBACK_STATUS] = formData.callbackStatus || "";
-
-    delete auditionPayload["undefined"];
-    Object.keys(auditionPayload).forEach(key => {
-        if (auditionPayload[key] === undefined) {
-            delete auditionPayload[key];
-        }
-    });
-
-    const audition = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/`, {
-      method: "POST",
-      body: JSON.stringify(auditionPayload)
-    }, {}, tenant);
-
-    if (!audition || audition.error || Array.isArray(audition)) {
-        console.error("Database rejected the audition record. Payload:", auditionPayload);
-        return { success: false, error: "Database rejected the audition record. Please check your network and try again." };
-    }
-
-    // ==========================================
-    // WRITE TO COMMITTEE_PREFS TABLE
-    // ==========================================
-    if (audition?.id && tables.COMMITTEE_PREFS) {
-      try {
-        const prefsPayload: any = {
-          [DB.COMMITTEE_PREFS.FIELDS.PRODUCTION]: [productionId],
-          [DB.COMMITTEE_PREFS.FIELDS.STUDENT_ID]: [parseInt(personId)], 
-          [DB.COMMITTEE_PREFS.FIELDS.IS_CHAIR]: formData.chairInterest === "yes" ? true : false,
-        };
-
-        if (formData.preShow1) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_1ST] = formData.preShow1;
-        if (formData.preShow2) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_2ND] = formData.preShow2;
-        if (formData.preShow3) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.PRE_SHOW_3RD] = formData.preShow3;
-        if (formData.show1) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_1ST] = formData.show1;
-        if (formData.show2) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_2ND] = formData.show2;
-        if (formData.show3) prefsPayload[DB.COMMITTEE_PREFS.FIELDS.SHOW_WEEK_3RD] = formData.show3;
-
-        await fetchBaserow(`/database/rows/table/${tables.COMMITTEE_PREFS}/`, {
-          method: "POST",
-          body: JSON.stringify(prefsPayload)
-        }, {}, tenant);
-      } catch (committeeError) {
-        console.error("Failed to save Committee Prefs:", committeeError);
-      }
-    }
-
-    // ==========================================
-    // SEND CONFIRMATION EMAIL
-    // ==========================================
-    let showTitle = "Our Upcoming Production";
-    try {
-        const showObj = await getShowById(tenant, productionId);
-        if (showObj && showObj.title) showTitle = showObj.title;
-    } catch (e) {
-        console.error("Could not fetch show title for email", e);
-    }
-
-    try {
-      await getResend().emails.send({
-        from: process.env.EMAIL_FROM_ADDRESS || 'Casting Team <casting@open-backstage.org>',
-        to: lookupEmail,
-        subject: `🎭 Audition Confirmed: ${firstName} for ${showTitle}!`,
-        html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-              <h2 style="color: #2563eb; font-style: italic; text-transform: uppercase;">You're on the list! 🌟</h2>
-              <p style="font-size: 16px; color: #374151;">Hi there,</p>
-              <p style="font-size: 16px; color: #374151;">This email confirms that <strong>${firstName} ${lastName}</strong> is officially registered to audition for <em>${showTitle}</em>.</p>
-              
-              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; color: #374151;">Audition Details:</h3>
-                  <ul style="margin: 0; color: #4b5563; font-size: 14px; list-style-type: none; padding-left: 0; line-height: 1.6;">
-                     <li>🔢 <strong>Audition Number:</strong> ${assignedNumber}</li>
-                     <li>🕒 <strong>Time:</strong> ${slotLabel}</li>
-                     <li>🎵 <strong>Song:</strong> ${formData.songTitle || "None"}</li>
-                  </ul>
-              </div>
-
-              <p style="font-size: 16px; color: #374151;"><strong>Next Steps:</strong> Make sure you have your Family Hub password set up so you can securely view the cast list when it drops next Friday!</p>
-              
-              <p style="font-size: 16px; color: #374151;">Break a leg!</p>
-              <p style="font-size: 14px; color: #6b7280; font-weight: bold; text-transform: uppercase;">- The Directing Team</p>
-          </div>`
-      });
-    } catch (emailError) { 
-      console.error("Audition Confirmation Email failed:", emailError); 
-    }
-
-    // 🟢 RETURN THE NUMBER TO THE CLIENT
-    return { success: true, auditionId: audition?.id, auditionNumber: assignedNumber };
   } catch (error) {
     console.error("Submission Error:", error);
     return { success: false, error: "Submission failed." };
@@ -355,16 +96,7 @@ export async function submitRealAudition(tenant: string, productionId: number, f
 
 export async function cancelAudition(tenant: string, auditionId: number) {
   try {
-    if (isPostgresEnabled()) return await cancelAuditionPg(tenant, auditionId);
-
-    const tables = await getTenantTableConfig(tenant);
-    const response = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-      method: "DELETE"
-    }, {}, tenant);
-    if (response?.error) {
-      return { success: false, error: "Database rejected the cancellation." };
-    }
-    return { success: true };
+    return await cancelAuditionPg(tenant, auditionId);
   } catch (error) {
     console.error("Cancellation Error:", error);
     return { success: false, error: "Failed to cancel audition." };
@@ -372,45 +104,13 @@ export async function cancelAudition(tenant: string, auditionId: number) {
 }
 
 export async function saveAuditionScore(
-  tenant: string, 
-  auditionId: number, 
-  scores: { vocal: number; acting: number; dance: number; presence: number; notes: string }, 
+  tenant: string,
+  auditionId: number,
+  scores: { vocal: number; acting: number; dance: number; presence: number; notes: string },
   judgeRole: string
 ) {
   try {
-    if (isPostgresEnabled()) {
-      return await saveAuditionScorePg(tenant, auditionId, scores, judgeRole);
-    }
-
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-
-    let notesField = DB.AUDITIONS.FIELDS.ACTING_NOTES;
-    if (judgeRole === "Music") notesField = DB.AUDITIONS.FIELDS.MUSIC_NOTES;
-    if (judgeRole === "Drop-In") notesField = DB.AUDITIONS.FIELDS.DROP_IN_NOTES;
-    if (judgeRole === "Admin") notesField = DB.AUDITIONS.FIELDS.ADMIN_NOTES;
-
-    const payload: any = {
-      [DB.AUDITIONS.FIELDS.VOCAL_SCORE]: scores.vocal,
-      [DB.AUDITIONS.FIELDS.ACTING_SCORE]: scores.acting,
-      [DB.AUDITIONS.FIELDS.DANCE_SCORE]: scores.dance,
-    };
-
-    if (scores.notes !== undefined) {
-       payload[notesField] = scores.notes;
-    }
-
-    const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-       method: "PATCH",
-       body: JSON.stringify(payload)
-    }, {}, tenant);
-
-    if (!res || res.error) {
-       console.error("Failed to save score:", res);
-       return { success: false, error: "Database rejected the score." };
-    }
-
-    return { success: true };
+    return await saveAuditionScorePg(tenant, auditionId, scores, judgeRole);
   } catch (error) {
     console.error("Scoring Error:", error);
     return { success: false, error: "Failed to connect to database." };
@@ -418,36 +118,17 @@ export async function saveAuditionScore(
 }
 
 export async function acceptRoleAndSign(
-  tenant: string, 
-  auditionId: number, 
-  studentName: string, 
-  roleName: string, 
-  showTitle: string, 
+  tenant: string,
+  auditionId: number,
+  studentName: string,
+  roleName: string,
+  showTitle: string,
   parentEmail: string,
-  signatures: string 
+  signatures: string
 ) {
   try {
-    if (isPostgresEnabled()) {
-      const pgRes = await acceptRoleAndSignPg(tenant, auditionId, signatures);
-      if (!pgRes.success) return pgRes;
-    } else {
-      const DB = getDB(tenant);
-      const tables = await getTenantTableConfig(tenant);
-
-      const payload = {
-        [DB.AUDITIONS.FIELDS.SIGNATURES]: signatures
-      };
-
-      const res = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-         method: "PATCH",
-         body: JSON.stringify(payload)
-      }, {}, tenant);
-
-      if (!res || res.error) {
-         console.error("Failed to update signatures:", res);
-         return { success: false, error: "Database rejected the signature update." };
-      }
-    }
+    const pgRes = await acceptRoleAndSignPg(tenant, auditionId, signatures);
+    if (!pgRes.success) return pgRes;
 
     try {
       await getResend().emails.send({
@@ -473,10 +154,10 @@ export async function acceptRoleAndSign(
               
               <p style="font-size: 16px; color: #374151;">We can't wait to get started!</p>
               <p style="font-size: 14px; color: #6b7280; font-weight: bold; text-transform: uppercase;">- The Directing Team</p>
-          </div>`
+          </div>`,
       });
-    } catch (emailError) { 
-      console.error("Welcome Email failed:", emailError); 
+    } catch (emailError) {
+      console.error("Welcome Email failed:", emailError);
     }
 
     return { success: true };

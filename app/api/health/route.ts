@@ -8,11 +8,15 @@ export async function GET() {
   const startedAt = Date.now();
 
   if (!isPostgresEnabled()) {
-    return NextResponse.json({
-      ok: true,
-      backend: "baserow-fallback",
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        ok: false,
+        backend: "postgres",
+        error: "DATABASE_URL is not configured",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 503 }
+    );
   }
 
   try {

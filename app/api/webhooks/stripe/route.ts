@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
-import { fetchBaserow, getDB } from '@/app/lib/baserow';
-import { getTenantTableConfig } from '@/app/lib/tenant-config';
 import { getStripeClient, parseCheckoutMetadata } from '@/app/lib/stripe-helpers';
 import {
   parseBillingMetadata,
@@ -192,40 +190,11 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      if (isPostgresEnabled()) {
-        const pgRes = await markAuditionPaidPg(parsed.tenant, parsed.auditionId);
-        if (!pgRes.success) {
-          console.error('[Stripe Webhook] Failed to update Postgres audition row:', pgRes.error);
-          return NextResponse.json({ error: pgRes.error }, { status: 500 });
-        }
-        return NextResponse.json({
-          received: true,
-          updated: { tenant: parsed.tenant, auditionId: parsed.auditionId },
-        });
+      const pgRes = await markAuditionPaidPg(parsed.tenant, parsed.auditionId);
+      if (!pgRes.success) {
+        console.error('[Stripe Webhook] Failed to update Postgres audition row:', pgRes.error);
+        return NextResponse.json({ error: pgRes.error }, { status: 500 });
       }
-
-      const DB = getDB(parsed.tenant);
-      const tables = await getTenantTableConfig(parsed.tenant);
-      const F = DB.AUDITIONS.FIELDS;
-
-      const patchRes = await fetchBaserow(
-        `/database/rows/table/${tables.AUDITIONS}/${parsed.auditionId}/`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            [F.PAID_FEES]: true,
-            [F.PRODUCTION_FEE_STATUS]: 'Paid',
-          }),
-        },
-        {},
-        parsed.tenant
-      );
-
-      if (!patchRes || patchRes.error) {
-        console.error('[Stripe Webhook] Failed to update Baserow audition row:', patchRes);
-        return NextResponse.json({ error: 'Failed to update Baserow record.' }, { status: 500 });
-      }
-
       return NextResponse.json({
         received: true,
         updated: { tenant: parsed.tenant, auditionId: parsed.auditionId },

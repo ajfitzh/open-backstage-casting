@@ -1,88 +1,22 @@
- // app/actions/casting.ts
+// app/actions/casting.ts
 "use server";
 
-import { fetchBaserow, getDB } from "@/app/lib/baserow";
-import { getTenantTableConfig } from "@/app/lib/tenant-config";
 import { requirePermission } from "@/app/lib/auth-guard";
 import { revalidatePath } from "next/cache";
-import { isPostgresEnabled } from "@/db";
 import { generateCastingRowsPg } from "@/app/lib/db/casting-repo";
 
 export async function generateCastingRows(tenant: string, productionId: number) {
   const guard = await requirePermission(tenant, "manage_casting", productionId);
   if (!guard.ok) return { success: false, error: guard.error };
 
-  console.log(`Generating casting rows for Production ${productionId} on tenant ${tenant}...`);
-
   try {
-    if (isPostgresEnabled()) {
-      const pgRes = await generateCastingRowsPg(tenant, productionId);
-      if (pgRes.success) {
-        revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');
-      }
-      return pgRes;
+    const pgRes = await generateCastingRowsPg(tenant, productionId);
+    if (pgRes.success) {
+      revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');
     }
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-
-    // 1. Fetch ALL Blueprint Roles using pagination
-    let allRoles: any[] = [];
-    let page = 1;
-    let hasNextPage = true;
-
-    while (hasNextPage) {
-      const response = await fetchBaserow(`/database/rows/table/${tables.BLUEPRINT_ROLES}/`, {}, {
-        size: "200", 
-        page: page.toString(),
-        "user_field_names": "true" 
-      }, tenant);
-
-      // Handle how fetchBaserow formats the return (it might return the array directly or a results object)
-      const batch = Array.isArray(response) ? response : (response?.results || []);
-
-      if (!batch || batch.length === 0) {
-        hasNextPage = false;
-        break;
-      }
-
-      allRoles = [...allRoles, ...batch];
-
-      // If we got fewer than 200 items, we are on the last page
-      if (batch.length < 200) {
-        hasNextPage = false;
-      } else {
-        page++; // Queue up the next page
-      }
-    }
-
-    if (!allRoles || allRoles.length === 0) {
-      return { success: false, error: "No Blueprint Roles found for this production." };
-    }
-
-    // 2. Prepare the new rows payload
-    const newRows = allRoles.map((role: any) => ({
-      [DB.ASSIGNMENTS.FIELDS.PRODUCTION]: [productionId],
-      [DB.ASSIGNMENTS.FIELDS.PERFORMANCE_IDENTITY]: [role.id],
-      [DB.ASSIGNMENTS.FIELDS.SCENE_ASSIGNMENTS]: role['Active Scenes']?.map((s:any) => s.id) || [] 
-    }));
-
-    // 3. Batch POST the rows in chunks (Baserow's batch limit is also 200)
-    const chunkSize = 200;
-    for (let i = 0; i < newRows.length; i += chunkSize) {
-      const chunk = newRows.slice(i, i + chunkSize);
-      
-      await fetchBaserow(`/database/rows/table/${tables.ASSIGNMENTS}/batch/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: chunk })
-      }, {}, tenant);
-    }
-
-    revalidatePath('/[tenant]/(main)/(casting)/casting', 'page');
-    return { success: true, count: newRows.length };
-
+    return pgRes;
   } catch (error) {
     console.error("Casting Generation Error:", error);
-    return { success: false, error: "An unexpected error occurred while communicating with Baserow." };
+    return { success: false, error: "An unexpected error occurred while generating casting rows." };
   }
 }

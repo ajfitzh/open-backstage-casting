@@ -1,49 +1,16 @@
 // app/[tenant]/(main)/production/[id]/rehearsal-check-in/page.tsx
-import { 
-    getShowById, 
-    getAssignments, 
-    getProductionEvents, 
-    fetchBaserow,  
-    getTenantTableConfig 
-} from '@/app/lib/baserow';
-import { DB } from '@/app/lib/schema';
+import { getShowById, getAssignments, getProductionEvents } from '@/app/lib/baserow';
 import CheckInKioskClient from '@/app/components/production/CheckInKioskClient';
 import { CalendarX } from 'lucide-react';
-import { isPostgresEnabled } from '@/db';
 import { getAttendanceForEventPg } from '@/app/lib/db/operations-repo';
 
 export const dynamic = 'force-dynamic';
 
 async function getTodayAttendance(tenant: string, eventId: number) {
-    if (isPostgresEnabled()) {
-        try {
-            const pgRows = await getAttendanceForEventPg(tenant, eventId);
-            if (pgRows !== null) return pgRows;
-        } catch (error) {
-            console.error("[Postgres] getTodayAttendance failed, falling back:", error);
-        }
-    }
-
     try {
-        const tables = await getTenantTableConfig(tenant);
-        const F = DB.ATTENDANCE.FIELDS;
-        const tableId = tables.ATTENDANCE || DB.ATTENDANCE.ID;
-
-        const params = {
-            filter_type: "AND",
-            [`filter__${F.REHEARSAL_PRODUCTION_EVENTS}__link_row_has`]: eventId
-        };
-        
-        const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params, tenant);
-        if (!Array.isArray(rows)) return [];
-
-        return rows.map((r: any) => ({
-            personId: r[F.PERSON]?.[0]?.id,
-            checkIn: r[F.CHECK_IN_TIME] || null,
-            checkOut: r[F.CHECK_OUT_TIME] || null,
-            status: r[F.STATUS]?.value || "Unknown"
-        }));
+        return (await getAttendanceForEventPg(tenant, eventId)) ?? [];
     } catch (error) {
+        console.error("Failed to fetch today attendance:", error);
         return [];
     }
 }

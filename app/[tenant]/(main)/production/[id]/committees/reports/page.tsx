@@ -4,59 +4,14 @@ import {
   ClipboardList, AlertTriangle, DollarSign, 
   CheckCircle2, Calendar, Target, Users 
 } from 'lucide-react';
-import { 
-  getActiveProduction, 
-  getShowById, 
-  fetchBaserow, 
-  getDB, 
-  getTenantTableConfig 
-} from '@/app/lib/baserow';
-import { isPostgresEnabled } from '@/db';
+import { getActiveProduction, getShowById } from '@/app/lib/baserow';
 import { getCommitteeReportsPg } from '@/app/lib/db/operations-repo';
 
 export const dynamic = 'force-dynamic';
 
-// 1. Helper to fetch the new reports
 async function getCommitteeReports(tenant: string, productionId: number) {
-  if (isPostgresEnabled()) {
-    try {
-      const pgReports = await getCommitteeReportsPg(tenant, productionId);
-      if (pgReports !== null) return pgReports;
-    } catch (error) {
-      console.error("[Postgres] getCommitteeReports failed, falling back:", error);
-    }
-  }
-
   try {
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    const F = DB.COMMITTEE_REPORTS.FIELDS;
-    
-    // Using the bypass we established earlier in case it's not in the registry yet
-    const tableId = (tables as any).COMMITTEE_REPORTS || DB.COMMITTEE_REPORTS.ID; 
-
-    const params = {
-      filter_type: "AND",
-      [`filter__${F.PRODUCTION}__link_row_has`]: productionId,
-    };
-
-    const rows = await fetchBaserow(`/database/rows/table/${tableId}/`, {}, params, tenant);
-    if (!Array.isArray(rows)) return [];
-
-    return rows.map((r: any) => ({
-      id: r.id,
-      name: r[F.NAME] || "Untitled",
-      committee: r[F.COMMITTEE_NAME]?.value || "Unassigned",
-      phase: r[F.PRODUCTION_PHASE]?.value || "Unknown",
-      date: r[F.REPORT_DATE] || "No Date",
-      progress: r[F.PROGRESS_UPDATE] || "",
-      attendance: r[F.ATTENDANCE_NOTES] || "",
-      blockers: r[F.BLOCKERS_AND_NEEDS] || "",
-      completion: parseInt(r[F.ESTIMATED_COMPLETION]) || 0,
-      moneySpent: parseFloat(r[F.MONEY_SPENT_THIS_WEEK]) || 0,
-      submitter: r[F.SUBMITTER]?.[0]?.value || "Unknown Chair"
-    })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Newest first
-
+    return (await getCommitteeReportsPg(tenant, productionId)) ?? [];
   } catch (error) {
     console.error("Failed to fetch reports:", error);
     return [];

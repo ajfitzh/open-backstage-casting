@@ -3,14 +3,10 @@ import {
   getAuditionees,
   getAuditionSlots,
   getPeople,
-  fetchBaserow,
-  getDB,
-  getTenantTableConfig,
 } from "@/app/lib/baserow";
 import ComplianceDashboard from "@/app/components/ComplianceDashboard";
 import { cancelAudition } from "@/app/actions/auditions";
 import { revalidatePath } from "next/cache";
-import { isPostgresEnabled } from "@/db";
 import {
   assignMissingAuditionNumbersPg,
   changeAuditionTimeSlotPg,
@@ -83,96 +79,13 @@ export default async function RosterPage({
 
   async function handleChangeTimeSlot(auditionId: string | number, newSlotLabel: string) {
     "use server";
-    if (isPostgresEnabled()) {
-      await changeAuditionTimeSlotPg(tenant, showId, parseInt(auditionId.toString(), 10), newSlotLabel);
-      revalidatePath(`/${tenant}/production/${showId}/roster`);
-      return;
-    }
-
-    const tables = await getTenantTableConfig(tenant);
-    const DB = getDB(tenant);
-
-    const slotsParams = {
-      filter_type: "AND",
-      [`filter__${DB.AUDITION_SLOTS.FIELDS.TIME_LABEL}__equal`]: newSlotLabel,
-      [`filter__${DB.AUDITION_SLOTS.FIELDS.PRODUCTION}__link_row_has`]: showId,
-    };
-    const slotsRes = await fetchBaserow(`/database/rows/table/${tables.AUDITION_SLOTS}/`, {}, slotsParams, tenant);
-    const slotList = Array.isArray(slotsRes) ? slotsRes : slotsRes?.results || [];
-
-    if (slotList.length > 0) {
-      const slotId = slotList[0].id;
-      await fetchBaserow(
-        `/database/rows/table/${tables.AUDITIONS}/${auditionId}/`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ [DB.AUDITIONS.FIELDS.AUDITION_SLOTS]: [slotId] }),
-        },
-        {},
-        tenant
-      );
-    }
+    await changeAuditionTimeSlotPg(tenant, showId, parseInt(auditionId.toString(), 10), newSlotLabel);
     revalidatePath(`/${tenant}/production/${showId}/roster`);
   }
 
   async function handleAssignMissingNumbers() {
     "use server";
-    if (isPostgresEnabled()) {
-      await assignMissingAuditionNumbersPg(tenant, showId);
-      revalidatePath(`/${tenant}/production/${showId}/roster`);
-      return;
-    }
-
-    const tables = await getTenantTableConfig(tenant);
-    const DB = getDB(tenant);
-
-    const existingRows = await fetchBaserow(
-      `/database/rows/table/${tables.AUDITIONS}/`,
-      {},
-      {
-        filter_type: "AND",
-        [`filter__${DB.AUDITIONS.FIELDS.PRODUCTION}__link_row_has`]: showId,
-      },
-      tenant
-    );
-    const rowList = Array.isArray(existingRows) ? existingRows : existingRows?.results || [];
-
-    const existingNumbers = new Set<number>();
-    const missingRows: any[] = [];
-
-    rowList.forEach((row: any) => {
-      const numStr = row[DB.AUDITIONS.FIELDS.AUDITION_NUMBER];
-      if (numStr && numStr.trim() !== "" && numStr !== "N/A") {
-        const num = parseInt(numStr, 10);
-        if (!isNaN(num)) existingNumbers.add(num);
-      } else {
-        missingRows.push(row);
-      }
-    });
-
-    if (missingRows.length === 0) return;
-
-    const availableNumbers: number[] = [];
-    for (let i = 1; i <= 200; i++) {
-      if (!existingNumbers.has(i)) availableNumbers.push(i);
-    }
-    availableNumbers.sort(() => Math.random() - 0.5);
-
-    const itemsToUpdate = missingRows.map((row, idx) => ({
-      id: row.id,
-      [DB.AUDITIONS.FIELDS.AUDITION_NUMBER]: availableNumbers[idx].toString(),
-    }));
-
-    await fetchBaserow(
-      `/database/rows/table/${tables.AUDITIONS}/batch/`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ items: itemsToUpdate }),
-      },
-      {},
-      tenant
-    );
-
+    await assignMissingAuditionNumbersPg(tenant, showId);
     revalidatePath(`/${tenant}/production/${showId}/roster`);
   }
 

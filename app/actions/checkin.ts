@@ -1,15 +1,13 @@
 // app/actions/checkin.ts
 "use server";
 
-import { fetchBaserow, getDB, getTenantTableConfig } from "@/app/lib/baserow";
 import { requirePermission } from "@/app/lib/auth-guard";
-import { isPostgresEnabled } from "@/db";
 import { saveCheckInPg } from "@/app/lib/db/casting-repo";
 
 export async function saveCheckIn(
-  tenant: string, 
-  auditionId: number, 
-  status: string, 
+  tenant: string,
+  auditionId: number,
+  status: string,
   lobbyNote: string,
   performerId?: number | null,
   updatedName?: string,
@@ -20,53 +18,16 @@ export async function saveCheckIn(
   if (!guard.ok) return { success: false, error: guard.error };
 
   try {
-    if (isPostgresEnabled()) {
-      return await saveCheckInPg(
-        tenant,
-        auditionId,
-        status,
-        lobbyNote,
-        performerId,
-        updatedName,
-        updatedPhone,
-        updatedEmail
-      );
-    }
-    const DB = getDB(tenant);
-    const tables = await getTenantTableConfig(tenant);
-    
-    // 1. Calculate Check-In Boolean
-    const isCheckedIn = status === "Checked In" || status === "Late";
-
-    // 2. Patch the Audition Table (Check-In Status & Lobby Notes)
-    const auditionRes = await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${auditionId}/`, {
-       method: "PATCH",
-       body: JSON.stringify({
-           [DB.AUDITIONS.FIELDS.LOBBY_NOTE]: lobbyNote || "",
-           [DB.AUDITIONS.FIELDS.CHECKED_IN]: isCheckedIn
-       })
-    }, {}, tenant);
-
-    // 3. If they edited contact info, Patch the Master People Table!
-    if (performerId && (updatedPhone || updatedEmail || updatedName)) {
-        const peopleUpdate: any = {};
-        
-        // Split name back into First/Last for Baserow
-        if (updatedName) {
-            const parts = updatedName.split(' ');
-            peopleUpdate[DB.PEOPLE.FIELDS.FIRST_NAME] = parts[0];
-            peopleUpdate[DB.PEOPLE.FIELDS.LAST_NAME] = parts.slice(1).join(' ');
-        }
-        if (updatedPhone) peopleUpdate[DB.PEOPLE.FIELDS.PHONE_NUMBER] = updatedPhone;
-        if (updatedEmail) peopleUpdate[DB.PEOPLE.FIELDS.CYT_ACCOUNT_PERSONAL_EMAIL] = updatedEmail;
-
-        await fetchBaserow(`/database/rows/table/${tables.PEOPLE}/${performerId}/`, {
-            method: "PATCH",
-            body: JSON.stringify(peopleUpdate)
-        }, {}, tenant);
-    }
-
-    return { success: !auditionRes.error };
+    return await saveCheckInPg(
+      tenant,
+      auditionId,
+      status,
+      lobbyNote,
+      performerId,
+      updatedName,
+      updatedPhone,
+      updatedEmail
+    );
   } catch (e) {
     console.error("Check-In Save Error:", e);
     return { success: false };
