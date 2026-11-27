@@ -269,7 +269,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
             <form action={switchProduction} className="shrink-0">
               <input type="hidden" name="productionId" value={defaultActiveShow.id} />
               <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="redirectPath" value={`/${tenant}`} />
+              <input type="hidden" name="redirectPath" value="/" />
               <button
                 type="submit"
                 className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-wider transition-colors"

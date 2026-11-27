@@ -8,34 +8,25 @@ import {
 } from "../../app/lib/show-switcher-helpers.ts";
 
 describe("show-switcher-helpers", () => {
-  it("resolveShowSwitchPath swaps production ID while preserving tenant prefix and sub-route", () => {
+  it("resolveShowSwitchPath preserves subdomain paths without prepending tenant", () => {
+    assert.equal(resolveShowSwitchPath("/", "cytfred", 42), "/");
     assert.equal(
-      resolveShowSwitchPath("/cyt/production/5/schedule", "cyt", 42),
-      "/cyt/production/42/schedule"
+      resolveShowSwitchPath("/production/5/schedule", "cytfred", 42),
+      "/production/42/schedule"
     );
     assert.equal(
-      resolveShowSwitchPath("/cyt/production/5/team", "cyt", 19),
-      "/cyt/production/19/team"
+      resolveShowSwitchPath("/production/5/team", "cytfred", 19),
+      "/production/19/team"
     );
-    assert.equal(
-      resolveShowSwitchPath("/cyt/production/5/casting", "cyt", 8),
-      "/cyt/production/8/casting"
-    );
+    assert.equal(resolveShowSwitchPath("/box-office", "cytfred", 101), "/box-office");
+    assert.equal(resolveShowSwitchPath("/reports", "cytfred", 42), "/reports");
   });
 
-  it("resolveShowSwitchPath normalizes middleware-rewritten paths without tenant prefix", () => {
-    assert.equal(
-      resolveShowSwitchPath("/production/5/roster", "cyt", 101),
-      "/cyt/production/101/roster"
-    );
-    assert.equal(resolveShowSwitchPath("/box-office", "cyt", 101), "/cyt/box-office");
-  });
-
-  it("resolveShowSwitchPath keeps dashboard and global routes intact with tenant prefix", () => {
-    assert.equal(resolveShowSwitchPath("/", "cyt", 42), "/cyt");
+  it("resolveShowSwitchPath preserves tenant prefix when already present in path-based URLs", () => {
+    assert.equal(resolveShowSwitchPath("/cyt/production/5/schedule", "cyt", 42), "/cyt/production/42/schedule");
+    assert.equal(resolveShowSwitchPath("/cyt/production/5/casting", "cyt", 8), "/cyt/production/8/casting");
     assert.equal(resolveShowSwitchPath("/cyt", "cyt", 42), "/cyt");
     assert.equal(resolveShowSwitchPath("/cyt/reports", "cyt", 42), "/cyt/reports");
-    assert.equal(resolveShowSwitchPath("/cyt/production", "cyt", 42), "/cyt/production");
   });
 
   it("classifyShowBucket classifies active, upcoming, and archived shows", () => {

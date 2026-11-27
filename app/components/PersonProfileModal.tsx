@@ -271,7 +271,7 @@ export default function PersonProfileModal({
                     {profile.crewCredits.map((credit, idx) => (
                       <Link
                         key={`crew-${credit.productionId}-${idx}`}
-                        href={tenant ? `/${tenant}/production/${credit.productionId}/team` : `/production/${credit.productionId}/team`}
+                        href={`/production/${credit.productionId}/team`}
                         onClick={onClose}
                         className="flex items-center justify-between gap-3 p-3 rounded-xl bg-zinc-900/60 border border-white/5 hover:bg-zinc-900 hover:border-white/15 transition-all group"
                       >
@@ -304,7 +304,7 @@ export default function PersonProfileModal({
                     {profile.castCredits.map((credit, idx) => (
                       <Link
                         key={`cast-${credit.productionId}-${idx}`}
-                        href={tenant ? `/${tenant}/production/${credit.productionId}/cast` : `/production/${credit.productionId}/cast`}
+                        href={`/production/${credit.productionId}/cast`}
                         onClick={onClose}
                         className="flex items-center justify-between gap-3 p-3 rounded-xl bg-zinc-900/60 border border-white/5 hover:bg-zinc-900 hover:border-white/15 transition-all group"
                       >

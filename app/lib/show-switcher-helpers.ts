@@ -23,11 +23,16 @@ export function classifyShowBucket(show: Pick<SwitcherShow, "isActive" | "status
  * Given the current browser pathname, tenant slug, and target production ID,
  * returns the clean destination URL for switching production context.
  *
- * - On `/[tenant]/production/12/schedule` (or `/production/12/schedule`), swaps
- *   the production ID to `targetProductionId` and preserves the sub-route.
- * - On global/dashboard routes (`/[tenant]`, `/[tenant]/box-office`, `/[tenant]/reports`,
- *   `/[tenant]/production`, etc.), stays on that route (with `/${tenant}` preserved)
- *   so the server re-renders using the updated `active_production_id` cookie.
+ * IMPORTANT: On subdomain hosts (e.g. `cytfred.open-backstage.org`), middleware
+ * automatically rewrites `/...` -> `/cytfred/...`, so browser URLs must NOT have
+ * `/${tenant}` prepended (otherwise middleware rewrites `/cytfred` -> `/cytfred/cytfred` 404).
+ *
+ * - Preserves `/${tenant}` ONLY when `currentPath` already starts with `/${tenant}`
+ *   (path-based local routing like `localhost:3001/cytfred/...`).
+ * - On `/production/12/schedule` (or `/cytfred/production/12/schedule`), swaps the
+ *   production ID to `targetProductionId` and preserves the sub-route.
+ * - On `/` or global routes (`/box-office`, `/reports`, `/production`), stays on
+ *   that exact path so the server re-renders using the updated `active_production_id` cookie.
  */
 export function resolveShowSwitchPath(
   currentPath: string,
@@ -36,33 +41,35 @@ export function resolveShowSwitchPath(
 ): string {
   const cleanTenant = tenant.trim().replace(/^\/+|\/+$/g, "");
   const normalizedPath = (currentPath || "/").trim() || "/";
+  const withLeadingSlash = normalizedPath.startsWith("/")
+    ? normalizedPath
+    : `/${normalizedPath}`;
 
-  // Match either `/[tenant]/production/[id]/...` or `/production/[id]/...`
-  const prodMatch = normalizedPath.match(
+  const hasTenantPrefix =
+    Boolean(cleanTenant) &&
+    (withLeadingSlash === `/${cleanTenant}` ||
+      withLeadingSlash.startsWith(`/${cleanTenant}/`));
+
+  // Match `/[tenant]/production/[id]/...` or `/production/[id]/...`
+  const prodMatch = withLeadingSlash.match(
     /^(?:\/([^/]+))?\/production\/(\d+)(\/.*)?$/
   );
 
   if (prodMatch) {
-    const matchedTenant = prodMatch[1];
+    const matchedPrefix = prodMatch[1];
     const suffix = prodMatch[3] || "";
-    const resolvedTenant = cleanTenant || matchedTenant || "";
-    return resolvedTenant
-      ? `/${resolvedTenant}/production/${targetProductionId}${suffix}`
-      : `/production/${targetProductionId}${suffix}`;
+    if (matchedPrefix) {
+      return `/${matchedPrefix}/production/${targetProductionId}${suffix}`;
+    }
+    return `/production/${targetProductionId}${suffix}`;
   }
 
-  // Ensure tenant prefix is preserved on non-production routes
-  if (cleanTenant) {
-    if (normalizedPath === "/" || normalizedPath === `/${cleanTenant}`) {
-      return `/${cleanTenant}`;
-    }
-    if (normalizedPath.startsWith(`/${cleanTenant}/`)) {
-      return normalizedPath;
-    }
-    return `/${cleanTenant}${normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`}`;
+  // Non-production routes: keep the exact path format the browser is already on
+  if (hasTenantPrefix) {
+    return withLeadingSlash;
   }
 
-  return normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`;
+  return withLeadingSlash;
 }
 
 /**
