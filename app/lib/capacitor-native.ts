@@ -44,26 +44,22 @@ export async function triggerHaptic(
 }
 
 /**
- * Launches the native MLKit barcode/QR scanner when running inside the iOS/Android
+ * Launches the native iOS/Android barcode/QR scanner when running inside the
  * Capacitor shell. Returns the scanned raw value, or null if cancelled / unavailable.
  */
 export async function scanBarcodeNative(): Promise<string | null> {
   if (!isNativeCapacitor()) return null;
   try {
-    const { BarcodeScanner } = await import("@capacitor-mlkit/barcode-scanning");
-    const { supported } = await BarcodeScanner.isSupported();
-    if (!supported) return null;
-
-    const perms = await BarcodeScanner.requestPermissions();
-    if (perms.camera !== "granted" && perms.camera !== "limited") {
-      return null;
-    }
-
-    const result = await BarcodeScanner.scan();
-    const first = result.barcodes?.[0]?.rawValue || result.barcodes?.[0]?.displayValue;
-    if (first) {
+    const { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } = await import(
+      "@capacitor/barcode-scanner"
+    );
+    const result = await CapacitorBarcodeScanner.scanBarcode({
+      hint: CapacitorBarcodeScannerTypeHint.ALL,
+      scanInstructions: "Align QR code or barcode inside the frame",
+    });
+    if (result?.ScanResult) {
       await triggerHaptic("success");
-      return first;
+      return result.ScanResult;
     }
     return null;
   } catch {
