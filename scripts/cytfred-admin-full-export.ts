@@ -23,6 +23,7 @@ import { chromium, type Page } from "@playwright/test";
 
 const BASE_URL = "https://www.cytfredericksburg.org";
 const OUT_PATH = path.join(process.cwd(), "scripts", ".cytfred-full-export.json");
+const CLASSES_ONLY = process.argv.includes("--classes-only");
 
 async function browserFetchText(page: Page, relUrl: string): Promise<string> {
   return await page.evaluate(async (url) => {
@@ -90,8 +91,13 @@ async function main() {
     console.log(`[2/6] Found ${sessions.length} session option(s) in dropdown.`);
 
     // -------------------------------------------------------------------------
-    // 2. Pull ALL Shows (try session=0 first; if few results, iterate all sessions)
+    // 2. Pull ALL Shows (skipped when --classes-only is passed)
     // -------------------------------------------------------------------------
+    const prevExport =
+      CLASSES_ONLY && fs.existsSync(OUT_PATH)
+        ? JSON.parse(fs.readFileSync(OUT_PATH, "utf8"))
+        : null;
+
     const showMap = new Map<
       number,
       {
@@ -134,30 +140,34 @@ async function main() {
       }
     };
 
-    const allShowsHtml0 = await browserFetchText(
-      page,
-      "/_ajax_load/show-listing-admin?session=0&area=0&location=0"
-    );
-    await extractShowsFromHtml(allShowsHtml0, "");
+    let detailedShows: any[] = [];
+    if (CLASSES_ONLY && Array.isArray(prevExport?.shows)) {
+      detailedShows = prevExport.shows;
+      console.log(`[3/6] --classes-only: reusing ${detailedShows.length} previously exported show(s).`);
+    } else {
+      const allShowsHtml0 = await browserFetchText(
+        page,
+        "/_ajax_load/show-listing-admin?session=0&area=0&location=0"
+      );
+      await extractShowsFromHtml(allShowsHtml0, "");
 
-    if (showMap.size < 10 && sessions.length > 0) {
-      console.log(`  session=0 returned ${showMap.size} show(s); querying all ${sessions.length} sessions...`);
-      for (const ses of sessions) {
-        if (ses.id === "0") continue;
-        const html = await browserFetchText(
-          page,
-          `/_ajax_load/show-listing-admin?session=${encodeURIComponent(ses.id)}&area=0&location=0`
-        );
-        if (html.includes("showListing")) {
-          await extractShowsFromHtml(html, ses.name);
+      if (showMap.size < 10 && sessions.length > 0) {
+        console.log(`  session=0 returned ${showMap.size} show(s); querying all ${sessions.length} sessions...`);
+        for (const ses of sessions) {
+          if (ses.id === "0") continue;
+          const html = await browserFetchText(
+            page,
+            `/_ajax_load/show-listing-admin?session=${encodeURIComponent(ses.id)}&area=0&location=0`
+          );
+          if (html.includes("showListing")) {
+            await extractShowsFromHtml(html, ses.name);
+          }
         }
       }
-    }
-    const showsList = Array.from(showMap.values()).sort((a, b) => b.mycytId - a.mycytId);
-    console.log(`[3/6] Found ${showsList.length} total show(s) in MyCYT! Pulling details for each...`);
+      const showsList = Array.from(showMap.values()).sort((a, b) => b.mycytId - a.mycytId);
+      console.log(`[3/6] Found ${showsList.length} total show(s) in MyCYT! Pulling details for each...`);
 
-    const detailedShows: any[] = [];
-    for (let i = 0; i < showsList.length; i++) {
+      for (let i = 0; i < showsList.length; i++) {
       const sh = showsList[i];
       const [artHtml, perfHtml, charHtml, crewHtml, audHtml, settingsHtml] = await Promise.all([
         browserFetchText(page, `/_ajax_load/artistic-team-listing-admin?show=${sh.mycytId}`),
@@ -295,6 +305,7 @@ async function main() {
         );
       }
     }
+    }
 
     // -------------------------------------------------------------------------
     // 3. Pull ALL Theaters (type=1) & Class Locations (type=2) + Addresses
@@ -390,7 +401,37 @@ async function main() {
     );
     await parseClassesHtml(classHtml0, "");
 
+    // Tag each class with its exact Session name by querying per session ID
+    if (sessions.length > 0) {
+      let sessionTagged = 0;
+      for (const ses of sessions) {
+        if (ses.id === "0") continue;
+        const sesHtml = await browserFetchText(
+          page,
+          `/_ajax_load/class_listing_admin?session=${encodeURIComponent(ses.id)}&area=0&location=0&timeSlot=0&minAge=0&maxAge=0&day=0&gender=0&teacher=0`
+        );
+        if (!sesHtml.includes("classListing")) continue;
+        const sesIds = await parseHtmlInBrowser<number[]>(
+          page,
+          sesHtml,
+          `return Array.from(root.querySelectorAll("tr.classListing")).map(tr => {
+            const m = (tr.id || "").match(/(\\d+)/);
+            return m ? Number(m[1]) : 0;
+          }).filter(x => x > 0);`
+        );
+        for (const cid of sesIds) {
+          const existing = classMap.get(cid);
+          if (existing) {
+            existing.sessionName = ses.name;
+            sessionTagged++;
+          }
+        }
+      }
+      console.log(`  ✓ Tagged ${sessionTagged} class(es) with exact session names.`);
+    }
+
     // Tag each class with its exact church/building location by querying per class_location ID
+    let locTagged = 0;
     for (const loc of locations.filter((l) => l.kind === "class_location")) {
       const cleanLocName = loc.name.replace(/\s*Chapters:.*$/i, "").trim();
       const locHtml = await browserFetchText(
@@ -410,62 +451,114 @@ async function main() {
         const existing = classMap.get(lr.mycytId);
         if (existing) {
           existing.locationName = cleanLocName;
+          locTagged++;
         }
       }
     }
-    if (classMap.size < 20 && sessions.length > 0) {
-      // Pull most recent 12 sessions
-      for (const ses of sessions.slice(0, 12)) {
-        if (ses.id === "0") continue;
-        const html = await browserFetchText(
-          page,
-          `/_ajax_load/class_listing_admin?session=${encodeURIComponent(ses.id)}&area=0&location=0&timeSlot=0&minAge=0&maxAge=0&day=0&gender=0&teacher=0`
-        );
-        if (html.includes("classListing")) {
-          await parseClassesHtml(html, ses.name);
-        }
-      }
-    }
+    console.log(`  ✓ Tagged ${locTagged} class(es) with exact church/building locations.`);
+
+    // Pull student rosters for every class that has enrolled students (> 0)
     const classesList = Array.from(classMap.values());
-    console.log(`  ✓ Pulled ${classesList.length} class(es).`);
+    const enrolledClasses = classesList.filter((c) => {
+      const m = String(c.enrollment || "").match(/^(\d+)/);
+      return m ? parseInt(m[1], 10) > 0 : false;
+    });
+    console.log(
+      `  Pulling student rosters for ${enrolledClasses.length} enrolled class(es) (batched)...`
+    );
+    let totalRosterEntries = 0;
+    const ROSTER_BATCH = 8;
+    for (let i = 0; i < enrolledClasses.length; i += ROSTER_BATCH) {
+      const batch = enrolledClasses.slice(i, i + ROSTER_BATCH);
+      const batchResults = await page.evaluate(async (ids: number[]) => {
+        const fetchOne = async (cid: number) => {
+          const url = `/_ajax_load/user-listing-admin2?pageName=searchUsers&session=0&area=0&location=0&show=0&class=${cid}&gender=0&minAge=0&maxAge=0&teachersOnly=n&showFilterCast=n&showFilterCrew=n&listFilterTeachersOnly=n&listFilterArtisticOnly=n&listFilterGuardiansOnly=n`;
+          const res = await fetch(url, { credentials: "include" });
+          if (!res.ok) return { cid, students: [] };
+          const html = await res.text();
+          const wrap = document.createElement("div");
+          wrap.innerHTML = /^\s*<tr[\s>]/i.test(html) ? `<table><tbody>${html}</tbody></table>` : html;
+          const students = Array.from(wrap.querySelectorAll("tr"))
+            .map((tr) => {
+              const tds = Array.from(tr.querySelectorAll("td"));
+              if (tds.length < 5) return null;
+              const firstName = (tds[0]?.textContent || "").trim();
+              const lastName = (tds[1]?.textContent || "").trim();
+              if (!firstName && !lastName) return null;
+              const email = (tds[4]?.textContent || "").trim();
+              const editHref = tr.querySelector("a[href*='user/members']")?.getAttribute("href") || "";
+              const pMatch = editHref.match(/[?&]p=(\d+)/);
+              return {
+                mycytPersonId: pMatch ? Number(pMatch[1]) : null,
+                firstName,
+                lastName,
+                email,
+              };
+            })
+            .filter(Boolean);
+          return { cid, students };
+        };
+        return Promise.all(ids.map(fetchOne));
+      }, batch.map((c) => c.mycytId));
+
+      for (const res of batchResults) {
+        const cls = classMap.get(res.cid);
+        if (cls) {
+          cls.roster = res.students;
+          totalRosterEntries += res.students.length;
+        }
+      }
+      if ((i + ROSTER_BATCH) % 80 === 0 || i + ROSTER_BATCH >= enrolledClasses.length) {
+        console.log(
+          `    [${Math.min(i + ROSTER_BATCH, enrolledClasses.length)}/${enrolledClasses.length}] ${totalRosterEntries} roster entries pulled so far...`
+        );
+      }
+    }
+    console.log(`  ✓ Pulled ${classesList.length} class(es) with ${totalRosterEntries} student enrollment(s).`);
 
     // -------------------------------------------------------------------------
-    // 5. Pull ALL Individual Users (session=0 -> entire directory!)
+    // 5. Pull ALL Individual Users (reused when --classes-only is passed)
     // -------------------------------------------------------------------------
-    console.log(`\n[6/6] Pulling Individual Users directory (session=0)...`);
-    const usersHtml = await browserFetchText(
-      page,
-      "/_ajax_load/user-listing-admin2?pageName=searchUsers&session=0&area=0&location=0&show=0&class=0&gender=0&minAge=0&maxAge=0&teachersOnly=n&showFilterCast=n&showFilterCrew=n&listFilterTeachersOnly=n&listFilterArtisticOnly=n&listFilterGuardiansOnly=n"
-    );
-    const users = await parseHtmlInBrowser<any[]>(
-      page,
-      usersHtml,
-      `
-      return Array.from(root.querySelectorAll("tr")).map(tr => {
-        const tds = Array.from(tr.querySelectorAll("td"));
-        if (tds.length < 5) return null;
-        const firstName = (tds[0]?.textContent || "").trim();
-        const lastName = (tds[1]?.textContent || "").trim();
-        if (!firstName && !lastName) return null;
-        const photoLink = tds[2]?.querySelector("a")?.getAttribute("href") || tds[2]?.querySelector("img")?.getAttribute("src") || null;
-        const age = (tds[3]?.textContent || "").trim();
-        const email = (tds[4]?.textContent || "").trim();
-        const editHref = tr.querySelector("a[href*='user/members']")?.getAttribute("href") || "";
-        const uMatch = editHref.match(/[?&]u=(\\d+)/);
-        const pMatch = editHref.match(/[?&]p=(\\d+)/);
-        return {
-          mycytFamilyId: uMatch ? Number(uMatch[1]) : null,
-          mycytPersonId: pMatch ? Number(pMatch[1]) : null,
-          firstName,
-          lastName,
-          headshotUrl: photoLink,
-          age,
-          email
-        };
-      }).filter(Boolean);
-      `
-    );
-    console.log(`  ✓ Pulled ${users.length} individual user record(s).`);
+    let users: any[] = [];
+    if (CLASSES_ONLY && Array.isArray(prevExport?.users)) {
+      users = prevExport.users;
+      console.log(`\n[6/6] --classes-only: reusing ${users.length} previously exported user record(s).`);
+    } else {
+      console.log(`\n[6/6] Pulling Individual Users directory (session=0)...`);
+      const usersHtml = await browserFetchText(
+        page,
+        "/_ajax_load/user-listing-admin2?pageName=searchUsers&session=0&area=0&location=0&show=0&class=0&gender=0&minAge=0&maxAge=0&teachersOnly=n&showFilterCast=n&showFilterCrew=n&listFilterTeachersOnly=n&listFilterArtisticOnly=n&listFilterGuardiansOnly=n"
+      );
+      users = await parseHtmlInBrowser<any[]>(
+        page,
+        usersHtml,
+        `
+        return Array.from(root.querySelectorAll("tr")).map(tr => {
+          const tds = Array.from(tr.querySelectorAll("td"));
+          if (tds.length < 5) return null;
+          const firstName = (tds[0]?.textContent || "").trim();
+          const lastName = (tds[1]?.textContent || "").trim();
+          if (!firstName && !lastName) return null;
+          const photoLink = tds[2]?.querySelector("a")?.getAttribute("href") || tds[2]?.querySelector("img")?.getAttribute("src") || null;
+          const age = (tds[3]?.textContent || "").trim();
+          const email = (tds[4]?.textContent || "").trim();
+          const editHref = tr.querySelector("a[href*='user/members']")?.getAttribute("href") || "";
+          const uMatch = editHref.match(/[?&]u=(\\d+)/);
+          const pMatch = editHref.match(/[?&]p=(\\d+)/);
+          return {
+            mycytFamilyId: uMatch ? Number(uMatch[1]) : null,
+            mycytPersonId: pMatch ? Number(pMatch[1]) : null,
+            firstName,
+            lastName,
+            headshotUrl: photoLink,
+            age,
+            email
+          };
+        }).filter(Boolean);
+        `
+      );
+      console.log(`  ✓ Pulled ${users.length} individual user record(s).`);
+    }
 
     // -------------------------------------------------------------------------
     // 6. Pull ALL Events (includes CYT Lite productions & special events)

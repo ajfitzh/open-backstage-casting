@@ -739,6 +739,7 @@ async function main() {
       className: schema.classes.className,
       sessionId: schema.classes.sessionId,
       location: schema.classes.location,
+      day: schema.classes.day,
       teacherId: schema.classes.teacherId,
       timeSlot: schema.classes.timeSlot,
     })
@@ -748,6 +749,24 @@ async function main() {
     existingClasses.map((c) => [`${c.sessionId || 0}|${norm(c.className)}`, c])
   );
 
+  const inferDayFromTimeSlot = (ts?: string | null): string | null => {
+    if (!ts) return null;
+    const explicit = ts.match(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:day|sday|nesday|rsday|urday)?\b/i);
+    if (explicit) return explicit[1][0].toUpperCase() + explicit[1].slice(1, 3).toLowerCase();
+    const dm = ts.match(/([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{2,4})/);
+    if (dm) {
+      const yr = dm[3].length === 2 ? 2000 + parseInt(dm[3], 10) : parseInt(dm[3], 10);
+      const parsed = new Date(`${dm[1]} ${dm[2]}, ${yr} 12:00:00 UTC`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][parsed.getUTCDay()];
+      }
+    }
+    return null;
+  };
+
+  let classesUpdatedLoc = 0;
+  let classesUpdatedDay = 0;
+  const pendingEnrollments: { classKey: string; students: any[] }[] = [];
   const batchClasses: (typeof schema.classes.$inferInsert)[] = [];
 
   for (const cls of raw.classes || []) {
@@ -797,16 +816,29 @@ async function main() {
     const sesId = ses?.id ?? 0;
     const key = `${sesId}|${norm(className)}`;
     const resolvedLocation = cls.locationName || cls.chapter || "Fredericksburg";
+    const inferredDay = inferDayFromTimeSlot(cls.timeSlot);
     const teacher = cls.teacherEmail ? personByEmail.get(cls.teacherEmail.trim().toLowerCase()) : undefined;
+
+    if (Array.isArray(cls.roster) && cls.roster.length > 0) {
+      pendingEnrollments.push({ classKey: key, students: cls.roster });
+    }
 
     const existingClass = classByKey.get(key);
     if (existingClass) {
       const updates: Record<string, any> = {};
       if (
         cls.locationName &&
-        (!existingClass.location || existingClass.location === "Fredericksburg" || existingClass.location === "Stafford")
+        (!existingClass.location ||
+          existingClass.location === "Fredericksburg" ||
+          existingClass.location === "Stafford" ||
+          existingClass.location === "TBD")
       ) {
         updates.location = cls.locationName;
+        classesUpdatedLoc++;
+      }
+      if (inferredDay && (!existingClass.day || existingClass.day === "TBD")) {
+        updates.day = inferredDay;
+        classesUpdatedDay++;
       }
       if (!existingClass.teacherId && teacher?.id) {
         updates.teacherId = teacher.id;
@@ -826,6 +858,7 @@ async function main() {
       className,
       sessionId: ses?.id ?? null,
       location: resolvedLocation,
+      day: inferredDay,
       teacherId: teacher?.id ?? null,
       timeSlot: timeMatch ? timeMatch[1] : cls.timeSlot || null,
     });
@@ -836,6 +869,7 @@ async function main() {
       teacherId: teacher?.id ?? null,
       className,
       location: resolvedLocation,
+      day: inferredDay,
       timeSlot: timeMatch ? timeMatch[1] : cls.timeSlot || null,
       minAge: ageMatch ? parseInt(ageMatch[1], 10) : null,
       maxAge: ageMatch ? parseInt(ageMatch[2], 10) : null,
@@ -848,13 +882,64 @@ async function main() {
     stats.classesCreated = batchClasses.length;
     if (!DRY_RUN) {
       for (let i = 0; i < batchClasses.length; i += 200) {
-        await db.insert(schema.classes).values(batchClasses.slice(i, i + 200));
+        const inserted = await db
+          .insert(schema.classes)
+          .values(batchClasses.slice(i, i + 200))
+          .returning({
+            id: schema.classes.id,
+            sessionId: schema.classes.sessionId,
+            className: schema.classes.className,
+          });
+        for (const ic of inserted) {
+          const k = `${ic.sessionId || 0}|${norm(ic.className)}`;
+          const prev = classByKey.get(k);
+          if (prev) prev.id = ic.id;
+        }
       }
     }
   }
 
+  // Upsert class student enrollments (idempotent via unique index on org + class + student)
+  let enrollmentsQueued = 0;
+  const batchEnrollments: (typeof schema.classEnrollments.$inferInsert)[] = [];
+  const seenEnrollKeys = new Set<string>();
+
+  for (const item of pendingEnrollments) {
+    const clsRow = classByKey.get(item.classKey);
+    if (!clsRow || clsRow.id <= 0) continue;
+    for (const stu of item.students) {
+      const fullName = `${stu.firstName || ""} ${stu.lastName || ""}`.replace(/\s+/g, " ").trim();
+      const extId = stu.mycytPersonId ? String(stu.mycytPersonId) : null;
+      const email = (stu.email || "").trim().toLowerCase();
+      const matched =
+        (extId ? personByExtId.get(extId) : undefined) ||
+        (email && fullName ? personByNameEmail.get(`${norm(fullName)}|${email}`) : undefined) ||
+        (fullName ? personByNormName.get(norm(fullName)) : undefined);
+      if (!matched) continue;
+      const dedupeKey = `${clsRow.id}|${matched.id}`;
+      if (seenEnrollKeys.has(dedupeKey)) continue;
+      seenEnrollKeys.add(dedupeKey);
+      batchEnrollments.push({
+        organizationId: org.id,
+        classId: clsRow.id,
+        studentId: matched.id,
+        status: "enrolled",
+      });
+      enrollmentsQueued++;
+    }
+  }
+
+  if (batchEnrollments.length > 0 && !DRY_RUN) {
+    for (let i = 0; i < batchEnrollments.length; i += 300) {
+      await db
+        .insert(schema.classEnrollments)
+        .values(batchEnrollments.slice(i, i + 300))
+        .onConflictDoNothing();
+    }
+  }
+
   console.log(
-    `[4/5] Academy: +${stats.sessionsCreated} sessions, +${stats.classesCreated} classes`
+    `[4/5] Academy: +${stats.sessionsCreated} sessions, +${stats.classesCreated} classes, ${classesUpdatedLoc} church locations backfilled, ${classesUpdatedDay} weekdays backfilled, ${enrollmentsQueued} student enrollments synced`
   );
   console.log(`\n================================================`);
   console.log(DRY_RUN ? `✓ DRY RUN COMPLETE (no database writes made)` : `✓ LIVE IMPORT COMPLETE!`);
