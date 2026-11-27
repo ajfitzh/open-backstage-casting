@@ -2,7 +2,7 @@
 // Neon PostgreSQL repository for General Admission Performances, Ticket Orders,
 // Emailed QR Tickets, and Door Scanner check-in.
 
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getOrganizationBySlugPg } from "./core-repo";
 import {
@@ -11,6 +11,11 @@ import {
   generateTicketCode,
   parseTicketQrPayload,
 } from "@/app/lib/ticketing-helpers";
+import {
+  formatSeatLabel,
+  type PublicSeatAvailability,
+  type PublicSeatItem,
+} from "@/app/lib/seat-picker-helpers";
 
 function extId(row: { id: number; baserowId?: number | null }): number {
   return row.baserowId ?? row.id;
@@ -463,6 +468,109 @@ export async function getPerformanceForCheckoutPg(tenantSlug: string, performanc
   };
 }
 
+export async function getPerformanceSeatingMapPg(tenantSlug: string, performanceId: number) {
+  const ctx = await getPerformanceForCheckoutPg(tenantSlug, performanceId);
+  if (!ctx) return null;
+
+  const db = getDb();
+  const venueId = ctx.production.venueId;
+  if (!venueId) {
+    return {
+      hasSeatingMap: false,
+      venueId: null,
+      venueName: ctx.production.location || ctx.org.name,
+      seats: [] as PublicSeatItem[],
+    };
+  }
+
+  const [venueRow] = await db
+    .select({ id: schema.venues.id, name: schema.venues.name })
+    .from(schema.venues)
+    .where(and(eq(schema.venues.organizationId, ctx.org.id), eq(schema.venues.id, venueId)))
+    .limit(1);
+
+  const seatRows = await db
+    .select()
+    .from(schema.seats)
+    .where(and(eq(schema.seats.organizationId, ctx.org.id), eq(schema.seats.venueId, venueId)))
+    .orderBy(asc(schema.seats.section), asc(schema.seats.rowLabel), asc(schema.seats.seatNumber));
+
+  if (seatRows.length === 0) {
+    return {
+      hasSeatingMap: false,
+      venueId,
+      venueName: venueRow?.name || ctx.production.location || ctx.org.name,
+      seats: [] as PublicSeatItem[],
+    };
+  }
+
+  // Sold / active tickets for this performance
+  const takenTicketRows = await db
+    .select({ seatId: schema.tickets.seatId })
+    .from(schema.tickets)
+    .where(
+      and(
+        eq(schema.tickets.organizationId, ctx.org.id),
+        eq(schema.tickets.performanceId, ctx.performance.id),
+        isNotNull(schema.tickets.seatId),
+        ne(schema.tickets.status, "void")
+      )
+    );
+
+  // Recent pending checkout holds (15 minutes) so two buyers don't race for the same seat
+  const holdCutoff = new Date(Date.now() - 15 * 60 * 1000);
+  const pendingHoldRows = await db
+    .select({ seatIds: schema.ticketOrders.seatIds })
+    .from(schema.ticketOrders)
+    .where(
+      and(
+        eq(schema.ticketOrders.organizationId, ctx.org.id),
+        eq(schema.ticketOrders.performanceId, ctx.performance.id),
+        eq(schema.ticketOrders.status, "pending"),
+        gte(schema.ticketOrders.createdAt, holdCutoff)
+      )
+    );
+
+  const takenSeatIds = new Set<number>();
+  for (const r of takenTicketRows) {
+    if (r.seatId) takenSeatIds.add(r.seatId);
+  }
+  for (const o of pendingHoldRows) {
+    for (const sid of o.seatIds || []) {
+      takenSeatIds.add(sid);
+    }
+  }
+
+  const seats: PublicSeatItem[] = seatRows.map((s) => {
+    let availability: PublicSeatAvailability = "available";
+    const rawStatus = (s.status || "available").toLowerCase();
+    if (takenSeatIds.has(s.id)) {
+      availability = "taken";
+    } else if (rawStatus === "house_hold" || rawStatus === "unavailable" || rawStatus === "held") {
+      availability = "held";
+    } else if (rawStatus === "ada") {
+      availability = "ada";
+    }
+
+    return {
+      id: s.id,
+      section: s.section || "Main",
+      rowLabel: s.rowLabel || "A",
+      seatNumber: s.seatNumber ?? 1,
+      availability,
+      gridX: s.gridX ?? null,
+      gridY: s.gridY ?? null,
+    };
+  });
+
+  return {
+    hasSeatingMap: true,
+    venueId,
+    venueName: venueRow?.name || ctx.production.location || ctx.org.name,
+    seats,
+  };
+}
+
 export async function createPendingTicketOrderPg(input: {
   organizationId: number;
   productionId: number;
@@ -473,6 +581,7 @@ export async function createPendingTicketOrderPg(input: {
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
+  seatIds?: number[];
 }) {
   const db = getDb();
   let internalPersonId: number | null = null;
@@ -493,6 +602,7 @@ export async function createPendingTicketOrderPg(input: {
       quantity: input.quantity,
       unitPriceCents: input.unitPriceCents,
       totalCents: input.totalCents,
+      seatIds: input.seatIds && input.seatIds.length > 0 ? input.seatIds : [],
       status: "pending",
     })
     .returning();
@@ -574,9 +684,32 @@ export async function fulfillTicketOrderPg(
       })
       .where(eq(schema.performances.id, order.performanceId));
 
+    // Resolve reserved seat metadata if this order includes specific seat IDs
+    const orderSeatIds = Array.isArray(order.seatIds) ? order.seatIds : [];
+    const seatById = new Map<number, { id: number; label: string }>();
+    if (orderSeatIds.length > 0) {
+      const seatRows = await db
+        .select()
+        .from(schema.seats)
+        .where(
+          and(
+            eq(schema.seats.organizationId, org.id),
+            inArray(schema.seats.id, orderSeatIds)
+          )
+        );
+      for (const s of seatRows) {
+        seatById.set(s.id, { id: s.id, label: formatSeatLabel(s) });
+      }
+    }
+
     // Mint individual QR tickets
     const ticketRowsToInsert = Array.from({ length: order.quantity }, (_, idx) => {
       const code = generateTicketCode();
+      const seatInfo = orderSeatIds[idx] ? seatById.get(orderSeatIds[idx]) : undefined;
+      const baseHolder =
+        order.quantity > 1
+          ? `${order.buyerName} (Ticket ${idx + 1} of ${order.quantity})`
+          : order.buyerName;
       return {
         organizationId: org.id,
         orderId: order.id,
@@ -584,10 +717,9 @@ export async function fulfillTicketOrderPg(
         performanceId: order.performanceId,
         code,
         qrCodeValue: buildTicketQrPayload(org.slug, code),
-        holderName:
-          order.quantity > 1
-            ? `${order.buyerName} (Ticket ${idx + 1} of ${order.quantity})`
-            : order.buyerName,
+        seatId: seatInfo?.id ?? null,
+        seatLabel: seatInfo?.label ?? null,
+        holderName: seatInfo ? `${baseHolder} • ${seatInfo.label}` : baseHolder,
         status: "valid",
       };
     });

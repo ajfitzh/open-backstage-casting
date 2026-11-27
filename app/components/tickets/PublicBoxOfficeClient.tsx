@@ -1,7 +1,7 @@
 // app/components/tickets/PublicBoxOfficeClient.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Calendar,
@@ -14,6 +14,11 @@ import {
   Users,
 } from "lucide-react";
 import { MAX_TICKETS_PER_ORDER } from "@/app/lib/ticketing-helpers";
+import {
+  formatShortSeatTag,
+  type PublicSeatItem,
+} from "@/app/lib/seat-picker-helpers";
+import PublicSeatPicker from "@/app/components/tickets/PublicSeatPicker";
 
 interface PerformanceOption {
   id: number;
@@ -34,6 +39,12 @@ interface PublicShow {
   defaultPrice: number;
   performances: PerformanceOption[];
   castMembers: { id: number; name: string }[];
+}
+
+interface SeatMapState {
+  hasSeatingMap: boolean;
+  venueName: string;
+  seats: PublicSeatItem[];
 }
 
 export default function PublicBoxOfficeClient({
@@ -59,6 +70,15 @@ export default function PublicBoxOfficeClient({
   });
 
   const [quantity, setQuantity] = useState(2);
+  const [seatMap, setSeatMap] = useState<SeatMapState>({
+    hasSeatingMap: false,
+    venueName: "",
+    seats: [],
+  });
+  const [loadingSeats, setLoadingSeats] = useState(false);
+  const [selectedSeatIds, setSelectedSeatIds] = useState<number[]>([]);
+  const [seatRefreshNonce, setSeatRefreshNonce] = useState(0);
+
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
   const [referredByPersonId, setReferredByPersonId] = useState("");
@@ -67,15 +87,71 @@ export default function PublicBoxOfficeClient({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedPerfId = selectedPerf?.perf.id ?? null;
+
+  // Load live seat availability whenever the selected performance changes
+  useEffect(() => {
+    if (!selectedPerfId) return;
+    let active = true;
+    (async () => {
+      setLoadingSeats(true);
+      try {
+        const res = await fetch(
+          `/api/tickets/seats?tenant=${encodeURIComponent(tenant)}&performanceId=${selectedPerfId}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active) {
+          setSeatMap({
+            hasSeatingMap: Boolean(data.hasSeatingMap),
+            venueName: data.venueName || "",
+            seats: Array.isArray(data.seats) ? data.seats : [],
+          });
+          setSelectedSeatIds([]);
+        }
+      } catch {
+        if (active) {
+          setSeatMap({ hasSeatingMap: false, venueName: "", seats: [] });
+        }
+      } finally {
+        if (active) setLoadingSeats(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [tenant, selectedPerfId, seatRefreshNonce]);
+
   const maxAllowed = selectedPerf
     ? Math.min(MAX_TICKETS_PER_ORDER, Math.max(1, selectedPerf.perf.remainingSeats))
     : 1;
 
-  const totalPrice = selectedPerf ? selectedPerf.perf.ticketPrice * quantity : 0;
+  const effectiveQuantity = seatMap.hasSeatingMap ? selectedSeatIds.length : quantity;
+  const totalPrice = selectedPerf ? selectedPerf.perf.ticketPrice * effectiveQuantity : 0;
+
+  const seatById = useMemo(
+    () => new Map(seatMap.seats.map((s) => [s.id, s])),
+    [seatMap.seats]
+  );
+
+  const handleToggleSeat = (seatId: number) => {
+    setError(null);
+    setSelectedSeatIds((prev) => {
+      if (prev.includes(seatId)) return prev.filter((id) => id !== seatId);
+      if (prev.length >= maxAllowed) return prev;
+      return [...prev, seatId];
+    });
+  };
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPerf) return;
+    if (seatMap.hasSeatingMap && selectedSeatIds.length === 0) {
+      setError("Please choose at least one seat on the seating map before checking out.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setCompSuccess(null);
@@ -87,7 +163,8 @@ export default function PublicBoxOfficeClient({
         body: JSON.stringify({
           tenant,
           performanceId: selectedPerf.perf.id,
-          quantity,
+          quantity: effectiveQuantity,
+          seatIds: seatMap.hasSeatingMap ? selectedSeatIds : undefined,
           buyerName,
           buyerEmail,
           referredByPersonId: referredByPersonId ? Number(referredByPersonId) : null,
@@ -96,6 +173,10 @@ export default function PublicBoxOfficeClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 409) {
+          // Refresh live seat map so conflicting seats show as taken
+          setSeatRefreshNonce((n) => n + 1);
+        }
         throw new Error(data.error || "Unable to start checkout.");
       }
       if (data.compOrder) {
@@ -103,6 +184,7 @@ export default function PublicBoxOfficeClient({
           orderId: data.orderId,
           codes: (data.tickets || []).map((t: { code: string }) => t.code),
         });
+        setSeatRefreshNonce((n) => n + 1);
         setSubmitting(false);
         return;
       }
@@ -126,11 +208,11 @@ export default function PublicBoxOfficeClient({
           </p>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight flex items-center gap-3">
             <Ticket className="text-blue-500 shrink-0" size={36} />
-            General Admission Tickets
+            {seatMap.hasSeatingMap ? "Reserved & Admission Tickets" : "Show Tickets"}
           </h1>
           <p className="text-sm text-zinc-400 max-w-2xl">
-            Choose a performance below to reserve general admission seats. Your scannable QR tickets
-            are emailed immediately after checkout.
+            Choose a performance below to reserve your seats. Your scannable QR tickets are emailed
+            immediately after checkout.
           </p>
         </header>
 
@@ -151,7 +233,7 @@ export default function PublicBoxOfficeClient({
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left: Show & Performance Picker */}
+            {/* Left: Show, Performance & Interactive Seat Picker */}
             <div className="lg:col-span-7 space-y-6">
               {shows.map((show) => (
                 <section
@@ -190,6 +272,7 @@ export default function PublicBoxOfficeClient({
                           onClick={() => {
                             setSelectedPerf({ show, perf });
                             setQuantity((q) => Math.min(q, Math.max(1, perf.remainingSeats)));
+                            setSelectedSeatIds([]);
                             setReferredByPersonId("");
                             setError(null);
                           }}
@@ -232,6 +315,19 @@ export default function PublicBoxOfficeClient({
                   </div>
                 </section>
               ))}
+
+              {/* INTERACTIVE RESERVED SEAT MAP (shown automatically when venue has seats configured) */}
+              {selectedPerf && (loadingSeats || seatMap.hasSeatingMap) && (
+                <PublicSeatPicker
+                  venueName={seatMap.venueName || selectedPerf.show.location}
+                  seats={seatMap.seats}
+                  selectedSeatIds={selectedSeatIds}
+                  maxSelectable={maxAllowed}
+                  loading={loadingSeats}
+                  onToggleSeat={handleToggleSeat}
+                  onClearSelection={() => setSelectedSeatIds([])}
+                />
+              )}
             </div>
 
             {/* Right: Checkout Summary Card */}
@@ -263,33 +359,66 @@ export default function PublicBoxOfficeClient({
                     </p>
                   </div>
 
-                  {/* Quantity Picker */}
-                  <div className="flex items-center justify-between bg-zinc-950 border border-white/10 rounded-2xl p-3.5">
-                    <span className="text-xs font-black uppercase tracking-widest text-zinc-300">
-                      Tickets
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                        className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 flex items-center justify-center text-white"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus size={15} />
-                      </button>
-                      <span className="w-8 text-center text-lg font-black font-mono">
-                        {quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setQuantity((q) => Math.min(maxAllowed, q + 1))}
-                        className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 flex items-center justify-center text-white"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus size={15} />
-                      </button>
+                  {/* Quantity Picker (GA) or Selected Seats Summary (Reserved) */}
+                  {seatMap.hasSeatingMap ? (
+                    <div className="bg-zinc-950 border border-white/10 rounded-2xl p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase tracking-widest text-zinc-300">
+                          Selected Seats
+                        </span>
+                        <span className="text-sm font-black font-mono text-blue-400">
+                          {selectedSeatIds.length} {selectedSeatIds.length === 1 ? "seat" : "seats"}
+                        </span>
+                      </div>
+                      {selectedSeatIds.length === 0 ? (
+                        <p className="text-[11px] text-zinc-500">
+                          Tap available seats on the seating map to add them to your order.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedSeatIds.map((sid) => {
+                            const s = seatById.get(sid);
+                            if (!s) return null;
+                            return (
+                              <span
+                                key={sid}
+                                className="px-2 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/30 text-[10px] font-bold text-blue-200"
+                              >
+                                {s.section} {formatShortSeatTag(s)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-zinc-950 border border-white/10 rounded-2xl p-3.5">
+                      <span className="text-xs font-black uppercase tracking-widest text-zinc-300">
+                        Tickets
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                          className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 flex items-center justify-center text-white"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus size={15} />
+                        </button>
+                        <span className="w-8 text-center text-lg font-black font-mono">
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setQuantity((q) => Math.min(maxAllowed, q + 1))}
+                          className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 flex items-center justify-center text-white"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Buyer Info */}
                   <div className="space-y-3">
@@ -384,7 +513,7 @@ export default function PublicBoxOfficeClient({
 
                     <button
                       type="submit"
-                      disabled={submitting}
+                      disabled={submitting || (seatMap.hasSeatingMap && selectedSeatIds.length === 0)}
                       className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all"
                     >
                       {submitting ? (

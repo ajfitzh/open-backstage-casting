@@ -9,9 +9,17 @@ import {
   attachStripeSessionToOrderPg,
   createPendingTicketOrderPg,
   getPerformanceForCheckoutPg,
+  getPerformanceSeatingMapPg,
 } from "@/app/lib/db/tickets-repo";
 import { sellDoorTicketsPg, validatePromoCodePg } from "@/app/lib/db/phase2-repo";
-import { validateTicketOrderRequest } from "@/app/lib/ticketing-helpers";
+import {
+  MAX_TICKETS_PER_ORDER,
+  validateTicketOrderRequest,
+} from "@/app/lib/ticketing-helpers";
+import {
+  formatShortSeatTag,
+  validateRequestedSeats,
+} from "@/app/lib/seat-picker-helpers";
 
 export async function POST(req: NextRequest) {
   if (!isPostgresEnabled()) {
@@ -47,6 +55,47 @@ export async function POST(req: NextRequest) {
 
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    // Optional Reserved Seat Validation (when venue has a seating map configured)
+    const rawSeatIds: number[] = Array.isArray(body.seatIds)
+      ? body.seatIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0)
+      : [];
+    let validatedSeatIds: number[] = [];
+    let seatSummaryTags: string[] = [];
+
+    const seatMap = await getPerformanceSeatingMapPg(tenant, perfContext.performance.id);
+    if (seatMap?.hasSeatingMap && rawSeatIds.length > 0) {
+      const venueSeatIds = new Set(seatMap.seats.map((s) => s.id));
+      const unavailableSeatIds = new Set(
+        seatMap.seats
+          .filter((s) => s.availability === "taken" || s.availability === "held")
+          .map((s) => s.id)
+      );
+      const seatCheck = validateRequestedSeats({
+        requestedSeatIds: rawSeatIds,
+        venueSeatIds,
+        unavailableSeatIds,
+        maxPerOrder: MAX_TICKETS_PER_ORDER,
+      });
+      if (!seatCheck.ok) {
+        return NextResponse.json(
+          { error: seatCheck.error, conflictSeatIds: seatCheck.conflictSeatIds },
+          { status: seatCheck.conflictSeatIds ? 409 : 400 }
+        );
+      }
+      if (seatCheck.seatIds.length !== validation.quantity) {
+        return NextResponse.json(
+          { error: "Selected seat count must match ticket quantity." },
+          { status: 400 }
+        );
+      }
+      validatedSeatIds = seatCheck.seatIds;
+      const seatLookup = new Map(seatMap.seats.map((s) => [s.id, s]));
+      seatSummaryTags = validatedSeatIds
+        .map((id) => seatLookup.get(id))
+        .filter((s): s is NonNullable<typeof s> => Boolean(s))
+        .map((s) => formatShortSeatTag(s));
     }
 
     const rawPromo = typeof body.promoCode === "string" ? body.promoCode.trim() : "";
@@ -111,6 +160,7 @@ export async function POST(req: NextRequest) {
       quantity: validation.quantity,
       unitPriceCents: finalUnitCents,
       totalCents: finalTotalCents,
+      seatIds: validatedSeatIds,
     });
 
     const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
@@ -130,7 +180,8 @@ export async function POST(req: NextRequest) {
               description: [
                 perfContext.performance.performanceDate || null,
                 perfContext.production.location || perfContext.org.name,
-                appliedPromo ? `Promo ${appliedPromo.code} applied` : "General Admission QR Ticket",
+                seatSummaryTags.length > 0 ? `Reserved Seats: ${seatSummaryTags.join(", ")}` : null,
+                appliedPromo ? `Promo ${appliedPromo.code} applied` : seatSummaryTags.length > 0 ? "Reserved QR Ticket" : "General Admission QR Ticket",
               ]
                 .filter(Boolean)
                 .join(" • "),
