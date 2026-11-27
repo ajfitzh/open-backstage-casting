@@ -88,7 +88,7 @@ export default function MarketingPage() {
       <section className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-24 text-center">
         <ShieldCheck size={40} className="text-zinc-400 mx-auto mb-5" />
         <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-          Ready to launch your theater&apos;s workspace?
+          Ready to launch your production workspace?
         </h2>
         <p className="text-zinc-300 mb-8 max-w-xl mx-auto text-sm sm:text-base">
           Request your dedicated tenant subdomain in minutes and give your artistic team, stage
