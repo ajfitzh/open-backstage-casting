@@ -17,6 +17,7 @@ import { isAdminRole } from "@/app/lib/permissions";
 import { isPostgresEnabled } from "@/db";
 import { getOrganizationBillingPg } from "@/app/lib/db/core-repo";
 import SettingsClient from "@/app/components/settings/SettingsClient";
+import PlatformAdminPanel from "@/app/components/settings/PlatformAdminPanel";
 
 // 🟢 FIX 1: Add `params` to the component signature
 export default async function SettingsPage({ 
@@ -110,6 +111,11 @@ export default async function SettingsPage({
         }))}
         orgBilling={orgBilling}
       />
+      {isAdmin && (
+        <div className="mt-8">
+          <PlatformAdminPanel tenant={tenant} />
+        </div>
+      )}
     </div>
   );
 }

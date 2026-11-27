@@ -23,6 +23,8 @@ export interface OrganizationSettings {
   contactEmail?: string;
   websiteUrl?: string;
   timezone?: string;
+  waiverText?: string;
+  committeeTemplates?: string[];
 }
 
 export const organizations = pgTable(
@@ -180,5 +182,26 @@ export const passwordResetTokens = pgTable(
   (table) => [
     index("password_reset_tokens_org_email_idx").on(table.organizationId, table.email),
     index("password_reset_tokens_person_idx").on(table.personId),
+  ]
+);
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    actorEmail: text("actor_email").notNull(),
+    actorName: text("actor_name"),
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    details: jsonb("details").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("audit_logs_org_created_idx").on(table.organizationId, table.createdAt),
+    index("audit_logs_org_action_idx").on(table.organizationId, table.action),
   ]
 );
