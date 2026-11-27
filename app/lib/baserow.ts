@@ -1518,8 +1518,10 @@ export async function getUserProfile(tenant: string, email: string) {
     try {
       const pgProfile = await getUserProfilePg(tenant, email);
       if (pgProfile) return pgProfile;
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     } catch (error) {
       console.error("[Postgres] getUserProfile failed, falling back to Baserow:", error);
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     }
   }
 
@@ -1578,8 +1580,10 @@ export async function getUserProductionRole(tenant: string, userId: number, prod
     try {
       const pgRole = await getUserProductionRolePg(tenant, userId, productionId);
       if (pgRole !== null) return pgRole;
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     } catch (error) {
       console.error("[Postgres] getUserProductionRole failed, falling back to Baserow:", error);
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     }
   }
 
