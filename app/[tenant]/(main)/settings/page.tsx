@@ -18,6 +18,7 @@ import { isPostgresEnabled } from "@/db";
 import { getOrganizationBillingPg } from "@/app/lib/db/core-repo";
 import SettingsClient from "@/app/components/settings/SettingsClient";
 import PlatformAdminPanel from "@/app/components/settings/PlatformAdminPanel";
+import DuplicatePeoplePanel from "@/app/components/settings/DuplicatePeoplePanel";
 
 // 🟢 FIX 1: Add `params` to the component signature
 export default async function SettingsPage({ 
@@ -112,7 +113,8 @@ export default async function SettingsPage({
         orgBilling={orgBilling}
       />
       {isAdmin && (
-        <div className="mt-8">
+        <div className="mt-8 space-y-8">
+          <DuplicatePeoplePanel tenant={tenant} />
           <PlatformAdminPanel tenant={tenant} />
         </div>
       )}
