@@ -38,13 +38,13 @@ export default async function ReportsPage({
 
   if (financialReport) {
     return (
-      <main className="min-h-screen bg-zinc-950 p-4 sm:p-6 lg:p-8 text-white pb-20">
-        <h1 className="text-3xl font-black uppercase italic mb-6 tracking-tighter">
+      <div className="min-h-full bg-zinc-950 p-4 sm:p-6 lg:p-8 text-white pb-20">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 tracking-tight">
           Reports &amp; Fees{" "}
-          <span className="text-zinc-500 not-italic">/ {financialReport.productionTitle}</span>
+          <span className="text-zinc-400 font-medium">/ {financialReport.productionTitle}</span>
         </h1>
         <ReportsClient report={financialReport} />
-      </main>
+      </div>
     );
   }
 
@@ -56,9 +56,9 @@ export default async function ReportsPage({
   const safeTitle = (production?.title as string) || "Active Show";
 
   return (
-    <main className="min-h-screen bg-zinc-950 p-4 sm:p-6 lg:p-8 text-white pb-20">
-      <h1 className="text-3xl font-black uppercase italic mb-6 tracking-tighter">
-        Reports &amp; Fees <span className="text-zinc-500 not-italic">/ {safeTitle}</span>
+    <div className="min-h-full bg-zinc-950 p-4 sm:p-6 lg:p-8 text-white pb-20">
+      <h1 className="text-2xl sm:text-3xl font-bold mb-6 tracking-tight">
+        Reports &amp; Fees <span className="text-zinc-400 font-medium">/ {safeTitle}</span>
       </h1>
       <ReportsClient
         report={{
@@ -94,6 +94,6 @@ export default async function ReportsPage({
           performances: [],
         }}
       />
-    </main>
+    </div>
   );
 }

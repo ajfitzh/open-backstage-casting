@@ -1,28 +1,35 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ToastProvider } from '@/app/components/ToastProvider';
 
-// 🛑 THIS IS THE FIX FOR VERCEL
-// This tells Next.js: "Do not try to build static HTML. 
-// Render everything fresh on every request."
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Open Backstage',
-  description: 'CYT Production Hub',
+  description: 'Open-source theater & performing arts production hub',
   icons: {
-    icon: '/logo.svg', // 🟢 This forces Vercel to inject the icon from the public folder!
+    icon: '/logo.svg',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      {/* 1. suppressHydrationWarning: Keeps extensions like ColorZilla happy.
-          2. NO Header here: This ensures the Login page gets the full, empty screen.
-      */}
-      <body 
-        className="bg-zinc-950 text-zinc-100 min-h-screen antialiased"
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
+      <body
+        className="bg-zinc-950 text-zinc-100 min-h-screen antialiased font-sans"
         suppressHydrationWarning={true}
       >
         <ToastProvider>{children}</ToastProvider>

@@ -37,10 +37,10 @@ export default async function ProductionHubPage({ params }: { params: { tenant: 
   };
 
   return (
-    <main className="p-8 bg-zinc-950 min-h-screen text-white pb-24">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-6 lg:p-8 bg-zinc-950 min-h-full text-white pb-24">
+      <div className="flex justify-between items-center mb-6 sm:mb-8">
          <div>
-            <h1 className="text-3xl font-black uppercase tracking-tight">{production.title} Production Hub</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{production.title} Production Hub</h1>
             <p className="text-zinc-400 text-sm mt-1">Real-time status tracking and analytics</p>
          </div>
       </div>
@@ -50,10 +50,10 @@ export default async function ProductionHubPage({ params }: { params: { tenant: 
         demographics={demographics} 
       />
       
-      <div className="mt-12 pt-12 border-t border-white/5 opacity-50 hover:opacity-100 transition-opacity">
-         <h3 className="text-xs font-bold uppercase text-zinc-500 mb-4 tracking-widest">Global Progress</h3>
+      <div className="mt-12 pt-10 border-t border-white/10">
+         <h3 className="text-xs font-semibold uppercase text-zinc-400 mb-4 tracking-wider">Global Progress</h3>
          <WorkflowProgress status={workflowStatus} productionId={production.id} />
       </div>
-    </main>
+    </div>
   );
 }

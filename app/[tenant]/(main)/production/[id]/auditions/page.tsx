@@ -50,8 +50,8 @@ export default async function AuditionsPage({
   }
 
   return (
-    <main className="h-full bg-zinc-950">
-      <AuditionsClient
+    <div className="h-full bg-zinc-950">
+      <AuditionsClient 
         tenant={tenant}
         productionId={showId}
         productionTitle={String(production.title || 'Active Production')}
@@ -61,6 +61,6 @@ export default async function AuditionsPage({
         initialPerformers={deckData?.performers || []}
         blueprintRoles={deckData?.blueprintRoles || []}
       />
-    </main>
+    </div>
   );
 }

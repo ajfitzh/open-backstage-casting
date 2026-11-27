@@ -466,34 +466,34 @@ export default function AuditionsClient({
             </div>
 
             {/* Mode Switcher + Callbacks Link */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setWorkspaceMode("deck")}
-                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap border transition-colors ${
+                className={`px-3.5 min-h-[40px] rounded-xl text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap border transition-colors ${
                   workspaceMode === "deck"
                     ? "bg-white text-black border-white"
-                    : "bg-zinc-900 text-zinc-400 border-white/10 hover:text-white"
+                    : "bg-zinc-900 text-zinc-300 border-white/10 hover:text-white"
                 }`}
               >
-                <ListChecks size={13} /> Panel Deck
+                <ListChecks size={14} /> Panel Deck
               </button>
               <button
                 type="button"
                 onClick={() => setWorkspaceMode("dance")}
-                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap border transition-colors ${
+                className={`px-3.5 min-h-[40px] rounded-xl text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap border transition-colors ${
                   workspaceMode === "dance"
                     ? "bg-emerald-600 text-white border-emerald-400"
-                    : "bg-zinc-900 text-zinc-400 border-white/10 hover:text-white"
+                    : "bg-zinc-900 text-zinc-300 border-white/10 hover:text-white"
                 }`}
               >
-                <Move size={13} /> Dance Group Mode
+                <Move size={14} /> Dance Mode
               </button>
               <Link
-                href={`/${tenant}/production/${productionId}/callbacks`}
-                className="px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 transition-colors"
+                href={`/production/${productionId}/callbacks`}
+                className="px-3.5 min-h-[40px] rounded-xl text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 border border-purple-500/40 transition-colors"
               >
-                <Sparkles size={13} /> Callbacks ({calledBackCount})
+                <Sparkles size={14} /> Callbacks ({calledBackCount})
               </Link>
             </div>
           </div>
@@ -772,7 +772,7 @@ export default function AuditionsClient({
                             </div>
                           </button>
 
-                          {/* Quick Record / Watch Video */}
+                          {/* Quick Record / Watch Video (desktop/tablet; also inside Scoring Drawer on mobile) */}
                           <button
                             type="button"
                             onClick={() =>
@@ -785,13 +785,13 @@ export default function AuditionsClient({
                                   })
                             }
                             title={hasAnyVideo ? "Watch / Manage Video" : "Record Audition Tape"}
-                            className={`w-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                            className={`hidden sm:flex w-11 rounded-xl border items-center justify-center shrink-0 transition-colors ${
                               hasAnyVideo
                                 ? "bg-blue-500/15 border-blue-500/30 text-blue-400 hover:bg-blue-500/25"
-                                : "bg-zinc-900 border-white/5 text-zinc-500 hover:text-red-400 hover:border-red-500/30"
+                                : "bg-zinc-900 border-white/10 text-zinc-400 hover:text-red-400 hover:border-red-500/30"
                             }`}
                           >
-                            {hasAnyVideo ? <PlayCircle size={17} /> : <Video size={16} />}
+                            {hasAnyVideo ? <PlayCircle size={18} /> : <Video size={17} />}
                           </button>
 
                           {/* Backing Track Quick Play */}
@@ -804,13 +804,13 @@ export default function AuditionsClient({
                             type="button"
                             onClick={() => handleToggleCallback(person)}
                             title={person.isCalledBack ? "Remove from Callbacks" : "Add to Callbacks"}
-                            className={`w-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                            className={`hidden sm:flex w-11 rounded-xl border items-center justify-center shrink-0 transition-colors ${
                               person.isCalledBack
                                 ? "bg-purple-600 border-purple-400 text-white"
-                                : "bg-zinc-900 border-white/5 text-zinc-500 hover:text-purple-300 hover:border-purple-500/30"
+                                : "bg-zinc-900 border-white/10 text-zinc-400 hover:text-purple-300 hover:border-purple-500/30"
                             }`}
                           >
-                            <Sparkles size={15} />
+                            <Sparkles size={16} />
                           </button>
 
                           {/* Actor Dossier */}
@@ -818,9 +818,9 @@ export default function AuditionsClient({
                             type="button"
                             onClick={() => setInspectingActorId(person.id)}
                             title="View Full Bio, History & Panel Notes"
-                            className="w-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-zinc-400 hover:text-white flex items-center justify-center shrink-0 transition-colors"
+                            className="w-11 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-300 hover:text-white flex items-center justify-center shrink-0 transition-colors"
                           >
-                            <User size={16} />
+                            <User size={17} />
                           </button>
                         </div>
                       );

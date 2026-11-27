@@ -24,7 +24,7 @@ export default async function CastGridPage({
   if (!production) return <div className="p-10 text-zinc-500">Production context lost.</div>;
 
   return (
-    <main className="h-full bg-zinc-950">
+    <div className="h-full bg-zinc-950">
       <CastGridClient 
         tenant={tenant}
         activeId={showId}               // 🟢 Renamed from 'id' to 'activeId'
@@ -33,6 +33,6 @@ export default async function CastGridPage({
         allScenes={scenes || []}        // 🟢 Added missing scenes
         roster={roster || []}           // 🟢 Added missing roster
       />
-    </main>
+    </div>
   );
 }

@@ -1,94 +1,106 @@
 import Link from 'next/link';
-import { Database, Theater, GraduationCap, ArrowRight, Server, ShieldCheck } from 'lucide-react';
+import { Database, GraduationCap, ArrowRight, Server, ShieldCheck } from 'lucide-react';
 
 export default function MarketingPage() {
   return (
     <div className="flex flex-col items-center justify-center overflow-x-hidden">
-      
       {/* HERO SECTION */}
-      <section className="relative w-full max-w-7xl mx-auto px-6 py-32 md:py-48 flex flex-col items-center text-center">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none -z-10" />
-        
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest mb-8">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-          </span>
-          Now Available for CYT Affiliates
+      <section className="relative w-full max-w-6xl mx-auto px-4 sm:px-6 py-24 md:py-36 flex flex-col items-center text-center">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-300 text-xs font-semibold tracking-wide mb-8">
+          <span className="h-2 w-2 rounded-full bg-blue-400" />
+          Multi-Tenant Theater &amp; Performing Arts Platform
         </div>
 
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-black uppercase italic tracking-tighter text-white mb-6 drop-shadow-2xl max-w-5xl leading-[0.85]">
-          Your Theater. <br/><span className="text-zinc-500">Your Data.</span>
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-white mb-6 max-w-4xl leading-[1.06]">
+          Your Theater.{' '}
+          <span className="text-zinc-400">Your Data.</span>
         </h1>
-        
-        <p className="text-lg md:text-xl text-zinc-400 font-medium max-w-2xl mb-12">
-          Open Backstage is a next-generation production hub. Built on an open-source model, it gives you complete ownership of your data while providing the ease of a fully managed SaaS.
+
+        <p className="text-base sm:text-lg text-zinc-300 font-normal max-w-2xl mb-10 leading-relaxed">
+          Open Backstage unifies auditions, multi-judge scoring, casting matrices, rehearsal
+          schedules, box office ticketing, and academy classes in one open-source workspace.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-            <Link href="#features" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full font-black uppercase tracking-widest text-sm transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center gap-2 group">
-                See How It Works <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
-            </Link>
-            <Link href="https://github.com/your-repo" target="_blank" className="bg-zinc-900 border border-white/10 hover:bg-zinc-800 text-white px-8 py-4 rounded-full font-black uppercase tracking-widest text-sm transition-all">
-                View Source
-            </Link>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <Link
+            href="/workspaces?choose=1"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-7 min-h-[48px] rounded-xl font-semibold text-sm transition-colors shadow-lg shadow-blue-950/50 group"
+          >
+            Find Your Workspace
+            <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+          <Link
+            href="https://github.com/ajfitzh/open-backstage-casting"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto inline-flex items-center justify-center bg-zinc-900 border border-white/15 hover:bg-zinc-800 text-zinc-100 px-7 min-h-[48px] rounded-xl font-semibold text-sm transition-colors"
+          >
+            View Source on GitHub
+          </Link>
         </div>
       </section>
 
       {/* FEATURES GRID */}
-      <section id="features" className="w-full bg-zinc-900/50 border-y border-white/5 py-24">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-            
-            {/* Feature 1 */}
-            <div className="bg-zinc-950 border border-white/5 p-8 rounded-3xl relative overflow-hidden group hover:border-blue-500/30 transition-colors">
-                <div className="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-6">
-                    <Database size={24} />
-                </div>
-                <h3 className="text-xl font-black tracking-tight text-white mb-3">Open Database Architecture</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
-                    Built like Baserow, you own the underlying tables. No more vendor lock-in. Access your raw data, build custom API connections, and export everything with a single click.
-                </p>
+      <section id="features" className="w-full bg-zinc-900/40 border-y border-white/10 py-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-zinc-950 border border-white/10 p-7 rounded-2xl hover:border-blue-500/40 transition-colors">
+            <div className="w-11 h-11 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center mb-5 border border-blue-500/20">
+              <Database size={22} />
             </div>
+            <h3 className="text-lg font-bold tracking-tight text-white mb-2.5">
+              Tenant-Isolated PostgreSQL
+            </h3>
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              Every theater runs on clean, exportable relational tables with zero vendor lock-in.
+              Admins control rosters, staff roles, schedules, and financial CSV exports directly.
+            </p>
+          </div>
 
-            {/* Feature 2 */}
-            <div className="bg-zinc-950 border border-white/5 p-8 rounded-3xl relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
-                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-6">
-                    <Server size={24} />
-                </div>
-                <h3 className="text-xl font-black tracking-tight text-white mb-3">Managed Hosting</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
-                    You get the transparency of open source with the convenience of SaaS. We deploy, host, and maintain your dedicated database instance. Zero server configuration required.
-                </p>
+          <div className="bg-zinc-950 border border-white/10 p-7 rounded-2xl hover:border-emerald-500/40 transition-colors">
+            <div className="w-11 h-11 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20">
+              <Server size={22} />
             </div>
+            <h3 className="text-lg font-bold tracking-tight text-white mb-2.5">
+              Auditions to Opening Night
+            </h3>
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              Multi-judge scoring panels, live video recording, callback comparisons, QR check-in,
+              Stripe box office ticketing, and print-ready saddle-stitch playbills.
+            </p>
+          </div>
 
-            {/* Feature 3 */}
-            <div className="bg-zinc-950 border border-white/5 p-8 rounded-3xl relative overflow-hidden group hover:border-purple-500/30 transition-colors">
-                <div className="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-6">
-                    <GraduationCap size={24} />
-                </div>
-                <h3 className="text-xl font-black tracking-tight text-white mb-3">Built for CYT & Schools</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
-                    Pre-configured workflows designed specifically for Christian Youth Theater affiliates and high school drama departments. Handle massive casts, parent committees, and compliance effortlessly.
-                </p>
+          <div className="bg-zinc-950 border border-white/10 p-7 rounded-2xl hover:border-purple-500/40 transition-colors">
+            <div className="w-11 h-11 bg-purple-500/10 text-purple-400 rounded-xl flex items-center justify-center mb-5 border border-purple-500/20">
+              <GraduationCap size={22} />
             </div>
-
+            <h3 className="text-lg font-bold tracking-tight text-white mb-2.5">
+              Built for Youth &amp; Community Theater
+            </h3>
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              Purpose-built for youth theater organizations, community stages, and school drama
+              departments managing large casts, parent committees, and academy classes.
+            </p>
+          </div>
         </div>
       </section>
 
       {/* CTA SECTION */}
-      <section className="w-full max-w-4xl mx-auto px-6 py-32 text-center">
-        <ShieldCheck size={48} className="text-zinc-700 mx-auto mb-6" />
-        <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter text-white mb-6">
-            Ready to upgrade your production?
+      <section className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-24 text-center">
+        <ShieldCheck size={40} className="text-zinc-400 mx-auto mb-5" />
+        <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
+          Ready to launch your theater&apos;s workspace?
         </h2>
-        <p className="text-zinc-400 mb-8 max-w-xl mx-auto">
-            Get your dedicated tenant instance spun up in minutes. Bring your own domain, or use a custom Open Backstage subdomain.
+        <p className="text-zinc-300 mb-8 max-w-xl mx-auto text-sm sm:text-base">
+          Request your dedicated tenant subdomain in minutes and give your artistic team, stage
+          managers, and families a single home.
         </p>
-        <Link href="mailto:your-email@example.com" className="bg-white text-black hover:bg-zinc-200 px-8 py-4 rounded-full font-black uppercase tracking-widest text-sm transition-all shadow-xl">
-            Contact for Hosting
+        <Link
+          href="/workspaces?choose=1"
+          className="inline-flex items-center justify-center bg-white text-zinc-950 hover:bg-zinc-200 px-8 min-h-[48px] rounded-xl font-bold text-sm transition-colors shadow-lg"
+        >
+          Request a Workspace
         </Link>
       </section>
-
     </div>
   );
 }

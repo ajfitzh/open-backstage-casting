@@ -134,6 +134,14 @@ export default function StaffSidebar({ activeProductionId, userGroups = [] }: St
       <div className="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
         {NAV_CONFIG.map((section, idx) => {
            if (!canSee(section)) return null;
+           const visibleItems = section.items.filter((item: any) => {
+             if (!canSee(item)) return false;
+             if (item.isCollapsible && item.children) {
+               return item.children.some((child: any) => canSee(child));
+             }
+             return true;
+           });
+           if (visibleItems.length === 0) return null;
 
            return (
              <div key={idx} className="animate-in slide-in-from-left-2 duration-300">

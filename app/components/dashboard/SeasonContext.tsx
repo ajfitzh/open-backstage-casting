@@ -142,18 +142,19 @@ export default function SeasonContext({
                 <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8">
                     
                     {/* Breadcrumb / Picker */}
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                            <LayoutGrid size={14} className="text-blue-500" /> Organization
+                    <div className="flex items-center gap-2 shrink-0">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2 whitespace-nowrap">
+                            <LayoutGrid size={14} className="text-blue-400" /> Organization
                         </h2>
-                        <span className="text-zinc-700">/</span>
+                        <span className="text-zinc-600">/</span>
                         
                         <div className="relative">
                             <button 
                                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                                className="flex items-center gap-1 text-xs font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-colors"
+                                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 hover:text-blue-300 transition-colors whitespace-nowrap min-h-[36px] px-2 -mx-2 rounded-lg"
                             >
-                                {selectedSeasonName} <ChevronDown size={12} className={`transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}/>
+                                <span>{selectedSeasonName}</span>
+                                <ChevronDown size={13} className={`shrink-0 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}/>
                             </button>
                             
                             {isMenuOpen && (

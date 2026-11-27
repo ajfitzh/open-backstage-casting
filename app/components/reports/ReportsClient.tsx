@@ -112,8 +112,8 @@ export default function ReportsClient({ report }: { report: ProductionFinancialR
   return (
     <div className="space-y-6">
       {/* Tabs + Export Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex bg-zinc-900 p-1 rounded-xl border border-white/10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex bg-zinc-900 p-1 rounded-xl border border-white/10 overflow-x-auto no-scrollbar max-w-full">
           {[
             { id: "overview", label: "Overview", icon: BarChart3 },
             { id: "financial", label: "Fees & Box Office", icon: DollarSign },
@@ -125,10 +125,10 @@ export default function ReportsClient({ report }: { report: ProductionFinancialR
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                className={`px-3.5 min-h-[40px] rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all ${
                   activeTab === tab.id
                     ? "bg-blue-600 text-white shadow"
-                    : "text-zinc-400 hover:text-white"
+                    : "text-zinc-300 hover:text-white"
                 }`}
               >
                 <Icon size={14} /> {tab.label}

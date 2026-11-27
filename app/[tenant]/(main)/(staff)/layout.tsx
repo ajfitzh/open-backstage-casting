@@ -16,10 +16,10 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex h-full w-full"> {/* CHANGED: h-screen -> h-full */}
-      <main className="flex-1 overflow-auto bg-zinc-900/50 relative">
+    <div className="flex h-full w-full">
+      <div className="flex-1 overflow-auto bg-zinc-900/50 relative custom-scrollbar">
         {children}
-      </main>
+      </div>
     </div>
   );
 }

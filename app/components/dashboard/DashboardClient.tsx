@@ -31,10 +31,11 @@ export default function DashboardClient({ scenes, demographics }: any) {
        </div>
 
        {/* 2. THE SCENE LIST */}
-       <div className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
+       <div className="bg-zinc-900/50 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="w-full overflow-x-auto custom-scrollbar">
+          <table className="w-full min-w-[540px] text-left border-collapse">
              <thead>
-                <tr className="border-b border-white/5 text-xs font-black text-zinc-500 uppercase tracking-widest">
+                <tr className="border-b border-white/10 text-xs font-bold text-zinc-400 uppercase tracking-wider">
                    <th className="p-4 w-16 text-center">#</th>
                    <th className="p-4">Scene Name</th>
                    <th className="p-4 text-center w-32">Music</th>
@@ -48,9 +49,14 @@ export default function DashboardClient({ scenes, demographics }: any) {
                 ))}
              </tbody>
           </table>
+          </div>
           
           {filteredScenes.length === 0 && (
-             <div className="p-12 text-center text-zinc-500">No scenes found matching &ldquo;{filter}&ldquo;</div>
+             <div className="p-10 text-center text-zinc-400 text-sm">
+                {filter.trim()
+                  ? `No scenes found matching "${filter.trim()}".`
+                  : "No scenes added to this production yet."}
+             </div>
           )}
        </div>
     </div>

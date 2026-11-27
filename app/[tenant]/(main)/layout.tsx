@@ -41,7 +41,8 @@ export default async function MainLayout({
       productionRole = await getUserProductionRole(currentTenant, Number(userProfile.id), activeId);
   }
 
-  const globalRole = userProfile?.role || "Student";
+  const sessionRole = (session?.user as { role?: string } | undefined)?.role;
+  const globalRole = userProfile?.role || sessionRole || "Student";
   const rawGroups = (session?.user as any)?.groups || "";
   const userGroups = typeof rawGroups === 'string' 
     ? rawGroups.split(',').map((g: string) => g.trim()).filter(Boolean) 

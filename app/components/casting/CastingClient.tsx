@@ -196,7 +196,7 @@ function RosterSidebar({
   }, [students, complianceMap, releasedIds]);
 
   return (
-    <aside className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0 h-full relative z-20">
+    <aside className="w-full lg:w-80 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0 h-full relative z-20">
       
       {/* TABS */}
       <div className="flex border-b border-zinc-800 bg-zinc-900/50">
@@ -459,6 +459,8 @@ export default function CastingClient({ tenant, assignments = [], blueprintRoles
     });
   };
 
+  const [mobilePane, setMobilePane] = useState<"matrix" | "pool">("matrix");
+
   if (isLoading) return (
       <div className="flex flex-col items-center justify-center h-full space-y-4 text-zinc-400">
          <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
@@ -467,37 +469,59 @@ export default function CastingClient({ tenant, assignments = [], blueprintRoles
   );
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] relative">
-      <div className="contents print:hidden">
-          <RosterSidebar students={roster} rows={rows} allScenes={allScenes} onSelect={setSelectedStudent} releasedIds={releasedIds} onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} />
+    <div className="flex flex-col lg:flex-row h-[calc(100dvh-4rem)] relative overflow-hidden">
+      {/* MOBILE PANE SWITCHER (< lg) */}
+      <div className="flex lg:hidden border-b border-zinc-800 bg-zinc-900/90 p-2 gap-2 shrink-0 print:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePane("matrix")}
+          className={`flex-1 min-h-[40px] rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${
+            mobilePane === "matrix" ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-300"
+          }`}
+        >
+          Casting Grid ({rows.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePane("pool")}
+          className={`flex-1 min-h-[40px] rounded-xl text-xs font-bold uppercase tracking-wider transition-colors ${
+            mobilePane === "pool" ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-300"
+          }`}
+        >
+          Actor Pool ({roster.length})
+        </button>
+      </div>
+
+      <div className="flex-1 flex min-h-0 overflow-hidden print:hidden">
+          <div className={`${mobilePane === "pool" ? "flex w-full" : "hidden"} lg:flex lg:w-80 shrink-0 h-full`}>
+            <RosterSidebar students={roster} rows={rows} allScenes={allScenes} onSelect={setSelectedStudent} releasedIds={releasedIds} onToggleRelease={(id) => setReleasedIds(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} />
+          </div>
           
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
+          <div className={`${mobilePane === "matrix" ? "flex" : "hidden"} lg:flex flex-1 flex-col min-w-0 overflow-hidden bg-zinc-950`}>
             {/* TOOLBAR */}
-            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900/50">
-              <div className="flex items-center gap-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 p-3 sm:p-4 border-b border-zinc-800 bg-zinc-900/50">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-6">
                 <div>
-                    <h2 className="text-lg font-bold text-white">Casting Dashboard</h2>
-                    <p className="text-xs text-zinc-500 font-mono mt-1">{rows.length} ROLES • {allScenes.length} SCENES</p>
+                    <h2 className="text-base sm:text-lg font-bold text-white">Casting Dashboard</h2>
+                    <p className="text-xs text-zinc-400 font-mono mt-0.5 whitespace-nowrap">{rows.length} ROLES • {allScenes.length} SCENES</p>
                 </div>
-                 <div className="flex bg-black/50 p-1 rounded-lg border border-white/5">
-                    <button onClick={() => setViewMode("matrix")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid size={14} /> <span className="hidden md:inline">Matrix</span></button>
-                    <button onClick={() => setViewMode("chemistry")} className={`p-2 rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-400 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><Scale size={14} /> <span className="hidden md:inline">Chemistry</span></button>
+                 <div className="flex bg-black/50 p-1 rounded-lg border border-white/10">
+                    <button onClick={() => setViewMode("matrix")} className={`px-3 min-h-[36px] rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'matrix' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}><LayoutGrid size={14} /> <span>Matrix</span></button>
+                    <button onClick={() => setViewMode("chemistry")} className={`px-3 min-h-[36px] rounded flex items-center gap-2 text-xs font-bold uppercase transition-all ${viewMode === 'chemistry' ? 'bg-zinc-800 text-purple-300 shadow' : 'text-zinc-400 hover:text-zinc-200'}`}><Scale size={14} /> <span>Chemistry</span></button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Print Cast List"><Printer size={16} /></button>
-                <button onClick={handleAddRole} className="p-2 text-zinc-400 hover:text-emerald-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded transition-colors" title="Add New Role"><Plus size={16} /></button>
-                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => window.print()} className="min-w-[38px] min-h-[38px] flex items-center justify-center text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition-colors" title="Print Cast List"><Printer size={16} /></button>
+                <button onClick={handleAddRole} className="min-w-[38px] min-h-[38px] flex items-center justify-center text-zinc-300 hover:text-emerald-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition-colors" title="Add New Role"><Plus size={16} /></button>
                 <AutoCastButton rows={rows} roster={roster} blueprintRoles={blueprintRoles} allScenes={allScenes} releasedIds={releasedIds} onUpdateRows={setRows} />
-                <div className="w-px h-6 bg-zinc-800 mx-1"></div>
-                <button onClick={handleDraftAutoFill} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all">Reset to Defaults</button>
-                <button onClick={handleSave} disabled={isSaving} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all disabled:opacity-50">{isSaving ? "Saving..." : "Save Changes"}</button>
+                <button onClick={handleDraftAutoFill} className="px-3 min-h-[38px] text-xs font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-all">Reset</button>
+                <button onClick={handleSave} disabled={isSaving} className="px-3 min-h-[38px] text-xs font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-all disabled:opacity-50">{isSaving ? "Saving..." : "Save Changes"}</button>
               </div>
             </div>
 
             {viewMode === "matrix" ? (
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-                     <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                <div className="flex-1 overflow-auto custom-scrollbar p-3 sm:p-4">
+                     <div className="border border-zinc-800 rounded-xl overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left border-collapse">
                         <thead className="bg-zinc-900 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
                             <tr>

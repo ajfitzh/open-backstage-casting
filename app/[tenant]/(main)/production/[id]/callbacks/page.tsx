@@ -50,7 +50,7 @@ export default async function CallbacksPage({
   }
 
   return (
-    <main className="h-full bg-zinc-950">
+    <div className="h-full bg-zinc-950">
       <CallbacksClient
         tenant={tenant}
         productionId={showId}
@@ -61,6 +61,6 @@ export default async function CallbacksPage({
         initialPerformers={deckData?.performers || []}
         blueprintRoles={deckData?.blueprintRoles || []}
       />
-    </main>
+    </div>
   );
 }

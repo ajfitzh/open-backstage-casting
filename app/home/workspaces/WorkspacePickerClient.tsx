@@ -136,10 +136,10 @@ export default function WorkspacePickerClient({
           <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-2">
             <Sparkles size={12} /> Open Backstage
           </span>
-          <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter text-white">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
             Choose Your Workspace
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-zinc-300 mt-1.5">
             {userEmail ? (
               <>
                 {isSignedIn ? "Signed in as " : "Showing organizations for "}
@@ -157,21 +157,14 @@ export default function WorkspacePickerClient({
         </div>
 
         <div className="flex items-center gap-3">
-          {isSignedIn ? (
+          {isSignedIn && (
             <button
               type="button"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-white/10 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="inline-flex items-center gap-2 px-4 min-h-[40px] rounded-xl bg-zinc-900 border border-white/10 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
             >
               <LogOut size={14} /> Sign Out
             </button>
-          ) : (
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-black uppercase tracking-wider text-white transition-colors"
-            >
-              Sign In
-            </Link>
           )}
         </div>
       </div>
