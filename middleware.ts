@@ -68,7 +68,8 @@ export default auth((req) => {
   // ==========================================
   if (tenant) {
     const isOnLoginPage = pathname.startsWith("/login");
-    const isPublicTenantRoute = pathname.startsWith("/audition-form");
+    const isPublicTenantRoute =
+      pathname.startsWith("/audition-form") || pathname.startsWith("/tickets");
 
     if (!isLoggedIn && !isOnLoginPage && !isPublicTenantRoute) {
       return NextResponse.redirect(new URL("/login", req.url));

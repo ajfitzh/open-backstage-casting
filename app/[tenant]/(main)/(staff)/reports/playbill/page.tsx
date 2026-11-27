@@ -46,8 +46,12 @@ async function getPlaybillData(tenant: string, showId: number) {
     }
 }
 
-export default async function PlaybillPage({ params }: { params: { tenant: string } }) {
-    const { tenant } = params;
+export default async function PlaybillPage({
+    params,
+}: {
+    params: Promise<{ tenant: string }> | { tenant: string };
+}) {
+    const { tenant } = await params;
 
     const cookieStore = await cookies();
     const cookieId = cookieStore.get('active_production_id')?.value;
@@ -64,7 +68,12 @@ export default async function PlaybillPage({ params }: { params: { tenant: strin
 
     return (
         <div className="p-6 lg:p-8">
-            <PlaybillExporterClient showTitle={show.title} castData={castData} />
+            <PlaybillExporterClient
+                tenant={tenant}
+                productionId={show.id}
+                showTitle={show.title}
+                castData={castData}
+            />
         </div>
     );
 }

@@ -2,9 +2,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, Megaphone, ClipboardCopy, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BookOpen, Megaphone, ClipboardCopy, CheckCircle2, AlertCircle, FileDown, Printer } from 'lucide-react';
 
-export default function PlaybillExporterClient({ showTitle, castData }: any) {
+export default function PlaybillExporterClient({ tenant = "", productionId = 0, showTitle, castData }: any) {
     const [activeTab, setActiveTab] = useState<'bios' | 'ads'>('bios');
     const [copied, setCopied] = useState(false);
 
@@ -51,12 +51,31 @@ export default function PlaybillExporterClient({ showTitle, castData }: any) {
                     </h1>
                 </div>
 
-                <button 
-                    onClick={handleCopyAll}
-                    className="px-6 py-3 bg-white text-black hover:bg-zinc-200 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95"
-                >
-                    {copied ? <><CheckCircle2 size={16} className="text-emerald-500"/> Copied to Clipboard!</> : <><ClipboardCopy size={16}/> Copy All for InDesign</>}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                    {tenant && productionId > 0 && (
+                        <>
+                            <a
+                                href={`/api/playbill/pdf?tenant=${encodeURIComponent(tenant)}&productionId=${productionId}&mode=reader`}
+                                className="px-4 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-2"
+                            >
+                                <FileDown size={15} /> Half-Letter PDF (5.5×8.5&quot;)
+                            </a>
+                            <a
+                                href={`/api/playbill/pdf?tenant=${encodeURIComponent(tenant)}&productionId=${productionId}&mode=booklet`}
+                                className="px-4 py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-2"
+                                title="Imposed onto 11×8.5 US Letter landscape — print double-sided (flip on short edge), fold & staple"
+                            >
+                                <Printer size={15} /> Print Booklet (Folded Letter)
+                            </a>
+                        </>
+                    )}
+                    <button 
+                        onClick={handleCopyAll}
+                        className="px-5 py-3 bg-white text-black hover:bg-zinc-200 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 active:scale-95"
+                    >
+                        {copied ? <><CheckCircle2 size={16} className="text-emerald-500"/> Copied!</> : <><ClipboardCopy size={16}/> Copy for InDesign</>}
+                    </button>
+                </div>
             </div>
 
             {/* Tabs */}

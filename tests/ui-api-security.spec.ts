@@ -88,4 +88,16 @@ test.describe('API Security & Validation E2E', () => {
       expect(ics).toContain('END:VCALENDAR');
     }
   });
+
+  test('POST /api/tickets/checkout validates missing parameters cleanly', async ({ request }) => {
+    const res = await request.post('/api/tickets/checkout', {
+      data: { tenant: '', performanceId: 0 },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('GET /api/playbill/pdf rejects unauthenticated requests with 401', async ({ request }) => {
+    const res = await request.get('/api/playbill/pdf?tenant=cytfred&productionId=115');
+    expect(res.status()).toBe(401);
+  });
 });

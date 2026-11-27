@@ -3,7 +3,7 @@ import {
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
   SlidersHorizontal, Sparkles, FilePlus, Home, 
-  UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors, Wrench
+  UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors, Wrench, Ticket
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
@@ -47,6 +47,13 @@ export const NAV_CONFIG = [
       { label: "Conflict Matrix", href: "/production/active/conflicts", icon: AlertOctagon, permission: "view_cast_list" },
       { label: "Costume Wardrobe", href: "/production/active/costumes", icon: Scissors, permission: "view_cast_list" },
       { label: "Tech Gear & QR", href: "/inventory", icon: Wrench, permission: "view_cast_list" },
+      {
+        label: "Box Office & QR",
+        href: "/box-office",
+        icon: Ticket,
+        permission: "view_checkin",
+        group: "Check In Team"
+      },
       
       { 
         label: "Audition Check-In", 

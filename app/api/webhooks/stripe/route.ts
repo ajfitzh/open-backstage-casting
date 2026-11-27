@@ -10,6 +10,9 @@ import {
 import { isPostgresEnabled } from '@/db';
 import { markAuditionPaidPg } from '@/app/lib/db/casting-repo';
 import { updateOrganizationBillingPg } from '@/app/lib/db/core-repo';
+import { fulfillTicketOrderPg } from '@/app/lib/db/tickets-repo';
+import { parseTicketOrderMetadata } from '@/app/lib/ticketing-helpers';
+import { sendTicketConfirmationEmail } from '@/app/lib/ticket-email';
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -100,7 +103,59 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2B. Cast Production Fee Payment
+    // 2B. General Admission Ticket Order Checkout
+    const ticketMeta = parseTicketOrderMetadata(session.metadata);
+    if (ticketMeta) {
+      if (event.type === 'checkout.session.completed' && session.payment_status !== 'paid') {
+        return NextResponse.json({ received: true, skipped: 'ticket_payment_pending' });
+      }
+      if (!isPostgresEnabled()) {
+        return NextResponse.json({ error: 'PostgreSQL required for ticket fulfillment.' }, { status: 500 });
+      }
+
+      const paymentIntentId =
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : session.payment_intent?.id || null;
+
+      const fulfilled = await fulfillTicketOrderPg(
+        ticketMeta.tenant,
+        ticketMeta.orderId,
+        paymentIntentId
+      );
+      if (!fulfilled.success) {
+        console.error('[Stripe Webhook] Ticket fulfillment failed:', fulfilled.error);
+        return NextResponse.json({ error: fulfilled.error }, { status: 500 });
+      }
+
+      if (!fulfilled.alreadyFulfilled && !fulfilled.order.emailSentAt) {
+        await sendTicketConfirmationEmail({
+          orderId: fulfilled.order.id,
+          orgName: fulfilled.orgName,
+          orgSlug: fulfilled.orgSlug,
+          productionTitle: fulfilled.productionTitle,
+          productionLocation: fulfilled.productionLocation,
+          performanceLabel: fulfilled.performanceLabel,
+          performanceDate: fulfilled.performanceDate,
+          buyerName: fulfilled.order.buyerName,
+          buyerEmail: fulfilled.order.buyerEmail,
+          totalCents: fulfilled.order.totalCents,
+          stripeSessionId: fulfilled.order.stripeSessionId,
+          tickets: fulfilled.tickets.map((t) => ({ code: t.code, holderName: t.holderName })),
+        });
+      }
+
+      return NextResponse.json({
+        received: true,
+        fulfilledTicketOrder: {
+          tenant: ticketMeta.tenant,
+          orderId: ticketMeta.orderId,
+          ticketCount: fulfilled.tickets.length,
+        },
+      });
+    }
+
+    // 2C. Cast Production Fee Payment
     if (event.type === 'checkout.session.completed' && session.payment_status !== 'paid') {
       return NextResponse.json({ received: true, skipped: 'payment_pending' });
     }

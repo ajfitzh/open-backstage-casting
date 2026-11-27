@@ -231,6 +231,9 @@ export const performances = pgTable(
     }),
     label: text("label"),
     performanceDate: text("performance_date"),
+    doorsOpenAt: text("doors_open_at"),
+    ticketPrice: real("ticket_price"),
+    salesOpen: boolean("sales_open").default(true).notNull(),
     totalInventory: integer("total_inventory").default(0),
     ticketsSold: integer("tickets_sold").default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -239,6 +242,72 @@ export const performances = pgTable(
   (table) => [
     uniqueIndex("performances_org_baserow_uidx").on(table.organizationId, table.baserowId),
     index("performances_org_prod_idx").on(table.organizationId, table.productionId),
+  ]
+);
+
+export const ticketOrders = pgTable(
+  "ticket_orders",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productionId: integer("production_id")
+      .notNull()
+      .references(() => productions.id, { onDelete: "cascade" }),
+    performanceId: integer("performance_id")
+      .notNull()
+      .references(() => performances.id, { onDelete: "cascade" }),
+    referredByPersonId: integer("referred_by_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    buyerName: text("buyer_name").notNull(),
+    buyerEmail: text("buyer_email").notNull(),
+    quantity: integer("quantity").notNull(),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    status: text("status").notNull().default("pending"),
+    stripeSessionId: text("stripe_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("ticket_orders_stripe_session_uidx").on(table.stripeSessionId),
+    index("ticket_orders_org_perf_idx").on(table.organizationId, table.performanceId),
+    index("ticket_orders_org_prod_idx").on(table.organizationId, table.productionId),
+  ]
+);
+
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => ticketOrders.id, { onDelete: "cascade" }),
+    productionId: integer("production_id")
+      .notNull()
+      .references(() => productions.id, { onDelete: "cascade" }),
+    performanceId: integer("performance_id")
+      .notNull()
+      .references(() => performances.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    qrCodeValue: text("qr_code_value").notNull(),
+    holderName: text("holder_name"),
+    status: text("status").notNull().default("valid"),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    checkedInBy: text("checked_in_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tickets_org_code_uidx").on(table.organizationId, table.code),
+    index("tickets_org_order_idx").on(table.organizationId, table.orderId),
+    index("tickets_org_perf_idx").on(table.organizationId, table.performanceId),
   ]
 );
 
