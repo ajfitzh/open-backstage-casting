@@ -19,6 +19,9 @@
     "db:import": "tsx scripts/import-baserow.ts",
     "db:sync-show-images": "tsx scripts/sync-show-images.ts",
     "sync:cytfred": "tsx scripts/sync-cytfred-legacy.ts",
+    "dump:cytfred-admin": "tsx scripts/cytfred-admin-dump.ts",
+    "export:cytfred-admin": "tsx scripts/cytfred-admin-full-export.ts",
+    "import:cytfred-admin": "tsx scripts/import-cytfred-admin.ts",
     "cap:sync": "npx cap sync ios",
     "cap:ios": "npx cap open ios"
   },

@@ -51,4 +51,4 @@ node_modules/
 
 # Repomix exports
 repomix-output*.xml
-scripts/.cytfred-auth-export.json
+scripts/.cytfred-*

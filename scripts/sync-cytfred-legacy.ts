@@ -244,59 +244,83 @@ async function scrapePublicClasses(page: import("@playwright/test").Page): Promi
   });
 }
 
-async function runAuthenticatedCapture(page: import("@playwright/test").Page) {
-  console.log(`\n[Auth Mode] Opening ${BASE_URL}/login ...`);
-  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
+const AUTH_STATE_PATH = path.join(process.cwd(), "scripts", ".cytfred-auth-state.json");
+const AUTH_EXPORT_PATH = path.join(process.cwd(), "scripts", ".cytfred-auth-export.json");
+const AUTH_ONLY = args.has("--auth-only");
 
-  const envEmail = process.env.CYT_LEGACY_EMAIL;
-  const envPass = process.env.CYT_LEGACY_PASSWORD;
-  if (envEmail && envPass) {
-    const emailInput = page.locator("input[type='email'], input[name*='email' i], input[name*='user' i]").first();
-    const passInput = page.locator("input[type='password']").first();
-    if ((await emailInput.count()) > 0 && (await passInput.count()) > 0) {
-      await emailInput.fill(envEmail);
-      await passInput.fill(envPass);
-      const submitBtn = page.locator("button[type='submit'], input[type='submit']").first();
-      if ((await submitBtn.count()) > 0) {
-        await submitBtn.click();
-      }
-    }
-  } else {
-    console.log("  Please log in inside the open Chromium window (waiting up to 2 minutes)...");
+async function runAuthenticatedCapture(
+  context: import("@playwright/test").BrowserContext,
+  page: import("@playwright/test").Page
+) {
+  console.log(`\n[Auth Mode] Opening ${BASE_URL}/login/admin ...`);
+  await page.goto(`${BASE_URL}/login/admin`, { waitUntil: "domcontentloaded", timeout: 30000 });
+
+  // Wait until we are on /admin (and no longer on /login) — up to 5 minutes for manual login + MFA
+  if (page.url().includes("/login")) {
+    console.log("  Please log in (and complete MFA if prompted) in the open Chrome window...");
+    console.log("  Tip: click directly into username & password fields (avoid browser autofill).");
+    await page.waitForURL(
+      (url) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
+      { timeout: 300000 }
+    );
   }
 
-  await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 120000 });
   console.log("  Logged in! Current URL:", page.url());
+  await page.waitForLoadState("networkidle").catch(() => {});
+
+  // Persist cookies/storage so follow-up admin sync scripts don't require re-login
+  await context.storageState({ path: AUTH_STATE_PATH });
+  console.log(`  Saved session cookies to ${AUTH_STATE_PATH}`);
 
   const captured = await page.evaluate(() => {
     const links = Array.from(document.querySelectorAll("a[href]"))
       .map((a) => ({
-        text: (a.textContent || "").trim(),
+        text: (a.textContent || "").replace(/\s+/g, " ").trim(),
         href: (a as HTMLAnchorElement).href,
       }))
       .filter((l) => l.text && l.href.startsWith("http"));
+
+    const seen = new Set<string>();
+    const uniqueLinks = links.filter((l) => {
+      const key = `${l.href}|${l.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const headings = Array.from(document.querySelectorAll("h1, h2, h3"))
+      .map((h) => (h.textContent || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
     return {
+      capturedAt: new Date().toISOString(),
       url: window.location.href,
       title: document.title,
-      links: links.slice(0, 120),
+      headings: headings.slice(0, 40),
+      links: uniqueLinks.slice(0, 250),
     };
   });
 
-  const outPath = path.join(process.cwd(), "scripts", ".cytfred-auth-export.json");
-  fs.writeFileSync(outPath, JSON.stringify(captured, null, 2), "utf8");
-  console.log(`  Saved authenticated portal links to ${outPath}`);
+  fs.writeFileSync(AUTH_EXPORT_PATH, JSON.stringify(captured, null, 2), "utf8");
+  console.log(`  Saved ${captured.links.length} admin portal links to ${AUTH_EXPORT_PATH}`);
 }
 
 async function main() {
   const browser = await chromium
     .launch({ headless: !AUTH_MODE, channel: "chrome" })
     .catch(() => chromium.launch({ headless: !AUTH_MODE }));
-  const context = await browser.newContext();
+  const contextOptions =
+    AUTH_MODE && fs.existsSync(AUTH_STATE_PATH) ? { storageState: AUTH_STATE_PATH } : {};
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
 
   try {
     if (AUTH_MODE) {
-      await runAuthenticatedCapture(page);
+      await runAuthenticatedCapture(context, page);
+      if (AUTH_ONLY) {
+        console.log("\n[Auth Only] Done capturing admin portal structure.");
+        return;
+      }
     }
 
     const shows = await scrapePublicShows(page);
