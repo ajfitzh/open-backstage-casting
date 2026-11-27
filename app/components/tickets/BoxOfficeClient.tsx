@@ -22,6 +22,12 @@ import {
   scanDoorTicket,
   togglePerformanceSales,
 } from "@/app/actions/tickets";
+import {
+  cancelTicketOrderAction,
+  resendTicketOrderEmailAction,
+} from "@/app/actions/phase2-ops";
+import { toast } from "@/app/components/ToastProvider";
+import BoxOfficeOpsPanel from "./BoxOfficeOpsPanel";
 import CameraQrScanner from "@/app/components/production/CameraQrScanner";
 import type { PerformanceSummary } from "@/app/lib/db/tickets-repo";
 
@@ -475,12 +481,13 @@ export default function BoxOfficeClient({
                 <th className="p-3.5">Total</th>
                 <th className="p-3.5">Cast Credit</th>
                 <th className="p-3.5">Status</th>
+                <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {initialOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500">
+                  <td colSpan={8} className="p-8 text-center text-zinc-500">
                     No online ticket orders yet.
                   </td>
                 </tr>
@@ -501,13 +508,47 @@ export default function BoxOfficeClient({
                     <td className="p-3.5">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          o.status === "paid"
+                          o.status === "paid" || o.status === "comp"
                             ? "bg-emerald-500/15 text-emerald-300"
+                            : o.status === "refunded"
+                            ? "bg-red-500/15 text-red-300"
                             : "bg-zinc-800 text-zinc-400"
                         }`}
                       >
                         {o.status}
                       </span>
+                    </td>
+                    <td className="p-3.5 text-right whitespace-nowrap">
+                      {o.status !== "refunded" && o.status !== "canceled" && (
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await resendTicketOrderEmailAction(tenant, o.id);
+                              if (!res.success) toast.error(res.error || "Resend failed.");
+                              else toast.success(`Resent tickets to ${res.email}`);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold uppercase text-zinc-200"
+                          >
+                            Resend
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm(`Cancel & void order #${o.id} and restore ${o.quantity} seat(s)?`)) return;
+                              const res = await cancelTicketOrderAction(tenant, o.id);
+                              if (!res.success) toast.error(res.error || "Cancel failed.");
+                              else {
+                                toast.success(`Order #${o.id} canceled (${res.restoredSeats} seat(s) restored).`);
+                                window.location.reload();
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[10px] font-bold uppercase text-red-300"
+                          >
+                            Void
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -516,6 +557,20 @@ export default function BoxOfficeClient({
           </table>
         </div>
       </section>
+
+      {/* WALK-UP DOOR SALES & PROMO CODES */}
+      <BoxOfficeOpsPanel
+        tenant={tenant}
+        productionId={productionId}
+        performances={performances.map((p) => ({
+          id: p.id,
+          label: p.label,
+          date: p.performanceDate,
+          price: p.ticketPrice,
+          remaining: p.remainingSeats,
+        }))}
+        onOrderCreated={() => window.location.reload()}
+      />
 
       {scannerOpen && (
         <CameraQrScanner

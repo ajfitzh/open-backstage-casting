@@ -1,5 +1,6 @@
 import { getShowById, getProductionEvents, fetchBaserow, getDB, getTenantTableConfig, getAssignments } from '@/app/lib/baserow';
 import NightlyReportClient from '@/app/components/production/NightlyReportClient';
+import SendRehearsalReportButton from '@/app/components/production/SendRehearsalReportButton';
 import { isPostgresEnabled } from '@/db';
 import {
   getAttendanceForEventPg,
@@ -83,8 +84,22 @@ export default async function NightlyReportPage({ params }: { params: { tenant: 
     const assignments = await getAssignments(tenant, show.id);
     const castEmails = assignments.map((a: any) => a.email).filter(Boolean);
 
+    const presentCount = attendance.filter((a) => a.status === "Present").length;
+    const lateNames = attendance.filter((a) => a.status === "Late").map((a) => String(a.name));
+    const absentNames = attendance.filter((a) => a.status === "Absent").map((a) => String(a.name));
+
     return (
-        <div className="p-6 lg:p-8 min-h-screen bg-zinc-950">
+        <div className="p-6 lg:p-8 min-h-full bg-zinc-950 space-y-6">
+            <div className="flex justify-end">
+              <SendRehearsalReportButton
+                tenant={tenant}
+                productionId={show.id}
+                reportDate={activeEvent?.date || todayStr}
+                presentCount={presentCount}
+                lateNames={lateNames}
+                absentNames={absentNames}
+              />
+            </div>
             <NightlyReportClient 
                 todayEvent={activeEvent}
                 attendance={attendance}

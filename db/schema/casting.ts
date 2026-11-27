@@ -146,6 +146,7 @@ export const assignments = pgTable(
     personId: integer("person_id").references(() => people.id, { onDelete: "set null" }),
     roleId: integer("role_id").references(() => blueprintRoles.id, { onDelete: "set null" }),
     auditionId: integer("audition_id").references(() => auditions.id, { onDelete: "set null" }),
+    castTrack: text("cast_track").default("All"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

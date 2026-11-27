@@ -2,13 +2,15 @@
 // Public general-admission ticket Stripe Checkout endpoint.
 
 import { NextRequest, NextResponse } from "next/server";
-import { isPostgresEnabled } from "@/db";
+import { eq, sql } from "drizzle-orm";
+import { getDb, isPostgresEnabled, schema } from "@/db";
 import { getStripeClient } from "@/app/lib/stripe-helpers";
 import {
   attachStripeSessionToOrderPg,
   createPendingTicketOrderPg,
   getPerformanceForCheckoutPg,
 } from "@/app/lib/db/tickets-repo";
+import { sellDoorTicketsPg, validatePromoCodePg } from "@/app/lib/db/phase2-repo";
 import { validateTicketOrderRequest } from "@/app/lib/ticketing-helpers";
 
 export async function POST(req: NextRequest) {
@@ -47,6 +49,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    const rawPromo = typeof body.promoCode === "string" ? body.promoCode.trim() : "";
+    let finalUnitCents = validation.unitPriceCents;
+    let finalTotalCents = validation.totalCents;
+    let appliedPromo: { promoId: number; code: string; discountCents: number } | null = null;
+
+    if (rawPromo) {
+      const promoRes = await validatePromoCodePg(
+        tenant,
+        rawPromo,
+        validation.unitPriceCents,
+        validation.quantity
+      );
+      if (!promoRes.ok) {
+        return NextResponse.json({ error: promoRes.error }, { status: 400 });
+      }
+      finalTotalCents = promoRes.totalCents;
+      finalUnitCents = promoRes.effectiveUnitCents;
+      appliedPromo = {
+        promoId: promoRes.promoId,
+        code: promoRes.code,
+        discountCents: promoRes.discountCents,
+      };
+    }
+
+    // 100% Comp / Free Promo Code -> issue QR tickets immediately without Stripe
+    if (finalTotalCents === 0 && appliedPromo) {
+      const compOrder = await sellDoorTicketsPg(tenant, perfContext.performance.id, {
+        quantity: validation.quantity,
+        buyerName: validation.buyerName,
+        buyerEmail: validation.buyerEmail,
+        paymentMethod: "comp",
+      });
+      if (!compOrder.success) {
+        return NextResponse.json({ error: compOrder.error }, { status: 400 });
+      }
+      const db = getDb();
+      await db
+        .update(schema.promoCodes)
+        .set({ currentUses: sql`coalesce(${schema.promoCodes.currentUses}, 0) + 1` })
+        .where(eq(schema.promoCodes.id, appliedPromo.promoId));
+
+      return NextResponse.json({
+        compOrder: true,
+        orderId: compOrder.orderId,
+        tickets: compOrder.tickets,
+        code: appliedPromo.code,
+      });
+    }
+
     const order = await createPendingTicketOrderPg({
       organizationId: perfContext.org.id,
       productionId: perfContext.production.id,
@@ -58,8 +109,8 @@ export async function POST(req: NextRequest) {
       buyerName: validation.buyerName,
       buyerEmail: validation.buyerEmail,
       quantity: validation.quantity,
-      unitPriceCents: validation.unitPriceCents,
-      totalCents: validation.totalCents,
+      unitPriceCents: finalUnitCents,
+      totalCents: finalTotalCents,
     });
 
     const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
@@ -79,12 +130,12 @@ export async function POST(req: NextRequest) {
               description: [
                 perfContext.performance.performanceDate || null,
                 perfContext.production.location || perfContext.org.name,
-                "General Admission QR Ticket",
+                appliedPromo ? `Promo ${appliedPromo.code} applied` : "General Admission QR Ticket",
               ]
                 .filter(Boolean)
                 .join(" • "),
             },
-            unit_amount: validation.unitPriceCents,
+            unit_amount: finalUnitCents,
           },
           quantity: validation.quantity,
         },
@@ -95,10 +146,19 @@ export async function POST(req: NextRequest) {
         orderId: String(order.id),
         productionId: String(perfContext.production.id),
         performanceId: String(perfContext.performance.id),
+        ...(appliedPromo ? { promoCode: appliedPromo.code } : {}),
       },
       success_url: `${origin}/tickets/order/{CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/tickets?canceled=1`,
     });
+
+    if (appliedPromo) {
+      const db = getDb();
+      await db
+        .update(schema.promoCodes)
+        .set({ currentUses: sql`coalesce(${schema.promoCodes.currentUses}, 0) + 1` })
+        .where(eq(schema.promoCodes.id, appliedPromo.promoId));
+    }
 
     await attachStripeSessionToOrderPg(order.id, session.id);
 

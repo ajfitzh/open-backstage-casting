@@ -376,3 +376,28 @@ export const staffInterest = pgTable(
     index("staff_interest_org_season_idx").on(table.organizationId, table.seasonId),
   ]
 );
+
+export const promoCodes = pgTable(
+  "promo_codes",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productionId: integer("production_id").references(() => productions.id, {
+      onDelete: "cascade",
+    }),
+    code: text("code").notNull(),
+    discountType: text("discount_type").notNull().default("percent"), // "percent" | "fixed" | "comp"
+    discountValue: real("discount_value").notNull().default(0),
+    maxUses: integer("max_uses"),
+    currentUses: integer("current_uses").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("promo_codes_org_code_uidx").on(table.organizationId, table.code),
+    index("promo_codes_org_prod_idx").on(table.organizationId, table.productionId),
+  ]
+);

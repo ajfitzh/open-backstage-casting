@@ -7,6 +7,7 @@ import {
   UserCog, Mic, Scissors, LayoutGrid
 } from 'lucide-react';
 import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard';
+import FamilyConflictModal from '@/app/components/casting/FamilyConflictModal';
 import ChairLogbook from '@/app/components/committees/ChairLogbook';
 import { 
   getActiveProduction, 
@@ -115,7 +116,17 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
               )}
 
               <div className="space-y-4">
-                 <h2 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest border-b border-zinc-800 pb-2">My Students</h2>
+                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+                   <h2 className="text-[11px] font-bold uppercase text-zinc-400 tracking-wider">My Students</h2>
+                   <FamilyConflictModal
+                     tenant={tenant}
+                     productionId={show.id}
+                     students={myAuditions.map((s: any) => ({
+                       studentId: Number(s.studentId || s.id),
+                       name: String(s.name || "Student"),
+                     }))}
+                   />
+                 </div>
                  
                  {myAuditions.length === 0 ? (
                     <div className="bg-zinc-900/50 border border-dashed border-zinc-800 p-10 rounded-3xl text-center">

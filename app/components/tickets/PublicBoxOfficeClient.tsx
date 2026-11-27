@@ -62,6 +62,8 @@ export default function PublicBoxOfficeClient({
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
   const [referredByPersonId, setReferredByPersonId] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [compSuccess, setCompSuccess] = useState<{ orderId: number; codes: string[] } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,6 +78,7 @@ export default function PublicBoxOfficeClient({
     if (!selectedPerf) return;
     setSubmitting(true);
     setError(null);
+    setCompSuccess(null);
 
     try {
       const res = await fetch("/api/tickets/checkout", {
@@ -88,10 +91,22 @@ export default function PublicBoxOfficeClient({
           buyerName,
           buyerEmail,
           referredByPersonId: referredByPersonId ? Number(referredByPersonId) : null,
+          promoCode: promoCode.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) {
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to start checkout.");
+      }
+      if (data.compOrder) {
+        setCompSuccess({
+          orderId: data.orderId,
+          codes: (data.tickets || []).map((t: { code: string }) => t.code),
+        });
+        setSubmitting(false);
+        return;
+      }
+      if (!data.url) {
         throw new Error(data.error || "Unable to start Stripe Checkout.");
       }
       window.location.assign(data.url);
@@ -324,7 +339,34 @@ export default function PublicBoxOfficeClient({
                         </select>
                       </div>
                     )}
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1">
+                        Promo / Comp Code (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                        placeholder="CASTFAMILY or COMP"
+                        className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm font-mono uppercase text-white outline-none focus:border-blue-500"
+                      />
+                    </div>
                   </div>
+
+                  {compSuccess && (
+                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 space-y-1.5">
+                      <p className="font-black uppercase tracking-wider text-emerald-300">
+                        Comp Tickets Confirmed (Order #{compSuccess.orderId})
+                      </p>
+                      <p className="text-zinc-300">
+                        Present these ticket code(s) at the door:
+                      </p>
+                      <p className="font-mono font-bold text-white break-all">
+                        {compSuccess.codes.join(" • ")}
+                      </p>
+                    </div>
+                  )}
 
                   {error && (
                     <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs font-bold text-red-300">
@@ -350,7 +392,7 @@ export default function PublicBoxOfficeClient({
                       ) : (
                         <CreditCard size={16} />
                       )}
-                      {submitting ? "Redirecting to Stripe..." : "Checkout with Stripe"}
+                      {submitting ? "Processing..." : "Checkout"}
                     </button>
                   </div>
                 </>

@@ -28,6 +28,7 @@ describe("PostgreSQL multi-tenant Drizzle schema", () => {
     schema.performances,
     schema.ticketOrders,
     schema.tickets,
+    schema.promoCodes,
     schema.staffPositions,
     schema.showTeam,
     schema.staffInterest,
@@ -54,13 +55,13 @@ describe("PostgreSQL multi-tenant Drizzle schema", () => {
     schema.classEnrollments,
   ];
 
-  it("defines organizations + onboarding requests + all 38 tenant-scoped tables", () => {
+  it("defines organizations + onboarding requests + all 39 tenant-scoped tables", () => {
     assert.equal(getTableName(schema.organizations), "organizations");
     assert.equal(
       getTableName(schema.organizationOnboardingRequests),
       "organization_onboarding_requests"
     );
-    assert.equal(tenantScopedTables.length, 38);
+    assert.equal(tenantScopedTables.length, 39);
   });
 
   it("ensures every tenant-scoped table has an organizationId foreign-key column", () => {
