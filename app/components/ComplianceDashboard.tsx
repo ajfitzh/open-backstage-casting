@@ -243,11 +243,12 @@ export default function ComplianceDashboard({
     if (res.success) {
       setSwapTarget(null);
       setReplacementPersonId("");
+      const affected = "rolesAffected" in res ? (res.rolesAffected ?? 0) : 0;
       setNotice({
         type: "success",
         text: replacementPersonId
-          ? `Swapped ${swapTarget.name} out and transferred ${res.rolesAffected ?? 0} role(s).`
-          : `Dropped ${swapTarget.name} from cast (${res.rolesAffected ?? 0} role(s) cleared).`,
+          ? `Swapped ${swapTarget.name} out and transferred ${affected} role(s).`
+          : `Dropped ${swapTarget.name} from cast (${affected} role(s) cleared).`,
       });
       router.refresh();
     } else {

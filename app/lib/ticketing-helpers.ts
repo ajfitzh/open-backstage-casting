@@ -1,13 +1,15 @@
 // app/lib/ticketing-helpers.ts
 // Pure helpers for online general-admission ticketing, QR parsing, Stripe metadata,
-// and half-letter booklet imposition. Zero path aliases for direct Node ESM unit tests.
-
-import crypto from "node:crypto";
+// and half-letter booklet imposition. Zero path aliases and browser-safe (uses Web Crypto).
 
 export const MAX_TICKETS_PER_ORDER = 12;
 
 export function generateTicketCode(): string {
-  const raw = crypto.randomBytes(4).toString("hex").toUpperCase();
+  const bytes = new Uint8Array(4);
+  globalThis.crypto.getRandomValues(bytes);
+  const raw = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
   return `OBT-${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
 }
 
