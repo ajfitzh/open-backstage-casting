@@ -1460,8 +1460,11 @@ export async function findUserByEmail(tenant: string, email: string) {
     try {
       const pgUser = await findUserByEmailPg(tenant, email);
       if (pgUser) return pgUser;
+      // When Postgres is the active backend and Baserow isn't configured, return null cleanly
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     } catch (error) {
       console.error("[Postgres] findUserByEmail failed, falling back to Baserow:", error);
+      if (!process.env.NEXT_PUBLIC_MASTER_REGISTRY_TABLE_ID) return null;
     }
   }
 
