@@ -12,7 +12,8 @@ export function validateUploadRequest(filename: unknown, fileType: unknown):
     return { ok: false, error: 'Missing or invalid fileType.' };
   }
 
-  const normalizedType = fileType.trim().toLowerCase();
+  // Strip codec suffixes like "video/webm;codecs=vp8,opus" so S3 Content-Type signing stays clean
+  const normalizedType = fileType.split(';')[0].trim().toLowerCase();
   const isAllowedType =
     ALLOWED_EXACT_MIMES.has(normalizedType) ||
     ALLOWED_MIME_PREFIXES.some((prefix) => normalizedType.startsWith(prefix));

@@ -90,6 +90,7 @@ export const auditions = pgTable(
     voiceType: text("voice_type"),
     auditionVideoUrl: text("audition_video_url"),
     danceVideoUrl: text("dance_video_url"),
+    callbackVideoUrl: text("callback_video_url"),
     backingTrackUrl: text("backing_track_url"),
 
     checkedIn: boolean("checked_in").default(false),
@@ -210,5 +211,47 @@ export const studentBios = pgTable(
   (table) => [
     uniqueIndex("student_bios_org_baserow_uidx").on(table.organizationId, table.baserowId),
     index("student_bios_org_prod_idx").on(table.organizationId, table.productionId),
+  ]
+);
+
+export const auditionJudgeScores = pgTable(
+  "audition_judge_scores",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productionId: integer("production_id")
+      .notNull()
+      .references(() => productions.id, { onDelete: "cascade" }),
+    auditionId: integer("audition_id")
+      .notNull()
+      .references(() => auditions.id, { onDelete: "cascade" }),
+    judgePersonId: integer("judge_person_id").references(() => people.id, {
+      onDelete: "set null",
+    }),
+    judgeEmail: text("judge_email").notNull(),
+    judgeName: text("judge_name").notNull(),
+    judgeRole: text("judge_role").notNull().default("Judge"),
+    round: text("round").notNull().default("audition"), // "audition" | "callback"
+    vocalScore: real("vocal_score"),
+    actingScore: real("acting_score"),
+    danceScore: real("dance_score"),
+    stagePresenceScore: real("stage_presence_score"),
+    callbackVote: text("callback_vote"), // "strong_yes" | "yes" | "maybe" | "no"
+    suggestedRoles: text("suggested_roles"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("audition_judge_scores_unique_ballot_uidx").on(
+      table.organizationId,
+      table.auditionId,
+      table.judgeEmail,
+      table.round
+    ),
+    index("audition_judge_scores_org_prod_idx").on(table.organizationId, table.productionId),
+    index("audition_judge_scores_audition_idx").on(table.auditionId),
   ]
 );

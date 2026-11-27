@@ -1,29 +1,48 @@
 // app/[tenant]/(main)/production/[id]/auditions/page.tsx
 import { BaserowClient } from '@/app/lib/BaserowClient';
+import { getUserProductionRole } from '@/app/lib/baserow';
+import { getAuditionDeckDataPg } from '@/app/lib/db/audition-panel-repo';
+import { hasPermission } from '@/app/lib/permissions';
 import AuditionsClient from '@/app/components/auditions/AuditionsClient';
-import { auth } from '@/auth'; // Adjust path to your auth config
+import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AuditionsPage({ 
-  params 
-}: { 
-  params: Promise<{ tenant: string; id: string }> 
+export default async function AuditionsPage({
+  params,
+}: {
+  params: Promise<{ tenant: string; id: string }>;
 }) {
   const { tenant, id } = await params;
-  const showId = parseInt(id);
+  const showId = Number.parseInt(id, 10);
   const session = await auth();
 
-  // 1. Check Auth - If no judge is logged in, they can't be here
-  if (!session?.user) {
+  if (!session?.user?.email) {
     redirect('/login');
   }
 
-  // 2. Fetch everything in parallel for speed
-  const [production, roster] = await Promise.all([
-      BaserowClient.getProduction(tenant, showId),
-      BaserowClient.getRosterForShow(tenant, showId)
+  const user = session.user as { id?: string; email?: string; name?: string; role?: string };
+  const globalRole = user.role || 'Guest';
+  const prodRole =
+    user.id && !Number.isNaN(Number(user.id))
+      ? await getUserProductionRole(tenant, Number(user.id), showId)
+      : null;
+
+  if (!hasPermission(globalRole, prodRole, 'view_auditions')) {
+    return (
+      <div className="p-10 text-center text-zinc-400">
+        <p className="text-sm font-bold text-white mb-1">Audition Deck Access Restricted</p>
+        <p className="text-xs text-zinc-500">
+          You need a staff or judging role on this production to view the audition panel.
+        </p>
+      </div>
+    );
+  }
+
+  const [production, deckData] = await Promise.all([
+    BaserowClient.getProduction(tenant, showId),
+    getAuditionDeckDataPg(tenant, showId),
   ]);
 
   if (!production) {
@@ -32,13 +51,15 @@ export default async function AuditionsPage({
 
   return (
     <main className="h-full bg-zinc-950">
-      <AuditionsClient 
+      <AuditionsClient
         tenant={tenant}
         productionId={showId}
-        productionTitle={String(production.title || "Active Production")}
-        serverJudgeName={session.user.name || "Unknown Judge"}
-        serverJudgeRole={(session.user as any).role || "Drop-In"}
-        initialPerformers={(roster || []) as any} // 🟢 Now matches the updated interface!
+        productionTitle={String(production.title || 'Active Production')}
+        serverJudgeName={user.name || user.email || 'Judge'}
+        serverJudgeEmail={user.email || ''}
+        serverJudgeRole={prodRole || globalRole || 'Judge'}
+        initialPerformers={deckData?.performers || []}
+        blueprintRoles={deckData?.blueprintRoles || []}
       />
     </main>
   );

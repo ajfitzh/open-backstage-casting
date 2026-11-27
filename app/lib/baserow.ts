@@ -1439,6 +1439,10 @@ export async function submitAudition(tenant: string, studentId: number, producti
 }
 
 export async function updateAuditionSlot(tenant: string, rowId: number, data: any) {
+    if (isPostgresEnabled()) {
+        const { updateAuditionSlotLegacyPg } = await import("@/app/lib/db/audition-panel-repo");
+        return await updateAuditionSlotLegacyPg(tenant, rowId, data);
+    }
     const tables = await getTenantTableConfig(tenant);
     return await fetchBaserow(`/database/rows/table/${tables.AUDITIONS}/${rowId}/`, {
         method: "PATCH",
