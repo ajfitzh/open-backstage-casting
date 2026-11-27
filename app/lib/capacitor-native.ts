@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { Capacitor } from "@capacitor/core";
 
 export function isNativeCapacitor(): boolean {
@@ -8,6 +9,12 @@ export function isNativeCapacitor(): boolean {
   } catch {
     return false;
   }
+}
+
+const noopSubscribe = () => () => {};
+
+export function useIsNativeCapacitor(): boolean {
+  return useSyncExternalStore(noopSubscribe, isNativeCapacitor, () => false);
 }
 
 export async function initNativeStatusBar(): Promise<void> {

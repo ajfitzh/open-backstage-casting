@@ -1,11 +1,12 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 "use client";
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Lock, Loader2, AlertCircle, Chrome } from 'lucide-react';
 import { formatTenantDisplayName } from '@/app/lib/tenant-utils';
+import { useIsNativeCapacitor } from '@/app/lib/capacitor-native';
 
 export default function LoginPage() {
   const params = useParams();
@@ -15,7 +16,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const isNativeApp = useIsNativeCapacitor();
   const router = useRouter();
+
+  useEffect(() => {
+    const resetLoading = () => setIsLoading(false);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") resetLoading();
+    };
+    window.addEventListener("pageshow", resetLoading);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pageshow", resetLoading);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   const orgName = formatTenantDisplayName(tenant);
 
@@ -73,27 +88,32 @@ export default function LoginPage() {
         )}
 
         <div className="space-y-4">
-            {/* --- GOOGLE SSO BUTTON --- */}
-            <button 
-                onClick={handleGoogleLogin}
-                type="button"
-                disabled={isLoading}
-                className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 active:scale-95 shadow-md"
-            >
-                <Chrome size={20} className="text-blue-600" />
-                Sign in with Google
-            </button>
+            {/* --- GOOGLE SSO BUTTON (hidden in native WebView where Google blocks embedded OAuth) --- */}
+            {!isNativeApp && (
+              <>
+                <button 
+                    onClick={handleGoogleLogin}
+                    type="button"
+                    disabled={isLoading}
+                    className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-200 transition-colors flex items-center justify-center gap-3 active:scale-95 shadow-md"
+                >
+                    <Chrome size={20} className="text-blue-600" />
+                    Sign in with Google
+                </button>
 
-            {/* Divider */}
-            <div className="relative py-2">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
-                <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-3 text-zinc-500 font-bold tracking-widest">Or</span></div>
-            </div>
+                {/* Divider */}
+                <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-900 px-3 text-zinc-500 font-bold tracking-widest">Or</span></div>
+                </div>
+              </>
+            )}
 
             {/* Email/Password Form */}
             <form onSubmit={handleCredentialsLogin} className="space-y-3">
                 <input 
-                    type="email" 
+                    type="email"
+                    autoComplete="email"
                     placeholder="Email Address" 
                     className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600"
                     value={email}
@@ -102,7 +122,8 @@ export default function LoginPage() {
                     required
                 />
                 <input 
-                    type="password" 
+                    type="password"
+                    autoComplete="current-password"
                     placeholder="Password" 
                     className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white focus:border-blue-500 transition-all placeholder:text-zinc-500"
                     value={password}
