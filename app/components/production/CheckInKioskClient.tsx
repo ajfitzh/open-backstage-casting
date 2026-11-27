@@ -7,6 +7,7 @@ import { toggleAttendance } from '@/app/actions/attendance';
 import { toast } from '@/app/components/ToastProvider';
 import CameraQrScanner from './CameraQrScanner';
 import { parseStudentQrPayload } from '@/app/lib/features-helpers';
+import { triggerHaptic } from '@/app/lib/capacitor-native';
 
 export default function CheckInKioskClient({ tenant, productionId, event, castList, initialAttendance }: any) {
     const [search, setSearch] = useState("");
@@ -36,6 +37,7 @@ export default function CheckInKioskClient({ tenant, productionId, event, castLi
         const res = await toggleAttendance(tenant, productionId, personId, event.id, action);
         
         if (res.success) {
+            void triggerHaptic("success");
             // Optimistically update the UI so the Parent Monitor doesn't have to wait for a refresh
             const now = new Date().toISOString();
             setLocalAttendance(prev => {
@@ -57,6 +59,7 @@ export default function CheckInKioskClient({ tenant, productionId, event, castLi
                 }
             });
         } else {
+            void triggerHaptic("error");
             toast.error("Failed to record attendance. Please try again.");
         }
         setProcessingId(null);

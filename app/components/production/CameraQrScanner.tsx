@@ -3,6 +3,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { Camera, CameraOff, Loader2, RefreshCw, X } from "lucide-react";
+import {
+  isNativeCapacitor,
+  scanBarcodeNative,
+  triggerHaptic,
+} from "@/app/lib/capacitor-native";
 
 interface CameraQrScannerProps {
   onScan: (decodedText: string) => void;
@@ -26,10 +31,28 @@ export default function CameraQrScanner({
   const [status, setStatus] = useState<"starting" | "scanning" | "error">("starting");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [nativeActive, setNativeActive] = useState<boolean>(() => isNativeCapacitor());
 
   useEffect(() => {
     let active = true;
     hasScannedRef.current = false;
+
+    // On iOS/Android Capacitor, launch the native camera barcode scanner directly
+    if (nativeActive) {
+      (async () => {
+        const scanned = await scanBarcodeNative(subtitle);
+        if (!active) return;
+        if (scanned) {
+          hasScannedRef.current = true;
+          onScan(scanned.trim());
+        } else {
+          onClose();
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }
 
     const stopCamera = () => {
       if (rafRef.current !== null) {
@@ -104,6 +127,7 @@ export default function CameraQrScanner({
 
           if (code?.data) {
             hasScannedRef.current = true;
+            void triggerHaptic("success");
             if (typeof navigator !== "undefined" && "vibrate" in navigator) {
               try {
                 navigator.vibrate(80);
@@ -136,7 +160,27 @@ export default function CameraQrScanner({
       active = false;
       stopCamera();
     };
-  }, [facingMode, onScan]);
+  }, [facingMode, nativeActive, onClose, onScan, subtitle]);
+
+  if (nativeActive) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-zinc-950 border border-white/15 rounded-3xl px-6 py-5 flex items-center gap-3 shadow-2xl">
+          <Loader2 size={20} className="animate-spin text-pink-500" />
+          <span className="text-xs font-black uppercase tracking-widest text-white">
+            Opening Camera Scanner…
+          </span>
+          <button
+            type="button"
+            onClick={() => setNativeActive(false)}
+            className="ml-2 text-[10px] font-bold text-zinc-400 hover:text-white underline"
+          >
+            Use Web
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">

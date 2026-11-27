@@ -140,7 +140,7 @@ export async function registerNativeDeepLinkAuthListener(): Promise<() => void> 
  * Launches the native iOS/Android barcode/QR scanner when running inside the
  * Capacitor shell. Returns the scanned raw value, or null if cancelled / unavailable.
  */
-export async function scanBarcodeNative(): Promise<string | null> {
+export async function scanBarcodeNative(instructions?: string): Promise<string | null> {
   if (!isNativeCapacitor()) return null;
   try {
     const { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } = await import(
@@ -148,7 +148,7 @@ export async function scanBarcodeNative(): Promise<string | null> {
     );
     const result = await CapacitorBarcodeScanner.scanBarcode({
       hint: CapacitorBarcodeScannerTypeHint.ALL,
-      scanInstructions: "Align QR code or barcode inside the frame",
+      scanInstructions: instructions || "Align QR code or barcode inside the frame",
     });
     if (result?.ScanResult) {
       await triggerHaptic("success");

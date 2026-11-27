@@ -8,6 +8,7 @@ import { ChevronLeft, Search, Check, Clock, X, AlertTriangle, Camera } from "luc
 import { saveCheckIn } from "@/app/actions/checkin";
 import CameraQrScanner from "@/app/components/production/CameraQrScanner";
 import { parseStudentQrPayload } from "@/app/lib/features-helpers";
+import { triggerHaptic } from "@/app/lib/capacitor-native";
 
 const FORM_TEMPLATES: Record<string, { title: string, text: string }> = {
   'Medical Release': { 
@@ -97,7 +98,9 @@ export default function CheckInBoard({ tenant, productionTitle, initialCast }: {
         phoneToSave,
         emailToSave
       );
+      void triggerHaptic("success");
     } catch (error) {
+      void triggerHaptic("error");
       console.error("Failed to save check-in state:", error);
       toast.error("Connection error! The check-in could not be saved. Please try again.");
       // Rollback the optimistic UI update
