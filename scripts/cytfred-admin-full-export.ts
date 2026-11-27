@@ -23,6 +23,7 @@ import { chromium, type Page } from "@playwright/test";
 
 const BASE_URL = "https://www.cytfredericksburg.org";
 const OUT_PATH = path.join(process.cwd(), "scripts", ".cytfred-full-export.json");
+const AUTH_STATE_PATH = path.join(process.cwd(), "scripts", ".cytfred-auth-state.json");
 const CLASSES_ONLY = process.argv.includes("--classes-only");
 
 async function browserFetchText(page: Page, relUrl: string): Promise<string> {
@@ -58,19 +59,24 @@ async function main() {
   const browser = await chromium
     .launch({ headless: false, channel: "chrome" })
     .catch(() => chromium.launch({ headless: false }));
-  const context = await browser.newContext({ viewport: { width: 1360, height: 860 } });
+  const context = await browser.newContext({
+    viewport: { width: 1360, height: 860 },
+    ...(fs.existsSync(AUTH_STATE_PATH) ? { storageState: AUTH_STATE_PATH } : {}),
+  });
   const page = await context.newPage();
 
   try {
-    console.log(`\n[1/6] Opening ${BASE_URL}/login/admin ...`);
-    await page.goto(`${BASE_URL}/login/admin`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    console.log("  Please log in (and complete MFA if prompted) in the open Chrome window.");
-    console.log("  Tip: click directly into username & password fields (avoid browser autofill).");
-
-    await page.waitForURL(
-      (url) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
-      { timeout: 300000 }
-    );
+    console.log(`\n[1/6] Opening ${BASE_URL}/admin/search_shows ...`);
+    await page.goto(`${BASE_URL}/admin/search_shows`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    if (page.url().includes("/login")) {
+      console.log("  Please log in (and complete MFA if prompted) in the open Chrome window.");
+      console.log("  Tip: click directly into username & password fields (avoid browser autofill).");
+      await page.waitForURL(
+        (url) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
+        { timeout: 300000 }
+      );
+    }
+    await context.storageState({ path: AUTH_STATE_PATH }).catch(() => {});
     console.log("✓ Logged in! Starting fast in-browser API extraction...\n");
 
     // -------------------------------------------------------------------------
@@ -317,7 +323,7 @@ async function main() {
       ["class_location", 2],
     ] as const) {
       await page.goto(`${BASE_URL}/admin/locations?type=${typeNum}`, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
-      // Expand DataTables if present
+      // Expand DataTables if present, and also paginate through every page in case it stays at 10/page
       await page.evaluate(() => {
         const sel = document.querySelector("select[name*='length']") as HTMLSelectElement | null;
         if (sel) {
@@ -329,12 +335,27 @@ async function main() {
         }
       });
       await page.waitForTimeout(800);
-      const locLinks = await page.evaluate(() =>
-        Array.from(document.querySelectorAll("a[href*='location_edit?location=']")).map((a) => ({
-          href: (a as HTMLAnchorElement).href,
-          rowName: (a.closest("tr")?.querySelector("td")?.textContent || "").replace(/\s+/g, " ").trim(),
-        }))
-      );
+      const seenLocHref = new Map<string, { href: string; rowName: string }>();
+      for (let pg = 0; pg < 20; pg++) {
+        const pageLinks = await page.evaluate(() =>
+          Array.from(document.querySelectorAll("a[href*='location_edit?location=']")).map((a) => ({
+            href: (a as HTMLAnchorElement).href,
+            rowName: (a.closest("tr")?.querySelector("td")?.textContent || "").replace(/\s+/g, " ").trim(),
+          }))
+        );
+        for (const ll of pageLinks) seenLocHref.set(ll.href, ll);
+        const nextDone = await page.evaluate(() => {
+          const nextBtn = document.querySelector(".paginate_button.next, a.next, li.next a") as HTMLElement | null;
+          if (!nextBtn) return true;
+          const parent = nextBtn.closest("li") || nextBtn;
+          if (parent.classList.contains("disabled") || nextBtn.classList.contains("disabled")) return true;
+          nextBtn.click();
+          return false;
+        });
+        if (nextDone) break;
+        await page.waitForTimeout(400);
+      }
+      const locLinks = Array.from(seenLocHref.values());
       for (const ll of locLinks) {
         const idMatch = ll.href.match(/location=(\d+)/);
         const locId = idMatch ? Number(idMatch[1]) : 0;
@@ -467,38 +488,49 @@ async function main() {
       `  Pulling student rosters for ${enrolledClasses.length} enrolled class(es) (batched)...`
     );
     let totalRosterEntries = 0;
-    const ROSTER_BATCH = 8;
+    const ROSTER_BATCH = 4;
     for (let i = 0; i < enrolledClasses.length; i += ROSTER_BATCH) {
       const batch = enrolledClasses.slice(i, i + ROSTER_BATCH);
       const batchResults = await page.evaluate(async (ids: number[]) => {
-        const fetchOne = async (cid: number) => {
-          const url = `/_ajax_load/user-listing-admin2?pageName=searchUsers&session=0&area=0&location=0&show=0&class=${cid}&gender=0&minAge=0&maxAge=0&teachersOnly=n&showFilterCast=n&showFilterCrew=n&listFilterTeachersOnly=n&listFilterArtisticOnly=n&listFilterGuardiansOnly=n`;
-          const res = await fetch(url, { credentials: "include" });
-          if (!res.ok) return { cid, students: [] };
-          const html = await res.text();
-          const wrap = document.createElement("div");
-          wrap.innerHTML = /^\s*<tr[\s>]/i.test(html) ? `<table><tbody>${html}</tbody></table>` : html;
-          const students = Array.from(wrap.querySelectorAll("tr"))
-            .map((tr) => {
-              const tds = Array.from(tr.querySelectorAll("td"));
-              if (tds.length < 5) return null;
-              const firstName = (tds[0]?.textContent || "").trim();
-              const lastName = (tds[1]?.textContent || "").trim();
-              if (!firstName && !lastName) return null;
-              const email = (tds[4]?.textContent || "").trim();
-              const editHref = tr.querySelector("a[href*='user/members']")?.getAttribute("href") || "";
-              const pMatch = editHref.match(/[?&]p=(\d+)/);
-              return {
-                mycytPersonId: pMatch ? Number(pMatch[1]) : null,
-                firstName,
-                lastName,
-                email,
-              };
-            })
-            .filter(Boolean);
-          return { cid, students };
-        };
-        return Promise.all(ids.map(fetchOne));
+        return Promise.all(
+          ids.map(async (cid) => {
+            const url = `/_ajax_load/user-listing-admin2?pageName=searchUsers&session=0&area=0&location=0&show=0&class=${cid}&gender=0&minAge=0&maxAge=0&teachersOnly=n&showFilterCast=n&showFilterCrew=n&listFilterTeachersOnly=n&listFilterArtisticOnly=n&listFilterGuardiansOnly=n`;
+            let html = "";
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const res = await fetch(url, { credentials: "include" });
+                if (res.ok) {
+                  html = await res.text();
+                  break;
+                }
+              } catch {
+                await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+              }
+            }
+            if (!html) return { cid, students: [] };
+            const wrap = document.createElement("div");
+            wrap.innerHTML = /^\s*<tr[\s>]/i.test(html) ? `<table><tbody>${html}</tbody></table>` : html;
+            const students = Array.from(wrap.querySelectorAll("tr"))
+              .map((tr) => {
+                const tds = Array.from(tr.querySelectorAll("td"));
+                if (tds.length < 5) return null;
+                const firstName = (tds[0]?.textContent || "").trim();
+                const lastName = (tds[1]?.textContent || "").trim();
+                if (!firstName && !lastName) return null;
+                const email = (tds[4]?.textContent || "").trim();
+                const editHref = tr.querySelector("a[href*='user/members']")?.getAttribute("href") || "";
+                const pMatch = editHref.match(/[?&]p=(\d+)/);
+                return {
+                  mycytPersonId: pMatch ? Number(pMatch[1]) : null,
+                  firstName,
+                  lastName,
+                  email,
+                };
+              })
+              .filter(Boolean);
+            return { cid, students };
+          })
+        );
       }, batch.map((c) => c.mycytId));
 
       for (const res of batchResults) {
@@ -513,6 +545,7 @@ async function main() {
           `    [${Math.min(i + ROSTER_BATCH, enrolledClasses.length)}/${enrolledClasses.length}] ${totalRosterEntries} roster entries pulled so far...`
         );
       }
+      await page.waitForTimeout(120);
     }
     console.log(`  ✓ Pulled ${classesList.length} class(es) with ${totalRosterEntries} student enrollment(s).`);
 
@@ -594,6 +627,41 @@ async function main() {
     });
     console.log(`  ✓ Pulled ${events.length} event record(s).`);
 
+    // For Charlie Brown / CYT Lite events, also pull linked ticket/registration pages
+    const eventDetails: any[] = [];
+    const targetEvents = events.filter((ev) =>
+      /charlie\s*brown|lite|christmas/i.test(ev.cells.join(" "))
+    );
+    for (const ev of targetEvents.slice(0, 12)) {
+      const detailPages: any[] = [];
+      for (const lk of ev.links) {
+        if (!lk.href || !lk.href.startsWith(BASE_URL)) continue;
+        const rel = lk.href.slice(BASE_URL.length);
+        if (/delete|remove|logout/i.test(rel)) continue;
+        const html = await browserFetchText(page, rel);
+        if (!html) continue;
+        const parsed = await parseHtmlInBrowser<{ title: string; tables: string[][][]; textSample: string }>(
+          page,
+          html,
+          `
+          const title = (root.querySelector("h1, h2, h3")?.textContent || "").replace(/\\s+/g, " ").trim();
+          const tables = Array.from(root.querySelectorAll("table")).map(t =>
+            Array.from(t.querySelectorAll("tr")).map(tr =>
+              Array.from(tr.querySelectorAll("th, td")).map(c => (c.textContent || "").replace(/\\s+/g, " ").trim())
+            ).filter(r => r.some(Boolean))
+          ).filter(t => t.length > 0);
+          const textSample = (root.innerText || root.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 4000);
+          return { title, tables, textSample };
+          `
+        );
+        detailPages.push({ linkText: lk.text, url: rel, ...parsed });
+      }
+      eventDetails.push({ cells: ev.cells, links: ev.links, detailPages });
+    }
+    if (eventDetails.length > 0) {
+      console.log(`  ✓ Pulled detailed pages/ticket tables for ${eventDetails.length} Charlie Brown / Lite event(s).`);
+    }
+
     const fullExport = {
       exportedAt: new Date().toISOString(),
       baseUrl: BASE_URL,
@@ -601,6 +669,7 @@ async function main() {
       locations,
       shows: detailedShows,
       events,
+      eventDetails,
       classes: classesList,
       users,
     };
