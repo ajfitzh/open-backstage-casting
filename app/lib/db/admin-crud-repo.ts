@@ -1151,6 +1151,74 @@ export async function deleteConflictPg(tenant: string, conflictExternalId: numbe
 // 6. ACADEMY CLASSES, ENROLLMENTS & ATTENDANCE
 // ============================================================================
 
+async function resolveClassById(orgId: number, classId: number) {
+  const db = getDb();
+  const [byId] = await db
+    .select()
+    .from(schema.classes)
+    .where(and(eq(schema.classes.organizationId, orgId), eq(schema.classes.id, classId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
+    .select()
+    .from(schema.classes)
+    .where(and(eq(schema.classes.organizationId, orgId), eq(schema.classes.baserowId, classId)))
+    .limit(1);
+  return byBaserow ?? null;
+}
+
+async function resolvePersonByIdFirst(orgId: number, personId: number) {
+  const db = getDb();
+  const [byId] = await db
+    .select()
+    .from(schema.people)
+    .where(and(eq(schema.people.organizationId, orgId), eq(schema.people.id, personId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
+    .select()
+    .from(schema.people)
+    .where(and(eq(schema.people.organizationId, orgId), eq(schema.people.baserowId, personId)))
+    .limit(1);
+  return byBaserow ?? null;
+}
+
+async function resolveSessionByIdFirst(orgId: number, sessionId: number) {
+  const db = getDb();
+  const [byId] = await db
+    .select()
+    .from(schema.sessions)
+    .where(and(eq(schema.sessions.organizationId, orgId), eq(schema.sessions.id, sessionId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
+    .select()
+    .from(schema.sessions)
+    .where(and(eq(schema.sessions.organizationId, orgId), eq(schema.sessions.baserowId, sessionId)))
+    .limit(1);
+  return byBaserow ?? null;
+}
+
+async function resolveSpaceByIdFirst(orgId: number, spaceId: number) {
+  const db = getDb();
+  const [byId] = await db
+    .select()
+    .from(schema.spaces)
+    .where(and(eq(schema.spaces.organizationId, orgId), eq(schema.spaces.id, spaceId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
+    .select()
+    .from(schema.spaces)
+    .where(and(eq(schema.spaces.organizationId, orgId), eq(schema.spaces.baserowId, spaceId)))
+    .limit(1);
+  return byBaserow ?? null;
+}
+
 export async function getAcademyAdminOptionsPg(tenant: string) {
   const orgId = await resolveOrgId(tenant);
   if (!orgId) return { sessions: [], teachers: [], allPeople: [], spaces: [] };
@@ -1163,21 +1231,21 @@ export async function getAcademyAdminOptionsPg(tenant: string) {
   ]);
 
   return {
-    sessions: sessionRows.map((s) => ({ id: extId(s), name: s.name })),
+    sessions: sessionRows.map((s) => ({ id: s.id, name: s.name })),
     teachers: peopleRows
       .filter((p) =>
         (p.roles || []).some((r) =>
           ["Admin", "Executive Director", "Staff", "Teacher", "Contractor", "Education Coordinator"].includes(r)
         )
       )
-      .map((p) => ({ id: extId(p), name: p.fullName, email: p.email || "" })),
+      .map((p) => ({ id: p.id, name: p.fullName, email: p.email || "" })),
     allPeople: peopleRows.map((p) => ({
-      id: extId(p),
+      id: p.id,
       name: p.fullName,
       email: p.email || "",
       phone: p.phone || "",
     })),
-    spaces: spaceRows.map((sp) => ({ id: extId(sp), name: sp.roomName })),
+    spaces: spaceRows.map((sp) => ({ id: sp.id, name: sp.roomName })),
   };
 }
 
@@ -1208,16 +1276,7 @@ export async function createClassAdminPg(
 
   let sessionDbId: number | null = null;
   if (input.sessionId) {
-    const [s] = await db
-      .select()
-      .from(schema.sessions)
-      .where(
-        and(
-          eq(schema.sessions.organizationId, orgId),
-          or(eq(schema.sessions.baserowId, input.sessionId), eq(schema.sessions.id, input.sessionId))
-        )
-      )
-      .limit(1);
+    const s = await resolveSessionByIdFirst(orgId, input.sessionId);
     sessionDbId = s?.id ?? null;
   } else if (input.sessionName?.trim()) {
     const [createdSess] = await db
@@ -1229,22 +1288,13 @@ export async function createClassAdminPg(
 
   let teacherDbId: number | null = null;
   if (input.teacherId) {
-    const t = await resolvePerson(orgId, input.teacherId);
+    const t = await resolvePersonByIdFirst(orgId, input.teacherId);
     teacherDbId = t?.id ?? null;
   }
 
   let spaceDbId: number | null = null;
   if (input.spaceId) {
-    const [sp] = await db
-      .select()
-      .from(schema.spaces)
-      .where(
-        and(
-          eq(schema.spaces.organizationId, orgId),
-          or(eq(schema.spaces.baserowId, input.spaceId), eq(schema.spaces.id, input.spaceId))
-        )
-      )
-      .limit(1);
+    const sp = await resolveSpaceByIdFirst(orgId, input.spaceId);
     spaceDbId = sp?.id ?? null;
   }
 
@@ -1266,7 +1316,7 @@ export async function createClassAdminPg(
     })
     .returning();
 
-  return { success: true, classId: extId(created) };
+  return { success: true, classId: created.id };
 }
 
 export async function updateClassAdminPg(
@@ -1289,16 +1339,7 @@ export async function updateClassAdminPg(
   if (!orgId) return { success: false, error: "Organization not found." };
 
   const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(schema.classes)
-    .where(
-      and(
-        eq(schema.classes.organizationId, orgId),
-        or(eq(schema.classes.baserowId, classExternalId), eq(schema.classes.id, classExternalId))
-      )
-    )
-    .limit(1);
+  const existing = await resolveClassById(orgId, classExternalId);
 
   if (!existing) return { success: false, error: "Class not found." };
 
@@ -1310,7 +1351,7 @@ export async function updateClassAdminPg(
     if (input.teacherId === null) {
       updates.teacherId = null;
     } else {
-      const t = await resolvePerson(orgId, input.teacherId);
+      const t = await resolvePersonByIdFirst(orgId, input.teacherId);
       updates.teacherId = t?.id ?? null;
     }
   }
@@ -1318,16 +1359,7 @@ export async function updateClassAdminPg(
     if (input.spaceId === null) {
       updates.spaceId = null;
     } else {
-      const [sp] = await db
-        .select()
-        .from(schema.spaces)
-        .where(
-          and(
-            eq(schema.spaces.organizationId, orgId),
-            or(eq(schema.spaces.baserowId, input.spaceId), eq(schema.spaces.id, input.spaceId))
-          )
-        )
-        .limit(1);
+      const sp = await resolveSpaceByIdFirst(orgId, input.spaceId);
       updates.spaceId = sp?.id ?? null;
     }
   }
@@ -1351,15 +1383,13 @@ export async function deleteClassAdminPg(tenant: string, classExternalId: number
   const orgId = await resolveOrgId(tenant);
   if (!orgId) return { success: false, error: "Organization not found." };
 
+  const existing = await resolveClassById(orgId, classExternalId);
+  if (!existing) return { success: false, error: "Class not found." };
+
   const db = getDb();
   await db
     .delete(schema.classes)
-    .where(
-      and(
-        eq(schema.classes.organizationId, orgId),
-        or(eq(schema.classes.baserowId, classExternalId), eq(schema.classes.id, classExternalId))
-      )
-    );
+    .where(and(eq(schema.classes.organizationId, orgId), eq(schema.classes.id, existing.id)));
 
   return { success: true };
 }
@@ -1373,19 +1403,10 @@ export async function enrollStudentInClassPg(
   if (!orgId) return { success: false, error: "Organization not found." };
 
   const db = getDb();
-  const [cls] = await db
-    .select()
-    .from(schema.classes)
-    .where(
-      and(
-        eq(schema.classes.organizationId, orgId),
-        or(eq(schema.classes.baserowId, classExternalId), eq(schema.classes.id, classExternalId))
-      )
-    )
-    .limit(1);
+  const cls = await resolveClassById(orgId, classExternalId);
   if (!cls) return { success: false, error: "Class not found." };
 
-  const student = await resolvePerson(orgId, studentExternalId);
+  const student = await resolvePersonByIdFirst(orgId, studentExternalId);
   if (!student) return { success: false, error: "Student not found." };
 
   await db
@@ -1400,11 +1421,12 @@ export async function enrollStudentInClassPg(
   return {
     success: true,
     student: {
-      id: extId(student),
+      id: student.id,
       name: student.fullName,
       age: student.dateOfBirth || "?",
       email: student.email || "",
       phone: student.phone || "",
+      status: "Student",
     },
   };
 }
@@ -1418,19 +1440,10 @@ export async function unenrollStudentFromClassPg(
   if (!orgId) return { success: false, error: "Organization not found." };
 
   const db = getDb();
-  const [cls] = await db
-    .select()
-    .from(schema.classes)
-    .where(
-      and(
-        eq(schema.classes.organizationId, orgId),
-        or(eq(schema.classes.baserowId, classExternalId), eq(schema.classes.id, classExternalId))
-      )
-    )
-    .limit(1);
+  const cls = await resolveClassById(orgId, classExternalId);
   if (!cls) return { success: false, error: "Class not found." };
 
-  const student = await resolvePerson(orgId, studentExternalId);
+  const student = await resolvePersonByIdFirst(orgId, studentExternalId);
   if (!student) return { success: false, error: "Student not found." };
 
   await db
@@ -1455,14 +1468,17 @@ export async function saveClassAttendancePg(
   const orgId = await resolveOrgId(tenant);
   if (!orgId) return { success: false, error: "Organization not found." };
 
+  const cls = await resolveClassById(orgId, classExternalId);
+  const resolvedClassId = cls?.id ?? classExternalId;
+
   const db = getDb();
-  const noteTag = `class:${classExternalId}:${dateIso}`;
+  const noteTag = `class:${resolvedClassId}:${dateIso}`;
   let savedCount = 0;
 
   for (const [studentExtIdStr, status] of Object.entries(statuses)) {
     const studentExtId = Number(studentExtIdStr);
     if (!Number.isFinite(studentExtId) || !status) continue;
-    const student = await resolvePerson(orgId, studentExtId);
+    const student = await resolvePersonByIdFirst(orgId, studentExtId);
     if (!student) continue;
 
     // Replace existing attendance row for this class+date+student

@@ -34,19 +34,21 @@ async function resolveProductionRow(orgId: number, externalProdId: number) {
   return prod ?? null;
 }
 
-async function resolveClassRow(orgId: number, externalClassId: number) {
+async function resolveClassRow(orgId: number, classId: number) {
   const db = getDb();
-  const [cls] = await db
+  const [byId] = await db
     .select()
     .from(schema.classes)
-    .where(
-      and(
-        eq(schema.classes.organizationId, orgId),
-        or(eq(schema.classes.baserowId, externalClassId), eq(schema.classes.id, externalClassId))
-      )
-    )
+    .where(and(eq(schema.classes.organizationId, orgId), eq(schema.classes.id, classId)))
     .limit(1);
-  return cls ?? null;
+  if (byId) return byId;
+
+  const [byBaserow] = await db
+    .select()
+    .from(schema.classes)
+    .where(and(eq(schema.classes.organizationId, orgId), eq(schema.classes.baserowId, classId)))
+    .limit(1);
+  return byBaserow ?? null;
 }
 
 async function resolvePersonRow(orgId: number, externalPersonId: number) {
@@ -132,12 +134,12 @@ export async function getClassesPg(tenantSlug: string) {
       : "Unknown Room";
 
     return {
-      id: extId(row),
+      id: row.id,
       name: row.className || "Unnamed Class",
       session: (row.sessionId && sessionMap.get(row.sessionId)) || "Unknown Session",
       teacher: (row.teacherId && personMap.get(row.teacherId)) || "TBA",
       location: row.location || "Main Campus",
-      spaceId: space?.ext ?? null,
+      spaceId: row.spaceId ?? null,
       spaceName: displaySpaceName,
       roomCapacity: space?.capacity ?? null,
       day: row.day || "TBD",
@@ -195,7 +197,7 @@ export async function getClassByIdPg(tenantSlug: string, externalClassId: number
     : "TBA";
 
   return {
-    id: extId(cls),
+    id: cls.id,
     name: cls.className || "Unnamed Class",
     session: sessionRow[0]?.name || "Unknown",
     teacher: teacherName,
@@ -231,7 +233,7 @@ export async function getClassRosterPg(tenantSlug: string, externalClassId: numb
     );
 
   const roster = enrollmentRows.map(({ person }) => ({
-    id: extId(person),
+    id: person.id,
     name:
       person.fullName ||
       `${person.firstName || ""} ${person.lastName || ""}`.trim() ||
@@ -250,9 +252,9 @@ export async function getClassRosterPg(tenantSlug: string, externalClassId: numb
       .from(schema.people)
       .where(eq(schema.people.id, cls.teacherId))
       .limit(1);
-    if (teacher && !roster.some((r) => r.id === extId(teacher))) {
+    if (teacher && !roster.some((r) => r.id === teacher.id)) {
       roster.unshift({
-        id: extId(teacher),
+        id: teacher.id,
         name:
           teacher.fullName ||
           `${teacher.firstName || ""} ${teacher.lastName || ""}`.trim() ||
@@ -312,10 +314,9 @@ export async function getVenueLogisticsPg(tenantSlug: string) {
     const venueSpaces = spaceRows
       .filter((s) => s.venueId === venue.id)
       .map((space) => {
-        const spaceExternalId = extId(space);
-        const occupiedBy = classesList.filter((cls) => cls.spaceId === spaceExternalId);
+        const occupiedBy = classesList.filter((cls) => cls.spaceId === space.id);
         return {
-          id: spaceExternalId,
+          id: space.id,
           name: space.roomName || "Unnamed Room",
           capacity: space.capacity || 0,
           floorType: space.floorType || "Unknown",

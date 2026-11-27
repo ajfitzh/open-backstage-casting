@@ -46,6 +46,7 @@ export interface ClassStudent {
   age: string | number;
   email: string;
   phone: string;
+  status?: string;
 }
 
 export interface AcademyAdminOptions {
@@ -101,6 +102,9 @@ export default function ClassManagerModal({ tenant = "", cls, adminOptions, onCl
     load();
   }, [cls.id, tenant]);
 
+  const instructors = students.filter((s) => s.status === "Instructor");
+  const enrolledStudents = students.filter((s) => s.status !== "Instructor");
+
   const toggleAttendance = (studentId: number) => {
     const current = attendance[studentId];
     const next = current === "present" ? "late" : current === "late" ? "absent" : "present";
@@ -109,7 +113,7 @@ export default function ClassManagerModal({ tenant = "", cls, adminOptions, onCl
 
   const markAllPresent = () => {
     const update: Record<number, string> = {};
-    students.forEach((s) => (update[s.id] = "present"));
+    enrolledStudents.forEach((s) => (update[s.id] = "present"));
     setAttendance(update);
   };
 
@@ -238,7 +242,7 @@ export default function ClassManagerModal({ tenant = "", cls, adminOptions, onCl
             active={activeTab === "roster"}
             onClick={() => setActiveTab("roster")}
             icon={<Users size={16} />}
-            label={`Roster (${students.length})`}
+            label={`Roster (${enrolledStudents.length})`}
           />
           <TabButton
             active={activeTab === "attendance"}
@@ -307,14 +311,31 @@ export default function ClassManagerModal({ tenant = "", cls, adminOptions, onCl
                     </form>
                   )}
 
-                  {students.length === 0 ? (
+                  {instructors.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {instructors.map((inst) => (
+                        <div
+                          key={`inst-${inst.id}`}
+                          className="bg-blue-500/10 border border-blue-500/20 px-3.5 py-2 rounded-xl flex items-center gap-2.5 text-xs"
+                        >
+                          <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-wider">
+                            Instructor
+                          </span>
+                          <span className="font-bold text-white">{inst.name}</span>
+                          {inst.email && <span className="text-zinc-400">{inst.email}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {enrolledStudents.length === 0 ? (
                     <div className="text-center py-16 opacity-60">
                       <Users size={40} className="mx-auto mb-3 text-zinc-600" />
                       <p className="text-sm text-zinc-400">No students enrolled yet.</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {students.map((student) => (
+                      {enrolledStudents.map((student) => (
                         <div
                           key={student.id}
                           className="bg-zinc-950 border border-white/5 p-4 rounded-xl flex items-start justify-between gap-3 hover:border-white/10 transition-colors"
@@ -376,7 +397,7 @@ export default function ClassManagerModal({ tenant = "", cls, adminOptions, onCl
                       Mark All Present
                     </button>
                   </div>
-                  {students.map((student) => {
+                  {enrolledStudents.map((student) => {
                     const st = attendance[student.id];
                     return (
                       <div
