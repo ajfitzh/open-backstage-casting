@@ -42,6 +42,26 @@ function extId(row: { id: number; baserowId: number | null }): number {
   return row.baserowId ?? row.id;
 }
 
+function normName(s: string | null | undefined): string {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function personMatchesName(
+  row: { fullName: string; firstName: string; lastName: string },
+  expectedName: string
+): boolean {
+  const target = normName(expectedName);
+  if (!target) return true;
+  const full = normName(row.fullName || `${row.firstName} ${row.lastName}`);
+  const combined = normName(`${row.firstName} ${row.lastName}`);
+  return full === target || combined === target;
+}
+
 export async function getPersonProfilePg(
   tenantSlug: string,
   lookup: { personId?: number | null; name?: string | null; email?: string | null },
@@ -53,22 +73,37 @@ export async function getPersonProfilePg(
   const db = getDb();
   let person: typeof schema.people.$inferSelect | undefined;
 
-  // 1. Lookup by external/internal ID
+  // 1. Lookup by internal/external ID (disambiguating id vs baserowId collisions using lookup.name)
   if (lookup.personId && Number.isInteger(lookup.personId) && lookup.personId > 0) {
-    const [byId] = await db
+    const idCandidates = await db
       .select()
       .from(schema.people)
       .where(
         and(
           eq(schema.people.organizationId, org.id),
           or(
-            eq(schema.people.baserowId, lookup.personId),
-            eq(schema.people.id, lookup.personId)
+            eq(schema.people.id, lookup.personId),
+            eq(schema.people.baserowId, lookup.personId)
           )
         )
       )
-      .limit(1);
-    person = byId;
+      .limit(5);
+
+    if (idCandidates.length > 0) {
+      if (lookup.name?.trim()) {
+        // Prefer exact name match among ID candidates (prevents id/baserowId cross-person collision)
+        const nameMatched =
+          idCandidates.find(
+            (r) => r.id === lookup.personId && personMatchesName(r, lookup.name!)
+          ) || idCandidates.find((r) => personMatchesName(r, lookup.name!));
+        if (nameMatched) {
+          person = nameMatched;
+        }
+      } else {
+        person =
+          idCandidates.find((r) => r.id === lookup.personId) || idCandidates[0];
+      }
+    }
   }
 
   // 2. Fallback lookup by email

@@ -55,6 +55,7 @@ export default function PersonProfileModal({
   const [profile, setProfile] = useState<PersonProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedField, setCopiedField] = useState<"email" | "phone" | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -88,7 +89,10 @@ export default function PersonProfileModal({
   }, [onClose]);
 
   const displayName = profile?.name || person.name;
-  const headshot = profile?.headshotUrl || person.headshot || null;
+  const candidateHeadshots = [profile?.headshotUrl, person.headshot].filter(
+    (u): u is string => Boolean(u && u !== failedSrc)
+  );
+  const headshot = candidateHeadshots[0] || null;
   const email = profile?.email || person.email || "";
   const phone = profile?.phone || person.phone || "";
   const initials = person.initials || computeInitials(displayName);
@@ -124,6 +128,7 @@ export default function PersonProfileModal({
               <img
                 src={headshot}
                 alt={displayName}
+                onError={() => setFailedSrc(headshot)}
                 className="w-full h-full object-cover object-top"
               />
             ) : (
