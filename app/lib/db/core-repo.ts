@@ -105,6 +105,42 @@ export async function findWorkspacesForEmailPg(email: string) {
   return { matched, otherTenants };
 }
 
+function scoreEmailAccountCandidate(person: typeof schema.people.$inferSelect): number {
+  const primary = derivePrimaryAppRole(person.roles || []);
+  let score = 0;
+  if (primary === "Admin") score += 1000;
+  else if (primary === "Staff") score += 500;
+  else if (primary === "Volunteer") score += 300;
+  else if (primary === "Parent/Guardian") score += 200;
+  else if (primary !== "Guest") score += 100;
+  if (person.passwordHash) score += 50;
+  return score;
+}
+
+async function findBestPersonByEmail(orgId: number, cleanEmail: string) {
+  const db = getDb();
+  const candidates = await db
+    .select()
+    .from(schema.people)
+    .where(
+      and(
+        eq(schema.people.organizationId, orgId),
+        or(
+          eq(schema.people.email, cleanEmail),
+          eq(schema.people.secondaryEmail, cleanEmail)
+        )
+      )
+    )
+    .limit(25);
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    const diff = scoreEmailAccountCandidate(b) - scoreEmailAccountCandidate(a);
+    return diff !== 0 ? diff : a.id - b.id;
+  });
+  return candidates[0];
+}
+
 export async function findUserByEmailPg(tenantSlug: string, email: string) {
   const org = await getOrganizationBySlugPg(tenantSlug);
   if (!org) return null;
@@ -112,21 +148,7 @@ export async function findUserByEmailPg(tenantSlug: string, email: string) {
   const cleanEmail = (email || "").trim().toLowerCase();
   if (!cleanEmail) return null;
 
-  const db = getDb();
-  const [person] = await db
-    .select()
-    .from(schema.people)
-    .where(
-      and(
-        eq(schema.people.organizationId, org.id),
-        or(
-          eq(schema.people.email, cleanEmail),
-          eq(schema.people.secondaryEmail, cleanEmail)
-        )
-      )
-    )
-    .limit(1);
-
+  const person = await findBestPersonByEmail(org.id, cleanEmail);
   if (!person) return null;
 
   return {
@@ -157,20 +179,7 @@ export async function getUserProfilePg(tenantSlug: string, email: string) {
   const cleanEmail = (email || "").trim().toLowerCase();
   const db = getDb();
 
-  const [person] = await db
-    .select()
-    .from(schema.people)
-    .where(
-      and(
-        eq(schema.people.organizationId, org.id),
-        or(
-          eq(schema.people.email, cleanEmail),
-          eq(schema.people.secondaryEmail, cleanEmail)
-        )
-      )
-    )
-    .limit(1);
-
+  const person = await findBestPersonByEmail(org.id, cleanEmail);
   if (!person) return null;
 
   let familyMembers: Array<{
@@ -385,18 +394,7 @@ export async function findUserByEmailClientPg(tenantSlug: string, email: string)
   const cleanEmail = (email || "").trim().toLowerCase();
   if (!cleanEmail) return null;
 
-  const db = getDb();
-  const [person] = await db
-    .select()
-    .from(schema.people)
-    .where(
-      and(
-        eq(schema.people.organizationId, org.id),
-        or(eq(schema.people.email, cleanEmail), eq(schema.people.secondaryEmail, cleanEmail))
-      )
-    )
-    .limit(1);
-
+  const person = await findBestPersonByEmail(org.id, cleanEmail);
   if (!person) return null;
   const roles = Array.isArray(person.roles) && person.roles.length > 0 ? person.roles : ["Guest"];
   const primaryRole = roles.includes("Admin")
