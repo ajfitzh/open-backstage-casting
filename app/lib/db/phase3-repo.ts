@@ -4,7 +4,7 @@
 // - Venue Reserved Seating Map CRUD (seats table)
 // - Printable Avery QR Label Inventory Queries
 
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getOrganizationBySlugPg } from "./core-repo";
 import { computeClassAvailability, type SeatDraft, type SeatStatus } from "../phase3-helpers";
@@ -240,6 +240,152 @@ export async function listVenueSeatsPg(tenantSlug: string) {
     })),
     seatsByVenue,
   };
+}
+
+export interface VenueExplorerSeat {
+  id: number;
+  section: string;
+  rowLabel: string;
+  seatNumber: number;
+  status: string;
+  gridX: number;
+  gridY: number;
+}
+
+export interface VenueExplorerItem {
+  id: number;
+  name: string;
+  address: string | null;
+  type: string | null;
+  seatingCapacity: number;
+  seatCount: number;
+  sections: { name: string; count: number }[];
+  seats: VenueExplorerSeat[];
+  showCount: number;
+  recentShows: { id: number; title: string; sessionLabel: string | null; status: string | null }[];
+  totalTicketsSold: number;
+  performanceCount: number;
+}
+
+export async function getVenueExplorerDataPg(tenantSlug: string): Promise<VenueExplorerItem[]> {
+  const org = await getOrganizationBySlugPg(tenantSlug);
+  if (!org) return [];
+
+  const db = getDb();
+  const [venueRows, seatRows, prodRows, perfRows] = await Promise.all([
+    db
+      .select()
+      .from(schema.venues)
+      .where(eq(schema.venues.organizationId, org.id))
+      .orderBy(asc(schema.venues.name)),
+    db
+      .select({
+        id: schema.seats.id,
+        venueId: schema.seats.venueId,
+        section: schema.seats.section,
+        rowLabel: schema.seats.rowLabel,
+        seatNumber: schema.seats.seatNumber,
+        status: schema.seats.status,
+        gridX: schema.seats.gridX,
+        gridY: schema.seats.gridY,
+      })
+      .from(schema.seats)
+      .where(eq(schema.seats.organizationId, org.id))
+      .orderBy(asc(schema.seats.gridY), asc(schema.seats.gridX), asc(schema.seats.seatNumber)),
+    db
+      .select({
+        id: schema.productions.id,
+        venueId: schema.productions.venueId,
+        title: schema.productions.title,
+        sessionLabel: schema.productions.sessionLabel,
+        status: schema.productions.status,
+      })
+      .from(schema.productions)
+      .where(eq(schema.productions.organizationId, org.id))
+      .orderBy(desc(schema.productions.id)),
+    db
+      .select({
+        productionId: schema.performances.productionId,
+        ticketsSold: schema.performances.ticketsSold,
+      })
+      .from(schema.performances)
+      .where(eq(schema.performances.organizationId, org.id)),
+  ]);
+
+  const seatsByVenue = new Map<number, VenueExplorerSeat[]>();
+  for (const s of seatRows) {
+    if (!s.venueId) continue;
+    const list = seatsByVenue.get(s.venueId) || [];
+    list.push({
+      id: s.id,
+      section: s.section || "Orchestra",
+      rowLabel: s.rowLabel || "A",
+      seatNumber: s.seatNumber || 1,
+      status: (s.status || "available").toLowerCase(),
+      gridX: s.gridX ?? 0,
+      gridY: s.gridY ?? 0,
+    });
+    seatsByVenue.set(s.venueId, list);
+  }
+
+  const perfStatsByProd = new Map<number, { sold: number; count: number }>();
+  for (const pf of perfRows) {
+    if (!pf.productionId) continue;
+    const cur = perfStatsByProd.get(pf.productionId) || { sold: 0, count: 0 };
+    cur.sold += Number(pf.ticketsSold || 0);
+    cur.count += 1;
+    perfStatsByProd.set(pf.productionId, cur);
+  }
+
+  const prodsByVenue = new Map<number, typeof prodRows>();
+  for (const p of prodRows) {
+    if (!p.venueId) continue;
+    const list = prodsByVenue.get(p.venueId) || [];
+    list.push(p);
+    prodsByVenue.set(p.venueId, list);
+  }
+
+  return venueRows.map((v) => {
+    const seats = seatsByVenue.get(v.id) || [];
+    const secMap = new Map<string, number>();
+    for (const s of seats) {
+      secMap.set(s.section, (secMap.get(s.section) || 0) + 1);
+    }
+    const sections = Array.from(secMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const vProds = prodsByVenue.get(v.id) || [];
+    let totalTicketsSold = 0;
+    let performanceCount = 0;
+    for (const p of vProds) {
+      const st = perfStatsByProd.get(p.id);
+      if (st) {
+        totalTicketsSold += st.sold;
+        performanceCount += st.count;
+      }
+    }
+
+    return {
+      id: v.id,
+      name: v.name,
+      address: v.address || null,
+      type: v.type || null,
+      seatingCapacity: v.seatingCapacity ?? seats.length ?? 0,
+      seatCount: seats.length,
+      sections,
+      seats,
+      showCount: vProds.length,
+      recentShows: vProds.slice(0, 6).map((p) => ({
+        id: p.id,
+        title: p.title,
+        sessionLabel: p.sessionLabel,
+        status: p.status,
+      })),
+      totalTicketsSold,
+      performanceCount,
+    };
+  });
 }
 
 export async function saveVenueSeatsPg(

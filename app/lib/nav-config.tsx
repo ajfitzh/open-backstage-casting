@@ -3,7 +3,7 @@ import {
   Users, Calendar, UserSquare2, AlertOctagon, BarChart3, VenetianMask, 
   Mic2, Megaphone, LayoutGrid, GraduationCap, Theater, Banknote, 
   SlidersHorizontal, Sparkles, FilePlus, Home, 
-  UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors, Wrench, Ticket
+  UserCircle, ClipboardList, BookOpen, Mic, UserCheck, Scissors, Wrench, Ticket, MapPin
 } from 'lucide-react';
 
 export const NAV_CONFIG = [
@@ -81,6 +81,7 @@ export const NAV_CONFIG = [
         ]
       },
       { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
+      { label: "Venues & Seating", href: "/venues", icon: MapPin, permission: "view_cast_list" },
     ]
   },
   {

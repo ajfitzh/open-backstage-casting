@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Accessibility, Armchair, Grid, Loader2, Save, Sparkles } from "lucide-react";
 import { getVenueSeatsAction, saveVenueSeatsAction } from "@/app/actions/phase3-ops";
+import VenueSeatingChart from "./VenueSeatingChart";
 import {
   generateVenueSeatGrid,
   nextSeatStatus,
@@ -250,11 +251,28 @@ export default function SeatingMapBuilder({ tenant }: { tenant: string }) {
           No seats configured yet for this venue. Click <strong>Generate Grid</strong> above to start.
         </div>
       ) : (
-        <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 overflow-x-auto space-y-4">
-          <div className="max-w-md mx-auto py-2 rounded-b-3xl bg-gradient-to-b from-blue-600/20 to-transparent border-b-2 border-blue-500/50 text-center text-[10px] font-black uppercase tracking-[0.35em] text-blue-300">
-            Stage
+        <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 space-y-5">
+          {/* Interactive 2D SVG Auditorium Chart */}
+          <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-3">
+            <VenueSeatingChart
+              venueName={venues.find((v) => v.id === selectedVenueId)?.name || "Venue"}
+              seats={currentSeats.map((s, idx) => ({
+                id: s.id ?? idx + 1,
+                section: s.section,
+                rowLabel: s.rowLabel,
+                seatNumber: s.seatNumber,
+                status: s.status,
+                gridX: s.gridX,
+                gridY: s.gridY,
+              }))}
+            />
           </div>
-          <div className="space-y-2 min-w-max">
+
+          <div className="overflow-x-auto space-y-3">
+            <div className="max-w-md mx-auto py-1.5 rounded-b-3xl bg-gradient-to-b from-blue-600/20 to-transparent border-b-2 border-blue-500/50 text-center text-[10px] font-black uppercase tracking-[0.3em] text-blue-300">
+              Seat Status Editor (Click to Toggle)
+            </div>
+            <div className="space-y-2 min-w-max">
             {rowsGrouped.map(([rowKey, seats]) => (
               <div key={rowKey} className="flex items-center gap-2">
                 <span className="w-28 shrink-0 text-[10px] font-black uppercase text-zinc-500 truncate">
@@ -278,6 +296,7 @@ export default function SeatingMapBuilder({ tenant }: { tenant: string }) {
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
