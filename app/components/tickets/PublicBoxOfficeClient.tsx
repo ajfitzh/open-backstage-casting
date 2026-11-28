@@ -74,17 +74,33 @@ export default function PublicBoxOfficeClient({
   tenant,
   orgName,
   shows,
+  initialProductionId,
   wasCanceled,
 }: {
   tenant: string;
   orgName: string;
   shows: PublicShow[];
+  initialProductionId?: number | null;
   wasCanceled?: boolean;
 }) {
+  const orderedShows = useMemo(() => {
+    if (!initialProductionId) return shows;
+    const idx = shows.findIndex((s) => s.productionId === initialProductionId);
+    if (idx <= 0) return shows;
+    return [shows[idx], ...shows.slice(0, idx), ...shows.slice(idx + 1)];
+  }, [shows, initialProductionId]);
+
   const [selectedPerf, setSelectedPerf] = useState<{
     show: PublicShow;
     perf: PerformanceOption;
   } | null>(() => {
+    if (initialProductionId) {
+      const targetShow = shows.find((s) => s.productionId === initialProductionId);
+      if (targetShow) {
+        const open = targetShow.performances.find((p) => p.remainingSeats > 0) || targetShow.performances[0];
+        if (open) return { show: targetShow, perf: open };
+      }
+    }
     for (const s of shows) {
       const open = s.performances.find((p) => p.remainingSeats > 0);
       if (open) return { show: s, perf: open };
@@ -258,7 +274,7 @@ export default function PublicBoxOfficeClient({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Left: Show, Performance & Interactive Seat Picker */}
             <div className="lg:col-span-7 space-y-6">
-              {shows.map((show) => (
+              {orderedShows.map((show) => (
                 <section
                   key={show.productionId}
                   className="bg-zinc-900 border border-white/10 rounded-3xl p-5 sm:p-6 space-y-4"

@@ -117,14 +117,16 @@ export default function BoxOfficeClient({
   const [savingPerf, setSavingPerf] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const storefrontPath = `/tickets?show=${productionId}`;
+
   const handleCopyStorefront = async () => {
     try {
-      const url = `${window.location.origin}/tickets`;
+      const url = `${window.location.origin}${storefrontPath}`;
       await navigator.clipboard.writeText(url);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     } catch {
-      window.open("/tickets", "_blank");
+      window.open(storefrontPath, "_blank");
     }
   };
 
@@ -217,7 +219,7 @@ export default function BoxOfficeClient({
             {copiedLink ? "Storefront Link Copied" : "Copy Public Ticket Link"}
           </button>
           <a
-            href="/tickets"
+            href={storefrontPath}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white flex items-center gap-2"
