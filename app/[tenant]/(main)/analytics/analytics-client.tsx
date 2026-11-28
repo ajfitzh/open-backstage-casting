@@ -140,11 +140,12 @@ export default function AnalyticsDashboard({
   const [chartMode, setChartMode] = useState<'fill' | 'sales' | 'profit'>('sales');
   
   const [era, setEra] = useState<'Post-COVID' | 'All Time'>('Post-COVID');
+  const [compRate, setCompRate] = useState<number>(10);
   const [rentEstimates, setRentEstimates] = useState<Record<string, number>>(() => ({
       "Fredericksburg Academy": 2500,
       "Spotsylvania High School": 3000,
       "King George High School": 1500,
-      "Kingdom Baptist Church": 500,
+      "Kingdom Baptist Church": 0,
       ...initialRentEstimates,
   }));
   const rentTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -189,7 +190,11 @@ export default function AnalyticsDashboard({
       const count = shows.length;
       
       const totalSold = shows.reduce((acc, s) => acc + (s.totalSold || 0), 0);
-      const totalRev = shows.reduce((acc, s) => acc + (s.revenue || ((s.totalSold || 0) * ticketPrice)), 0);
+      const paidMultiplier = Math.max(0, 1 - compRate / 100);
+      const totalRev = shows.reduce(
+        (acc, s) => acc + Math.round((s.revenue || ((s.totalSold || 0) * ticketPrice)) * paidMultiplier),
+        0
+      );
       const totalRent = shows.reduce((acc, s) => {
           const venueStr = getBaserowString(s.venue || s.Venue);
           return acc + (rentEstimates[venueStr] || 0);
@@ -202,7 +207,7 @@ export default function AnalyticsDashboard({
         avgSold: count > 0 ? Math.round(totalSold / count) : 0,
       };
     });
-  }, [tieredShows, rentEstimates, ticketPrice]);
+  }, [tieredShows, rentEstimates, ticketPrice, compRate]);
 
   const filteredShows = useMemo(() => {
     let data = tieredShows;
@@ -231,7 +236,8 @@ export default function AnalyticsDashboard({
         
         const sales = show.totalSold || 0;
         const grossRevenue = typeof show.revenue === "number" ? show.revenue : sales * ticketPrice;
-        const profit = grossRevenue - rent;
+        const paidRevenue = Math.round(grossRevenue * Math.max(0, 1 - compRate / 100));
+        const profit = paidRevenue - rent;
         
         return {
             name: getBaserowString(show.name || show['Full Title'] || show.Title),
@@ -249,7 +255,7 @@ export default function AnalyticsDashboard({
         if (a.year !== b.year) return a.year - b.year; 
         return a.termOrder - b.termOrder; 
     });
-  }, [tieredShows, rentEstimates, ticketPrice, performanceData]); // 👇 CHANGED: updated dependency
+  }, [tieredShows, rentEstimates, ticketPrice, performanceData, compRate]);
 
   // 🟢 EXPERT FIX 2: Year-Over-Year Averages (Not Sums)
   const seasonHistoryData = useMemo(() => {
@@ -356,7 +362,29 @@ export default function AnalyticsDashboard({
         </div>
 
         {!selectedShow && (
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              title="Discount raw ticket counts for free/comped seats (cast families, VIPs, sponsors)"
+              className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1"
+            >
+              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                Comps
+              </span>
+              {[0, 10, 15, 20].map((pct) => (
+                <button
+                  key={pct}
+                  onClick={() => setCompRate(pct)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all ${
+                    compRate === pct
+                      ? "bg-amber-500/25 text-amber-300 border border-amber-500/40"
+                      : "text-zinc-500 hover:text-white hover:bg-zinc-800"
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
                 <div className="px-2 text-zinc-500"><Clock size={14}/></div>
                 <button onClick={() => setEra('Post-COVID')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${era === 'Post-COVID' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}>Post-2021</button>
@@ -383,7 +411,35 @@ export default function AnalyticsDashboard({
           <div className="absolute inset-0 overflow-y-auto p-8 custom-scrollbar space-y-8">
             
             {activeTab === 'overview' && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                  {/* Plain-English Guide to Key Theater Numbers */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-3.5 text-xs">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">
+                        1. Fill Rate (Target: 70–90%)
+                      </p>
+                      <p className="text-zinc-400 leading-relaxed">
+                        Shows if a venue is too big (paying for empty seats) or too small (turning away families).
+                      </p>
+                    </div>
+                    <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-3.5 text-xs">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">
+                        2. Comps Discount ({compRate}% active)
+                      </p>
+                      <p className="text-zinc-400 leading-relaxed">
+                        Reduces gross face value for free cast/VIP/sponsor tickets so estimated revenue stays realistic.
+                      </p>
+                    </div>
+                    <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-3.5 text-xs">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-1">
+                        3. Net After Venue Rent
+                      </p>
+                      <p className="text-zinc-400 leading-relaxed">
+                        Paid box office minus theater rent. <span className="text-zinc-200 font-semibold">Kingdom Baptist HQ = $0 extra</span> (covered by your $3,125/mo lease).
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="flex flex-col xl:flex-row gap-6 h-auto xl:h-[450px]">
                       <div className="flex-1 bg-zinc-900/50 border border-white/5 p-6 rounded-[2rem] flex flex-col">
                           <div className="flex justify-between items-start mb-6">

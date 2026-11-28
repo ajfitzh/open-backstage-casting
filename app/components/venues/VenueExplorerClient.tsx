@@ -90,10 +90,36 @@ function inferMarket(venue: VenueExplorerItem): MarketKey {
   return "Other";
 }
 
+function isHqVenue(name: string): boolean {
+  return name.toLowerCase().includes("kingdom baptist");
+}
+
+function isRetiredVenue(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    n.includes("old--do not use") ||
+    n === "location tbd" ||
+    n.includes("cyt warehouse") ||
+    n.includes("cyt studio") ||
+    n.startsWith("cyt theater") ||
+    n === "cyt online"
+  );
+}
+
+/** Detect layout permutations (e.g. "Spotsylvania High School-(No orchestra)") and extract base venue name + variant label. */
+function parseVenueVariant(name: string): { baseName: string; variantLabel: string | null } {
+  const m = name.match(/^(.+?)\s*[-–]?\s*\(([^)]+)\)\s*$/);
+  if (!m) return { baseName: name.trim(), variantLabel: null };
+  const base = m[1].replace(/[-–]+$/, "").trim();
+  const variant = m[2].trim();
+  if (/old--do not use/i.test(variant)) return { baseName: name.trim(), variantLabel: null };
+  return { baseName: base, variantLabel: variant };
+}
+
 function defaultEstimatedCost(venue: VenueExplorerItem): number {
   const n = venue.name.toLowerCase();
   const cap = venue.seatCount || venue.seatingCapacity || 0;
-  if (n.includes("online") || n.includes("tbd")) return 0;
+  if (isHqVenue(n) || n.includes("online") || n.includes("tbd")) return 0;
   if (n.includes("cyt theater") || n.includes("cyt studio") || n.includes("cyt warehouse"))
     return 1200;
   if (n.includes("high school") || n.includes("middle school")) {
@@ -121,6 +147,8 @@ export default function VenueExplorerClient({
   const [sizeFilter, setSizeFilter] = useState<SizeFilter>("all");
   const [marketFilter, setMarketFilter] = useState<MarketKey | "All">("All");
   const [sortMode, setSortMode] = useState<SortMode>("charts");
+  const [showRetired, setShowRetired] = useState(false);
+  const [selectedVariantByBase, setSelectedVariantByBase] = useState<Record<number, number>>({});
 
   // Season scheduling revenue simulator controls
   const [ticketPrice, setTicketPrice] = useState(15);
@@ -162,12 +190,51 @@ export default function VenueExplorerClient({
     });
   };
 
-  // Hide obvious retired/junk entries unless searched explicitly
+  // Group layout permutations (e.g. "Spotsylvania High School-(No orchestra)") under their parent venue
+  const { groupedVenues, retiredCount } = useMemo(() => {
+    const byBase = new Map<string, { primary: VenueExplorerItem; variants: { label: string; venue: VenueExplorerItem }[] }>();
+    let retired = 0;
+
+    // First pass: register base venues (those without parenthetical variant suffix)
+    for (const v of venues) {
+      if (isRetiredVenue(v.name)) retired++;
+      const parsed = parseVenueVariant(v.name);
+      if (!parsed.variantLabel) {
+        const key = parsed.baseName.toLowerCase();
+        if (!byBase.has(key)) {
+          byBase.set(key, {
+            primary: v,
+            variants: [{ label: "Standard", venue: v }],
+          });
+        }
+      }
+    }
+
+    // Second pass: attach variant venues to their parent if present, else keep standalone
+    const standalone: { primary: VenueExplorerItem; variants: { label: string; venue: VenueExplorerItem }[] }[] = [];
+    for (const v of venues) {
+      const parsed = parseVenueVariant(v.name);
+      if (!parsed.variantLabel) continue;
+      const key = parsed.baseName.toLowerCase();
+      const parent = byBase.get(key);
+      if (parent) {
+        parent.variants.push({ label: parsed.variantLabel, venue: v });
+      } else {
+        standalone.push({ primary: v, variants: [{ label: "Standard", venue: v }] });
+      }
+    }
+
+    return {
+      groupedVenues: [...Array.from(byBase.values()), ...standalone],
+      retiredCount: retired,
+    };
+  }, [venues]);
+
   const visibleVenues = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return venues
-      .filter((v) => {
-        if (!q && /\(old--do not use\)|^location tbd$/i.test(v.name.trim())) {
+    return groupedVenues
+      .filter(({ primary: v }) => {
+        if (!q && !showRetired && isRetiredVenue(v.name)) {
           return false;
         }
         if (q) {
@@ -182,7 +249,9 @@ export default function VenueExplorerClient({
         if (marketFilter !== "All" && inferMarket(v) !== marketFilter) return false;
         return true;
       })
-      .sort((a, b) => {
+      .sort((aEntry, bEntry) => {
+        const a = aEntry.primary;
+        const b = bEntry.primary;
         const capA = a.seatCount || a.seatingCapacity || 0;
         const capB = b.seatCount || b.seatingCapacity || 0;
         if (sortMode === "charts") {
@@ -201,7 +270,7 @@ export default function VenueExplorerClient({
         if (sortMode === "cost_asc") return getVenueCost(a) - getVenueCost(b);
         return a.name.localeCompare(b.name);
       });
-  }, [venues, search, sizeFilter, marketFilter, sortMode, customCosts]);
+  }, [groupedVenues, search, showRetired, sizeFilter, marketFilter, sortMode, customCosts]);
 
   const stats = useMemo(() => {
     const withCharts = venues.filter((v) => v.seatCount > 0);
@@ -414,6 +483,19 @@ export default function VenueExplorerClient({
               );
             }
           )}
+          {retiredCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowRetired((prev) => !prev)}
+              className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                showRetired
+                  ? "bg-amber-500/15 border-amber-400/40 text-amber-300"
+                  : "bg-zinc-900/60 border-white/5 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {showRetired ? "Hiding" : "Show"} Retired Venues ({retiredCount})
+            </button>
+          )}
         </div>
       </div>
 
@@ -424,11 +506,14 @@ export default function VenueExplorerClient({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {visibleVenues.map((venue) => {
+          {visibleVenues.map(({ primary, variants }) => {
+            const activeVariantId = selectedVariantByBase[primary.id] ?? primary.id;
+            const venue = variants.find((v) => v.venue.id === activeVariantId)?.venue ?? primary;
+            const isHq = isHqVenue(primary.name);
             const market = inferMarket(venue);
             const mktStyle = MARKET_STYLES[market];
             const effectiveCap = venue.seatCount || venue.seatingCapacity || 0;
-            const estCost = getVenueCost(venue);
+            const estCost = getVenueCost(primary);
             const projectedTickets = Math.round(
               effectiveCap * (fillPercent / 100) * performancesPerRun
             );
@@ -437,7 +522,7 @@ export default function VenueExplorerClient({
 
             return (
               <div
-                key={venue.id}
+                key={primary.id}
                 onClick={() => {
                   setSelectedVenue(venue);
                   setActiveSection(null);
@@ -486,15 +571,53 @@ export default function VenueExplorerClient({
                 <div className="p-5 flex-1 flex flex-col justify-between gap-4">
                   <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-base font-black text-white group-hover:text-blue-300 transition-colors leading-snug">
-                        {venue.name}
-                      </h3>
-                      {venue.showCount > 0 && (
+                      <div>
+                        <h3 className="text-base font-black text-white group-hover:text-blue-300 transition-colors leading-snug">
+                          {primary.name}
+                        </h3>
+                        {isHq && (
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-black text-emerald-300">
+                            HQ • Included in $3,125/mo Lease ($0/show)
+                          </span>
+                        )}
+                      </div>
+                      {primary.showCount > 0 && (
                         <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 border border-blue-400/25 text-[10px] font-black text-blue-300">
-                          <Theater size={10} /> {venue.showCount}
+                          <Theater size={10} /> {primary.showCount}
                         </span>
                       )}
                     </div>
+
+                    {variants.length > 1 && (
+                      <div
+                        className="flex flex-wrap gap-1 pt-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {variants.map((variant) => {
+                          const isSelected = variant.venue.id === venue.id;
+                          const vCap = variant.venue.seatCount || variant.venue.seatingCapacity || 0;
+                          return (
+                            <button
+                              key={variant.venue.id}
+                              type="button"
+                              onClick={() =>
+                                setSelectedVariantByBase((prev) => ({
+                                  ...prev,
+                                  [primary.id]: variant.venue.id,
+                                }))
+                              }
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+                                isSelected
+                                  ? "bg-blue-600/25 border-blue-400/50 text-blue-200"
+                                  : "bg-zinc-950 border-white/10 text-zinc-400 hover:text-white"
+                              }`}
+                            >
+                              {variant.label} ({vCap})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {venue.address && !/^tbd|verify/i.test(venue.address) ? (
                       <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 truncate">

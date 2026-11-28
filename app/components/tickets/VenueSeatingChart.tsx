@@ -45,20 +45,35 @@ export default function VenueSeatingChart({
     const sectionOrder = Array.from(new Set(seats.map((s) => s.section))).sort();
     const sectionIndexMap = new Map(sectionOrder.map((name, idx) => [name, idx]));
 
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
+    // Compress huge empty coordinate gaps (e.g. MyCYT's +100 section offsets like 1..15, 101..126, 201..215)
+    // into clean, realistic aisles so auditorium sections fill the chart cleanly instead of leaving huge voids.
+    const compressAxis = (values: number[], maxGap: number, aisleSize: number) => {
+      const sorted = Array.from(new Set(values)).sort((a, b) => a - b);
+      const map = new Map<number, number>();
+      if (sorted.length === 0) return { map, min: 0, max: 1 };
+      let cursor = 0;
+      map.set(sorted[0], 0);
+      for (let i = 1; i < sorted.length; i++) {
+        const diff = sorted[i] - sorted[i - 1];
+        cursor += diff > maxGap ? aisleSize : diff;
+        map.set(sorted[i], cursor);
+      }
+      return { map, min: 0, max: Math.max(1, cursor) };
+    };
 
-    for (const s of seats) {
-      if (s.gridX < minX) minX = s.gridX;
-      if (s.gridX > maxX) maxX = s.gridX;
-      if (s.gridY < minY) minY = s.gridY;
-      if (s.gridY > maxY) maxY = s.gridY;
-    }
+    const xAxis = compressAxis(
+      seats.map((s) => s.gridX),
+      3,
+      2.6
+    );
+    const yAxis = compressAxis(
+      seats.map((s) => s.gridY),
+      2.5,
+      2.0
+    );
 
-    const spanX = Math.max(1, maxX - minX);
-    const spanY = Math.max(1, maxY - minY);
+    const spanX = xAxis.max;
+    const spanY = yAxis.max;
 
     // Normalize into a clean widescreen SVG canvas
     const width = 640;
@@ -73,21 +88,23 @@ export default function VenueSeatingChart({
     const density = seats.length;
     const radius = compact
       ? density > 600
-        ? 2.2
+        ? 2.6
         : density > 300
-          ? 2.9
-          : 4.2
+          ? 3.3
+          : 4.5
       : density > 600
-        ? 3.1
+        ? 3.6
         : density > 300
-          ? 4.0
-          : 6.0;
+          ? 4.4
+          : 6.2;
 
     // Compute distinct row labels along Y for subtle left/right row guides in full mode
     const rowYMap = new Map<string, number>();
     const points = seats.map((s) => {
-      const nx = padX + ((s.gridX - minX) / spanX) * usableW;
-      const ny = stageHeight + 12 + ((s.gridY - minY) / spanY) * (usableH - 20);
+      const cxVal = xAxis.map.get(s.gridX) ?? 0;
+      const cyVal = yAxis.map.get(s.gridY) ?? 0;
+      const nx = padX + (cxVal / spanX) * usableW;
+      const ny = stageHeight + 12 + (cyVal / spanY) * (usableH - 20);
       if (!rowYMap.has(s.rowLabel)) {
         rowYMap.set(s.rowLabel, ny);
       }
