@@ -30,20 +30,24 @@ function personDisplayName(person: {
 
 async function resolveProductionRow(orgId: number, externalProdId: number) {
   const db = getDb();
-  const [prod] = await db
+  const [byId] = await db
+    .select()
+    .from(schema.productions)
+    .where(and(eq(schema.productions.organizationId, orgId), eq(schema.productions.id, externalProdId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
     .select()
     .from(schema.productions)
     .where(
       and(
         eq(schema.productions.organizationId, orgId),
-        or(
-          eq(schema.productions.baserowId, externalProdId),
-          eq(schema.productions.id, externalProdId)
-        )
+        eq(schema.productions.baserowId, externalProdId)
       )
     )
     .limit(1);
-  return prod ?? null;
+  return byBaserow ?? null;
 }
 
 async function resolveEventRow(orgId: number, externalEventId: number) {
@@ -1113,7 +1117,7 @@ export async function getPerformanceAnalyticsPg(tenantSlug: string) {
     db.select().from(schema.performances).where(eq(schema.performances.organizationId, org.id)),
     db.select().from(schema.productions).where(eq(schema.productions.organizationId, org.id)),
   ]);
-  const prodExtMap = new Map(prodRows.map((p) => [p.id, extId(p)]));
+  const prodExtMap = new Map(prodRows.map((p) => [p.id, p.id]));
 
   return perfRows.map((row) => {
     const sold = Number(row.ticketsSold || 0);
@@ -1138,7 +1142,7 @@ export async function getPerformancesClientPg(tenantSlug: string) {
     db.select().from(schema.performances).where(eq(schema.performances.organizationId, org.id)),
     db.select().from(schema.productions).where(eq(schema.productions.organizationId, org.id)),
   ]);
-  const prodMap = new Map(prodRows.map((p) => [p.id, { id: extId(p), value: p.title }]));
+  const prodMap = new Map(prodRows.map((p) => [p.id, { id: p.id, value: p.title }]));
 
   return perfRows.map((row) => ({
     id: extId(row),
@@ -1275,7 +1279,7 @@ export async function getProductionClientPg(tenantSlug: string, externalProdId: 
   if (!org) return null;
   const prod = await resolveProductionRow(org.id, externalProdId);
   if (!prod) return null;
-  return { id: extId(prod), title: prod.title || "Unknown Show" };
+  return { id: prod.id, title: prod.title || "Unknown Show" };
 }
 
 export async function getRosterForShowClientPg(tenantSlug: string, externalProdId: number) {

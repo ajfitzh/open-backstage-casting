@@ -25,6 +25,8 @@ export interface OrganizationSettings {
   timezone?: string;
   waiverText?: string;
   committeeTemplates?: string[];
+  venueCostEstimates?: Record<string, number>;
+  committeeTargetsByShow?: Record<string, Record<string, number>>;
 }
 
 export const organizations = pgTable(

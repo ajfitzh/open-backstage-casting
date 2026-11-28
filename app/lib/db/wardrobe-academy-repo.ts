@@ -18,20 +18,24 @@ function extId(row: { id: number; baserowId?: number | null }): number {
 
 async function resolveProductionRow(orgId: number, externalProdId: number) {
   const db = getDb();
-  const [prod] = await db
+  const [byId] = await db
+    .select()
+    .from(schema.productions)
+    .where(and(eq(schema.productions.organizationId, orgId), eq(schema.productions.id, externalProdId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
     .select()
     .from(schema.productions)
     .where(
       and(
         eq(schema.productions.organizationId, orgId),
-        or(
-          eq(schema.productions.baserowId, externalProdId),
-          eq(schema.productions.id, externalProdId)
-        )
+        eq(schema.productions.baserowId, externalProdId)
       )
     )
     .limit(1);
-  return prod ?? null;
+  return byBaserow ?? null;
 }
 
 async function resolveClassRow(orgId: number, classId: number) {

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import {
   saveCommitteeAssignments,
+  saveCommitteeTargetsAction,
   updateCommitteeVolunteer,
   deleteCommitteeVolunteer,
 } from "@/app/actions/committees";
@@ -104,11 +105,13 @@ export default function CommitteeDashboard({
   volunteers = [],
   students = [],
   activeId,
+  initialSavedTargets = null,
   directoryPeople = [],
 }: {
   volunteers?: CommitteeVolunteer[];
   students?: any[];
   activeId: number;
+  initialSavedTargets?: Record<string, number> | null;
   directoryPeople?: { id: number; name: string; email: string; phone: string }[];
 }) {
   const tenant = useTenant();
@@ -189,6 +192,11 @@ export default function CommitteeDashboard({
       });
     });
 
+    if (initialSavedTargets && Object.keys(initialSavedTargets).length > 0) {
+      setTargets({ ...defaults, ...initialSavedTargets });
+      return;
+    }
+
     try {
       const savedRaw = localStorage.getItem(targetStorageKey);
       if (savedRaw) {
@@ -200,17 +208,26 @@ export default function CommitteeDashboard({
       // ignore localStorage read errors
     }
     setTargets(defaults);
-  }, [students.length, targetStorageKey]);
+  }, [students.length, targetStorageKey, initialSavedTargets]);
 
-  // Persist target adjustments
+  const targetSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistTargetsToServer = (next: Record<string, number>) => {
+    try {
+      localStorage.setItem(targetStorageKey, JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+    if (targetSaveTimerRef.current) clearTimeout(targetSaveTimerRef.current);
+    targetSaveTimerRef.current = setTimeout(() => {
+      void saveCommitteeTargetsAction(tenant, activeId, next);
+    }, 500);
+  };
+
+  // Persist target adjustments to Neon + localStorage
   const updateTarget = (key: string, value: number) => {
     setTargets((prev) => {
       const next = { ...prev, [key]: Math.max(0, value) };
-      try {
-        localStorage.setItem(targetStorageKey, JSON.stringify(next));
-      } catch {
-        // ignore storage errors
-      }
+      persistTargetsToServer(next);
       return next;
     });
   };
@@ -399,11 +416,7 @@ export default function CommitteeDashboard({
       newTargets[key] = Math.max(1, Math.round((targets[key] || 0) * scale));
     });
     setTargets(newTargets);
-    try {
-      localStorage.setItem(targetStorageKey, JSON.stringify(newTargets));
-    } catch {
-      // ignore storage errors
-    }
+    persistTargetsToServer(newTargets);
   };
 
   const groupedData = useMemo(() => {

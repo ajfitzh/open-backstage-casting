@@ -1,6 +1,9 @@
 // app/actions/committees.ts
 "use server";
 
+import { eq } from "drizzle-orm";
+import { getDb, schema } from "@/db";
+import { getOrganizationBySlugPg } from "@/app/lib/db/core-repo";
 import { revalidatePath } from 'next/cache';
 import { requireAuthenticatedUser, requirePermission } from "@/app/lib/auth-guard";
 import {
@@ -95,5 +98,90 @@ export async function deleteCommitteeVolunteer(tenant: string, rowId: number) {
   } catch (error) {
     console.error("Delete Committee Volunteer Error:", error);
     return { success: false, error: "Failed to delete committee volunteer." };
+  }
+}
+
+export async function saveCommitteeTargetsAction(
+  tenant: string,
+  productionId: number,
+  targets: Record<string, number>
+) {
+  const guard = await requirePermission(tenant, "manage_committees");
+  if (!guard.ok) return { success: false as const, error: guard.error };
+
+  try {
+    const org = await getOrganizationBySlugPg(tenant);
+    if (!org) return { success: false as const, error: "Organization not found." };
+
+    const cleanTargets: Record<string, number> = {};
+    for (const [k, v] of Object.entries(targets)) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+        cleanTargets[k] = Math.round(v);
+      }
+    }
+
+    const currentSettings = (org.settings || {}) as Record<string, any>;
+    const existingByShow = (currentSettings.committeeTargetsByShow || {}) as Record<
+      string,
+      Record<string, number>
+    >;
+
+    const db = getDb();
+    await db
+      .update(schema.organizations)
+      .set({
+        settings: {
+          ...currentSettings,
+          committeeTargetsByShow: {
+            ...existingByShow,
+            [String(productionId)]: cleanTargets,
+          },
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.organizations.id, org.id));
+
+    return { success: true as const };
+  } catch (error) {
+    console.error("Save Committee Targets Error:", error);
+    return { success: false as const, error: "Failed to save committee targets." };
+  }
+}
+
+export async function saveVenueCostEstimatesAction(
+  tenant: string,
+  estimates: Record<number, number>
+) {
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return { success: false as const, error: guard.error };
+
+  try {
+    const org = await getOrganizationBySlugPg(tenant);
+    if (!org) return { success: false as const, error: "Organization not found." };
+
+    const cleanEstimates: Record<string, number> = {};
+    for (const [k, v] of Object.entries(estimates)) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+        cleanEstimates[String(k)] = Math.round(v);
+      }
+    }
+
+    const currentSettings = (org.settings || {}) as Record<string, any>;
+    const db = getDb();
+    await db
+      .update(schema.organizations)
+      .set({
+        settings: {
+          ...currentSettings,
+          venueCostEstimates: cleanEstimates,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.organizations.id, org.id));
+
+    return { success: true as const };
+  } catch (error) {
+    console.error("Save Venue Cost Estimates Error:", error);
+    return { success: false as const, error: "Failed to save venue cost estimates." };
   }
 }

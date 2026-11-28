@@ -12,17 +12,21 @@ function extId(row: { id: number; baserowId: number | null }): number {
 
 async function resolveProduction(orgId: number, externalId: number) {
   const db = getDb();
-  const [prod] = await db
+  const [byId] = await db
+    .select()
+    .from(schema.productions)
+    .where(and(eq(schema.productions.organizationId, orgId), eq(schema.productions.id, externalId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
     .select()
     .from(schema.productions)
     .where(
-      and(
-        eq(schema.productions.organizationId, orgId),
-        or(eq(schema.productions.baserowId, externalId), eq(schema.productions.id, externalId))
-      )
+      and(eq(schema.productions.organizationId, orgId), eq(schema.productions.baserowId, externalId))
     )
     .limit(1);
-  return prod ?? null;
+  return byBaserow ?? null;
 }
 
 async function resolvePerson(orgId: number, externalId: number) {

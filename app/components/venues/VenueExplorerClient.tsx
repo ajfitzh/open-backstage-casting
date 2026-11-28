@@ -18,11 +18,13 @@ import {
   X,
 } from "lucide-react";
 import type { VenueExplorerItem } from "@/app/lib/db/phase3-repo";
+import { saveVenueCostEstimatesAction } from "@/app/actions/committees";
 import VenueSeatingChart, { getSectionColor } from "@/app/components/tickets/VenueSeatingChart";
 
 interface VenueExplorerClientProps {
   tenant: string;
   venues: VenueExplorerItem[];
+  initialCostEstimates?: Record<number, number>;
 }
 
 type MarketKey =
@@ -110,7 +112,11 @@ function defaultEstimatedCost(venue: VenueExplorerItem): number {
 
 const COST_STORAGE_KEY = "ob_venue_cost_estimates_v1";
 
-export default function VenueExplorerClient({ tenant, venues }: VenueExplorerClientProps) {
+export default function VenueExplorerClient({
+  tenant,
+  venues,
+  initialCostEstimates = {},
+}: VenueExplorerClientProps) {
   const [search, setSearch] = useState("");
   const [sizeFilter, setSizeFilter] = useState<SizeFilter>("all");
   const [marketFilter, setMarketFilter] = useState<MarketKey | "All">("All");
@@ -121,8 +127,9 @@ export default function VenueExplorerClient({ tenant, venues }: VenueExplorerCli
   const [performancesPerRun, setPerformancesPerRun] = useState(6);
   const [fillPercent, setFillPercent] = useState(75);
 
-  // Per-venue customizable cost estimates persisted locally
+  // Per-venue customizable cost estimates persisted to Neon + localStorage cache
   const [customCosts, setCustomCosts] = useState<Record<number, number>>(() => {
+    if (Object.keys(initialCostEstimates).length > 0) return initialCostEstimates;
     if (typeof window === "undefined") return {};
     try {
       const saved = localStorage.getItem(`${COST_STORAGE_KEY}_${tenant}`);
@@ -131,6 +138,7 @@ export default function VenueExplorerClient({ tenant, venues }: VenueExplorerCli
       return {};
     }
   });
+  const costSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedVenue, setSelectedVenue] = useState<VenueExplorerItem | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
@@ -146,6 +154,10 @@ export default function VenueExplorerClient({ tenant, venues }: VenueExplorerCli
       } catch {
         // ignore
       }
+      if (costSaveTimerRef.current) clearTimeout(costSaveTimerRef.current);
+      costSaveTimerRef.current = setTimeout(() => {
+        void saveVenueCostEstimatesAction(tenant, next);
+      }, 600);
       return next;
     });
   };

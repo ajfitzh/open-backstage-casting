@@ -7,6 +7,7 @@ import {
   getPeople,
 } from "@/app/lib/baserow";
 import { DB } from "@/app/lib/schema";
+import { getOrganizationBySlugPg } from "@/app/lib/db/core-repo";
 import CommitteeClient from "@/app/components/committees/CommitteeClient";
 
 export const dynamic = "force-dynamic";
@@ -41,11 +42,15 @@ export default async function CommitteesPage({
     );
   }
 
-  const [committeeData, complianceData, directoryPeople] = await Promise.all([
+  const [committeeData, complianceData, directoryPeople, org] = await Promise.all([
     getCommitteeData(tenant, show.id),
     getComplianceData(tenant, show.id),
     getPeople(tenant).catch(() => []),
+    getOrganizationBySlugPg(tenant).catch(() => null),
   ]);
+
+  const savedTargets =
+    org?.settings?.committeeTargetsByShow?.[String(show.id)] || null;
 
   const formattedVolunteers = (committeeData || []).map((v: any) => ({
     id: v.id,
@@ -84,6 +89,7 @@ export default async function CommitteesPage({
         volunteers={formattedVolunteers}
         students={actualCast}
         activeId={show.id}
+        initialSavedTargets={savedTargets}
         directoryPeople={(directoryPeople || []).map((p: any) => ({
           id: Number(p.id),
           name: p.name || "Unnamed",

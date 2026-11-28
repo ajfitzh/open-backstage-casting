@@ -23,20 +23,24 @@ function extId(row: { id: number; baserowId?: number | null }): number {
 
 async function resolveProductionRow(orgId: number, externalProdId: number) {
   const db = getDb();
-  const [prod] = await db
+  const [byId] = await db
+    .select()
+    .from(schema.productions)
+    .where(and(eq(schema.productions.organizationId, orgId), eq(schema.productions.id, externalProdId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
     .select()
     .from(schema.productions)
     .where(
       and(
         eq(schema.productions.organizationId, orgId),
-        or(
-          eq(schema.productions.baserowId, externalProdId),
-          eq(schema.productions.id, externalProdId)
-        )
+        eq(schema.productions.baserowId, externalProdId)
       )
     )
     .limit(1);
-  return prod ?? null;
+  return byBaserow ?? null;
 }
 
 async function resolvePersonRow(orgId: number, externalPersonId: number) {
@@ -125,7 +129,7 @@ export async function listPublicBoxOfficePg(tenantSlug: string) {
 
     if (!grouped.has(prod.id)) {
       grouped.set(prod.id, {
-        productionId: extId(prod),
+        productionId: prod.id,
         internalProductionId: prod.id,
         title: prod.title,
         location: prod.location || org.name,
@@ -137,7 +141,7 @@ export async function listPublicBoxOfficePg(tenantSlug: string) {
 
     grouped.get(prod.id)!.performances.push({
       id: perf.id,
-      productionId: extId(prod),
+      productionId: prod.id,
       productionTitle: prod.title,
       label: perf.label || "General Admission",
       performanceDate: perf.performanceDate || "",
@@ -314,7 +318,7 @@ export async function getBoxOfficeDashboardPg(tenantSlug: string, externalProdId
     const ticketsSold = Number(perf.ticketsSold ?? 0);
     return {
       id: perf.id,
-      productionId: extId(prod),
+      productionId: prod.id,
       productionTitle: prod.title,
       label: perf.label || "General Admission",
       performanceDate: perf.performanceDate || "",
@@ -352,7 +356,7 @@ export async function getBoxOfficeDashboardPg(tenantSlug: string, externalProdId
 
   return {
     orgName: org.name,
-    productionId: extId(prod),
+    productionId: prod.id,
     productionTitle: prod.title,
     venueId: prod.venueId ?? null,
     venueName: prod.location || null,
@@ -420,7 +424,7 @@ export async function createPerformancePg(
     success: true as const,
     performance: {
       id: inserted.id,
-      productionId: extId(prod),
+      productionId: prod.id,
       productionTitle: prod.title,
       label: inserted.label || "General Admission",
       performanceDate: inserted.performanceDate || "",

@@ -22,6 +22,7 @@ interface Props {
   tenant: string;
   productionId: number;
   productionTitle: string;
+  productionType?: string;
   productionImage?: string | null;
   slots: AuditionSlot[];
   initialEmail?: string; 
@@ -29,8 +30,11 @@ interface Props {
   initialExistingAuditions?: ExistingAudition[];
 }
 
-export default function AuditionWizardClient({ tenant, productionId, productionTitle, productionImage = null, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
+export default function AuditionWizardClient({ tenant, productionId, productionTitle, productionType = "", productionImage = null, slots, initialEmail, isGuest, initialExistingAuditions }: Props) {
   const STORAGE_KEY = `cyt_audition_draft_${productionId}`;
+  const isLiteShow =
+    /\blite\b/i.test(productionType) ||
+    /\b(cyt\s*lite|lite\s*show|kids)\b/i.test(productionTitle);
 
   const [view, setView] = useState<"login" | "hub" | "wizard">(initialEmail ? "hub" : "login");
   const [existingAuditions, setExistingAuditions] = useState<ExistingAudition[]>(initialExistingAuditions || []);
@@ -120,6 +124,10 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
     }
     if (currentStep === 5) {
       if (!formData.callbackStatus) newErrors.callbackStatus = "Please select your callback availability.";
+    }
+    if (currentStep === 6 && !isLiteShow) {
+      if (!formData.preShow1) newErrors.preShow1 = "Please select at least your 1st Pre-Show committee choice (or click Flexible).";
+      if (!formData.show1) newErrors.show1 = "Please select at least your 1st Show Week committee choice (or click Flexible).";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -491,7 +499,7 @@ export default function AuditionWizardClient({ tenant, productionId, productionT
                 {currentStep === 3 && <Step3Performance formData={formData} updateForm={updateForm} errors={errors} setAudioFile={setAudioFile} />}
                 {currentStep === 4 && <Step4AuditionTime formData={formData} updateForm={updateForm} errors={errors} slots={slots} />}
                 {currentStep === 5 && <Step5Conflicts formData={formData} updateForm={updateForm} errors={errors} />}
-                {currentStep === 6 && <Step6Committees formData={formData} updateForm={updateForm} errors={errors} setShowCommitteeGuide={setShowCommitteeGuide} />}
+                {currentStep === 6 && <Step6Committees formData={formData} updateForm={updateForm} errors={errors} setShowCommitteeGuide={setShowCommitteeGuide} isLiteShow={isLiteShow} />}
                 {currentStep === 7 && <Step7Commitment formData={formData} updateForm={updateForm} errors={errors} />}
               
               </form>

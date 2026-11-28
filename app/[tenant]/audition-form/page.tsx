@@ -37,6 +37,7 @@ export default async function PublicAuditionPage({ params }: { params: { tenant:
         tenant={tenant} 
         productionId={activeProduction.id} 
         productionTitle={activeProduction.title} 
+        productionType={activeProduction.type || ""}
         productionImage={activeProduction.image || null}
         slots={dynamicSlots} 
         initialEmail={userEmail}

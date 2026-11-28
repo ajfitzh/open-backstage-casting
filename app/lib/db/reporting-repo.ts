@@ -13,20 +13,24 @@ function extId(row: { id: number; baserowId?: number | null }): number {
 
 async function resolveProductionRow(orgId: number, externalProdId: number) {
   const db = getDb();
-  const [prod] = await db
+  const [byId] = await db
+    .select()
+    .from(schema.productions)
+    .where(and(eq(schema.productions.organizationId, orgId), eq(schema.productions.id, externalProdId)))
+    .limit(1);
+  if (byId) return byId;
+
+  const [byBaserow] = await db
     .select()
     .from(schema.productions)
     .where(
       and(
         eq(schema.productions.organizationId, orgId),
-        or(
-          eq(schema.productions.baserowId, externalProdId),
-          eq(schema.productions.id, externalProdId)
-        )
+        eq(schema.productions.baserowId, externalProdId)
       )
     )
     .limit(1);
-  return prod ?? null;
+  return byBaserow ?? null;
 }
 
 function sessionSortWeight(name: string): number {
@@ -656,11 +660,11 @@ export async function getAnalyticsEnrichmentPg(tenantSlug: string) {
       .where(eq(schema.rentalRates.organizationId, org.id)),
   ]);
 
-  const internalToExtProd = new Map(prodRows.map((p) => [p.id, extId(p)]));
+  const internalToExtProd = new Map(prodRows.map((p) => [p.id, p.id]));
   const priceByExtProd = new Map<number, number>();
   for (const p of prodRows) {
     if (p.ticketPriceStandard && p.ticketPriceStandard > 0) {
-      priceByExtProd.set(extId(p), p.ticketPriceStandard);
+      priceByExtProd.set(p.id, p.ticketPriceStandard);
     }
   }
 
