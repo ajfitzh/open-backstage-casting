@@ -309,7 +309,24 @@ export async function getBoxOfficeDashboardPg(tenantSlug: string, externalProdId
   });
 
   const paidOrders = orderRows.filter((o) => o.status === "paid");
-  const grossRevenueCents = paidOrders.reduce((acc, o) => acc + o.totalCents, 0);
+  const orderRevenueCents = paidOrders.reduce((acc, o) => acc + o.totalCents, 0);
+  const paidQtyByPerf = new Map<number, number>();
+  for (const o of paidOrders) {
+    paidQtyByPerf.set(o.performanceId, (paidQtyByPerf.get(o.performanceId) || 0) + o.quantity);
+  }
+
+  let externalTicketsSold = 0;
+  let estimatedExternalRevenueCents = 0;
+  for (const perf of performances) {
+    const paidQty = paidQtyByPerf.get(perf.id) || 0;
+    const unlinkedSold = Math.max(0, perf.ticketsSold - paidQty);
+    if (unlinkedSold > 0) {
+      externalTicketsSold += unlinkedSold;
+      estimatedExternalRevenueCents += Math.round(unlinkedSold * perf.ticketPrice * 100);
+    }
+  }
+
+  const grossRevenueCents = orderRevenueCents + estimatedExternalRevenueCents;
   const totalTicketsSold = performances.reduce((acc, p) => acc + p.ticketsSold, 0);
   const totalCheckedIn = performances.reduce((acc, p) => acc + p.checkedInCount, 0);
 
@@ -317,12 +334,17 @@ export async function getBoxOfficeDashboardPg(tenantSlug: string, externalProdId
     orgName: org.name,
     productionId: extId(prod),
     productionTitle: prod.title,
+    venueId: prod.venueId ?? null,
+    venueName: prod.location || null,
     defaultTicketPrice: Number(prod.ticketPriceStandard ?? 15),
     performances,
     stats: {
       totalTicketsSold,
       totalCheckedIn,
       grossRevenueCents,
+      orderRevenueCents,
+      estimatedExternalRevenueCents,
+      externalTicketsSold,
       paidOrderCount: paidOrders.length,
     },
     orders: orderRows.map((o) => ({

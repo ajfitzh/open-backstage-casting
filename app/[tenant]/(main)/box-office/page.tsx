@@ -50,6 +50,8 @@ export default async function BoxOfficePage({
         tenant={tenant}
         productionId={dashboard.productionId}
         productionTitle={dashboard.productionTitle}
+        venueId={dashboard.venueId}
+        venueName={dashboard.venueName}
         defaultTicketPrice={dashboard.defaultTicketPrice}
         initialPerformances={dashboard.performances}
         initialStats={dashboard.stats}

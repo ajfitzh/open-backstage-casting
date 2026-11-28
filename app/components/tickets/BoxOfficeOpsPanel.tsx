@@ -142,11 +142,20 @@ export default function BoxOfficeOpsPanel({
               onChange={(e) => setPerfId(Number(e.target.value))}
               className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-white"
             >
-              {performances.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} ({p.date}) — ${p.price} · {p.remaining} left
-                </option>
-              ))}
+              {performances.map((p) => {
+                const dateDisplay = /^\d{4}-\d{2}-\d{2}T/.test(p.date)
+                  ? new Date(p.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : p.date;
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.label} ({dateDisplay}) — ${p.price} · {p.remaining} left
+                  </option>
+                );
+              })}
             </select>
           </label>
 

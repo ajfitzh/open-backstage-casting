@@ -51,10 +51,28 @@ interface ScanResultBanner {
   timestamp: string;
 }
 
+function formatPerformanceDate(raw: string): string {
+  if (!raw) return "Date TBA";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+  }
+  return raw;
+}
+
 export default function BoxOfficeClient({
   tenant,
   productionId,
   productionTitle,
+  venueId,
+  venueName,
   defaultTicketPrice,
   initialPerformances,
   initialStats,
@@ -63,12 +81,17 @@ export default function BoxOfficeClient({
   tenant: string;
   productionId: number;
   productionTitle: string;
+  venueId?: number | null;
+  venueName?: string | null;
   defaultTicketPrice: number;
   initialPerformances: PerformanceSummary[];
   initialStats: {
     totalTicketsSold: number;
     totalCheckedIn: number;
     grossRevenueCents: number;
+    orderRevenueCents?: number;
+    estimatedExternalRevenueCents?: number;
+    externalTicketsSold?: number;
     paidOrderCount: number;
   };
   initialOrders: OrderSummary[];
@@ -221,7 +244,17 @@ export default function BoxOfficeClient({
         />
         <MetricCard
           label="Gross Box Office"
-          value={`$${(initialStats.grossRevenueCents / 100).toFixed(2)}`}
+          value={`$${(initialStats.grossRevenueCents / 100).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`}
+          subtext={
+            (initialStats.externalTicketsSold || 0) > 0
+              ? (initialStats.orderRevenueCents || 0) > 0
+                ? `$${((initialStats.orderRevenueCents || 0) / 100).toFixed(2)} online + $${((initialStats.estimatedExternalRevenueCents || 0) / 100).toFixed(2)} synced`
+                : `Est. from ${initialStats.externalTicketsSold} synced tickets`
+              : undefined
+          }
           accent="text-blue-400"
         />
         <MetricCard label="Paid Orders" value={String(initialStats.paidOrderCount)} />
@@ -426,7 +459,7 @@ export default function BoxOfficeClient({
                     <div>
                       <h3 className="text-base font-black text-white">{perf.label}</h3>
                       <p className="text-xs text-zinc-400">
-                        {perf.performanceDate || "Date TBA"} • ${perf.ticketPrice.toFixed(2)} GA
+                        {formatPerformanceDate(perf.performanceDate)} • ${perf.ticketPrice.toFixed(2)} GA
                       </p>
                     </div>
                     <button
@@ -574,7 +607,11 @@ export default function BoxOfficeClient({
       />
 
       {/* INTERACTIVE VENUE RESERVED SEATING MAP BUILDER */}
-      <SeatingMapBuilder tenant={tenant} />
+      <SeatingMapBuilder
+        tenant={tenant}
+        defaultVenueId={venueId}
+        defaultVenueName={venueName}
+      />
 
       {scannerOpen && (
         <CameraQrScanner
@@ -594,16 +631,19 @@ export default function BoxOfficeClient({
 function MetricCard({
   label,
   value,
+  subtext,
   accent = "text-white",
 }: {
   label: string;
   value: string;
+  subtext?: string;
   accent?: string;
 }) {
   return (
     <div className="bg-zinc-900 border border-white/10 rounded-2xl p-4">
       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{label}</p>
       <p className={`text-2xl font-black mt-0.5 ${accent}`}>{value}</p>
+      {subtext && <p className="text-[10px] text-zinc-400 mt-0.5">{subtext}</p>}
     </div>
   );
 }

@@ -25,7 +25,15 @@ function seatStyles(status: SeatStatus) {
   return "bg-emerald-500/20 border-emerald-500/50 text-emerald-200 hover:bg-emerald-500/30";
 }
 
-export default function SeatingMapBuilder({ tenant }: { tenant: string }) {
+export default function SeatingMapBuilder({
+  tenant,
+  defaultVenueId,
+  defaultVenueName,
+}: {
+  tenant: string;
+  defaultVenueId?: number | null;
+  defaultVenueName?: string | null;
+}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [venues, setVenues] = useState<VenueItem[]>([]);
@@ -45,14 +53,32 @@ export default function SeatingMapBuilder({ tenant }: { tenant: string }) {
       if (res.success) {
         setVenues(res.venues);
         setSeatsByVenue(res.seatsByVenue);
-        if (res.venues.length > 0) setSelectedVenueId(res.venues[0].id);
+        if (res.venues.length > 0) {
+          const byId = defaultVenueId
+            ? res.venues.find((v) => v.id === defaultVenueId)
+            : undefined;
+          const byName =
+            !byId && defaultVenueName
+              ? res.venues.find(
+                  (v) => v.name.toLowerCase() === defaultVenueName.trim().toLowerCase()
+                ) ||
+                res.venues.find((v) =>
+                  v.name.toLowerCase().includes(defaultVenueName.trim().toLowerCase())
+                )
+              : undefined;
+          const firstWithSeats =
+            !byId && !byName
+              ? res.venues.find((v) => (res.seatsByVenue[v.id]?.length || 0) > 0)
+              : undefined;
+          setSelectedVenueId((byId || byName || firstWithSeats || res.venues[0]).id);
+        }
       }
       setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, [tenant]);
+  }, [tenant, defaultVenueId, defaultVenueName]);
 
   const currentSeats = useMemo(
     () => (selectedVenueId ? seatsByVenue[selectedVenueId] || [] : []),

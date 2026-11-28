@@ -715,6 +715,17 @@ export async function getCommitteeDataPg(tenantSlug: string, externalProdId?: nu
       ? row.notes.split("PHONE:")[1]?.split("|")[0]?.trim()
       : "";
 
+    const familyId = parent?.familyId ?? student?.familyId ?? null;
+    const rawEmail = (parent?.familyEmail || parent?.email || parent?.secondaryEmail || fallbackEmail || "").trim().toLowerCase();
+    const lastName = (student?.lastName || parent?.lastName || "").trim().toLowerCase();
+    const familyKey = familyId
+      ? `fam:${familyId}`
+      : rawEmail
+        ? `email:${rawEmail}`
+        : lastName
+          ? `last:${lastName}`
+          : `row:${extId(row)}`;
+
     return {
       id: extId(row),
       name: (parent && personDisplayName(parent)) || fallbackName || "Unknown Parent",
@@ -725,6 +736,9 @@ export async function getCommitteeDataPg(tenantSlug: string, externalProdId?: nu
       showWeek1: row.showWeek1 || null,
       showWeek2: row.showWeek2 || null,
       showWeek3: row.showWeek3 || null,
+      chairInterest: Array.isArray(row.chairInterest) ? row.chairInterest : [],
+      notes: row.notes || "",
+      familyKey,
       email: parent?.email || parent?.secondaryEmail || fallbackEmail || "",
       phone: parent?.phone || fallbackPhone || "",
       assignedPreShow: row.assignedPreShow || null,
