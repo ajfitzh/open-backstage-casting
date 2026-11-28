@@ -4,7 +4,7 @@ import {
   Users, Calendar, BarChart3, 
   ChevronRight, Cat, 
   Theater, Waves, GraduationCap,
-  UserCog, Mic, Scissors, LayoutGrid
+  Ticket, Mic, Scissors, LayoutGrid
 } from 'lucide-react';
 import FamilyHubStudentCard from '@/app/components/casting/FamilyHubStudentCard';
 import FamilyConflictModal from '@/app/components/casting/FamilyConflictModal';
@@ -339,12 +339,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ tena
                     </Link>
 
                     <Link 
-                        href={`/production/${show.id}/team`}
+                        href={isStaff ? `/box-office` : `/tickets?show=${show.id}`}
                         className="group flex items-center gap-2 px-3.5 py-1.5 bg-black/30 rounded-full border border-white/10 backdrop-blur-xl shadow-lg hover:bg-black/50 hover:scale-105 transition-all cursor-pointer"
                     >
-                         <UserCog size={15} className={`${theme.accent} group-hover:text-white transition-colors`}/>
+                         <Ticket size={15} className={`${theme.accent} group-hover:text-white transition-colors`}/>
                          <span className={`text-xs font-black ${theme.accent} group-hover:text-white group-hover:underline decoration-white/30 underline-offset-4 transition-colors`}>
-                            Production Team
+                            {isStaff ? "Box Office & Tickets" : "Get Tickets"}
                          </span>
                     </Link>
                 </div>
