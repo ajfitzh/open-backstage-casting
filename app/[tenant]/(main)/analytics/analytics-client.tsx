@@ -20,26 +20,45 @@ const START_YEAR = 2010;
 const ShowContextTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
-        const formatCurr = (val: number) => `$${val.toLocaleString()}`;
+        const formatCurr = (val: number) => `${val < 0 ? "-" : ""}$${Math.abs(val).toLocaleString()}`;
+        const healthColors: Record<string, string> = {
+          Thriving: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+          Healthy: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+          Tight: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+          "At Risk": "bg-red-500/20 text-red-300 border-red-500/40",
+        };
         return (
-            <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl shadow-2xl min-w-[200px]">
-                <p className="text-sm font-black text-white mb-1">{data.name}</p>
+            <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl shadow-2xl min-w-[230px]">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <p className="text-sm font-black text-white">{data.name}</p>
+                  {data.healthGrade && (
+                    <span className={`px-2 py-0.5 rounded-full border text-[9px] font-black uppercase shrink-0 ${healthColors[data.healthGrade] || "bg-zinc-800 text-zinc-300 border-white/10"}`}>
+                      {data.healthGrade}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/5">
                     <span className={`w-2 h-2 rounded-full ${data.tier === 'Mainstage' ? 'bg-blue-500' : data.tier === 'Lite' ? 'bg-amber-500' : 'bg-zinc-500'}`}></span>
                     <span className="text-[10px] uppercase font-black tracking-widest text-zinc-400">{data.tier}</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                        <span className="text-xs text-zinc-400">Total Sales</span>
+                        <span className="text-xs text-zinc-400">Total Tickets</span>
                         <span className="text-xs font-bold text-white">{data.sales} <span className="text-[9px] text-zinc-600 font-normal">/ {Math.round(data.capacity)} cap</span></span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-xs text-zinc-400">Fill Rate</span>
-                        <span className={`text-xs font-bold ${data.fill > 75 ? 'text-emerald-400' : 'text-amber-400'}`}>{data.fill}%</span>
+                        <span className={`text-xs font-bold ${data.fill >= 70 ? 'text-emerald-400' : data.fill >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{data.fill}%</span>
                     </div>
+                    {data.safetyRatio != null && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-zinc-400">Safety Cushion</span>
+                        <span className="text-xs font-bold text-cyan-300">{data.safetyRatio.toFixed(2)}× break-even</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                        <span className="text-xs text-zinc-400">Est. Profit</span>
-                        <span className="text-xs font-bold text-emerald-400">{formatCurr(data.profit)}</span>
+                        <span className="text-xs text-zinc-400">Net After Costs</span>
+                        <span className={`text-xs font-bold ${data.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurr(data.profit)}</span>
                     </div>
                 </div>
             </div>
@@ -237,16 +256,31 @@ export default function AnalyticsDashboard({
         const sales = show.totalSold || 0;
         const grossRevenue = typeof show.revenue === "number" ? show.revenue : sales * ticketPrice;
         const paidRevenue = Math.round(grossRevenue * Math.max(0, 1 - compRate / 100));
-        const profit = paidRevenue - rent;
+        // Typical upfront production costs (royalties, sets, costumes, mics, marketing) beyond venue rent
+        const estUpfrontBudget = show.tier === "Mainstage" ? 11000 : show.tier === "Lite" ? 1800 : 3000;
+        const totalCost = rent + estUpfrontBudget;
+        const profit = paidRevenue - totalCost;
+        const safetyRatio = totalCost > 0 ? paidRevenue / totalCost : 2;
+        const fill = show.avgFill || 0;
+        const healthGrade =
+          safetyRatio >= 1.45 && fill >= 60
+            ? "Thriving"
+            : safetyRatio >= 1.1
+              ? "Healthy"
+              : safetyRatio >= 0.9
+                ? "Tight"
+                : "At Risk";
         
         return {
             name: getBaserowString(show.name || show['Full Title'] || show.Title),
             shortName: getBaserowString(show.name || show['Full Title'] || show.Title).split(' ')[0], // Cleaner X-Axis
             year,
             termOrder: termOrder[term],
-            fill: show.avgFill || 0,
+            fill,
             sales: sales,
             profit: profit,
+            safetyRatio,
+            healthGrade,
             capacity: show.totalCapacity || 0,
             venue: vKey,
             tier: show.tier // Now this exists!
@@ -432,10 +466,10 @@ export default function AnalyticsDashboard({
                     </div>
                     <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-3.5 text-xs">
                       <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-1">
-                        3. Net After Venue Rent
+                        3. Safety Cushion (Snow-Day Risk)
                       </p>
                       <p className="text-zinc-400 leading-relaxed">
-                        Paid box office minus theater rent. <span className="text-zinc-200 font-semibold">Kingdom Baptist HQ = $0 extra</span> (covered by your $3,125/mo lease).
+                        <span className="text-emerald-300 font-semibold">Thriving (≥1.45×)</span> survives a snowed-out weekend. <span className="text-zinc-200 font-semibold">Kingdom Baptist HQ = $0 venue rent</span> (covered by $3,125/mo lease) vs. ~$14k Mainstage upfront break-even.
                       </p>
                     </div>
                   </div>

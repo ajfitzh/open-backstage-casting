@@ -1404,6 +1404,84 @@ export async function getRosterForShowClientPg(tenantSlug: string, externalProdI
   ]);
   const personMap = new Map(peopleRows.map((p) => [p.id, p]));
 
+  // Pull cross-show history (past roles & prior auditions) for everyone on this show's roster
+  const performerIds = Array.from(
+    new Set(audRows.map((a) => a.performerId).filter((id): id is number => id != null))
+  );
+  const pastRolesByPerson = new Map<number, string[]>();
+  if (performerIds.length > 0) {
+    const [histAssigns, histAuds, allProds, allRoles] = await Promise.all([
+      db
+        .select({
+          personId: schema.assignments.personId,
+          productionId: schema.assignments.productionId,
+          roleId: schema.assignments.roleId,
+        })
+        .from(schema.assignments)
+        .where(
+          and(
+            eq(schema.assignments.organizationId, org.id),
+            inArray(schema.assignments.personId, performerIds)
+          )
+        ),
+      db
+        .select({
+          performerId: schema.auditions.performerId,
+          productionId: schema.auditions.productionId,
+          status: schema.auditions.status,
+          heightGrade: schema.auditions.grade,
+          vocalRange: schema.auditions.vocalRange,
+          voiceType: schema.auditions.voiceType,
+          programBio: schema.auditions.programBio,
+        })
+        .from(schema.auditions)
+        .where(
+          and(
+            eq(schema.auditions.organizationId, org.id),
+            inArray(schema.auditions.performerId, performerIds)
+          )
+        ),
+      db
+        .select({ id: schema.productions.id, title: schema.productions.title })
+        .from(schema.productions)
+        .where(eq(schema.productions.organizationId, org.id)),
+      db
+        .select({ id: schema.blueprintRoles.id, roleName: schema.blueprintRoles.roleName })
+        .from(schema.blueprintRoles)
+        .where(eq(schema.blueprintRoles.organizationId, org.id)),
+    ]);
+
+    const prodTitleMap = new Map(allProds.map((p) => [p.id, p.title]));
+    const roleNameMap = new Map(allRoles.map((r) => [r.id, r.roleName]));
+    const seenProdPerPerson = new Map<number, Set<number>>();
+
+    for (const a of histAssigns) {
+      if (!a.personId || !a.productionId || a.productionId === prod.id) continue;
+      const showTitle = prodTitleMap.get(a.productionId);
+      const roleName = a.roleId ? roleNameMap.get(a.roleId) : null;
+      if (!showTitle) continue;
+      const label = roleName ? `${roleName} (${showTitle})` : `Cast (${showTitle})`;
+      const list = pastRolesByPerson.get(a.personId) || [];
+      if (!list.includes(label)) list.push(label);
+      pastRolesByPerson.set(a.personId, list);
+      const sp = seenProdPerPerson.get(a.personId) || new Set<number>();
+      sp.add(a.productionId);
+      seenProdPerPerson.set(a.personId, sp);
+    }
+
+    for (const ha of histAuds) {
+      if (!ha.performerId || !ha.productionId || ha.productionId === prod.id) continue;
+      if (seenProdPerPerson.get(ha.performerId)?.has(ha.productionId)) continue;
+      const showTitle = prodTitleMap.get(ha.productionId);
+      if (!showTitle) continue;
+      const statusTag = ha.status === "Cast" ? "Cast" : "Auditioned";
+      const label = `${statusTag} (${showTitle})`;
+      const list = pastRolesByPerson.get(ha.performerId) || [];
+      if (!list.includes(label)) list.push(label);
+      pastRolesByPerson.set(ha.performerId, list);
+    }
+  }
+
   return audRows.map((aud) => {
     const person = aud.performerId ? personMap.get(aud.performerId) : null;
     const personExt = person ? extId(person) : extId(aud);
@@ -1411,6 +1489,11 @@ export async function getRosterForShowClientPg(tenantSlug: string, externalProdI
     const hasHeadshot = Boolean(person?.headshotUrl);
     const avatarUrl =
       person?.headshotUrl || "https://placehold.co/150x150/222/888?text=Actor";
+    const age = computeAgeFromDob(person?.dateOfBirth ?? null);
+    const heightFormatted = person?.heightInches
+      ? formatHeightFromInches(person.heightInches)
+      : "";
+    const pastRoles = aud.performerId ? pastRolesByPerson.get(aud.performerId) || [] : [];
 
     return {
       id: personExt,
@@ -1422,18 +1505,34 @@ export async function getRosterForShowClientPg(tenantSlug: string, externalProdI
       vocalScore: aud.vocalScore || 0,
       actingScore: aud.actingScore || 0,
       danceScore: aud.danceScore || 0,
-      auditionInfo: { gender: person?.gender || null },
+      auditionInfo: {
+        avatar: hasHeadshot ? avatarUrl : null,
+        gender: person?.gender || null,
+        age: age || null,
+        dob: person?.dateOfBirth || null,
+        height: heightFormatted || null,
+        grade: aud.grade || null,
+        hairColor: aud.hairColor || null,
+        vocalRange: aud.vocalRange || aud.voiceType || null,
+        song: aud.song || null,
+        bio: person?.editedBio || aud.programBio || null,
+        actingNotes: aud.actingNotes || null,
+        musicNotes: aud.musicNotes || null,
+        choreographyNotes: aud.choreographyNotes || null,
+        pastRoles: pastRoles.length > 0 ? pastRoles : null,
+      },
       auditionGrades: {
         vocal: aud.vocalScore ?? null,
         acting: aud.actingScore ?? null,
         dance: aud.danceScore ?? null,
+        presence: aud.stagePresenceScore ?? null,
       },
       paidFees: Boolean(aud.paidFees),
       measurementsTaken: Boolean(aud.measurementsTaken),
       signedAgreement: Boolean(aud.commitmentToCharacter),
       headshotSubmitted: hasHeadshot,
       grade: aud.grade || "",
-      height: person?.heightInches ? formatHeightFromInches(person.heightInches) : "",
+      height: heightFormatted,
       hairColor: aud.hairColor || "",
       songTitle: aud.song || "",
       musicFileUrl: aud.backingTrackUrl || "",
