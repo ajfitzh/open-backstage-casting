@@ -47,6 +47,29 @@ interface SeatMapState {
   seats: PublicSeatItem[];
 }
 
+function formatStorefrontDate(raw: string): string {
+  if (!raw) return "Date TBA";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+  }
+  return raw;
+}
+
+function cleanPerfLabel(label: string): string {
+  if (!label) return "General Admission";
+  return label
+    .replace(/^\[\s*\{\s*"id"\s*:\s*\d+\s*,\s*"value"\s*:\s*"[^"]+"\s*\}\s*\]\s*-\s*/, "")
+    .trim();
+}
+
 export default function PublicBoxOfficeClient({
   tenant,
   orgName,
@@ -288,11 +311,11 @@ export default function PublicBoxOfficeClient({
                         >
                           <div className="min-w-0">
                             <p className="font-black text-white text-sm sm:text-base truncate">
-                              {perf.label}
+                              {cleanPerfLabel(perf.label)}
                             </p>
                             <p className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
                               <Calendar size={12} className="text-blue-400 shrink-0" />
-                              {perf.performanceDate || "Date TBA"}
+                              {formatStorefrontDate(perf.performanceDate)}
                               {perf.doorsOpenAt ? ` • Doors ${perf.doorsOpenAt}` : ""}
                             </p>
                           </div>
@@ -350,9 +373,9 @@ export default function PublicBoxOfficeClient({
                   <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 space-y-1">
                     <p className="text-base font-black text-white">{selectedPerf.show.title}</p>
                     <p className="text-xs text-zinc-400">
-                      {selectedPerf.perf.label}
+                      {cleanPerfLabel(selectedPerf.perf.label)}
                       {selectedPerf.perf.performanceDate
-                        ? ` • ${selectedPerf.perf.performanceDate}`
+                        ? ` • ${formatStorefrontDate(selectedPerf.perf.performanceDate)}`
                         : ""}
                     </p>
                     <p className="text-xs font-bold text-emerald-400 pt-1">

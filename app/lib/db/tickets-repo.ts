@@ -88,7 +88,19 @@ export async function listPublicBoxOfficePg(tenantSlug: string) {
   ]);
 
   const prodMap = new Map(prodRows.map((p) => [p.id, p]));
-  const openPerfs = perfRows.filter((perf) => perf.salesOpen && perf.productionId && prodMap.has(perf.productionId));
+  const cutoffMs = Date.now() - 12 * 60 * 60 * 1000;
+  const openPerfs = perfRows.filter((perf) => {
+    if (!perf.salesOpen || !perf.productionId) return false;
+    const prod = prodMap.get(perf.productionId);
+    if (!prod) return false;
+    const status = (prod.status || "").toLowerCase();
+    if (status === "archived" || status === "canceled" || status === "cancelled") return false;
+    if (perf.performanceDate) {
+      const parsed = Date.parse(perf.performanceDate);
+      if (Number.isFinite(parsed) && parsed < cutoffMs) return false;
+    }
+    return true;
+  });
 
   // Group open performances by production
   const grouped = new Map<
@@ -198,10 +210,13 @@ export async function listPublicBoxOfficePg(tenantSlug: string) {
     }
   }
 
-  return {
-    orgName: org.name,
-    orgSlug: org.slug,
-    shows: Array.from(grouped.values()).map((show) => ({
+  const showsList = Array.from(grouped.values())
+    .sort((a, b) => {
+      const aTime = Date.parse(a.performances[0]?.performanceDate || "") || Number.MAX_SAFE_INTEGER;
+      const bTime = Date.parse(b.performances[0]?.performanceDate || "") || Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    })
+    .map((show) => ({
       productionId: show.productionId,
       title: show.title,
       location: show.location,
@@ -209,7 +224,12 @@ export async function listPublicBoxOfficePg(tenantSlug: string) {
       defaultPrice: show.defaultPrice,
       performances: show.performances,
       castMembers: castByProd.get(show.internalProductionId) || [],
-    })),
+    }));
+
+  return {
+    orgName: org.name,
+    orgSlug: org.slug,
+    shows: showsList,
   };
 }
 
