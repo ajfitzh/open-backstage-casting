@@ -231,8 +231,8 @@ export async function getConflicts(tenant: string, id?: any) {
   return (await getProductionConflictsPg(tenant, id ? Number(id) : undefined)) ?? [];
 }
 
-export async function getComplianceData(tenant: string, _productionId?: number) {
-  return (await getComplianceDataPg(tenant)) ?? [];
+export async function getComplianceData(tenant: string, productionId?: number) {
+  return (await getComplianceDataPg(tenant, productionId)) ?? [];
 }
 
 // ==============================================================================

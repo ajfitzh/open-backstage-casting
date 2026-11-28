@@ -80,7 +80,7 @@ export const NAV_CONFIG = [
            { label: "Weekly Reports", href: "/production/active/committees/reports", icon: ClipboardList }
         ]
       },
-      { label: "Season Planner", href: "/season", icon: LayoutGrid, permission: "view_cast_list" },
+      { label: "Compliance Hub", href: "/season", icon: ClipboardList, permission: "view_cast_list" },
       { label: "Venues & Seating", href: "/venues", icon: MapPin, permission: "view_cast_list" },
     ]
   },

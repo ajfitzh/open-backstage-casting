@@ -40,9 +40,14 @@ const LEGACY_MAP = {
   }
 };
 
-export default function StaffClient({ productionId, productionTitle, assignments, people, compliance }: any) {
+export default function StaffClient({ productionId, productionTitle, productionType = "", assignments, people, compliance }: any) {
   const [filter, setFilter] = useState("");
   const [selectedMember, setSelectedMember] = useState<any>(null);
+
+  const isLiteShow =
+    /\blite\b/i.test(productionType || "") ||
+    /\b(cyt\s*lite|lite\s*show|kids)\b/i.test(productionTitle || "") ||
+    /charlie brown christmas/i.test(productionTitle || "");
   
   // --- 🧠 REAL DATA ENGINE ---
   const roster = useMemo(() => {
@@ -51,12 +56,18 @@ export default function StaffClient({ productionId, productionTitle, assignments
     // 1. Create Lookup Maps
     const complianceMap = new Map();
     if (Array.isArray(compliance)) {
-        compliance.forEach((row: any) => complianceMap.set(row.id.toString(), row));
+        compliance.forEach((row: any) => {
+          complianceMap.set(row.id.toString(), row);
+          if (row.internalId) complianceMap.set(row.internalId.toString(), row);
+        });
     }
     
-    // Helper to find headshot in raw Baserow data
+    // Helper to find headshot in Postgres or legacy Baserow data
     const getHeadshot = (row: any) => {
         if (!row) return null;
+        if (typeof row.headshot === "string" && row.headshot.trim()) return row.headshot;
+        if (typeof row.headshotUrl === "string" && row.headshotUrl.trim()) return row.headshotUrl;
+        if (typeof row.photo === "string" && row.photo.trim()) return row.photo;
         const fileArr = row["Headshot"] || row["headshot"] || row["Avatar"] || row["Profile Picture"];
         const fileArrById = row["field_5776"]; 
         
@@ -77,12 +88,18 @@ export default function StaffClient({ productionId, productionTitle, assignments
         const peopleListMatch = people.find((p: any) => p.id.toString() === personId);
         
         const hasSignature = (keyword: string) => {
+           if (Array.isArray(rawPersonData.signedDocs)) {
+             if (rawPersonData.signedDocs.some((d: string) => d.toLowerCase().includes(keyword.toLowerCase()))) {
+               return true;
+             }
+           }
            const docs = rawPersonData["Signed Doc Types"] || []; 
            if (!Array.isArray(docs)) return false;
            return docs.some((d: any) => d.value && d.value.includes(keyword));
         };
 
         const hasBio = () => {
+           if (rawPersonData.hasBio === true) return true;
            const bio = rawPersonData["Original Bio"]; 
            if (Array.isArray(bio) && bio.length > 0) return true;
            if (typeof bio === 'string' && bio.length > 10) return true;
@@ -90,6 +107,7 @@ export default function StaffClient({ productionId, productionTitle, assignments
         };
 
         const hasMeasurements = () => {
+            if (rawPersonData.measurementsTaken === true) return true;
             const m = rawPersonData["Measurements"];
             return Array.isArray(m) && m.length > 0;
         };
@@ -102,19 +120,23 @@ export default function StaffClient({ productionId, productionTitle, assignments
           roles: [a.name],
           avatar: avatarUrl,
           
-          // --- 🏗️ AUDIT LOGIC ---
+          // --- 🏗️ AUDIT LOGIC (CYT Lite / KIDS shows don't require Mainstage docs) ---
           audit: {
-            medical: hasSignature("Medical"),
-            liability: hasSignature("Liability"),
-            photo: hasSignature("Photo"),
-            fees: rawPersonData["Paid Fees"] === true,
-            ticketsMet: false, 
-            bio: hasBio(),
-            measurements: hasMeasurements(),
-            committee: Array.isArray(rawPersonData["Form Committee Preferences"]) && rawPersonData["Form Committee Preferences"].length > 0
+            medical: isLiteShow || hasSignature("Medical"),
+            liability: isLiteShow || hasSignature("Liability"),
+            photo: isLiteShow || hasSignature("Photo"),
+            fees: rawPersonData.paidFees === true || rawPersonData["Paid Fees"] === true,
+            ticketsMet: isLiteShow,
+            bio: isLiteShow || hasBio(),
+            measurements: isLiteShow || hasMeasurements(),
+            committee:
+              isLiteShow ||
+              rawPersonData.hasCommittee === true ||
+              (Array.isArray(rawPersonData["Form Committee Preferences"]) &&
+                rawPersonData["Form Committee Preferences"].length > 0),
           },
           ticketsSold: 0, 
-          committeeName: "Unassigned", 
+          committeeName: isLiteShow ? "CYT Lite (N/A)" : rawPersonData.committeeName || "Unassigned", 
         });
       } else {
         const existing = uniqueActors.get(personId);
@@ -125,7 +147,7 @@ export default function StaffClient({ productionId, productionTitle, assignments
     });
 
     return Array.from(uniqueActors.values()).sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [assignments, people, compliance]);
+  }, [assignments, people, compliance, isLiteShow]);
 
   // Stats
   const stats = useMemo(() => {
@@ -145,7 +167,14 @@ export default function StaffClient({ productionId, productionTitle, assignments
        {/* HEADER */}
        <header className="sticky top-0 z-20 h-20 border-b border-white/10 flex items-center justify-between px-8 bg-zinc-950/80 backdrop-blur-xl shrink-0">
            <div className="flex flex-col justify-center">
-             <h1 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-1">Production Dashboard</h1>
+             <h1 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-1 flex items-center gap-2">
+               Compliance Hub
+               {isLiteShow && (
+                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[9px] font-black tracking-wider">
+                   CYT Lite • Auto-Cleared
+                 </span>
+               )}
+             </h1>
              <h2 className="text-xl font-bold tracking-tighter truncate max-w-[300px] text-zinc-100">{productionTitle}</h2>
            </div>
            

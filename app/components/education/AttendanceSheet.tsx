@@ -42,7 +42,7 @@ export default function AttendanceSheet({ students }: { students: any[] }) {
                     <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ${student.photo ? '' : 'bg-zinc-800 text-zinc-500'}`}>
                             {student.photo ? (
-                                <img src={student.photo} alt={student.name} className="w-full h-full object-cover rounded-full" />
+                                <img src={student.photo} alt={student.name} className="w-full h-full object-cover object-top rounded-full" />
                             ) : (
                                 student.name.substring(0, 2).toUpperCase()
                             )}

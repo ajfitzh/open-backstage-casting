@@ -1250,11 +1250,112 @@ export async function getCastDemographicsPg(tenantSlug: string) {
   }));
 }
 
-export async function getComplianceDataPg(tenantSlug: string) {
+export async function getComplianceDataPg(tenantSlug: string, externalProdId?: number) {
   const org = await getOrganizationBySlugPg(tenantSlug);
   if (!org) return null;
 
   const db = getDb();
+
+  if (externalProdId && externalProdId > 0) {
+    const prod = await resolveProductionRow(org.id, externalProdId);
+    if (!prod) return [];
+
+    const [audRows, assignRows, sigRows, commRows] = await Promise.all([
+      db
+        .select()
+        .from(schema.auditions)
+        .where(
+          and(
+            eq(schema.auditions.organizationId, org.id),
+            eq(schema.auditions.productionId, prod.id)
+          )
+        ),
+      db
+        .select({ personId: schema.assignments.personId })
+        .from(schema.assignments)
+        .where(
+          and(
+            eq(schema.assignments.organizationId, org.id),
+            eq(schema.assignments.productionId, prod.id)
+          )
+        ),
+      db
+        .select({ personId: schema.signatures.personId, docType: schema.signatures.docType })
+        .from(schema.signatures)
+        .where(
+          and(
+            eq(schema.signatures.organizationId, org.id),
+            eq(schema.signatures.productionId, prod.id)
+          )
+        ),
+      db
+        .select({
+          studentPersonId: schema.committeePrefs.studentPersonId,
+          assignedPreShow: schema.committeePrefs.assignedPreShow,
+          assignedShowWeek: schema.committeePrefs.assignedShowWeek,
+        })
+        .from(schema.committeePrefs)
+        .where(
+          and(
+            eq(schema.committeePrefs.organizationId, org.id),
+            eq(schema.committeePrefs.productionId, prod.id)
+          )
+        ),
+    ]);
+
+    const personIds = Array.from(
+      new Set([
+        ...audRows.map((a) => a.performerId).filter((id): id is number => id != null),
+        ...assignRows.map((a) => a.personId).filter((id): id is number => id != null),
+      ])
+    );
+    if (personIds.length === 0) return [];
+
+    const peopleRows = await db
+      .select()
+      .from(schema.people)
+      .where(and(eq(schema.people.organizationId, org.id), inArray(schema.people.id, personIds)));
+
+    const audByPerson = new Map(
+      audRows.filter((a) => a.performerId != null).map((a) => [a.performerId!, a])
+    );
+    const sigsByPerson = new Map<number, string[]>();
+    for (const s of sigRows) {
+      if (!s.personId || !s.docType) continue;
+      const list = sigsByPerson.get(s.personId) || [];
+      list.push(s.docType);
+      sigsByPerson.set(s.personId, list);
+    }
+    const commByStudent = new Map<number, { pre: string | null; show: string | null }>();
+    for (const c of commRows) {
+      if (!c.studentPersonId) continue;
+      commByStudent.set(c.studentPersonId, {
+        pre: c.assignedPreShow || null,
+        show: c.assignedShowWeek || null,
+      });
+    }
+
+    return peopleRows.map((p) => {
+      const aud = audByPerson.get(p.id);
+      const docs = sigsByPerson.get(p.id) || [];
+      const comm = commByStudent.get(p.id);
+      return {
+        id: extId(p),
+        internalId: p.id,
+        name: personDisplayName(p),
+        email: p.email || p.secondaryEmail || "",
+        roles: p.roles || [],
+        headshot: p.headshotUrl || null,
+        paidFees: Boolean(aud?.paidFees),
+        measurementsTaken: Boolean(aud?.measurementsTaken),
+        hasBio: Boolean(aud?.programBio && aud.programBio.trim().length > 10),
+        signedDocs: docs,
+        hasCommittee: Boolean(comm),
+        committeeName: comm?.pre || comm?.show || "Unassigned",
+      };
+    });
+  }
+
   const rows = await db
     .select()
     .from(schema.people)

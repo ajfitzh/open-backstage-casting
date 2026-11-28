@@ -29,6 +29,7 @@ interface RosterStudent {
   age?: string | number;
   email?: string;
   phone?: string;
+  photo?: string | null;
 }
 
 export default function ClassManager({ classes }: any) {
@@ -370,8 +371,17 @@ export default function ClassManager({ classes }: any) {
                                 return (
                                     <div key={student.id} className="flex items-center justify-between p-4 bg-zinc-900 border border-white/5 rounded-2xl group hover:border-white/10 transition-all">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
-                                                {student.name.charAt(0)}
+                                            <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400 overflow-hidden shrink-0 border border-white/10">
+                                                {student.photo ? (
+                                                    /* eslint-disable-next-line @next/next/no-img-element */
+                                                    <img
+                                                        src={student.photo}
+                                                        alt={student.name}
+                                                        className="w-full h-full object-cover object-top"
+                                                    />
+                                                ) : (
+                                                    student.name.charAt(0)
+                                                )}
                                             </div>
                                             <div>
                                                 <span className="font-bold text-zinc-200 text-lg block">{student.name}</span>
